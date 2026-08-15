@@ -36,7 +36,9 @@ export function ChatProvider({ children }) {
       return;
     }
 
-    const socket = io(API_URL, { auth: { token }, transports: ['websocket', 'polling'] });
+    // API_URL === '' means same-origin (single-host deploy); socket.io handles
+    // undefined by connecting to the page origin.
+    const socket = io(API_URL || undefined, { auth: { token }, transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
     socket.on('connect', () => setConnected(true));

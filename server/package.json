@@ -4,10 +4,15 @@
   "private": true,
   "type": "commonjs",
   "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
-    "seed": "node src/seed.js"
+    "seed": "node src/seed.js",
+    "build": "cd ../app && npm install && npx expo export --platform web --output-dir ../server/public",
+    "postinstall": "echo 'run npm run build to bundle the web app into ./public'"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

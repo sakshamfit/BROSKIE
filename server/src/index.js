@@ -524,5 +524,43 @@ io.on('connection', (socket) => {
   });
 });
 
+/* ------------------------------------------------------------------ */
+/* single-host mode: serve the built web app from this same server      */
+/* ------------------------------------------------------------------ */
+
+// `npm run build` exports the Expo web bundle to server/public
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+
+if (fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
+  // hashed assets are immutable -> cache hard; index.html must never be cached
+  app.use(
+    express.static(PUBLIC_DIR, {
+      setHeaders: (res, filePath) => {
+        if (filePath.includes(`${path.sep}_expo${path.sep}`)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
+      },
+    })
+  );
+
+  // SPA fallback for client-side routes — must not swallow API/socket/uploads
+  app.get(/^(?!\/(api|uploads|socket\.io)\/).*/, (req, res, next) => {
+    if (req.method !== 'GET') return next();
+    res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+  });
+
+  console.log('Serving web app from', PUBLIC_DIR);
+} else {
+  app.get('/', (req, res) =>
+    res.json({
+      name: 'BROSKIE API',
+      status: 'ok',
+      hint: 'No web build found. Run `npm run build` to serve the app from this server.',
+    })
+  );
+}
+
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, '0.0.0.0', () => console.log(`BROSKIE server listening on http://0.0.0.0:${PORT}`));

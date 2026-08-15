@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: broskie
+    runtime: node
+    plan: free
+    buildCommand: cd server && npm install && npm run build
+    startCommand: cd server && npm start
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_VERSION
+        value: "20"
+    # Persist the SQLite database across deploys (paid plans only).
+    # disk:
+    #   name: broskie-data
+    #   mountPath: /opt/render/project/src/server/data
+    #   sizeGB: 1

@@ -2,28 +2,44 @@ import { Platform } from 'react-native';
 
 /**
  * Resolve the backend URL.
- * - Web preview (e2b): same host, port 4000 -> https://4000-<sandbox>.e2b.app
- * - Local web dev:     http://localhost:4000
- * - Device / emulator: set EXPO_PUBLIC_API_URL in app/.env
+ *
+ * - Explicit override:  EXPO_PUBLIC_API_URL (required for phones / split hosting)
+ * - Single-host deploy: the Express server also serves this bundle, so the API
+ *                       lives at the SAME origin -> '' (relative URLs)
+ * - Web preview (e2b):  same host, port 4000 -> https://4000-<sandbox>.e2b.app
+ * - Local web dev:      http://localhost:4000
+ * - Native fallback:    http://localhost:4000
  */
 function resolveBase() {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '');
 
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    const { protocol, hostname, host } = window.location;
+    const { protocol, hostname, host, port } = window.location;
+
+    // e2b sandbox preview: app on 8081, api on 4000
     const m = host.match(/^(\d+)-(.+\.e2b\.app)$/);
     if (m) return `${protocol}//4000-${m[2]}`;
-    return `${protocol}//${hostname}:4000`;
+
+    // Metro dev server ports -> API is a separate process on 4000
+    if (port === '8081' || port === '19006' || port === '3000') {
+      return `${protocol}//${hostname}:4000`;
+    }
+
+    // Anything else (production single-host): same origin, use relative paths.
+    return '';
   }
   return 'http://localhost:4000';
 }
 
 export const API_URL = resolveBase();
 
+/** Socket.IO target: '' (same origin) is fine for the browser client. */
+export const SOCKET_URL = API_URL;
+
 export function mediaUrl(u) {
   if (!u) return null;
   if (/^https?:|^data:|^file:/.test(u)) return u;
-  return API_URL + u;
+  return API_URL + u; // API_URL may be '' -> relative, same-origin
 }
 
 let authToken = null;
