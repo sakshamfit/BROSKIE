@@ -1,0 +1,47 @@
+# dependencies
+node_modules/
+.npm/
+
+# runtime data (SQLite db + WAL/SHM) — never commit
+server/data/
+*.db
+*.db-wal
+*.db-shm
+
+# user uploads
+server/uploads/*
+!server/uploads/.gitkeep
+
+# expo / metro / build output
+.expo/
+.expo-shared/
+dist/
+web-build/
+android/
+ios/
+*.jsbundle
+
+# env & secrets
+.env
+.env.*
+!.env.example
+.netrc
+.git-credentials
+
+# logs
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# expo template leftovers
+app/.claude/
+app/AGENTS.md
+app/CLAUDE.md

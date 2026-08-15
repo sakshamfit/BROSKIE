@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "BROSKIE",
+    "slug": "broskie",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#075E54"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.arena.broskie",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "BROSKIE uses the microphone to record voice messages.",
+        "NSPhotoLibraryUsageDescription": "BROSKIE needs photo access so you can share images in chats."
+      }
+    },
+    "android": {
+      "package": "ai.arena.broskie",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#075E54"
+      },
+      "permissions": [
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-audio",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow BROSKIE to access your photos to share them in chats."
+        }
+      ],
+      "expo-font"
+    ]
+  }
+}

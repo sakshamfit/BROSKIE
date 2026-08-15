@@ -1,0 +1,69 @@
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { api, setToken } from '../api';
+
+const AuthContext = createContext(null);
+export const useAuth = () => useContext(AuthContext);
+
+const TOKEN_KEY = 'broskie.token';
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [token, setTok] = useState(null);
+  const [booting, setBooting] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(TOKEN_KEY);
+        if (saved) {
+          setToken(saved);
+          const { user } = await api.me();
+          setUser(user);
+          setTok(saved);
+        }
+      } catch {
+        await AsyncStorage.removeItem(TOKEN_KEY);
+        setToken(null);
+      } finally {
+        setBooting(false);
+      }
+    })();
+  }, []);
+
+  const persist = useCallback(async (tok, usr) => {
+    setToken(tok);
+    await AsyncStorage.setItem(TOKEN_KEY, tok);
+    setTok(tok);
+    setUser(usr);
+  }, []);
+
+  const login = useCallback(async (phone, password) => {
+    const { token, user } = await api.login({ phone, password });
+    await persist(token, user);
+  }, [persist]);
+
+  const register = useCallback(async (phone, name, password) => {
+    const { token, user } = await api.register({ phone, name, password });
+    await persist(token, user);
+  }, [persist]);
+
+  const logout = useCallback(async () => {
+    await AsyncStorage.removeItem(TOKEN_KEY);
+    setToken(null);
+    setTok(null);
+    setUser(null);
+  }, []);
+
+  const updateProfile = useCallback(async (patch) => {
+    const { user } = await api.updateMe(patch);
+    setUser(user);
+    return user;
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, token, booting, login, register, logout, updateProfile }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}

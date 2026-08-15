@@ -1,0 +1,148 @@
+import React, { useState } from 'react';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from './icons/Icon';
+
+import { useAuth } from './store/AuthContext';
+import { useTheme } from './store/ThemeContext';
+import { useChat } from './store/ChatContext';
+import { Loading, EmptyState, ClayBead } from './components/common';
+import { radius, type, clayFor, clayPressed } from './theme';
+
+import AuthScreen from './screens/AuthScreen';
+import ChatListScreen from './screens/ChatListScreen';
+import ConversationScreen from './screens/ConversationScreen';
+import NewChatScreen from './screens/NewChatScreen';
+import StatusScreen from './screens/StatusScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import ChatInfoScreen from './screens/ChatInfoScreen';
+
+const Stack = createNativeStackNavigator();
+
+/** Floating clay tab bar */
+function HomeTabs({ navigation }) {
+  const { theme } = useTheme();
+  const { chats } = useChat();
+  const [tab, setTab] = useState('chats');
+  const unread = chats.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
+  const s = makeStyles(theme);
+
+  const TABS = [
+    { key: 'chats', label: 'Chats', icon: 'chatbubbles', badge: unread },
+    { key: 'status', label: 'Status', icon: 'radio-button-on' },
+    { key: 'calls', label: 'Calls', icon: 'call' },
+  ];
+
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <View style={{ flex: 1 }}>
+        {tab === 'chats' && <ChatListScreen navigation={navigation} />}
+        {tab === 'status' && <StatusScreen navigation={navigation} />}
+        {tab === 'calls' && <CallsPlaceholder />}
+      </View>
+
+      <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'transparent' }}>
+        <View style={[s.tabBar, { backgroundColor: theme.card }, clayFor(theme, 2)]}>
+          {TABS.map((t) => {
+            const active = tab === t.key;
+            return (
+              <Pressable
+                key={t.key}
+                onPress={() => setTab(t.key)}
+                style={({ pressed }) => [
+                  s.tabItem,
+                  active && { backgroundColor: theme.accent },
+                  active ? clayFor(theme, 1) : null,
+                  pressed && !active ? { opacity: 0.6 } : null,
+                ]}
+              >
+                <View>
+                  <Icon
+                    name={active ? t.icon : `${t.icon}-outline`}
+                    size={21}
+                    color={active ? theme.onAccent : theme.muted}
+                  />
+                  {!!t.badge && t.badge > 0 && (
+                    <View style={s.tabBadge}>
+                      <ClayBead label={t.badge > 9 ? '9+' : String(t.badge)} small />
+                    </View>
+                  )}
+                </View>
+                {active && (
+                  <Text style={[type.labelMd, { color: theme.onAccent, letterSpacing: 0.3 }]}>{t.label}</Text>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+function CallsPlaceholder() {
+  const { theme } = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <View style={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, minHeight: 84, justifyContent: 'center' }}>
+        <Text style={[type.displayLg, { color: theme.text, letterSpacing: 0.4 }]}>Calls</Text>
+      </View>
+      <EmptyState
+        icon="call-outline"
+        title="No recent calls"
+        subtitle="Voice and video calling would need WebRTC — the signalling layer is ready on the server."
+      />
+    </View>
+  );
+}
+
+export default function Navigation() {
+  const { user, booting } = useAuth();
+  const { theme, mode } = useTheme();
+
+  if (booting) return <Loading label="Starting BROSKIE…" />;
+
+  const navTheme = {
+    ...(mode === 'dark' ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(mode === 'dark' ? DarkTheme : DefaultTheme).colors,
+      background: theme.bg,
+      card: theme.card,
+      text: theme.text,
+      border: 'transparent',
+      primary: theme.primary,
+    },
+  };
+
+  return (
+    <NavigationContainer theme={navTheme}>
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: Platform.OS === 'web' ? 'none' : 'default', contentStyle: { backgroundColor: theme.bg } }}>
+        {!user ? (
+          <Stack.Screen name="Auth" component={AuthScreen} />
+        ) : (
+          <>
+            <Stack.Screen name="Home" component={HomeTabs} />
+            <Stack.Screen name="Conversation" component={ConversationScreen} />
+            <Stack.Screen name="NewChat" component={NewChatScreen} />
+            <Stack.Screen name="ChatInfo" component={ChatInfoScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+          </>
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+const makeStyles = (t) => StyleSheet.create({
+  tabBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 20, marginBottom: 16, padding: 8, borderRadius: radius.full, gap: 6,
+  },
+  tabItem: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 13, borderRadius: radius.full,
+  },
+  tabBadge: { position: 'absolute', right: -12, top: -8 },
+});
