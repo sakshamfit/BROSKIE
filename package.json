@@ -1,0 +1,18 @@
+{
+  "name": "broskie",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BROSKIE — realtime claymorphic messenger. Root manifest so hosts (Railway/Render/Nixpacks) detect a Node project and delegate to server/.",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "build": "cd server && npm install && npm run build",
+    "start": "cd server && npm start",
+    "seed": "cd server && npm run seed",
+    "dev:server": "cd server && npm run dev",
+    "dev:app": "cd app && npx expo start"
+  },
+  "workspaces": [],
+  "license": "MIT"
+}

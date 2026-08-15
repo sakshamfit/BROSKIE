@@ -44,7 +44,10 @@ and the server serves it automatically when that folder exists.
 
 ### Railway
 1. https://railway.app → **New Project → Deploy from GitHub repo** → `BROSKIE`
-2. Railway reads `railway.json` — build and start commands are preconfigured
+2. Railway reads `railway.json` — build and start commands are preconfigured.
+   Leave **Root Directory empty** (the repo root). The root `package.json` is
+   what makes Nixpacks detect Node and install npm; it then delegates to
+   `server/`. Setting a root directory of `server` will break the build.
 3. **Variables →** add `JWT_SECRET` (generate: `openssl rand -hex 32`)
 4. **Settings → Networking → Generate Domain**
 5. Open the domain. That's the whole app.
@@ -116,6 +119,7 @@ Only if you want the Vercel CDN. `vercel.json` is already in the repo.
 
 | Symptom | Cause |
 |---|---|
+| Build fails: `npm: command not found` | No `package.json` at the repo root, or Root Directory set to `server`. Nixpacks detects the language from the root — keep the root manifest and leave Root Directory empty. |
 | "Reconnecting…" in Settings | Backend asleep, or (two-host) wrong `EXPO_PUBLIC_API_URL` |
 | Blank page, 404 on refresh | Web build missing — run `npm run build` so `server/public` exists |
 | "Failed to fetch" on login | Two-host: backend `http://` while site is `https://` (mixed content) |

@@ -3,8 +3,8 @@ services:
     name: broskie
     runtime: node
     plan: free
-    buildCommand: cd server && npm install && npm run build
-    startCommand: cd server && npm start
+    buildCommand: npm run build
+    startCommand: npm start
     envVars:
       - key: JWT_SECRET
         generateValue: true
