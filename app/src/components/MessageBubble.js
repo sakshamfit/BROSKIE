@@ -3,9 +3,9 @@ import { View, Text, Image, Pressable, StyleSheet, Modal } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
-import { Ticks, formatTime, ClayCard } from './common';
+import { Ticks, formatTime, PaperCard, Rule } from './common';
 import { mediaUrl } from '../api';
-import { colorFor, radius, type, clayFor, clayPressed, AVATAR_INK } from '../theme';
+import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 import VoiceNote from './VoiceNote';
 
 const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -18,9 +18,9 @@ export default function MessageBubble({ message, isMine, isGroup, senderName, on
   if (message.type === 'system') {
     return (
       <View style={s.systemWrap}>
-        <View style={[s.systemPill, { backgroundColor: theme.card }, clayFor(theme, 1)]}>
-          <EmojiText style={[type.bodySm, { color: theme.subtext, fontSize: 12.5, textAlign: 'center' }]}>{message.body}</EmojiText>
-        </View>
+        <View style={[dashedRule(theme), s.systemLine]} />
+        <EmojiText style={[type.labelXs, { color: theme.muted, textAlign: 'center' }]}>{message.body}</EmojiText>
+        <View style={[dashedRule(theme), s.systemLine]} />
       </View>
     );
   }
@@ -30,73 +30,78 @@ export default function MessageBubble({ message, isMine, isGroup, senderName, on
   const reactionList = Object.entries(grouped);
 
   const ink = isMine ? theme.onBubbleOut : theme.onBubbleIn;
-  const subInk = isMine ? 'rgba(0,33,19,0.55)' : theme.muted;
+  const subInk = isMine ? (theme.dark ? 'rgba(28,27,27,0.55)' : 'rgba(255,255,255,0.62)') : theme.muted;
 
-  // asymmetric clay corners replace the WhatsApp tail
+  // hand-drawn asymmetry: the "tail" corner is squared off
   const shape = isMine
-    ? { borderTopLeftRadius: radius.bubble, borderTopRightRadius: radius.bubble, borderBottomLeftRadius: radius.bubble, borderBottomRightRadius: radius.bubbleTail }
-    : { borderTopLeftRadius: radius.bubble, borderTopRightRadius: radius.bubble, borderBottomRightRadius: radius.bubble, borderBottomLeftRadius: radius.bubbleTail };
+    ? { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: 0 }
+    : { borderTopLeftRadius: radius.md, borderTopRightRadius: radius.lg, borderBottomRightRadius: radius.lg, borderBottomLeftRadius: 0 };
 
   return (
     <>
       <Pressable onLongPress={() => setMenu(true)} delayLongPress={280} style={[s.wrap, isMine ? s.wrapMine : s.wrapTheirs]}>
-        <View style={[s.bubble, shape, { backgroundColor: isMine ? theme.bubbleOut : theme.bubbleIn }, clayFor(theme, isMine ? 2 : 1)]}>
+        <View
+          style={[
+            s.bubble,
+            shape,
+            {
+              backgroundColor: isMine ? theme.bubbleOut : theme.bubbleIn,
+              borderWidth: stroke.ink,
+              borderColor: theme.ink,
+            },
+          ]}
+        >
           {isGroup && !isMine && (
-            <Text style={[type.labelMd, { color: theme.primary, marginBottom: 5, letterSpacing: 0.3 }]}>{senderName}</Text>
+            <Text style={[type.labelXs, { color: theme.graphite, marginBottom: 4 }]}>{senderName.toUpperCase()}</Text>
           )}
 
           {message.replyTo && (
-            <View style={[s.reply, { backgroundColor: isMine ? 'rgba(255,255,255,0.42)' : theme.cardAlt }]}>
-              <View style={[s.replyAccent, { backgroundColor: theme.primary }]} />
-              <View style={{ flex: 1 }}>
-                <Text style={[type.labelMd, { color: theme.primary, letterSpacing: 0.2 }]} numberOfLines={1}>
-                  {message.replyTo.senderName}
-                </Text>
-                {message.replyTo.type === 'image' || message.replyTo.type === 'voice' ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                    <Emoji char={message.replyTo.type === 'image' ? '📷' : '🎤'} size={13} />
-                    <Text style={[type.bodySm, { color: isMine ? 'rgba(0,33,19,0.7)' : theme.subtext, fontSize: 13 }]}>
-                      {message.replyTo.type === 'image' ? 'Photo' : 'Voice message'}
-                    </Text>
-                  </View>
-                ) : (
-                  <EmojiText style={[type.bodySm, { color: isMine ? 'rgba(0,33,19,0.7)' : theme.subtext, fontSize: 13 }]} numberOfLines={2}>
-                    {message.replyTo.body}
-                  </EmojiText>
-                )}
-              </View>
+            <View style={[s.reply, { borderLeftColor: isMine ? subInk : theme.graphiteLine }]}>
+              <Text style={[type.labelXs, { color: isMine ? subInk : theme.graphite }]} numberOfLines={1}>
+                {message.replyTo.senderName.toUpperCase()}
+              </Text>
+              {message.replyTo.type === 'image' || message.replyTo.type === 'voice' ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                  <Emoji char={message.replyTo.type === 'image' ? '📷' : '🎤'} size={12} />
+                  <Text style={[type.bodySm, { color: isMine ? subInk : theme.subtext, fontSize: 12.5 }]}>
+                    {message.replyTo.type === 'image' ? 'Photo' : 'Voice message'}
+                  </Text>
+                </View>
+              ) : (
+                <EmojiText style={[type.bodySm, { color: isMine ? subInk : theme.subtext, fontSize: 12.5, marginTop: 2 }]} numberOfLines={2}>
+                  {message.replyTo.body}
+                </EmojiText>
+              )}
             </View>
           )}
 
           {message.deleted ? (
             <View style={s.deletedRow}>
-              <Icon name="ban-outline" size={15} color={subInk} />
-              <Text style={[type.bodyLg, { color: subInk, fontStyle: 'italic', fontSize: 15 }]}>This message was deleted</Text>
+              <Icon name="ban-outline" size={14} color={subInk} />
+              <Text style={[type.bodyMd, { color: subInk, fontStyle: 'italic' }]}>message deleted</Text>
             </View>
           ) : message.type === 'image' ? (
             <Pressable onPress={() => onImagePress?.(mediaUrl(message.mediaUrl))}>
-              <Image source={{ uri: mediaUrl(message.mediaUrl) }} style={s.image} resizeMode="cover" />
-              {!!message.body && <EmojiText style={[type.bodyLg, { color: ink, marginTop: 8 }]}>{message.body}</EmojiText>}
+              <Image source={{ uri: mediaUrl(message.mediaUrl) }} style={[s.image, { borderColor: theme.ink }]} resizeMode="cover" />
+              {!!message.body && <EmojiText style={[type.bodyMd, { color: ink, marginTop: 7 }]}>{message.body}</EmojiText>}
             </Pressable>
           ) : message.type === 'voice' ? (
             <VoiceNote uri={mediaUrl(message.mediaUrl)} duration={message.duration} isMine={isMine} />
           ) : (
-            <EmojiText style={[type.bodyLg, { color: ink }]}>{message.body}</EmojiText>
+            <EmojiText style={[type.bodyMd, { color: ink }]}>{message.body}</EmojiText>
           )}
 
           <View style={s.meta}>
-            <Text style={[type.bodySm, { fontSize: 11, color: subInk, letterSpacing: 0.2 }]}>{formatTime(message.createdAt)}</Text>
-            {isMine && <Ticks status={message.status} size={14} />}
+            <Text style={[type.labelXs, { color: subInk, fontSize: 9 }]}>{formatTime(message.createdAt)}</Text>
+            {isMine && <Ticks status={message.status} size={13} color={message.status === 'read' ? theme.highlighter : subInk} />}
           </View>
 
           {reactionList.length > 0 && (
-            <View style={[s.reactions, { backgroundColor: theme.card }, clayFor(theme, 1)]}>
+            <View style={[s.reactions, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
               {reactionList.map(([emoji, count]) => (
                 <View key={emoji} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                  <Emoji char={emoji} size={14} />
-                  {count > 1 && (
-                    <Text style={[type.bodySm, { fontSize: 11, color: theme.subtext }]}>{count}</Text>
-                  )}
+                  <Emoji char={emoji} size={13} />
+                  {count > 1 && <Text style={[type.labelXs, { color: theme.ink, fontSize: 9 }]}>{count}</Text>}
                 </View>
               ))}
             </View>
@@ -106,29 +111,30 @@ export default function MessageBubble({ message, isMine, isGroup, senderName, on
 
       <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)}>
         <Pressable style={[s.overlay, { backgroundColor: theme.overlay }]} onPress={() => setMenu(false)}>
-          <ClayCard style={s.menu} level={3}>
+          <PaperCard weight="ink" style={s.menu}>
             <View style={s.quickRow}>
               {QUICK.map((e) => (
                 <Pressable
                   key={e}
                   onPress={() => { onReact(message.id, e); setMenu(false); }}
-                  style={({ pressed }) => [s.quickBtn, { backgroundColor: theme.cardAlt }, pressed ? clayPressed(theme.shadowTint) : clayFor(theme, 1)]}
+                  style={({ pressed }) => [s.quickBtn, inkBox(theme, 'thin'), pressed ? marker(theme, 2) : null]}
                 >
-                  <Emoji char={e} size={26} />
+                  <Emoji char={e} size={22} />
                 </Pressable>
               ))}
             </View>
-            <Pressable style={s.menuItem} onPress={() => { onReply(message); setMenu(false); }}>
-              <Icon name="arrow-undo-outline" size={20} color={theme.primary} />
-              <Text style={[type.bodyLg, { color: theme.text }]}>Reply</Text>
+            <Rule style={{ marginVertical: 10 }} />
+            <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReply(message); setMenu(false); }}>
+              <Icon name="arrow-undo-outline" size={18} color={theme.ink} />
+              <Text style={[type.bodyMd, { color: theme.text }]}>Reply</Text>
             </Pressable>
             {isMine && !message.deleted && (
-              <Pressable style={s.menuItem} onPress={() => { onDelete(message.id); setMenu(false); }}>
-                <Icon name="trash-outline" size={20} color={theme.danger} />
-                <Text style={[type.bodyLg, { color: theme.danger }]}>Delete for everyone</Text>
+              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onDelete(message.id); setMenu(false); }}>
+                <Icon name="trash-outline" size={18} color={theme.danger} />
+                <Text style={[type.bodyMd, { color: theme.danger }]}>Delete for everyone</Text>
               </Pressable>
             )}
-          </ClayCard>
+          </PaperCard>
         </Pressable>
       </Modal>
     </>
@@ -136,24 +142,24 @@ export default function MessageBubble({ message, isMine, isGroup, senderName, on
 }
 
 const makeStyles = (t) => StyleSheet.create({
-  wrap: { paddingHorizontal: 20, marginVertical: 6 },
+  wrap: { paddingHorizontal: 20, marginVertical: 5 },
   wrapMine: { alignItems: 'flex-end' },
   wrapTheirs: { alignItems: 'flex-start' },
-  bubble: { maxWidth: '84%', minWidth: 96, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, marginBottom: 8 },
+  bubble: { maxWidth: '84%', minWidth: 88, paddingHorizontal: 13, paddingTop: 9, paddingBottom: 7, marginBottom: 7 },
   deletedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  image: { width: 232, height: 232, borderRadius: radius.DEFAULT, backgroundColor: t.cardAlt },
-  meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 5, marginTop: 6 },
-  reply: { flexDirection: 'row', gap: 10, padding: 10, marginBottom: 8, borderRadius: radius.DEFAULT },
-  replyAccent: { width: 3.5, borderRadius: 2, alignSelf: 'stretch' },
+  image: { width: 224, height: 224, borderWidth: 1 },
+  meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 5, marginTop: 5 },
+  reply: { borderLeftWidth: 2, paddingLeft: 8, paddingVertical: 2, marginBottom: 7 },
   reactions: {
-    position: 'absolute', bottom: -14, left: 14, flexDirection: 'row', gap: 3,
-    borderRadius: radius.full, paddingHorizontal: 9, paddingVertical: 4,
+    position: 'absolute', bottom: -12, left: 10, flexDirection: 'row', gap: 4,
+    paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1,
+    borderTopLeftRadius: 1, borderTopRightRadius: 4, borderBottomRightRadius: 1, borderBottomLeftRadius: 3,
   },
-  systemWrap: { alignItems: 'center', marginVertical: 12, paddingHorizontal: 40 },
-  systemPill: { paddingHorizontal: 18, paddingVertical: 9, borderRadius: radius.full },
+  systemWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 14, paddingHorizontal: 28 },
+  systemLine: { flex: 1 },
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
-  menu: { width: '100%', maxWidth: 350, padding: 16 },
-  quickRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 8 },
-  quickBtn: { width: 46, height: 46, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 12, paddingVertical: 15 },
+  menu: { width: '100%', maxWidth: 340, padding: 14 },
+  quickRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  quickBtn: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 6, paddingVertical: 12 },
 });

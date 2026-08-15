@@ -1,7 +1,9 @@
 /**
- * BROSKIE design system — Claymorphism.
- * Tokens transcribed from design.md. Soft "inflated" surfaces, extreme roundness,
- * no borders or dividers, pastel clay shadows instead of grey/black.
+ * BROSKIE — "Graphite & Pulp" design system.
+ *
+ * Artisanal / tactile minimalism: ink strokes on warm off-white paper.
+ * NO digital shadows, NO elevation tints, NO blur. Depth comes from
+ * line weight and physical overlap.
  */
 import { Platform } from 'react-native';
 
@@ -10,155 +12,194 @@ import { Platform } from 'react-native';
 /* ------------------------------------------------------------------ */
 
 export const tokens = {
-  surface: '#f5fbf4',
-  surfaceDim: '#d5dcd5',
+  surface: '#fdf8f8',
+  surfaceDim: '#ddd9d8',
   surfaceContainerLowest: '#ffffff',
-  surfaceContainerLow: '#eff5ee',
-  surfaceContainer: '#e9efe9',
-  surfaceContainerHigh: '#e4eae3',
-  surfaceContainerHighest: '#dee4de',
-  onSurface: '#171d19',
-  onSurfaceVariant: '#3d4a42',
-  inverseSurface: '#2c322e',
-  inverseOnSurface: '#ecf2ec',
-  outline: '#6d7a71',
-  outlineVariant: '#bccac0',
+  surfaceContainerLow: '#f7f3f2',
+  surfaceContainer: '#f1edec',
+  surfaceContainerHigh: '#ebe7e6',
+  surfaceContainerHighest: '#e5e2e1',
 
-  primary: '#006c48',
+  onSurface: '#1c1b1b',
+  onSurfaceVariant: '#444748',
+  inverseSurface: '#313030',
+  inverseOnSurface: '#f4f0ef',
+  outline: '#747878',
+  outlineVariant: '#c4c7c7',
+
+  primary: '#000000',          // India ink
   onPrimary: '#ffffff',
-  primaryContainer: '#76ebb3',
-  onPrimaryContainer: '#006a46',
-  inversePrimary: '#67dca5',
+  primaryContainer: '#1c1b1b',
+  onPrimaryContainer: '#858383',
+  inversePrimary: '#c8c6c5',
 
-  secondary: '#006d2f',
+  secondary: '#5d5f5b',        // graphite
   onSecondary: '#ffffff',
-  secondaryContainer: '#5dfd8a',
-  onSecondaryContainer: '#007232',
+  secondaryContainer: '#e2e3de',
+  onSecondaryContainer: '#636561',
 
-  tertiary: '#7c5724',
-  tertiaryContainer: '#ffcc8e',
+  tertiary: '#000000',
+  tertiaryContainer: '#1a1c18',
 
   error: '#ba1a1a',
   onError: '#ffffff',
   errorContainer: '#ffdad6',
   onErrorContainer: '#93000a',
 
-  primaryFixed: '#84f9c0',
-  primaryFixedDim: '#67dca5',
-  onPrimaryFixed: '#002113',
-  onPrimaryFixedVariant: '#005235',
-  secondaryFixedDim: '#3de273',
+  primaryFixed: '#e5e2e1',
+  primaryFixedDim: '#c8c6c5',
+  onPrimaryFixed: '#1c1b1b',
+  onPrimaryFixedVariant: '#474746',
+  secondaryFixed: '#e2e3de',
+  secondaryFixedDim: '#c6c7c2',
 
-  clayWhite: '#ffffff',
-  clayShadowSoft: '#e2e8f0',
-  surfaceBg: '#f8fafc',
-  onSurfaceText: '#1e293b',
-
-  legacyGreen: '#25d366',   // secondary accent per spec: badges, status beads
+  /* Highlighter — the one vivid accent, used sparingly. Felt-tip yellow. */
+  highlighter: '#FFE24D',
+  highlighterSoft: 'rgba(255, 226, 77, 0.55)',
+  highlighterWash: 'rgba(255, 226, 77, 0.32)',
 };
 
-/* radii — "extreme roundness" (rem → px at 16) */
+/* radii — "soft", never geometric perfection */
 export const radius = {
-  sm: 8,
-  DEFAULT: 16,
-  md: 24,
-  lg: 32,
-  xl: 48,
+  sm: 2,
+  DEFAULT: 4,
+  md: 6,
+  lg: 8,
+  xl: 12,
   full: 9999,
-  bubble: 24,
-  bubbleTail: 8,
 };
 
-/* 8px rhythm */
-export const space = (n) => n * 8;
+/* 4px base unit */
+export const space = (n) => n * 4;
 export const spacing = {
-  unit: 8,
+  unit: 4,
   gutter: 24,
-  marginMobile: 20,
-  clayPadding: 24,
+  margin: 32,
+  safeArea: 16,
 };
 
 /* ------------------------------------------------------------------ */
-/* typography — Inter, spacious tracking                               */
+/* stroke weights — depth is line weight, not shadow                   */
 /* ------------------------------------------------------------------ */
 
-const family = (weight) => {
-  // Loaded via @expo-google-fonts/inter in App.js
-  if (weight >= 700) return 'Inter_700Bold';
-  if (weight >= 600) return 'Inter_600SemiBold';
-  if (weight >= 500) return 'Inter_500Medium';
-  return 'Inter_400Regular';
+export const stroke = {
+  hair: StyleSheetHairline(),  // ~0.5px graphite, "far away"
+  thin: 1,
+  ink: 2,                      // standard ink stroke
+  bold: 3,                     // "closest" to the viewer
 };
+
+function StyleSheetHairline() {
+  // avoid importing StyleSheet at module top for RN web tree-shaking quirks
+  const { StyleSheet } = require('react-native');
+  return StyleSheet.hairlineWidth;
+}
+
+/* ------------------------------------------------------------------ */
+/* typography — Bricolage headlines / Karla body / JetBrains labels    */
+/* ------------------------------------------------------------------ */
+
+const head = (w) => (w >= 800 ? 'Bricolage_800ExtraBold' : w >= 700 ? 'Bricolage_700Bold' : 'Bricolage_600SemiBold');
+const body = (w) => (w >= 700 ? 'Karla_700Bold' : w >= 500 ? 'Karla_500Medium' : 'Karla_400Regular');
+const mono = (w) => (w >= 700 ? 'JetBrainsMono_700Bold' : 'JetBrainsMono_500Medium');
 
 export const type = {
-  displayLg:  { fontFamily: family(700), fontSize: 32, fontWeight: '700', lineHeight: 40, letterSpacing: -0.64 },
-  headlineMd: { fontFamily: family(600), fontSize: 20, fontWeight: '600', lineHeight: 28, letterSpacing: -0.2 },
-  headlineSm: { fontFamily: family(600), fontSize: 18, fontWeight: '600', lineHeight: 24, letterSpacing: -0.18 },
-  bodyLg:     { fontFamily: family(400), fontSize: 16, fontWeight: '400', lineHeight: 24, letterSpacing: 0.16 },
-  bodySm:     { fontFamily: family(400), fontSize: 14, fontWeight: '400', lineHeight: 20, letterSpacing: 0.14 },
-  labelMd:    { fontFamily: family(600), fontSize: 12, fontWeight: '600', lineHeight: 16, letterSpacing: 0.6 },
-  fontFamily: family,
+  /* display / headlines — Bricolage Grotesque */
+  headlineLg:  { fontFamily: head(800), fontSize: 32, lineHeight: 35, letterSpacing: -0.64 },
+  headlineMd:  { fontFamily: head(700), fontSize: 24, lineHeight: 29, letterSpacing: -0.3 },
+  headlineSm:  { fontFamily: head(700), fontSize: 18, lineHeight: 22, letterSpacing: -0.2 },
+
+  /* body — Karla */
+  bodyLg:      { fontFamily: body(400), fontSize: 17, lineHeight: 26 },
+  bodyMd:      { fontFamily: body(400), fontSize: 15, lineHeight: 24 },
+  bodySm:      { fontFamily: body(400), fontSize: 13.5, lineHeight: 20 },
+  bodyStrong:  { fontFamily: body(700), fontSize: 15, lineHeight: 24 },
+
+  /* labels / metadata — JetBrains Mono */
+  labelSm:     { fontFamily: mono(500), fontSize: 11, lineHeight: 13, letterSpacing: 0.55 },
+  labelXs:     { fontFamily: mono(500), fontSize: 9.5, lineHeight: 12, letterSpacing: 0.5 },
+
+  head, body, mono,
 };
 
 /* ------------------------------------------------------------------ */
-/* claymorphism elevation                                              */
+/* "ink" helpers — replace the old clay shadow API                     */
 /* ------------------------------------------------------------------ */
 
 const isWeb = Platform.OS === 'web';
 
 /**
- * Dual-shadow clay elevation.
- * Web/new-arch RN support `boxShadow` (incl. inset) so we get the true
- * inflated look; native falls back to layered elevation + soft shadow.
+ * A drawn box. `weight` maps to how "close" the element is:
+ *   'hair' | 'thin' -> distant pencil line
+ *   'ink'           -> standard 2px pen
+ *   'bold'          -> 3px, foreground
+ * Slightly asymmetric corner radii imitate a hand-drawn rectangle.
  */
-export function clay(level = 1, tint = tokens.clayShadowSoft) {
-  if (isWeb) {
-    const presets = {
-      // level: [ambient, anchor, inner-highlight, inner-shade]
-      1: `0 10px 24px -6px ${tint}, 0 4px 10px -4px rgba(148,163,184,0.35), inset 2px 2px 5px rgba(255,255,255,0.95), inset -3px -4px 8px rgba(148,163,184,0.16)`,
-      2: `0 18px 38px -10px ${tint}, 0 8px 16px -6px rgba(148,163,184,0.42), inset 3px 3px 7px rgba(255,255,255,0.95), inset -4px -5px 11px rgba(148,163,184,0.22)`,
-      3: `0 26px 54px -12px ${tint}, 0 12px 22px -8px rgba(148,163,184,0.45), inset 3px 4px 9px rgba(255,255,255,0.9), inset -5px -7px 14px rgba(148,163,184,0.26)`,
-    };
-    return { boxShadow: presets[level] || presets[1] };
-  }
-  const native = {
-    1: { elevation: 4,  shadowRadius: 12, shadowOpacity: 0.16, shadowOffset: { width: 0, height: 6 } },
-    2: { elevation: 8,  shadowRadius: 18, shadowOpacity: 0.2,  shadowOffset: { width: 0, height: 10 } },
-    3: { elevation: 12, shadowRadius: 26, shadowOpacity: 0.24, shadowOffset: { width: 0, height: 14 } },
+export function inkBox(theme, weight = 'ink', color) {
+  const w = typeof weight === 'number' ? weight : stroke[weight] ?? stroke.ink;
+  return {
+    borderWidth: w,
+    borderColor: color || theme.ink,
+    borderTopLeftRadius: radius.DEFAULT,
+    borderTopRightRadius: radius.lg,
+    borderBottomRightRadius: radius.DEFAULT,
+    borderBottomLeftRadius: radius.md,
+    backgroundColor: 'transparent',
   };
-  return { shadowColor: '#94a3b8', ...(native[level] || native[1]) };
 }
 
-/** Pressed state — outer shadow shrinks, inner deepens (squished clay). */
-export function clayPressed(tint = tokens.clayShadowSoft) {
-  if (isWeb) {
-    return {
-      boxShadow: `0 3px 8px -4px ${tint}, inset 3px 4px 9px rgba(148,163,184,0.34), inset -2px -2px 6px rgba(255,255,255,0.85)`,
-      transform: [{ scale: 0.985 }],
-    };
-  }
-  return { elevation: 1, shadowColor: '#94a3b8', shadowRadius: 4, shadowOpacity: 0.14, shadowOffset: { width: 0, height: 2 }, transform: [{ scale: 0.985 }] };
+/** Faint pencil outline for "further away" surfaces (cards, list rows). */
+export function pencilBox(theme, color) {
+  return {
+    borderWidth: 1,
+    borderColor: color || theme.graphiteLine,
+    borderTopLeftRadius: radius.md,
+    borderTopRightRadius: radius.DEFAULT,
+    borderBottomRightRadius: radius.lg,
+    borderBottomLeftRadius: radius.DEFAULT,
+  };
 }
 
-/** Inset "carved" surface — inputs, search bars. No outer shadow. */
-export function clayInset(strength = 1) {
-  if (isWeb) {
-    const s = strength === 2
-      ? `inset 4px 5px 11px rgba(148,163,184,0.35), inset -3px -3px 8px rgba(255,255,255,0.95)`
-      : `inset 3px 4px 8px rgba(148,163,184,0.26), inset -2px -2px 6px rgba(255,255,255,0.92)`;
-    return { boxShadow: s };
-  }
-  // native cannot do inset shadows -> subtle tonal recess instead
-  return { backgroundColor: tokens.surfaceContainerLow };
+/** Single ink underline — the input-field treatment from the spec. */
+export function inkUnderline(theme, weight = 'ink', color) {
+  const w = typeof weight === 'number' ? weight : stroke[weight] ?? stroke.ink;
+  return {
+    borderBottomWidth: w,
+    borderBottomColor: color || theme.ink,
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+  };
 }
 
-/** Avatars sit "set into" the clay. */
-export function clayAvatar() {
-  if (isWeb) {
-    return { boxShadow: `inset 2px 3px 6px rgba(0,0,0,0.18), inset -2px -2px 5px rgba(255,255,255,0.35), 0 4px 10px -3px ${tokens.clayShadowSoft}` };
-  }
-  return { elevation: 2, shadowColor: '#94a3b8', shadowRadius: 6, shadowOpacity: 0.15, shadowOffset: { width: 0, height: 3 } };
+/** Dashed "leaking pen" divider. */
+export function dashedRule(theme, color) {
+  return {
+    borderBottomWidth: 1,
+    borderStyle: 'dashed',
+    borderBottomColor: color || theme.graphiteLine,
+  };
 }
+
+/** Highlighter wash — marker stroke behind text / active states. */
+export function marker(theme, strength = 1) {
+  return {
+    backgroundColor: strength >= 2 ? theme.highlighter : theme.highlighterSoft,
+  };
+}
+
+/** Pressed state: ink thickens, highlighter bleeds in. */
+export function pressedInk(theme) {
+  return { backgroundColor: theme.highlighterWash };
+}
+
+/* Back-compat shims so any stragglers don't crash.
+   The clay system is gone — these are intentional no-ops. */
+export const clay = () => ({});
+export const clayFor = () => ({});
+export const clayPressed = () => ({});
+export const clayInset = () => ({});
+export const clayInsetFor = () => ({});
+export const clayAvatar = () => ({});
 
 /* ------------------------------------------------------------------ */
 /* themes                                                              */
@@ -168,125 +209,116 @@ export const lightTheme = {
   dark: false,
   name: 'BROSKIE',
 
-  // surfaces
-  bg: tokens.surfaceBg,
-  chatBg: tokens.surfaceBg,
-  card: tokens.clayWhite,
+  bg: tokens.surface,             // warm pulp paper
+  chatBg: tokens.surface,
+  card: tokens.surface,           // cards are paper, not tinted
   cardAlt: tokens.surfaceContainerLow,
-  inputBg: tokens.clayWhite,
+  inputBg: 'transparent',
 
-  // brand
+  ink: tokens.primary,            // India ink
+  graphite: tokens.secondary,     // pencil
+  graphiteLine: tokens.outlineVariant,
+
   primary: tokens.primary,
   onPrimary: tokens.onPrimary,
   primaryContainer: tokens.primaryContainer,
   onPrimaryContainer: tokens.onPrimaryContainer,
-  accent: tokens.primaryContainer,      // mint clay for FAB / primary actions
-  onAccent: tokens.onPrimaryFixed,
-  badge: tokens.legacyGreen,            // secondary green beads
-  onBadge: '#ffffff',
 
-  // header is a clay surface, not a slab of colour
-  headerBg: tokens.clayWhite,
+  accent: tokens.highlighter,
+  onAccent: tokens.onSurface,
+  highlighter: tokens.highlighter,
+  highlighterSoft: tokens.highlighterSoft,
+  highlighterWash: tokens.highlighterWash,
+
+  badge: tokens.primary,          // ink-filled bead
+  onBadge: tokens.onPrimary,
+
+  headerBg: tokens.surface,
   headerText: tokens.onSurface,
   headerSub: tokens.onSurfaceVariant,
 
-  // text
-  text: tokens.onSurfaceText,
-  subtext: '#64748b',
+  text: tokens.onSurface,
+  subtext: tokens.onSurfaceVariant,
   muted: tokens.outline,
 
-  // bubbles
-  bubbleOut: tokens.primaryContainer,
-  onBubbleOut: tokens.onPrimaryFixed,
-  bubbleIn: tokens.clayWhite,
-  onBubbleIn: tokens.onSurfaceText,
+  /* bubbles: mine = ink-filled, theirs = paper with ink outline */
+  bubbleOut: tokens.primary,
+  onBubbleOut: tokens.onPrimary,
+  bubbleIn: tokens.surface,
+  onBubbleIn: tokens.onSurface,
 
-  tick: tokens.primary,
-  tickRead: '#0ea5e9',
+  tick: tokens.outline,
+  tickRead: tokens.primary,
+
   danger: tokens.error,
   dangerContainer: tokens.errorContainer,
 
-  shadowTint: tokens.clayShadowSoft,
-  ripple: 'rgba(0,108,72,0.06)',
-  overlay: 'rgba(23,29,25,0.42)',
-
-  border: 'transparent',   // spec: no dividers
+  ripple: 'rgba(0,0,0,0.06)',
+  overlay: 'rgba(28,27,27,0.55)',
+  border: tokens.outlineVariant,
 };
 
+/** Dark = ink-on-slate (chalkboard rather than paper). */
 export const darkTheme = {
   dark: true,
   name: 'BROSKIE',
 
-  bg: '#111b17',
-  chatBg: '#111b17',
-  card: '#1b2621',
-  cardAlt: '#22302a',
-  inputBg: '#1b2621',
+  bg: '#1c1b1b',
+  chatBg: '#1c1b1b',
+  card: '#1c1b1b',
+  cardAlt: '#262525',
+  inputBg: 'transparent',
 
-  primary: tokens.primaryFixedDim,
-  onPrimary: tokens.onPrimaryFixed,
-  primaryContainer: '#005235',
-  onPrimaryContainer: tokens.primaryFixed,
-  accent: tokens.primaryFixedDim,
-  onAccent: tokens.onPrimaryFixed,
-  badge: tokens.secondaryFixedDim,
-  onBadge: '#002109',
+  ink: '#f4f0ef',                 // chalk
+  graphite: '#a8a5a4',
+  graphiteLine: '#4a4848',
 
-  headerBg: '#1b2621',
-  headerText: tokens.inverseOnSurface,
-  headerSub: '#9bb0a5',
+  primary: '#f4f0ef',
+  onPrimary: '#1c1b1b',
+  primaryContainer: '#e5e2e1',
+  onPrimaryContainer: '#1c1b1b',
 
-  text: '#e6ede8',
-  subtext: '#9bb0a5',
-  muted: '#7f938a',
+  accent: tokens.highlighter,
+  onAccent: '#1c1b1b',
+  highlighter: tokens.highlighter,
+  highlighterSoft: 'rgba(255, 226, 77, 0.42)',
+  highlighterWash: 'rgba(255, 226, 77, 0.22)',
 
-  bubbleOut: '#005235',
-  onBubbleOut: tokens.primaryFixed,
-  bubbleIn: '#1b2621',
-  onBubbleIn: '#e6ede8',
+  badge: tokens.highlighter,
+  onBadge: '#1c1b1b',
 
-  tick: tokens.primaryFixedDim,
-  tickRead: '#38bdf8',
+  headerBg: '#1c1b1b',
+  headerText: '#f4f0ef',
+  headerSub: '#b6b3b2',
+
+  text: '#f4f0ef',
+  subtext: '#b6b3b2',
+  muted: '#8b8887',
+
+  bubbleOut: '#f4f0ef',
+  onBubbleOut: '#1c1b1b',
+  bubbleIn: '#1c1b1b',
+  onBubbleIn: '#f4f0ef',
+
+  tick: '#8b8887',
+  tickRead: tokens.highlighter,
+
   danger: '#ffb4ab',
-  // muted recessed red so destructive surfaces don't shout in dark mode
   dangerContainer: '#3b1d1a',
 
-  shadowTint: '#0b120f',
-  ripple: 'rgba(132,249,192,0.08)',
-  overlay: 'rgba(0,0,0,0.6)',
-
-  border: 'transparent',
+  ripple: 'rgba(255,255,255,0.07)',
+  overlay: 'rgba(0,0,0,0.65)',
+  border: '#4a4848',
 };
 
-/* dark-mode clay uses a darker tint */
-export function clayFor(theme, level = 1) {
-  if (!theme.dark) return clay(level, theme.shadowTint);
-  if (isWeb) {
-    const presets = {
-      1: `0 10px 22px -8px rgba(0,0,0,0.55), inset 2px 2px 5px rgba(255,255,255,0.05), inset -3px -4px 8px rgba(0,0,0,0.35)`,
-      2: `0 16px 34px -10px rgba(0,0,0,0.6), inset 3px 3px 7px rgba(255,255,255,0.06), inset -4px -5px 11px rgba(0,0,0,0.4)`,
-      3: `0 24px 48px -12px rgba(0,0,0,0.65), inset 3px 4px 9px rgba(255,255,255,0.07), inset -5px -7px 14px rgba(0,0,0,0.45)`,
-    };
-    return { boxShadow: presets[level] || presets[1] };
-  }
-  return clay(level, theme.shadowTint);
-}
-
-export function clayInsetFor(theme, strength = 1) {
-  if (!theme.dark) return clayInset(strength);
-  if (isWeb) {
-    return { boxShadow: `inset 3px 4px 9px rgba(0,0,0,0.45), inset -2px -2px 6px rgba(255,255,255,0.05)` };
-  }
-  return { backgroundColor: theme.cardAlt };
-}
-
 /* ------------------------------------------------------------------ */
-/* avatars                                                             */
+/* avatars — pencil-sketched initials, no colour fills                 */
 /* ------------------------------------------------------------------ */
 
+/** Muted drafting tints; avatars are outlined, fills stay subtle. */
 export const AVATAR_COLORS = [
-  '#76ebb3', '#5dfd8a', '#ffcc8e', '#84f9c0', '#67dca5',
-  '#a7f3d0', '#bbf7d0', '#fde68a', '#99f6e4', '#c7f9cc',
+  '#e5e2e1', '#e2e3de', '#e3e3dd', '#ebe7e6', '#ddd9d8',
+  '#f1edec', '#e7e4e0', '#e0e3e3', '#eae6e2', '#e4e6e1',
 ];
 
 export function colorFor(id = '') {
@@ -295,8 +327,7 @@ export function colorFor(id = '') {
   return AVATAR_COLORS[sum % AVATAR_COLORS.length];
 }
 
-/** avatars use pastel fills -> dark ink for contrast */
-export const AVATAR_INK = '#0f3d2b';
+export const AVATAR_INK = tokens.onSurface;
 
 export function initials(name = '') {
   const parts = String(name)

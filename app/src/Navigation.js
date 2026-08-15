@@ -8,8 +8,8 @@ import Icon from './icons/Icon';
 import { useAuth } from './store/AuthContext';
 import { useTheme } from './store/ThemeContext';
 import { useChat } from './store/ChatContext';
-import { Loading, EmptyState, ClayBead } from './components/common';
-import { radius, type, clayFor, clayPressed } from './theme';
+import { Loading, EmptyState, CountBead, Rule } from './components/common';
+import { radius, type, inkBox, marker, dashedRule, stroke } from './theme';
 
 import AuthScreen from './screens/AuthScreen';
 import ChatListScreen from './screens/ChatListScreen';
@@ -44,7 +44,7 @@ function HomeTabs({ navigation }) {
       </View>
 
       <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'transparent' }}>
-        <View style={[s.tabBar, { backgroundColor: theme.card }, clayFor(theme, 2)]}>
+        <View style={[s.tabBar, { backgroundColor: theme.bg, borderTopWidth: stroke.ink, borderTopColor: theme.ink }]}>
           {TABS.map((t) => {
             const active = tab === t.key;
             return (
@@ -53,26 +53,25 @@ function HomeTabs({ navigation }) {
                 onPress={() => setTab(t.key)}
                 style={({ pressed }) => [
                   s.tabItem,
-                  active && { backgroundColor: theme.accent },
-                  active ? clayFor(theme, 1) : null,
-                  pressed && !active ? { opacity: 0.6 } : null,
+                  active ? marker(theme, 2) : null,
+                  pressed && !active ? marker(theme, 1) : null,
                 ]}
               >
                 <View>
                   <Icon
                     name={active ? t.icon : `${t.icon}-outline`}
-                    size={21}
-                    color={active ? theme.onAccent : theme.muted}
+                    size={20}
+                    color={active ? theme.ink : theme.muted}
                   />
                   {!!t.badge && t.badge > 0 && (
                     <View style={s.tabBadge}>
-                      <ClayBead label={t.badge > 9 ? '9+' : String(t.badge)} small />
+                      <CountBead label={t.badge > 9 ? '9+' : String(t.badge)} small />
                     </View>
                   )}
                 </View>
-                {active && (
-                  <Text style={[type.labelMd, { color: theme.onAccent, letterSpacing: 0.3 }]}>{t.label}</Text>
-                )}
+                <Text style={[type.labelXs, { color: active ? theme.ink : theme.muted }]}>
+                  {t.label.toUpperCase()}
+                </Text>
               </Pressable>
             );
           })}
@@ -87,7 +86,7 @@ function CallsPlaceholder() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, minHeight: 84, justifyContent: 'center' }}>
-        <Text style={[type.displayLg, { color: theme.text, letterSpacing: 0.4 }]}>Calls</Text>
+        <Text style={[type.headlineLg, { color: theme.text }]}>Calls</Text>
       </View>
       <EmptyState
         icon="call-outline"
@@ -102,7 +101,7 @@ export default function Navigation() {
   const { user, booting } = useAuth();
   const { theme, mode } = useTheme();
 
-  if (booting) return <Loading label="Starting BROSKIE…" />;
+  if (booting) return <Loading label="STARTING BROSKIE" />;
 
   const navTheme = {
     ...(mode === 'dark' ? DarkTheme : DefaultTheme),
@@ -138,11 +137,11 @@ export default function Navigation() {
 const makeStyles = (t) => StyleSheet.create({
   tabBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginHorizontal: 20, marginBottom: 16, padding: 8, borderRadius: radius.full, gap: 6,
+    paddingTop: 10, paddingBottom: 6, paddingHorizontal: 12,
   },
   tabItem: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    paddingVertical: 13, borderRadius: radius.full,
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 5,
+    paddingVertical: 7, marginHorizontal: 6,
   },
-  tabBadge: { position: 'absolute', right: -12, top: -8 },
+  tabBadge: { position: 'absolute', right: -11, top: -7 },
 });

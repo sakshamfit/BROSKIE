@@ -7,10 +7,11 @@ import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, formatChatTime, ClaySurface, ClayCard } from '../components/common';
-import { radius, type, clayFor, clayPressed, tokens } from '../theme';
+import { Avatar, formatChatTime, PaperSurface, PaperCard, Rule } from '../components/common';
+import { radius, type, inkBox, marker, dashedRule, tokens } from '../theme';
 
-const BG_COLORS = ['#76ebb3', '#5dfd8a', '#ffcc8e', '#84f9c0', '#67dca5', '#efbe81'];
+// paper-and-ink status backgrounds
+const BG_COLORS = ['#FFE24D', '#1c1b1b', '#e2e3de', '#fdf8f8', '#c8c6c5', '#5d5f5b'];
 
 export default function StatusScreen() {
   const { user } = useAuth();
@@ -65,12 +66,12 @@ export default function StatusScreen() {
           contentContainerStyle={s.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={theme.primary} />}
         >
-          <ClaySurface style={s.row} radius={radius.md} onPress={() => (data.mine ? openViewer(data.mine) : setComposer(true))}>
+          <PaperSurface style={s.row} onPress={() => (data.mine ? openViewer(data.mine) : setComposer(true))} dogEar>
             <View>
               <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={56} />
               {!data.mine && (
-                <View style={[s.plus, { backgroundColor: theme.accent, borderColor: theme.card }, clayFor(theme, 1)]}>
-                  <Icon name="add" size={14} color={theme.onAccent} />
+                <View style={[s.plus, { backgroundColor: theme.highlighter, borderColor: theme.ink }]}>
+                  <Icon name="add" size={12} color={theme.ink} />
                 </View>
               )}
             </View>
@@ -85,21 +86,21 @@ export default function StatusScreen() {
                 <Icon name="add-circle-outline" size={24} color={theme.primary} />
               </Pressable>
             )}
-          </ClaySurface>
+          </PaperSurface>
 
           {data.others.length > 0 && (
             <>
-              <Text style={[type.labelMd, { color: theme.muted, paddingHorizontal: 8, marginTop: 8 }]}>RECENT UPDATES</Text>
+              <Text style={[type.labelXs, { color: theme.muted, paddingHorizontal: 2, marginTop: 10, marginBottom: 2 }]}>RECENT UPDATES</Text>
               {data.others.map((g) => (
-                <ClaySurface key={g.user.id} style={s.row} radius={radius.md} onPress={() => openViewer(g)}>
-                  <View style={[s.ring, { borderColor: g.allViewed ? theme.cardAlt : theme.accent }]}>
+                <PaperSurface key={g.user.id} style={s.row} onPress={() => openViewer(g)} dogEar>
+                  <View style={[s.ring, { borderColor: g.allViewed ? theme.graphiteLine : theme.ink, borderStyle: g.allViewed ? 'dashed' : 'solid' }]}>
                     <Avatar uri={g.user.avatar} name={g.user.name} id={g.user.id} size={48} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <EmojiText style={[type.headlineSm, { color: theme.text }]}>{g.user.name}</EmojiText>
                     <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>{formatChatTime(g.latestAt)}</Text>
                   </View>
-                </ClaySurface>
+                </PaperSurface>
               ))}
             </>
           )}
@@ -114,32 +115,32 @@ export default function StatusScreen() {
 
       <Pressable
         onPress={() => setComposer(true)}
-        style={({ pressed }) => [s.fab, { backgroundColor: theme.accent }, pressed ? clayPressed(theme.shadowTint) : clayFor(theme, 3)]}
+        style={({ pressed }) => [s.fab, inkBox(theme, 'bold'), { backgroundColor: pressed ? theme.highlighter : theme.ink }]}
       >
-        <Icon name="create-outline" size={24} color={theme.onAccent} />
+        <Icon name="create-outline" size={21} color={theme.onPrimary} />
       </Pressable>
 
       {/* composer */}
       <Modal visible={composer} animationType="slide" onRequestClose={() => setComposer(false)}>
         <View style={[s.composer, { backgroundColor: bg }]}>
           <Pressable style={s.closeBtn} onPress={() => setComposer(false)}>
-            <Icon name="close" size={26} color={tokens.onPrimaryFixed} />
+            <Icon name="close" size={24} color={bg === '#1c1b1b' ? '#fdf8f8' : tokens.onSurface} />
           </Pressable>
           <TextInput
             style={s.composerInput}
             placeholder="Type a status…"
-            placeholderTextColor="rgba(0,33,19,0.4)"
+            placeholderTextColor={bg === '#1c1b1b' ? 'rgba(253,248,248,0.45)' : 'rgba(28,27,27,0.4)'}
             value={body}
             onChangeText={setBody}
             multiline autoFocus textAlign="center"
           />
           <View style={s.colorRow}>
             {BG_COLORS.map((c) => (
-              <Pressable key={c} onPress={() => setBg(c)} style={[s.swatch, { backgroundColor: c }, bg === c && s.swatchActive, clayFor(theme, 1)]} />
+              <Pressable key={c} onPress={() => setBg(c)} style={[s.swatch, { backgroundColor: c, borderWidth: 1.5, borderColor: tokens.onSurface }, bg === c && s.swatchActive]} />
             ))}
           </View>
-          <Pressable onPress={post} style={({ pressed }) => [s.postBtn, { backgroundColor: '#fff' }, pressed ? clayPressed(theme.shadowTint) : clayFor(theme, 3)]}>
-            <Icon name="send" size={21} color={tokens.primary} />
+          <Pressable onPress={post} style={({ pressed }) => [s.postBtn, inkBox(theme, 'bold', tokens.onSurface), { backgroundColor: pressed ? tokens.highlighter : '#fdf8f8' }]}>
+            <Icon name="send" size={19} color={tokens.onSurface} />
           </Pressable>
         </View>
       </Modal>
@@ -150,25 +151,25 @@ export default function StatusScreen() {
           <Pressable style={[s.viewer, { backgroundColor: current.bg }]} onPress={nextStatus}>
             <View style={s.progressRow}>
               {viewer.group.items.map((_, i) => (
-                <View key={i} style={[s.progressBar, { backgroundColor: i <= viewer.index ? tokens.onPrimaryFixed : 'rgba(0,33,19,0.25)' }]} />
+                <View key={i} style={[s.progressBar, { backgroundColor: i <= viewer.index ? tokens.onSurface : 'rgba(28,27,27,0.22)' }]} />
               ))}
             </View>
             <View style={s.viewerHeader}>
               <Avatar uri={viewer.group.user.avatar} name={viewer.group.user.name} id={viewer.group.user.id} size={42} />
               <View style={{ flex: 1 }}>
-                <EmojiText style={[type.headlineSm, { color: tokens.onPrimaryFixed }]}>
+                <EmojiText style={[type.headlineSm, { color: tokens.onSurface }]}>
                   {viewer.group.user.id === user.id ? 'My status' : viewer.group.user.name}
                 </EmojiText>
-                <Text style={[type.bodySm, { color: 'rgba(0,33,19,0.6)' }]}>{formatChatTime(current.createdAt)}</Text>
+                <Text style={[type.labelXs, { color: 'rgba(28,27,27,0.55)' }]}>{formatChatTime(current.createdAt)}</Text>
               </View>
               <Pressable onPress={() => { setViewer(null); load(); }} hitSlop={10}>
-                <Icon name="close" size={25} color={tokens.onPrimaryFixed} />
+                <Icon name="close" size={23} color={tokens.onSurface} />
               </Pressable>
             </View>
             <View style={s.viewerBody}>
               <EmojiText style={s.viewerText}>{current.body}</EmojiText>
             </View>
-            <Text style={[type.bodySm, { color: 'rgba(0,33,19,0.45)', textAlign: 'center', paddingBottom: 34 }]}>
+            <Text style={[type.labelXs, { color: 'rgba(28,27,27,0.4)', textAlign: 'center', paddingBottom: 34 }]}>
               Tap anywhere to continue
             </Text>
           </Pressable>
@@ -180,23 +181,23 @@ export default function StatusScreen() {
 
 const makeStyles = (t) => StyleSheet.create({
   header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, minHeight: 84, justifyContent: 'center' },
-  headerTitle: { ...type.displayLg, color: t.text, letterSpacing: 0.4 },
-  scroll: { paddingHorizontal: 20, paddingBottom: 110, gap: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 16 },
-  plus: { position: 'absolute', right: -2, bottom: -2, width: 24, height: 24, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5 },
-  ring: { borderWidth: 3, borderRadius: radius.full, padding: 3 },
-  fab: { position: 'absolute', right: 20, bottom: 24, width: 60, height: 60, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { ...type.headlineLg, color: t.text },
+  scroll: { paddingHorizontal: 20, paddingBottom: 110, gap: 14 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 14 },
+  plus: { position: 'absolute', right: -5, bottom: -5, width: 20, height: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
+  ring: { borderWidth: 2, padding: 3 },
+  fab: { position: 'absolute', right: 24, bottom: 26, width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
   composer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   closeBtn: { position: 'absolute', top: 48, left: 24, padding: 8 },
-  composerInput: { ...type.displayLg, fontSize: 28, color: tokens.onPrimaryFixed, textAlign: 'center', width: '100%', maxHeight: 260, outlineStyle: 'none' },
+  composerInput: { ...type.headlineMd, fontSize: 26, color: tokens.onSurface, textAlign: 'center', width: '100%', maxHeight: 260, outlineStyle: 'none' },
   colorRow: { position: 'absolute', bottom: 44, left: 24, flexDirection: 'row', gap: 12 },
-  swatch: { width: 34, height: 34, borderRadius: radius.full },
-  swatchActive: { borderWidth: 3, borderColor: '#fff' },
-  postBtn: { position: 'absolute', bottom: 38, right: 24, width: 56, height: 56, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  swatch: { width: 30, height: 30 },
+  swatchActive: { borderWidth: 3 },
+  postBtn: { position: 'absolute', bottom: 38, right: 24, width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
   viewer: { flex: 1, paddingTop: 48 },
   progressRow: { flexDirection: 'row', gap: 5, paddingHorizontal: 16, marginBottom: 14 },
-  progressBar: { flex: 1, height: 4, borderRadius: radius.full },
+  progressBar: { flex: 1, height: 3 },
   viewerHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20 },
   viewerBody: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  viewerText: { ...type.displayLg, fontSize: 28, color: tokens.onPrimaryFixed, textAlign: 'center', lineHeight: 40 },
+  viewerText: { ...type.headlineMd, fontSize: 26, color: tokens.onSurface, textAlign: 'center', lineHeight: 40 },
 });

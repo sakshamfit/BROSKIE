@@ -3,83 +3,101 @@ import { View, Text, Image, StyleSheet, Pressable, ActivityIndicator } from 'rea
 import Icon from '../icons/Icon';
 import Emoji from '../icons/Emoji';
 import {
-  colorFor, initials, AVATAR_INK, radius, type, tokens,
-  clayFor, clayInsetFor, clayPressed, clayAvatar,
+  colorFor, initials, AVATAR_INK, radius, type, tokens, stroke,
+  inkBox, pencilBox, inkUnderline, dashedRule, marker, pressedInk,
 } from '../theme';
 import { mediaUrl } from '../api';
 import { useTheme } from '../store/ThemeContext';
 
 /* ------------------------------------------------------------------ */
-/* clay primitives                                                     */
+/* paper primitives                                                    */
 /* ------------------------------------------------------------------ */
 
-/** White, borderless, deeply rounded card lifted by a soft clay shadow. */
-export function ClayCard({ children, style, level = 1, radius: r = radius.md, color }) {
+/** A sheet of paper outlined with a thin graphite stroke. */
+export function PaperCard({ children, style, weight = 'pencil', dogEar = false }) {
   const { theme } = useTheme();
+  const outline = weight === 'ink' ? inkBox(theme, 'ink') : pencilBox(theme);
   return (
-    <View
-      style={[
-        { backgroundColor: color || theme.card, borderRadius: r, padding: 24 },
-        clayFor(theme, level),
-        style,
-      ]}
-    >
+    <View style={[{ backgroundColor: theme.card, padding: 20 }, outline, style]}>
       {children}
+      {dogEar && <DogEar />}
     </View>
   );
 }
 
-/** Pressable clay surface that squishes on press. */
-export function ClaySurface({ children, onPress, onLongPress, style, level = 1, radius: r = radius.md, color, disabled }) {
+/** Folded corner scrap — marks interactive cards. */
+function DogEar({ size = 14 }) {
   const { theme } = useTheme();
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute', right: 0, bottom: 0,
+        width: 0, height: 0,
+        borderRightWidth: size, borderBottomWidth: size,
+        borderRightColor: theme.graphiteLine,
+        borderBottomColor: theme.bg,
+      }}
+    />
+  );
+}
+
+/** Pressable paper row; highlighter washes in on press. */
+export function PaperSurface({ children, onPress, onLongPress, style, weight = 'pencil', disabled, dogEar }) {
+  const { theme } = useTheme();
+  const outline = weight === 'ink' ? inkBox(theme, 'ink') : pencilBox(theme);
   return (
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
       disabled={disabled}
       style={({ pressed }) => [
-        { backgroundColor: color || theme.card, borderRadius: r },
-        pressed ? clayPressed(theme.shadowTint) : clayFor(theme, level),
-        disabled && { opacity: 0.55 },
+        { backgroundColor: theme.card },
+        outline,
+        pressed ? pressedInk(theme) : null,
+        disabled && { opacity: 0.5 },
         style,
       ]}
     >
       {children}
+      {dogEar && <DogEar />}
     </Pressable>
   );
 }
 
-/** Pill button, mint clay by default. */
-export function ClayButton({ label, onPress, icon, style, textStyle, color, textColor, disabled, busy, level = 2 }) {
+/** Button: 2px ink box; press floods it with highlighter. */
+export function InkButton({ label, onPress, icon, style, textStyle, disabled, busy, filled = false, danger = false }) {
   const { theme } = useTheme();
+  const lineColor = danger ? theme.danger : theme.ink;
+  const fg = filled ? theme.onPrimary : danger ? theme.danger : theme.ink;
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || busy}
       style={({ pressed }) => [
         styles.btn,
-        { backgroundColor: color || theme.accent, borderRadius: radius.full },
-        pressed ? clayPressed(theme.shadowTint) : clayFor(theme, level),
-        (disabled || busy) && { opacity: 0.6 },
+        inkBox(theme, 'ink', lineColor),
+        filled && { backgroundColor: lineColor },
+        pressed && !filled ? marker(theme, 2) : null,
+        pressed && filled ? { opacity: 0.82 } : null,
+        (disabled || busy) && { opacity: 0.45 },
         style,
       ]}
     >
       {busy ? (
-        <ActivityIndicator color={textColor || theme.onAccent} />
+        <ActivityIndicator color={fg} />
       ) : (
         <>
-          {!!icon && <Icon name={icon} size={19} color={textColor || theme.onAccent} />}
-          <Text style={[type.bodyLg, { fontFamily: type.fontFamily(700), color: textColor || theme.onAccent }, textStyle]}>
-            {label}
-          </Text>
+          {!!icon && <Icon name={icon} size={18} color={fg} />}
+          <Text style={[type.bodyStrong, { color: fg }, textStyle]}>{label}</Text>
         </>
       )}
     </Pressable>
   );
 }
 
-/** Circular clay icon button. */
-export function ClayIconButton({ name, onPress, size = 44, iconSize = 20, color, iconColor, style, level = 1, disabled }) {
+/** Square-ish icon button drawn in ink. */
+export function InkIconButton({ name, onPress, size = 40, iconSize = 19, iconColor, style, weight = 'ink', disabled, active }) {
   const { theme } = useTheme();
   return (
     <Pressable
@@ -87,89 +105,134 @@ export function ClayIconButton({ name, onPress, size = 44, iconSize = 20, color,
       disabled={disabled}
       hitSlop={6}
       style={({ pressed }) => [
-        { width: size, height: size, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: color || theme.card },
-        pressed ? clayPressed(theme.shadowTint) : clayFor(theme, level),
-        disabled && { opacity: 0.5 },
+        { width: size, height: size, alignItems: 'center', justifyContent: 'center' },
+        inkBox(theme, weight),
+        active ? marker(theme, 2) : null,
+        pressed ? marker(theme, 1) : null,
+        disabled && { opacity: 0.4 },
         style,
       ]}
     >
-      <Icon name={name} size={iconSize} color={iconColor || theme.primary} />
+      <Icon name={name} size={iconSize} color={iconColor || theme.ink} />
     </Pressable>
   );
 }
 
-/** "Carved" inset surface for inputs and search bars. */
-export function ClayInset({ children, style, radius: r = radius.full, strength = 1 }) {
+/** Input treatment: a single ink line, no box. */
+export function InkField({ children, style, focused }) {
   const { theme } = useTheme();
   return (
-    <View style={[{ backgroundColor: theme.inputBg, borderRadius: r }, clayInsetFor(theme, strength), style]}>
+    <View style={[styles.field, inkUnderline(theme, focused ? 'bold' : 'ink'), style]}>
       {children}
     </View>
   );
 }
 
-/** Small high-contrast bead (unread counts, status chips). */
-export function ClayBead({ label, color, textColor, style, small }) {
+/** Torn-paper / masking-tape chip. */
+export function TapeChip({ label, style, textStyle, tone = 'ink' }) {
   const { theme } = useTheme();
+  const isAccent = tone === 'accent';
   return (
     <View
       style={[
+        styles.chip,
         {
-          minWidth: small ? 18 : 24,
-          height: small ? 18 : 24,
-          borderRadius: radius.full,
-          paddingHorizontal: small ? 5 : 8,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: color || theme.badge,
+          backgroundColor: isAccent ? theme.highlighter : theme.cardAlt,
+          borderWidth: 1,
+          borderColor: isAccent ? 'transparent' : theme.graphiteLine,
+          // irregular, torn-looking edges
+          borderTopLeftRadius: 1,
+          borderTopRightRadius: 4,
+          borderBottomRightRadius: 1,
+          borderBottomLeftRadius: 3,
+          transform: [{ rotate: '-0.6deg' }],
         },
-        clayFor(theme, 1),
         style,
       ]}
     >
-      <Text style={[type.labelMd, { color: textColor || theme.onBadge, fontSize: small ? 10 : 12, letterSpacing: 0 }]}>
-        {label}
-      </Text>
+      <Text style={[type.labelXs, { color: theme.ink }, textStyle]}>{label}</Text>
     </View>
   );
 }
 
+/** Unread count — small ink-filled bead. */
+export function CountBead({ label, style, small }) {
+  const { theme } = useTheme();
+  const d = small ? 17 : 21;
+  return (
+    <View
+      style={[
+        {
+          minWidth: d, height: d, paddingHorizontal: small ? 4 : 6,
+          alignItems: 'center', justifyContent: 'center',
+          backgroundColor: theme.badge, borderRadius: radius.full,
+        },
+        style,
+      ]}
+    >
+      <Text style={[type.labelXs, { color: theme.onBadge, fontSize: small ? 9 : 10.5 }]}>{label}</Text>
+    </View>
+  );
+}
+
+/** Literal X inside a hand-sketched square. */
+export function InkCheckbox({ checked, size = 20, onPress }) {
+  const { theme } = useTheme();
+  return (
+    <Pressable onPress={onPress} hitSlop={8} style={[{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }, inkBox(theme, 'ink')]}>
+      {checked && <Icon name="close" size={size * 0.82} color={theme.ink} />}
+    </Pressable>
+  );
+}
+
+/** Rough dashed rule. */
+export function Rule({ style }) {
+  const { theme } = useTheme();
+  return <View style={[dashedRule(theme), { marginVertical: 12 }, style]} />;
+}
+
+/** Highlighter scribble used for focus / active emphasis. */
+export function Highlight({ children, style }) {
+  const { theme } = useTheme();
+  return <View style={[marker(theme, 1), { paddingHorizontal: 4 }, style]}>{children}</View>;
+}
+
 /* ------------------------------------------------------------------ */
-/* avatar                                                              */
+/* avatar — sketched square-ish portrait                               */
 /* ------------------------------------------------------------------ */
 
-export function Avatar({ uri, name, id, size = 52, group = false, online = false }) {
+export function Avatar({ uri, name, id, size = 48, group = false, online = false }) {
   const { theme } = useTheme();
   const src = mediaUrl(uri);
-  const fill = group ? tokens.primaryContainer : colorFor(id || name || '');
+  const fill = theme.dark ? theme.cardAlt : colorFor(id || name || '');
+  const ink = theme.dark ? theme.ink : AVATAR_INK;
 
   return (
     <View style={{ width: size, height: size }}>
-      <View style={[{ width: size, height: size, borderRadius: radius.full, overflow: 'hidden', backgroundColor: fill }, clayAvatar()]}>
+      <View
+        style={[
+          { width: size, height: size, overflow: 'hidden', backgroundColor: fill, alignItems: 'center', justifyContent: 'center' },
+          inkBox(theme, 'ink'),
+        ]}
+      >
         {src ? (
-          <Image source={{ uri: src }} style={{ width: size, height: size, borderRadius: radius.full }} />
+          <Image source={{ uri: src }} style={{ width: size, height: size }} />
+        ) : group ? (
+          <Icon name="people" size={size * 0.46} color={ink} />
         ) : (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            {group ? (
-              <Icon name="people" size={size * 0.46} color={AVATAR_INK} />
-            ) : (
-              <Text style={{ color: AVATAR_INK, fontFamily: type.fontFamily(700), fontSize: size * 0.34, letterSpacing: 0.2 }}>
-                {initials(name)}
-              </Text>
-            )}
-          </View>
+          <Text style={{ color: ink, fontFamily: type.head(700), fontSize: size * 0.36, letterSpacing: -0.3 }}>
+            {initials(name)}
+          </Text>
         )}
       </View>
       {online && (
         <View
-          style={[
-            {
-              position: 'absolute', right: -1, bottom: -1,
-              width: size * 0.3, height: size * 0.3, borderRadius: radius.full,
-              backgroundColor: theme.badge, borderWidth: 2.5, borderColor: theme.card,
-            },
-            clayFor(theme, 1),
-          ]}
+          style={{
+            position: 'absolute', right: -4, top: -4,
+            width: 10, height: 10, borderRadius: radius.full,
+            backgroundColor: theme.highlighter,
+            borderWidth: 1.5, borderColor: theme.ink,
+          }}
         />
       )}
     </View>
@@ -180,11 +243,11 @@ export function Avatar({ uri, name, id, size = 52, group = false, online = false
 /* misc                                                                */
 /* ------------------------------------------------------------------ */
 
-export function Ticks({ status, color, size = 15 }) {
+export function Ticks({ status, color, size = 14 }) {
   const { theme } = useTheme();
   if (status === 'sending') return <Icon name="time-outline" size={size} color={color || theme.muted} />;
   if (status === 'failed') return <Icon name="alert-circle-outline" size={size} color={theme.danger} />;
-  const tickColor = status === 'read' ? theme.tickRead : color || theme.muted;
+  const tickColor = status === 'read' ? (color ? color : theme.tickRead) : color || theme.muted;
   return (
     <View style={{ flexDirection: 'row', width: size + 4 }}>
       <Icon name="checkmark" size={size} color={tickColor} />
@@ -203,9 +266,9 @@ export function Screen({ children, style }) {
 export function Loading({ label }) {
   const { theme } = useTheme();
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg, gap: 16 }}>
-      <ActivityIndicator size="large" color={theme.primary} />
-      {!!label && <Text style={[type.bodySm, { color: theme.subtext }]}>{label}</Text>}
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg, gap: 14 }}>
+      <ActivityIndicator size="large" color={theme.ink} />
+      {!!label && <Text style={[type.labelSm, { color: theme.muted }]}>{label}</Text>}
     </View>
   );
 }
@@ -214,12 +277,12 @@ export function EmptyState({ icon = 'chatbubbles-outline', title, subtitle }) {
   const { theme } = useTheme();
   return (
     <View style={{ alignItems: 'center', justifyContent: 'center', padding: 40, flex: 1 }}>
-      <View style={[{ width: 96, height: 96, borderRadius: radius.full, backgroundColor: theme.card, alignItems: 'center', justifyContent: 'center', marginBottom: 20 }, clayFor(theme, 1)]}>
-        <Icon name={icon} size={40} color={theme.primary} />
+      <View style={[{ width: 84, height: 84, alignItems: 'center', justifyContent: 'center', marginBottom: 22 }, inkBox(theme, 'ink')]}>
+        <Icon name={icon} size={36} color={theme.ink} />
       </View>
       <Text style={[type.headlineSm, { color: theme.text, textAlign: 'center' }]}>{title}</Text>
       {!!subtitle && (
-        <Text style={[type.bodySm, { marginTop: 8, color: theme.subtext, textAlign: 'center', maxWidth: 300 }]}>{subtitle}</Text>
+        <Text style={[type.bodySm, { marginTop: 8, color: theme.subtext, textAlign: 'center', maxWidth: 290 }]}>{subtitle}</Text>
       )}
     </View>
   );
@@ -230,10 +293,10 @@ export function IconButton({ name, onPress, size = 22, color, style }) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [{ padding: 8, borderRadius: radius.full, opacity: pressed ? 0.55 : 1 }, style]}
+      style={({ pressed }) => [{ padding: 8, opacity: pressed ? 0.55 : 1 }, style]}
       hitSlop={6}
     >
-      <Icon name={name} size={size} color={color || theme.headerText} />
+      <Icon name={name} size={size} color={color || theme.ink} />
     </Pressable>
   );
 }
@@ -247,10 +310,10 @@ export function EmojiPicker({ visible, onSelect }) {
   const { theme } = useTheme();
   if (!visible) return null;
   return (
-    <View style={[styles.emojiWrap, { backgroundColor: theme.card, borderRadius: radius.md, marginHorizontal: 16, marginBottom: 8 }, clayFor(theme, 1)]}>
+    <View style={[styles.emojiWrap, { backgroundColor: theme.card, marginHorizontal: 16, marginBottom: 8 }, inkBox(theme, 'ink')]}>
       {EMOJIS.map((e) => (
         <Pressable key={e} onPress={() => onSelect(e)} style={styles.emojiBtn}>
-          <Emoji char={e} size={28} />
+          <Emoji char={e} size={26} />
         </Pressable>
       ))}
     </View>
@@ -276,7 +339,7 @@ export function formatChatTime(ts) {
   const today = new Date();
   const yesterday = new Date(Date.now() - 86400000);
   if (d.toDateString() === today.toDateString()) return formatTime(ts);
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  if (d.toDateString() === yesterday.toDateString()) return 'YESTERDAY';
   return d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 
@@ -286,7 +349,7 @@ export function formatDayLabel(ts) {
   const yesterday = new Date(Date.now() - 86400000);
   if (d.toDateString() === today.toDateString()) return 'TODAY';
   if (d.toDateString() === yesterday.toDateString()) return 'YESTERDAY';
-  return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
 }
 
 export function lastSeenText(isOnline, lastSeen) {
@@ -301,14 +364,15 @@ export function lastSeenText(isOnline, lastSeen) {
   return `last seen ${formatChatTime(lastSeen)}`;
 }
 
-/** @username convention from the spec */
 export function handleFor(name = '', phone = '') {
   const base = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '');
   return '@' + (base || String(phone).replace(/\D/g, '').slice(-6) || 'user');
 }
 
 const styles = StyleSheet.create({
-  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, paddingHorizontal: 24 },
-  emojiWrap: { flexDirection: 'row', flexWrap: 'wrap', paddingVertical: 12, paddingHorizontal: 10, maxHeight: 230 },
-  emojiBtn: { width: '12.5%', alignItems: 'center', paddingVertical: 7 },
+  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, paddingVertical: 13, paddingHorizontal: 20 },
+  field: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 2, minHeight: 46 },
+  chip: { paddingHorizontal: 8, paddingVertical: 3 },
+  emojiWrap: { flexDirection: 'row', flexWrap: 'wrap', paddingVertical: 10, paddingHorizontal: 8, maxHeight: 226 },
+  emojiBtn: { width: '12.5%', alignItems: 'center', paddingVertical: 6 },
 });

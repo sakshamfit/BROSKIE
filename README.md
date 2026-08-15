@@ -1,4 +1,4 @@
-# BROSKIE — a claymorphic messenger
+# BROSKIE — an ink-and-paper messenger
 
 A full-stack, real-time messaging app: **Expo / React Native** client + **Node, Socket.IO, SQLite** backend.
 Runs on iOS, Android and the web from one codebase.
@@ -68,10 +68,12 @@ archive, mute, group info with participant list and admin tags.
 **Status / stories** — post coloured text statuses, 24-hour auto-expiry, viewed/unviewed
 rings, tap-through story viewer with progress bars.
 
-**Design** — BROSKIE claymorphism (see `design.md`): soft "inflated" surfaces built from
-dual outer shadows plus inner highlights, extreme roundness (pill controls, 24px bubbles),
-inset "carved" inputs, zero borders or dividers, Inter typography with generous tracking,
-and a mint/emerald palette on a `#f8fafc` clay background.
+**Design** — "Graphite & Pulp" (see `design.md`): artisanal ink-on-paper. No
+shadows, no blur, no elevation tints — depth comes from stroke weight (hairline
+graphite → 2px ink → 3px bold) and physical overlap. Underline-only inputs,
+dashed hand-drawn rules, masking-tape chips, X-mark checkboxes, and a
+highlighter-yellow accent used sparingly for focus and active states.
+Bricolage Grotesque headlines / Karla body / JetBrains Mono labels.
 
 **Icons & emoji — 100% SVG** — every icon is a true vector (`react-native-svg`) rendered
 from official Ionicons path data via `<Icon>`. Every emoji is a full-colour Twemoji vector
@@ -103,7 +105,7 @@ whatsapp-clone/
         ├── theme.js      light/dark palettes, avatar colours
         ├── Navigation.js stack + custom bottom tabs
         ├── store/        Auth / Chat(socket) / Theme contexts
-        ├── theme.js      design tokens: clay shadows, radii, Inter scale
+        ├── theme.js      design tokens: ink strokes, radii, type scale
         ├── icons/       Icon.js + iconData.json  (Ionicons vectors)
         │                Emoji.js + emojiData.json (Twemoji vectors)
         ├── components/   Avatar, Ticks, MessageBubble, VoiceNote…

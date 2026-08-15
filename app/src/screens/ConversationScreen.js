@@ -10,11 +10,11 @@ import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import {
-  Avatar, EmojiPicker, formatDayLabel, lastSeenText, ClayInset, ClayIconButton,
+  Avatar, EmojiPicker, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule,
 } from '../components/common';
 import MessageBubble from '../components/MessageBubble';
 import { api, mediaUrl } from '../api';
-import { radius, type, clayFor, clayPressed } from '../theme';
+import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 
 export default function ConversationScreen({ route, navigation }) {
   const { chatId } = route.params;
@@ -120,7 +120,7 @@ export default function ConversationScreen({ route, navigation }) {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.chatBg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {/* header — floating clay bar */}
       <View style={s.headerWrap}>
-        <View style={[s.header, { backgroundColor: theme.card }, clayFor(theme, 2)]}>
+        <View style={s.header}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={s.backBtn}>
             <Icon name="arrow-back" size={22} color={theme.primary} />
           </Pressable>
@@ -133,9 +133,10 @@ export default function ConversationScreen({ route, navigation }) {
               </Text>
             </View>
           </Pressable>
-          <ClayIconButton name="videocam" size={40} iconSize={19} />
-          <ClayIconButton name="call" size={40} iconSize={17} />
+          <InkIconButton name="videocam" size={36} iconSize={17} />
+          <InkIconButton name="call" size={36} iconSize={15} />
         </View>
+        <Rule style={{ marginHorizontal: 20, marginTop: 10, marginBottom: 0 }} />
       </View>
 
       <FlatList
@@ -147,9 +148,9 @@ export default function ConversationScreen({ route, navigation }) {
         renderItem={({ item }) =>
           item._type === 'day' ? (
             <View style={s.dayWrap}>
-              <View style={[s.dayPill, { backgroundColor: theme.card }, clayFor(theme, 1)]}>
-                <Text style={[type.labelMd, { color: theme.subtext }]}>{item.label}</Text>
-              </View>
+              <View style={[dashedRule(theme), { flex: 1 }]} />
+              <Text style={[type.labelXs, { color: theme.muted }]}>{item.label}</Text>
+              <View style={[dashedRule(theme), { flex: 1 }]} />
             </View>
           ) : (
             <MessageBubble
@@ -181,10 +182,10 @@ export default function ConversationScreen({ route, navigation }) {
       />
 
       {replyTo && (
-        <View style={[s.replyBar, { backgroundColor: theme.card }, clayFor(theme, 1)]}>
+        <View style={[s.replyBar, inkBox(theme, 'thin')]}>
           <View style={[s.replyAccent, { backgroundColor: theme.primary }]} />
           <View style={{ flex: 1 }}>
-            <Text style={[type.labelMd, { color: theme.primary, letterSpacing: 0.2 }]}>{nameFor(replyTo.senderId)}</Text>
+            <Text style={[type.labelXs, { color: theme.graphite }]}>{nameFor(replyTo.senderId).toUpperCase()}</Text>
             {replyTo.type === 'image' || replyTo.type === 'voice' ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Emoji char={replyTo.type === 'image' ? '📷' : '🎤'} size={13} />
@@ -207,17 +208,17 @@ export default function ConversationScreen({ route, navigation }) {
       {/* composer */}
       <View style={s.composerWrap}>
         {recording ? (
-          <ClayInset style={s.inputBar} strength={2}>
+          <InkField style={s.inputBar}>
             <View style={[s.recDot, { backgroundColor: theme.danger }]} />
             <Text style={[type.bodyLg, { flex: 1, color: theme.text }]}>
               Recording… {Math.floor(recSecs / 60)}:{String(recSecs % 60).padStart(2, '0')}
             </Text>
             <Pressable onPress={() => setRecording(false)} hitSlop={8}>
-              <Text style={[type.bodySm, { color: theme.danger, fontFamily: type.fontFamily(600) }]}>Cancel</Text>
+              <Text style={[type.labelSm, { color: theme.danger }]}>CANCEL</Text>
             </Pressable>
-          </ClayInset>
+          </InkField>
         ) : (
-          <ClayInset style={s.inputBar} strength={2}>
+          <InkField style={s.inputBar}>
             <Pressable onPress={() => setShowEmoji((v) => !v)} hitSlop={6}>
               <Icon name={showEmoji ? 'keypad-outline' : 'happy-outline'} size={23} color={theme.muted} />
             </Pressable>
@@ -247,18 +248,21 @@ export default function ConversationScreen({ route, navigation }) {
                 <Icon name="camera-outline" size={22} color={theme.muted} />
               </Pressable>
             )}
-          </ClayInset>
+          </InkField>
         )}
 
         <Pressable
           onPress={() => { if (text.trim()) send(); else if (recording) stopRecording(); else setRecording(true); }}
-          style={({ pressed }) => [s.sendBtn, { backgroundColor: theme.accent }, pressed ? clayPressed(theme.shadowTint) : clayFor(theme, 2)]}
+          style={({ pressed }) => [
+            s.sendBtn,
+            inkBox(theme, 'bold'),
+            { backgroundColor: pressed ? theme.highlighter : theme.ink },
+          ]}
         >
           <Icon
             name={text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
-            size={20}
-            color={theme.onAccent}
-            style={text.trim() ? { marginLeft: 2 } : null}
+            size={18}
+            color={theme.onPrimary}
           />
         </Pressable>
       </View>
@@ -277,21 +281,20 @@ export default function ConversationScreen({ route, navigation }) {
 
 const makeStyles = (t) => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  headerWrap: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 6 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderRadius: radius.md },
+  headerWrap: { paddingTop: 18, paddingBottom: 4 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingVertical: 10 },
   backBtn: { padding: 4 },
   headerInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  dayWrap: { alignItems: 'center', marginVertical: 14 },
-  dayPill: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: radius.full },
-  emptyChat: { alignItems: 'center', justifyContent: 'center', padding: 40 },
-  replyBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 8, borderRadius: radius.DEFAULT, padding: 12, gap: 12 },
+  dayWrap: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 16, paddingHorizontal: 24 },
+    emptyChat: { alignItems: 'center', justifyContent: 'center', padding: 40 },
+  replyBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 8, padding: 10, gap: 12, backgroundColor: 'transparent' },
   replyAccent: { width: 3.5, alignSelf: 'stretch', borderRadius: 2 },
-  composerWrap: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 20, paddingBottom: 20, paddingTop: 6, gap: 12 },
-  inputBar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, gap: 12, minHeight: 54 },
-  input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 15, outlineStyle: 'none' },
-  sendBtn: { width: 54, height: 54, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  recDot: { width: 10, height: 10, borderRadius: radius.full },
-  lightbox: { flex: 1, backgroundColor: 'rgba(15,23,42,0.94)', alignItems: 'center', justifyContent: 'center' },
+  composerWrap: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 20, paddingBottom: 22, paddingTop: 8, gap: 12 },
+  inputBar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, gap: 12, minHeight: 48 },
+  input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },
+  sendBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  recDot: { width: 9, height: 9, borderRadius: radius.full },
+  lightbox: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
   lightboxImg: { width: '92%', height: '78%' },
   lightboxClose: { position: 'absolute', top: 44, right: 22, padding: 8 },
 });

@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
-import { radius, type, clayFor, clayPressed, tokens } from '../theme';
+import { radius, type, inkBox, marker, tokens } from '../theme';
 
-/** Clay voice note: puffed play bead + soft waveform. */
+/** Ink voice note: drawn play box + graphite waveform. */
 export default function VoiceNote({ uri, duration = 0, isMine }) {
   const { theme } = useTheme();
   const [playing, setPlaying] = useState(false);
@@ -43,17 +43,21 @@ export default function VoiceNote({ uri, duration = 0, isMine }) {
 
   const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const active = Math.floor(progress * bars.length);
-  const activeColor = isMine ? tokens.onPrimaryFixed : theme.primary;
-  const idleColor = isMine ? 'rgba(0,33,19,0.3)' : theme.muted;
+  const activeColor = isMine ? theme.highlighter : theme.ink;
+  const idleColor = isMine ? 'rgba(255,255,255,0.35)' : theme.graphiteLine;
   const s = makeStyles(theme);
 
   return (
     <View style={s.wrap}>
       <Pressable
         onPress={toggle}
-        style={({ pressed }) => [s.play, { backgroundColor: isMine ? theme.card : theme.accent }, pressed ? clayPressed(theme.shadowTint) : clayFor(theme, 2)]}
+        style={({ pressed }) => [
+          s.play,
+          inkBox(theme, 'ink', isMine ? theme.onBubbleOut : theme.ink),
+          pressed ? marker(theme, 2) : null,
+        ]}
       >
-        <Icon name={playing ? 'pause' : 'play'} size={16} color={isMine ? theme.primary : theme.onAccent} />
+        <Icon name={playing ? 'pause' : 'play'} size={15} color={isMine ? theme.onBubbleOut : theme.ink} />
       </Pressable>
       <View style={{ flex: 1 }}>
         <View style={s.wave}>
@@ -61,23 +65,23 @@ export default function VoiceNote({ uri, duration = 0, isMine }) {
             <View
               key={i}
               style={{
-                width: 3, height: h, borderRadius: radius.full, marginRight: 2.5,
+                width: 2, height: h, marginRight: 2.5,
                 backgroundColor: i <= active && playing ? activeColor : idleColor,
               }}
             />
           ))}
         </View>
-        <Text style={[type.bodySm, { fontSize: 11, color: isMine ? 'rgba(0,33,19,0.55)' : theme.muted, marginTop: 4 }]}>
+        <Text style={[type.labelXs, { fontSize: 9.5, color: isMine ? 'rgba(255,255,255,0.6)' : theme.muted, marginTop: 4 }]}>
           {fmt(playing ? duration * progress : duration)}
         </Text>
       </View>
-      <Icon name="mic" size={15} color={isMine ? 'rgba(0,33,19,0.45)' : theme.muted} />
+      <Icon name="mic" size={14} color={isMine ? 'rgba(255,255,255,0.5)' : theme.muted} />
     </View>
   );
 }
 
 const makeStyles = (t) => StyleSheet.create({
   wrap: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4, minWidth: 200 },
-  play: { width: 40, height: 40, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  play: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   wave: { flexDirection: 'row', alignItems: 'center', height: 26 },
 });

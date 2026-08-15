@@ -5,8 +5,8 @@ import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, EmptyState, ClayInset, ClaySurface, ClayIconButton, handleFor } from '../components/common';
-import { radius, type, clayFor, clayPressed } from '../theme';
+import { Avatar, EmptyState, InkField, InkIconButton, InkCheckbox, handleFor, Rule } from '../components/common';
+import { radius, type, inkBox, marker, dashedRule } from '../theme';
 
 export default function NewChatScreen({ navigation }) {
   const { theme } = useTheme();
@@ -56,7 +56,7 @@ export default function NewChatScreen({ navigation }) {
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={s.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={{ padding: 6 }}>
-          <Icon name="arrow-back" size={23} color={theme.primary} />
+          <Icon name="arrow-back" size={22} color={theme.ink} />
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={[type.headlineMd, { color: theme.text }]}>{groupMode ? 'New group' : 'New chat'}</Text>
@@ -64,18 +64,17 @@ export default function NewChatScreen({ navigation }) {
             {groupMode ? `${selected.length} selected` : `${users.length} contacts`}
           </Text>
         </View>
-        <ClayIconButton
+        <InkIconButton
           name={groupMode ? 'person-outline' : 'people-outline'}
           onPress={() => { setGroupMode((v) => !v); setSelected([]); }}
-          size={44}
-          iconSize={20}
-          color={groupMode ? theme.accent : theme.card}
-          iconColor={groupMode ? theme.onAccent : theme.primary}
+          size={38}
+          iconSize={18}
+          active={groupMode}
         />
       </View>
 
       {groupMode && (
-        <ClayInset style={s.groupNameWrap}>
+        <InkField style={s.groupNameWrap}>
           <Icon name="camera-outline" size={20} color={theme.muted} />
           <TextInput
             style={s.groupInput}
@@ -84,10 +83,10 @@ export default function NewChatScreen({ navigation }) {
             value={groupName}
             onChangeText={setGroupName}
           />
-        </ClayInset>
+        </InkField>
       )}
 
-      <ClayInset style={s.searchWrap}>
+      <InkField style={s.searchWrap}>
         <Icon name="search" size={18} color={theme.muted} />
         <TextInput
           style={s.searchInput}
@@ -96,40 +95,34 @@ export default function NewChatScreen({ navigation }) {
           value={query}
           onChangeText={setQuery}
         />
-      </ClayInset>
+      </InkField>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={theme.primary} />
+        <ActivityIndicator style={{ marginTop: 40 }} color={theme.ink} />
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(i) => i.id}
           ListEmptyComponent={<EmptyState icon="person-outline" title="No contacts found" subtitle="Try a different search." />}
+          ItemSeparatorComponent={() => <View style={[dashedRule(theme), { marginHorizontal: 20 }]} />}
           contentContainerStyle={[s.list, !filtered.length && { flexGrow: 1 }]}
           renderItem={({ item }) => {
             const isSel = selected.includes(item.id);
             return (
-              <ClaySurface
-                style={[s.row, isSel && { backgroundColor: theme.accent }]}
-                radius={radius.md}
+              <Pressable
+                style={({ pressed }) => [s.row, isSel && marker(theme, 1), pressed && marker(theme, 1)]}
                 onPress={() => (groupMode ? toggleSelect(item) : openDirect(item))}
                 disabled={busy}
               >
-                <View>
-                  <Avatar uri={item.avatar} name={item.name} id={item.id} online={item.isOnline} size={50} />
-                  {groupMode && isSel && (
-                    <View style={[s.check, { backgroundColor: theme.primary, borderColor: theme.accent }]}>
-                      <Icon name="checkmark" size={12} color="#fff" />
-                    </View>
-                  )}
-                </View>
+                {groupMode && <InkCheckbox checked={isSel} size={19} />}
+                <Avatar uri={item.avatar} name={item.name} id={item.id} online={item.isOnline} size={44} />
                 <View style={{ flex: 1 }}>
-                  <EmojiText style={[type.headlineSm, { color: isSel ? theme.onAccent : theme.text }]}>{item.name}</EmojiText>
-                  <Text style={[type.labelMd, { color: isSel ? theme.onAccent : theme.primary, marginTop: 3, letterSpacing: 0.3 }]}>
+                  <EmojiText style={[type.headlineSm, { color: theme.text }]}>{item.name}</EmojiText>
+                  <Text style={[type.labelXs, { color: theme.graphite, marginTop: 3 }]}>
                     {handleFor(item.name, item.phone)}
                   </Text>
                 </View>
-              </ClaySurface>
+              </Pressable>
             );
           }}
         />
@@ -139,9 +132,9 @@ export default function NewChatScreen({ navigation }) {
         <Pressable
           onPress={createGroup}
           disabled={busy}
-          style={({ pressed }) => [s.fab, { backgroundColor: theme.accent }, pressed ? clayPressed(theme.shadowTint) : clayFor(theme, 3)]}
+          style={({ pressed }) => [s.fab, inkBox(theme, 'bold'), { backgroundColor: pressed ? theme.highlighter : theme.ink }]}
         >
-          {busy ? <ActivityIndicator color={theme.onAccent} /> : <Icon name="checkmark" size={26} color={theme.onAccent} />}
+          {busy ? <ActivityIndicator color={theme.onPrimary} /> : <Icon name="checkmark" size={22} color={theme.onPrimary} />}
         </Pressable>
       )}
     </View>
@@ -150,12 +143,11 @@ export default function NewChatScreen({ navigation }) {
 
 const makeStyles = (t) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14 },
-  groupNameWrap: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 20, marginBottom: 12, paddingHorizontal: 20, minHeight: 54 },
-  groupInput: { flex: 1, ...type.bodyLg, color: t.text, paddingVertical: 15, outlineStyle: 'none' },
-  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 20, marginBottom: 16, paddingHorizontal: 20, minHeight: 50 },
-  searchInput: { flex: 1, ...type.bodySm, color: t.text, paddingVertical: 13, outlineStyle: 'none' },
-  list: { paddingHorizontal: 20, paddingBottom: 110, gap: 14 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 14 },
-  check: { position: 'absolute', right: -3, bottom: -3, width: 22, height: 22, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5 },
-  fab: { position: 'absolute', right: 20, bottom: 24, width: 62, height: 62, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  groupNameWrap: { marginHorizontal: 20, marginBottom: 14, paddingHorizontal: 2, minHeight: 48 },
+  groupInput: { flex: 1, ...type.bodyLg, color: t.text, paddingVertical: 11, outlineStyle: 'none' },
+  searchWrap: { marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 2, minHeight: 46 },
+  searchInput: { flex: 1, ...type.bodyMd, color: t.text, paddingVertical: 11, outlineStyle: 'none' },
+  list: { paddingBottom: 110 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 13 },
+  fab: { position: 'absolute', right: 24, bottom: 26, width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
 });

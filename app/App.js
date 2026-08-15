@@ -3,13 +3,21 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { View, StyleSheet, Platform } from 'react-native';
+import { useFonts } from 'expo-font';
 import {
-  useFonts,
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from '@expo-google-fonts/inter';
+  BricolageGrotesque_600SemiBold,
+  BricolageGrotesque_700Bold,
+  BricolageGrotesque_800ExtraBold,
+} from '@expo-google-fonts/bricolage-grotesque';
+import {
+  Karla_400Regular,
+  Karla_500Medium,
+  Karla_700Bold,
+} from '@expo-google-fonts/karla';
+import {
+  JetBrainsMono_500Medium,
+  JetBrainsMono_700Bold,
+} from '@expo-google-fonts/jetbrains-mono';
 
 import { AuthProvider } from './src/store/AuthContext';
 import { ChatProvider } from './src/store/ChatContext';
@@ -17,12 +25,12 @@ import { ThemeProvider, useTheme } from './src/store/ThemeContext';
 import Navigation from './src/Navigation';
 import { Loading } from './src/components/common';
 
-/** On wide screens (web preview) centre the app in a phone-sized frame. */
+/** On wide screens (web preview) centre the app on a "sheet of paper". */
 function PhoneFrame({ children }) {
   const { theme } = useTheme();
   if (Platform.OS !== 'web') return children;
   return (
-    <View style={[styles.webRoot, { backgroundColor: theme.dark ? '#0a1210' : '#e7edf3' }]}>
+    <View style={[styles.webRoot, { backgroundColor: theme.dark ? '#141313' : '#e9e4e2' }]}>
       <View style={[styles.phone, { backgroundColor: theme.bg }]}>{children}</View>
     </View>
   );
@@ -41,11 +49,16 @@ function Root() {
 }
 
 export default function App() {
+  // Aliases keep theme.js font names short (Bricolage_800ExtraBold etc.)
   const [fontsLoaded] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
+    Bricolage_600SemiBold: BricolageGrotesque_600SemiBold,
+    Bricolage_700Bold: BricolageGrotesque_700Bold,
+    Bricolage_800ExtraBold: BricolageGrotesque_800ExtraBold,
+    Karla_400Regular,
+    Karla_500Medium,
+    Karla_700Bold,
+    JetBrainsMono_500Medium,
+    JetBrainsMono_700Bold,
   });
 
   return (
@@ -59,7 +72,7 @@ export default function App() {
               </ChatProvider>
             </AuthProvider>
           ) : (
-            <Loading label="Loading BROSKIE…" />
+            <Loading label="LOADING BROSKIE" />
           )}
         </ThemeProvider>
       </SafeAreaProvider>

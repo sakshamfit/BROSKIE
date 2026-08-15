@@ -1,175 +1,158 @@
 ---
-name: BROSKIE
+name: Graphite & Pulp
 colors:
-  surface: '#f5fbf4'
-  surface-dim: '#d5dcd5'
-  surface-bright: '#f5fbf4'
+  surface: '#fdf8f8'
+  surface-dim: '#ddd9d8'
+  surface-bright: '#fdf8f8'
   surface-container-lowest: '#ffffff'
-  surface-container-low: '#eff5ee'
-  surface-container: '#e9efe9'
-  surface-container-high: '#e4eae3'
-  surface-container-highest: '#dee4de'
-  on-surface: '#171d19'
-  on-surface-variant: '#3d4a42'
-  inverse-surface: '#2c322e'
-  inverse-on-surface: '#ecf2ec'
-  outline: '#6d7a71'
-  outline-variant: '#bccac0'
-  surface-tint: '#006c48'
-  primary: '#006c48'
+  surface-container-low: '#f7f3f2'
+  surface-container: '#f1edec'
+  surface-container-high: '#ebe7e6'
+  surface-container-highest: '#e5e2e1'
+  on-surface: '#1c1b1b'
+  on-surface-variant: '#444748'
+  inverse-surface: '#313030'
+  inverse-on-surface: '#f4f0ef'
+  outline: '#747878'
+  outline-variant: '#c4c7c7'
+  surface-tint: '#5f5e5e'
+  primary: '#000000'
   on-primary: '#ffffff'
-  primary-container: '#76ebb3'
-  on-primary-container: '#006a46'
-  inverse-primary: '#67dca5'
-  secondary: '#006d2f'
+  primary-container: '#1c1b1b'
+  on-primary-container: '#858383'
+  inverse-primary: '#c8c6c5'
+  secondary: '#5d5f5b'
   on-secondary: '#ffffff'
-  secondary-container: '#5dfd8a'
-  on-secondary-container: '#007232'
-  tertiary: '#7c5724'
+  secondary-container: '#e2e3de'
+  on-secondary-container: '#636561'
+  tertiary: '#000000'
   on-tertiary: '#ffffff'
-  tertiary-container: '#ffcc8e'
-  on-tertiary-container: '#795522'
+  tertiary-container: '#1a1c18'
+  on-tertiary-container: '#83847f'
   error: '#ba1a1a'
   on-error: '#ffffff'
   error-container: '#ffdad6'
   on-error-container: '#93000a'
-  primary-fixed: '#84f9c0'
-  primary-fixed-dim: '#67dca5'
-  on-primary-fixed: '#002113'
-  on-primary-fixed-variant: '#005235'
-  secondary-fixed: '#66ff8e'
-  secondary-fixed-dim: '#3de273'
-  on-secondary-fixed: '#002109'
-  on-secondary-fixed-variant: '#005322'
-  tertiary-fixed: '#ffddb7'
-  tertiary-fixed-dim: '#efbe81'
-  on-tertiary-fixed: '#2a1700'
-  on-tertiary-fixed-variant: '#61400e'
-  background: '#f5fbf4'
-  on-background: '#171d19'
-  surface-variant: '#dee4de'
-  clay-white: '#ffffff'
-  clay-shadow-soft: '#e2e8f0'
-  surface-bg: '#f8fafc'
-  on-surface-text: '#1e293b'
+  primary-fixed: '#e5e2e1'
+  primary-fixed-dim: '#c8c6c5'
+  on-primary-fixed: '#1c1b1b'
+  on-primary-fixed-variant: '#474746'
+  secondary-fixed: '#e2e3de'
+  secondary-fixed-dim: '#c6c7c2'
+  on-secondary-fixed: '#1a1c19'
+  on-secondary-fixed-variant: '#454744'
+  tertiary-fixed: '#e3e3dd'
+  tertiary-fixed-dim: '#c7c7c1'
+  on-tertiary-fixed: '#1a1c18'
+  on-tertiary-fixed-variant: '#464743'
+  background: '#fdf8f8'
+  on-background: '#1c1b1b'
+  surface-variant: '#e5e2e1'
 typography:
-  display-lg:
-    fontFamily: Inter
+  headline-lg:
+    fontFamily: Bricolage Grotesque
+    fontSize: 48px
+    fontWeight: '800'
+    lineHeight: '1.1'
+    letterSpacing: -0.02em
+  headline-lg-mobile:
+    fontFamily: Bricolage Grotesque
+    fontSize: 32px
+    fontWeight: '800'
+    lineHeight: '1.1'
+  headline-md:
+    fontFamily: Bricolage Grotesque
     fontSize: 32px
     fontWeight: '700'
-    lineHeight: 40px
-    letterSpacing: -0.02em
-  headline-md:
-    fontFamily: Inter
-    fontSize: 20px
-    fontWeight: '600'
-    lineHeight: 28px
-    letterSpacing: -0.01em
-  headline-md-mobile:
-    fontFamily: Inter
-    fontSize: 18px
-    fontWeight: '600'
-    lineHeight: 24px
-    letterSpacing: -0.01em
+    lineHeight: '1.2'
   body-lg:
-    fontFamily: Inter
+    fontFamily: Karla
+    fontSize: 18px
+    fontWeight: '400'
+    lineHeight: '1.6'
+  body-md:
+    fontFamily: Karla
     fontSize: 16px
     fontWeight: '400'
-    lineHeight: 24px
-    letterSpacing: 0.01em
-  body-sm:
-    fontFamily: Inter
-    fontSize: 14px
-    fontWeight: '400'
-    lineHeight: 20px
-    letterSpacing: 0.01em
-  label-md:
-    fontFamily: Inter
+    lineHeight: '1.6'
+  label-sm:
+    fontFamily: JetBrains Mono
     fontSize: 12px
-    fontWeight: '600'
-    lineHeight: 16px
+    fontWeight: '500'
+    lineHeight: '1.0'
     letterSpacing: 0.05em
 rounded:
-  sm: 0.5rem
-  DEFAULT: 1rem
-  md: 1.5rem
-  lg: 2rem
-  xl: 3rem
+  sm: 0.125rem
+  DEFAULT: 0.25rem
+  md: 0.375rem
+  lg: 0.5rem
+  xl: 0.75rem
   full: 9999px
 spacing:
-  unit: 8px
-  gutter-md: 1.5rem
-  margin-mobile: 1.25rem
-  clay-padding: 1.5rem
+  unit: 4px
+  gutter: 24px
+  margin: 32px
+  safe-area: 16px
 ---
 
 ## Brand & Style
 
-The design system is a radical evolution of traditional messaging interfaces, shifting from corporate utility to a playful, tactile, and ultra-modern aesthetic. Built for the "BROSKIE" app, it centers on the **Claymorphism** movement—characterized by soft, 3D "inflated" surfaces that feel physically touchable.
+The design system is rooted in the tactile, human experience of sketching on physical media. It targets creative professionals, thinkers, and journals who value the "imperfect" and the "handmade" over digital sterility.
 
-The brand personality is approachable, friendly, and high-energy. It targets a digitally native audience that values expressive UI over rigid structure. By combining **Minimalism** with tactile depth, the design system removes visual noise (borders, dividers, heavy text) and replaces it with volume and shadow to define hierarchy. The emotional goal is to make digital communication feel as soft and engaging as physical interaction.
+The visual style is **Artisanal/Tactile Minimalism**. It mimics a high-quality sketchbook with off-white, grain-textured paper. Every interface element is treated as an intentional ink or pencil stroke, characterized by slight line-weight variations, organic imperfections, and a lack of perfect geometric precision. The UI should evoke a sense of focus, intimacy, and raw creativity.
 
 ## Colors
 
-The palette is anchored in a soft, pastel interpretation of "Communication Green."
+The palette is strictly limited to traditional drafting materials.
 
-- **Primary (#76EBB3):** A desaturated, airy mint used for high-volume clay elements like active chat bubbles and primary action surfaces.
-- **Secondary (#25D366):** The legacy brand green, now reserved for accent moments, notification badges, and high-priority status indicators.
-- **Neutral/Surface:** The "Clay-White" (#FFFFFF) serves as the primary material for cards and inputs. The background is a very light "Surface-BG" (#F8FAFC) to allow white clay elements to pop through their outer shadows.
-- **Shadows:** Instead of black or grey, shadows use a "Clay-Shadow-Soft" (#E2E8F0) tint to maintain the clean, pastel aesthetic while providing the necessary 3D volume.
+- **Primary (Ink Black):** Used for all structural strokes, icons, and primary text. It should feel like high-pigment India ink.
+- **Secondary (Pulp):** The base background color. An off-white, warm-toned paper hue that reduces eye strain.
+- **Tertiary (Graphite):** A softer gray for secondary information, hints, and disabled states, mimicking light pencil sketches.
+- **Accent (Highlighter):** A vibrant, semi-transparent yellow used sparingly for call-to-actions, selections, and emphasis. It should look like a quick felt-tip marker stroke.
 
 ## Typography
 
-This design system utilizes **Inter** with a specific focus on modern, spacious typesetting. To balance the heavy visual weight of claymorphic elements, typography must feel light and intentional.
+Typography balances the "quirky" nature of hand-drawing with professional legibility.
 
-- **Spacing:** Letter-spacing is increased across all body and label styles to enhance the "minimalist" breathing room.
-- **Weights:** Headlines use bold and semi-bold weights to cut through the soft shadows of the UI.
-- **Convention:** The `@username` convention is treated as a specialized label style, often paired with the Primary color to emphasize identity.
-- **Scale:** Display sizes are significantly larger on desktop to act as anchor points, while mobile typography focuses on vertical efficiency and generous line heights for readability.
+- **Headlines:** Use **Bricolage Grotesque**. Its expressive, slightly irregular letterforms mimic the character of manual lettering while maintaining a bold, editorial presence.
+- **Body:** Use **Karla**. Its grotesque, slightly idiosyncratic spacing maintains the "imperfect" brand voice while ensuring long-form readability.
+- **System/Labels:** Use **JetBrains Mono**. This provides a subtle "technical drawing" or "architectural notation" feel for metadata and small labels.
+
+All text should be rendered with a slight "ink-bleed" effect where possible (softening edges) to avoid harsh digital aliasing.
 
 ## Layout & Spacing
 
-The layout philosophy is based on a **Fluid Grid** with an emphasis on "Safe Zones." Because claymorphic elements require extra space for their outer shadows to breathe without clipping, the spacing rhythm is more generous than standard flat designs.
+The layout philosophy follows a **Loose Grid**. While alignment is necessary for usability, the spacing should feel breathable and non-rigid, much like a composition on a blank page.
 
-- **The 8px Rhythm:** All spacing (padding, margins, gutters) follows an 8px base unit.
-- **Clay Padding:** Elements like cards and buttons use a minimum of 24px (1.5rem) internal padding to ensure the "inflated" edges don't crowd the content.
-- **No Dividers:** Horizontal rules and borders are strictly prohibited. Separation is achieved through 16px to 24px vertical gutters between elevated surfaces.
-- **Mobile:** On mobile, margins are increased to 20px to prevent the 3D shadows from touching the screen edges.
+- **Grid:** A standard 12-column system is used for desktop, but elements should occasionally "break" the grid by 4-8px to enhance the hand-drawn feel.
+- **White Space:** Heavy use of margins is encouraged. Content should never feel cramped against the edges of the "paper."
+- **Breakpoints:**
+  - **Mobile (<600px):** Single column, 16px margins.
+  - **Tablet (600-1024px):** 6 columns, 24px margins.
+  - **Desktop (>1024px):** 12 columns, 32px margins.
 
 ## Elevation & Depth
 
-Hierarchy is established through a **Dual-Shadow Technique** to create the signature Claymorphism look.
+This design system eschews digital shadows and blurs. Depth is communicated through **Physical Overlap** and **Line Weight**.
 
-1.  **Outer Shadows:** Used to lift the element off the background. Use two layers: one soft, large-radius shadow for the ambient glow, and one smaller, slightly darker shadow to anchor the object.
-2.  **Inner Shadows:** Crucial for the "inflated" look. Use a light inner shadow (Top-Left) for a highlight effect and a slightly darker, inset shadow (Bottom-Right) to simulate the curve of the clay.
-3.  **Tonal Layers:**
-    - **Level 0 (Background):** Soft gray (#F8FAFC).
-    - **Level 1 (Cards/Bubbles):** White or Pastel Green with 3D inflation.
-    - **Level 2 (Active States/FAB):** Deeper shadows and slightly more intense inner highlights to suggest the element is more "puffed up" than others.
+- **Tonal Layers:** No background elevation colors are used. Everything sits on the base paper texture.
+- **Stroke Contrast:** Elements "closer" to the user have thicker, darker ink strokes (2px - 3px). Elements further away use thin graphite strokes (0.5px - 1px) or dotted lines.
+- **Negative Space:** Depth is created by "cutting out" shapes or using the Accent color to lift an element from the background, mimicking a sticky note or a taped-on scrap of paper.
 
 ## Shapes
 
-The shape language is **Extreme Roundness**. Every interactive element should feel like a smooth, molded piece of clay.
+Shapes must never be mathematically perfect.
 
-- **Pill Geometry:** Buttons, input fields, and tags are strictly pill-shaped (`rounded-full`).
-- **Cards & Bubbles:** Use the `rounded-xl` (24px) or higher setting. Even large containers should avoid sharp corners to maintain the soft-body physics of the design.
-- **Avatars:** To maintain consistency with the rounded theme, avatars are always circular and feature a subtle inner shadow to look like they are "set into" the clay surface.
+- **Strokes:** Use SVG filters or custom CSS `border-image` to create a "rough" edge effect. Lines should have slight variations in thickness.
+- **Corners:** While the base roundedness is set to "Soft" (0.25rem), the actual execution should look like a hand-drawn corner—slightly overshot or slightly rounded by the natural movement of a pen.
+- **Connectors:** Use arrows and lines that look like quick "doodles" to connect related pieces of information.
 
 ## Components
 
-### Buttons
-Primary buttons are pill-shaped, colored in the Primary Mint, and feature a white inner-top-left shadow to create a highlight. On "press," the outer shadow shrinks while the inner shadow deepens, simulating the squishing of physical clay.
-
-### Clay Cards
-Used for user profiles and settings blocks. These are white, `rounded-xl` containers with no borders. They rely entirely on a large, soft outer shadow (#E2E8F0) to define their boundaries against the light gray background.
-
-### Chat Bubbles
-- **Outgoing (@username):** Pastel Mint background, aligned right, with an exaggerated 24px radius.
-- **Incoming:** Clay-White background, aligned left.
-Both use inner shadows to appear 3D. The "tail" is replaced by a simple asymmetrical corner radius (e.g., 24px on three corners, 8px on the bottom-trailing corner).
-
-### Input Fields
-Search bars and message inputs are white, pill-shaped, and "inset." Unlike cards, these use a heavy **Inner Shadow** and no outer shadow, making them look like they are carved into the clay surface.
-
-### Chips & Tags
-Small, highly rounded indicators for status. These use the Secondary Green for high contrast, appearing as small "beads" on the UI.
+- **Buttons:** Styled as boxes with a 2px "ink" border. The hover state should apply a "Highlighter" (Accent) fill that looks like a marker stroke, slightly bleeding outside the border.
+- **Cards:** Outlined with a thin graphite stroke. The card background remains the paper texture. Use a "dog-ear" fold effect in the corner for interactive cards.
+- **Input Fields:** A single horizontal ink line (underline style) rather than a full box. Placeholder text should look like a faint pencil sketch.
+- **Chips/Tags:** Styled to look like small pieces of masking tape or torn paper scraps, using irregular edges.
+- **Checkboxes:** These should be literal "X" marks drawn inside hand-sketched squares.
+- **Selection/Focus:** Instead of a blue glow, use a "scribble" or "underline" in the Accent color to indicate focus or active states.
+- **Dividers:** Use rough, hand-drawn lines or a series of "dashes" that look like they were drawn with a physical ruler and a leaking pen.
