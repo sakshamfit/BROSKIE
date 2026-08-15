@@ -45,3 +45,6 @@ Thumbs.db
 app/.claude/
 app/AGENTS.md
 app/CLAUDE.md
+
+# vercel
+.vercel
