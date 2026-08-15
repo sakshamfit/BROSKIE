@@ -18,15 +18,15 @@ const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '25mb' }));
 
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-app.use('/uploads', express.static(UPLOAD_DIR));
+const storage = require('./storage');
 
+// Local files are still served when the disk backend is in use (and harmless
+// otherwise — old /uploads/... URLs in the DB keep resolving).
+app.use('/uploads', express.static(storage.UPLOAD_DIR));
+
+// Buffer in memory, then hand off to the storage backend (Supabase or disk).
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-    filename: (req, file, cb) => cb(null, nano() + path.extname(file.originalname || '.bin')),
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 },
 });
 
@@ -221,9 +221,19 @@ app.get('/api/users', requireAuth, (req, res) => {
 /* uploads                                                             */
 /* ------------------------------------------------------------------ */
 
-app.post('/api/upload', requireAuth, upload.single('file'), (req, res) => {
+app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  res.json({ url: `/uploads/${req.file.filename}` });
+  try {
+    const url = await storage.save(
+      req.file.buffer,
+      req.file.originalname || 'upload.bin',
+      req.file.mimetype || 'application/octet-stream'
+    );
+    res.json({ url });
+  } catch (e) {
+    console.error('[upload]', e.message);
+    res.status(500).json({ error: 'Upload failed' });
+  }
 });
 
 /* ------------------------------------------------------------------ */
@@ -563,4 +573,8 @@ if (fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
 }
 
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, '0.0.0.0', () => console.log(`BROSKIE server listening on http://0.0.0.0:${PORT}`));
+server.listen(PORT, '0.0.0.0', async () => {
+  console.log(`BROSKIE server listening on http://0.0.0.0:${PORT}`);
+  console.log(`[storage] ${storage.describe()}`);
+  await storage.ensureBucket();
+});

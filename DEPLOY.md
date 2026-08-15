@@ -125,12 +125,12 @@ Only if you want the Vercel CDN. `vercel.json` is already in the repo.
 | "Failed to fetch" on login | Two-host: backend `http://` while site is `https://` (mixed content) |
 | Messages send but never arrive | WebSockets blocked — the host must support them (Vercel functions don't) |
 | Chats vanish after redeploy | Ephemeral disk wiped SQLite → attach a volume or move to Postgres |
-| Images 404 after redeploy | Same — `server/uploads` is ephemeral; use S3/Cloudinary |
+| Images 404 after redeploy | `server/uploads` is ephemeral — set up Supabase Storage (see `SUPABASE.md`) |
 
 ## Before real users
 
 - Set a strong `JWT_SECRET` (never ship the dev fallback)
 - Change the demo password `1234` / remove seeded accounts
 - Attach a persistent volume, or migrate SQLite → Postgres
-- Move uploads to object storage (S3, Cloudinary, Supabase)
+- Move uploads to object storage — **see `SUPABASE.md`** (3-minute setup)
 - Restrict CORS to your own domain

@@ -15,6 +15,7 @@
     "postinstall": "echo 'run npm run build to bundle the web app into ./public'"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.5.0",
     "cors": "^2.8.5",
