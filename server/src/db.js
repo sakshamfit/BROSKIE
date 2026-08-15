@@ -92,6 +92,40 @@ CREATE TABLE IF NOT EXISTS status_views (
   at        INTEGER NOT NULL,
   PRIMARY KEY (status_id, user_id)
 );
+
+/* ---- The Network: public, worldwide posts ---- */
+
+CREATE TABLE IF NOT EXISTS posts (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL,
+  title      TEXT DEFAULT '',
+  body       TEXT NOT NULL DEFAULT '',
+  media_url  TEXT,
+  tag        TEXT,
+  created_at INTEGER NOT NULL,
+  deleted    INTEGER DEFAULT 0,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_tag ON posts(tag);
+
+CREATE TABLE IF NOT EXISTS post_likes (
+  post_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  at      INTEGER NOT NULL,
+  PRIMARY KEY (post_id, user_id),
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS post_comments (
+  id         TEXT PRIMARY KEY,
+  post_id    TEXT NOT NULL,
+  user_id    TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_comments_post ON post_comments(post_id, created_at);
 `);
 
 module.exports = db;

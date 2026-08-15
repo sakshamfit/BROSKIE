@@ -79,6 +79,22 @@ export const api = {
   mute: (chatId, muted) => request(`/api/chats/${chatId}/mute`, { method: 'POST', body: { muted } }),
   search: (q) => request(`/api/search?q=${encodeURIComponent(q)}`),
 
+  // The Network — public posts
+  posts: ({ before, limit = 20, tag, userId } = {}) => {
+    const q = new URLSearchParams();
+    if (before) q.set('before', before);
+    if (limit) q.set('limit', limit);
+    if (tag) q.set('tag', tag);
+    if (userId) q.set('userId', userId);
+    return request(`/api/posts?${q.toString()}`);
+  },
+  createPost: (payload) => request('/api/posts', { method: 'POST', body: payload }),
+  deletePost: (id) => request(`/api/posts/${id}`, { method: 'DELETE' }),
+  likePost: (id) => request(`/api/posts/${id}/like`, { method: 'POST', body: {} }),
+  comments: (id) => request(`/api/posts/${id}/comments`),
+  addComment: (id, body) => request(`/api/posts/${id}/comments`, { method: 'POST', body: { body } }),
+  postTags: () => request('/api/posts-tags'),
+
   statuses: () => request('/api/status'),
   postStatus: (payload) => request('/api/status', { method: 'POST', body: payload }),
   viewStatus: (id) => request(`/api/status/${id}/view`, { method: 'POST' }),

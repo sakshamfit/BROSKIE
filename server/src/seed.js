@@ -113,3 +113,61 @@ const insertStatus = db.prepare(
 console.log('Seeded BROSKIE demo data.');
 console.log('Login with any of these (password: 1234):');
 people.forEach((p) => console.log(`  ${p.phone}  ->  ${p.name}`));
+
+/* ---- The Network: seed public posts ---- */
+const insertPost = db.prepare(
+  `INSERT INTO posts (id, user_id, title, body, media_url, tag, created_at)
+   VALUES (@id, @user_id, @title, @body, @media_url, @tag, @created_at)`
+);
+const insertLike = db.prepare('INSERT OR IGNORE INTO post_likes (post_id, user_id, at) VALUES (?,?,?)');
+const insertComment = db.prepare(
+  'INSERT INTO post_comments (id, post_id, user_id, body, created_at) VALUES (?,?,?,?,?)'
+);
+
+const POSTS = [
+  {
+    user: 'Ananya Sharma', tag: 'process', title: 'The myth of the blank page', minsAgo: 45,
+    body: "Staring at a blank canvas is intimidating because it demands perfection. Start by making a mess. Draw a terrible line. Smudge some ink. Once the page is ruined, you're free to actually create.",
+    likes: ['Rohit Verma', 'Priya Nair', 'Karan Mehta', 'You (Demo)'],
+    comments: [['Karan Mehta', 'Needed this today, honestly.'], ['Priya Nair', 'Ruining the page first is the whole trick 🙌']],
+  },
+  {
+    user: 'Priya Nair', tag: 'texture', title: '', minsAgo: 120,
+    body: 'Just found the perfect grain texture for the new sketchbook series. The imperfections are what make it feel alive.',
+    likes: ['Ananya Sharma', 'You (Demo)'],
+    comments: [['Ananya Sharma', 'Which paper stock is that?']],
+  },
+  {
+    user: 'Rohit Verma', tag: 'sketching', title: '', minsAgo: 400,
+    body: 'Cityscapes always feel too rigid when done digitally. Trying to capture the chaos with loose charcoal strokes today.',
+    likes: ['Priya Nair', 'Karan Mehta'],
+    comments: [['You (Demo)', 'The smudging really sells it.']],
+  },
+  {
+    user: 'Karan Mehta', tag: 'typography', title: 'Letterforms that breathe', minsAgo: 900,
+    body: 'Spent the morning redrawing the same lowercase g eleven times. Ten were technically correct. The eleventh had a wobble I actually liked.',
+    likes: ['Ananya Sharma', 'Rohit Verma', 'Priya Nair'],
+    comments: [],
+  },
+  {
+    user: 'You (Demo)', tag: 'process', title: '', minsAgo: 1500,
+    body: 'Shipping something imperfect today beats polishing something invisible forever.',
+    likes: ['Rohit Verma'],
+    comments: [['Rohit Verma', '💯']],
+  },
+];
+
+POSTS.forEach((p) => {
+  const id = nano();
+  const created = now - mins(p.minsAgo);
+  insertPost.run({
+    id, user_id: ids[p.user], title: p.title || '', body: p.body,
+    media_url: null, tag: p.tag || null, created_at: created,
+  });
+  (p.likes || []).forEach((n) => insertLike.run(id, ids[n], created + 1000));
+  (p.comments || []).forEach(([n, text], i) =>
+    insertComment.run(nano(), id, ids[n], text, created + (i + 1) * 60000)
+  );
+});
+
+console.log(`Seeded ${POSTS.length} public posts on The Network.`);

@@ -16,6 +16,7 @@ import ChatListScreen from './screens/ChatListScreen';
 import ConversationScreen from './screens/ConversationScreen';
 import NewChatScreen from './screens/NewChatScreen';
 import StatusScreen from './screens/StatusScreen';
+import NetworkScreen from './screens/NetworkScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ChatInfoScreen from './screens/ChatInfoScreen';
 
@@ -31,6 +32,7 @@ function HomeTabs({ navigation }) {
 
   const TABS = [
     { key: 'chats', label: 'Chats', icon: 'chatbubbles', badge: unread },
+    { key: 'network', label: 'Network', icon: 'globe' },
     { key: 'status', label: 'Status', icon: 'radio-button-on' },
     { key: 'calls', label: 'Calls', icon: 'call' },
   ];
@@ -39,6 +41,7 @@ function HomeTabs({ navigation }) {
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={{ flex: 1 }}>
         {tab === 'chats' && <ChatListScreen navigation={navigation} />}
+        {tab === 'network' && <NetworkScreen navigation={navigation} />}
         {tab === 'status' && <StatusScreen navigation={navigation} />}
         {tab === 'calls' && <CallsPlaceholder />}
       </View>

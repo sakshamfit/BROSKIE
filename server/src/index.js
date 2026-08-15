@@ -394,6 +394,151 @@ app.post('/api/status/:id/view', requireAuth, (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* The Network — public worldwide posts                                */
+/* ------------------------------------------------------------------ */
+
+function hydratePost(row, viewerId) {
+  if (!row) return null;
+  const author = getUser(row.user_id);
+  const likes = db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id = ?').get(row.id).c;
+  const comments = db.prepare('SELECT COUNT(*) c FROM post_comments WHERE post_id = ?').get(row.id).c;
+  const liked = viewerId
+    ? !!db.prepare('SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?').get(row.id, viewerId)
+    : false;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    author: author ? { id: author.id, name: author.name, avatar: author.avatar } : { id: row.user_id, name: 'Unknown', avatar: null },
+    title: row.title || '',
+    body: row.body,
+    mediaUrl: row.media_url,
+    tag: row.tag,
+    createdAt: row.created_at,
+    likes,
+    comments,
+    liked,
+    mine: row.user_id === viewerId,
+  };
+}
+
+/** GET /api/posts?before=<ts>&limit=20&tag=process&userId=… */
+app.get('/api/posts', requireAuth, (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 20, 50);
+  const before = Number(req.query.before) || Date.now() + 1;
+  const { tag, userId } = req.query;
+
+  let sql = 'SELECT * FROM posts WHERE deleted = 0 AND created_at < ?';
+  const params = [before];
+  if (tag) { sql += ' AND tag = ?'; params.push(String(tag).replace(/^#/, '')); }
+  if (userId) { sql += ' AND user_id = ?'; params.push(userId); }
+  sql += ' ORDER BY created_at DESC LIMIT ?';
+  params.push(limit);
+
+  const rows = db.prepare(sql).all(...params);
+  res.json({
+    posts: rows.map((r) => hydratePost(r, req.userId)),
+    nextBefore: rows.length === limit ? rows[rows.length - 1].created_at : null,
+  });
+});
+
+app.post('/api/posts', requireAuth, (req, res) => {
+  const { body = '', title = '', mediaUrl = null, tag = null } = req.body || {};
+  const text = String(body).trim();
+  if (!text && !mediaUrl) return res.status(400).json({ error: 'Write something or attach an image' });
+  if (text.length > 2000) return res.status(400).json({ error: 'Post is too long (2000 characters max)' });
+
+  const post = {
+    id: nano(),
+    user_id: req.userId,
+    title: String(title).trim().slice(0, 120),
+    body: text.slice(0, 2000),
+    media_url: mediaUrl,
+    tag: tag ? String(tag).replace(/^#/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24) || null : null,
+    created_at: now(),
+  };
+  db.prepare(
+    `INSERT INTO posts (id, user_id, title, body, media_url, tag, created_at)
+     VALUES (@id, @user_id, @title, @body, @media_url, @tag, @created_at)`
+  ).run(post);
+
+  const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(post.id);
+  // everyone online sees new posts appear live
+  io.emit('post:new', hydratePost(row, null));
+  res.json({ post: hydratePost(row, req.userId) });
+});
+
+app.delete('/api/posts/:id', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Post not found' });
+  if (row.user_id !== req.userId) return res.status(403).json({ error: 'Not your post' });
+  db.prepare('UPDATE posts SET deleted = 1 WHERE id = ?').run(req.params.id);
+  io.emit('post:deleted', { id: req.params.id });
+  res.json({ ok: true });
+});
+
+app.post('/api/posts/:id/like', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM posts WHERE id = ? AND deleted = 0').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Post not found' });
+
+  const existing = db.prepare('SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?').get(row.id, req.userId);
+  if (existing) db.prepare('DELETE FROM post_likes WHERE post_id = ? AND user_id = ?').run(row.id, req.userId);
+  else db.prepare('INSERT INTO post_likes (post_id, user_id, at) VALUES (?,?,?)').run(row.id, req.userId, now());
+
+  const likes = db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id = ?').get(row.id).c;
+  io.emit('post:likes', { id: row.id, likes });
+  res.json({ liked: !existing, likes });
+});
+
+app.get('/api/posts/:id/comments', requireAuth, (req, res) => {
+  const rows = db
+    .prepare('SELECT * FROM post_comments WHERE post_id = ? ORDER BY created_at ASC LIMIT 200')
+    .all(req.params.id);
+  res.json({
+    comments: rows.map((c) => {
+      const u = getUser(c.user_id);
+      return {
+        id: c.id,
+        body: c.body,
+        createdAt: c.created_at,
+        userId: c.user_id,
+        author: u ? { id: u.id, name: u.name, avatar: u.avatar } : { id: c.user_id, name: 'Unknown', avatar: null },
+        mine: c.user_id === req.userId,
+      };
+    }),
+  });
+});
+
+app.post('/api/posts/:id/comments', requireAuth, (req, res) => {
+  const post = db.prepare('SELECT * FROM posts WHERE id = ? AND deleted = 0').get(req.params.id);
+  if (!post) return res.status(404).json({ error: 'Post not found' });
+  const text = String(req.body?.body || '').trim();
+  if (!text) return res.status(400).json({ error: 'Comment cannot be empty' });
+
+  const c = { id: nano(), post_id: post.id, user_id: req.userId, body: text.slice(0, 600), created_at: now() };
+  db.prepare('INSERT INTO post_comments (id, post_id, user_id, body, created_at) VALUES (@id,@post_id,@user_id,@body,@created_at)').run(c);
+
+  const count = db.prepare('SELECT COUNT(*) c FROM post_comments WHERE post_id = ?').get(post.id).c;
+  io.emit('post:comments', { id: post.id, comments: count });
+
+  const u = getUser(req.userId);
+  res.json({
+    comment: {
+      id: c.id, body: c.body, createdAt: c.created_at, userId: c.user_id,
+      author: { id: u.id, name: u.name, avatar: u.avatar }, mine: true,
+    },
+  });
+});
+
+/** Trending tags, for the sidebar/chips. */
+app.get('/api/posts-tags', requireAuth, (req, res) => {
+  const rows = db
+    .prepare(`SELECT tag, COUNT(*) c FROM posts WHERE deleted = 0 AND tag IS NOT NULL
+              GROUP BY tag ORDER BY c DESC LIMIT 12`)
+    .all();
+  res.json({ tags: rows.map((r) => ({ tag: r.tag, count: r.c })) });
+});
+
+/* ------------------------------------------------------------------ */
 /* socket.io realtime                                                  */
 /* ------------------------------------------------------------------ */
 

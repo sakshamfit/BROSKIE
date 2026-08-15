@@ -65,6 +65,11 @@ receipts that flush when a recipient reconnects.
 **Organisation** — chat list sorted by recency, unread counts, global message search,
 archive, mute, group info with participant list and admin tags.
 
+**The Network** — a public worldwide feed. Anyone can post text, an image and a
+tag; posts appear live for every connected user via Socket.IO. Likes toggle with
+optimistic UI, threaded comments in a bottom sheet, tag filtering, trending tags,
+cursor pagination, and authors can delete their own posts.
+
 **Status / stories** — post coloured text statuses, 24-hour auto-expiry, viewed/unviewed
 rings, tap-through story viewer with progress bars.
 

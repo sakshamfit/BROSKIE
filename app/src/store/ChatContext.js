@@ -13,6 +13,13 @@ export function ChatProvider({ children }) {
   const [typing, setTyping] = useState({});       // chatId -> { userId: name }
   const [connected, setConnected] = useState(false);
   const socketRef = useRef(null);
+  const postListeners = useRef(new Set());
+
+  /** Subscribe to post:* socket events. Returns an unsubscribe fn. */
+  const onPostEvent = useCallback((fn) => {
+    postListeners.current.add(fn);
+    return () => postListeners.current.delete(fn);
+  }, []);
 
   const sortChats = (list) =>
     [...list].sort((a, b) => (b.lastMessage?.createdAt || b.updatedAt) - (a.lastMessage?.createdAt || a.updatedAt));
@@ -65,6 +72,13 @@ export function ChatProvider({ children }) {
 
     socket.on('chat:updated', upsertChat);
     socket.on('chat:new', upsertChat);
+
+    // The Network — re-broadcast post events to any subscribed screen
+    ['post:new', 'post:deleted', 'post:likes', 'post:comments'].forEach((ev) => {
+      socket.on(ev, (payload) => {
+        postListeners.current.forEach((fn) => fn(ev, payload));
+      });
+    });
 
     socket.on('presence', ({ userId, isOnline, lastSeen }) => {
       setChats((prev) => prev.map((c) => (c.otherUserId === userId ? { ...c, isOnline, lastSeen } : c)));
@@ -148,7 +162,7 @@ export function ChatProvider({ children }) {
       value={{
         chats, messages, typing, connected,
         refreshChats, loadMessages, sendMessage, markRead,
-        setTypingState, react, deleteMessage, upsertChat,
+        setTypingState, react, deleteMessage, upsertChat, onPostEvent,
       }}
     >
       {children}
