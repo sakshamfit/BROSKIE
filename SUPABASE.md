@@ -24,20 +24,44 @@ https://supabase.com → **New project**. Any region; the free tier is fine
 | Field | Env var |
 |---|---|
 | Project URL | `SUPABASE_URL` |
-| `service_role` key (under *Project API keys*) | `SUPABASE_SERVICE_KEY` |
+| **Secret** key (`service_role` / `sb_secret_…`) | `SUPABASE_SERVICE_KEY` |
 
-> ⚠️ Use the **`service_role`** key, not `anon`. It's a server-side secret that
-> bypasses row-level security — it must only ever live in your backend env
-> vars. Never put it in the app or commit it.
+> ⚠️ **Use the secret key, not the publishable one.**
+>
+> Supabase gives you two kinds:
+>
+> | Key | Looks like | Can it work here? |
+> |---|---|---|
+> | Publishable / anon | `sb_publishable_…` | ❌ Cannot create buckets. Uploads fail unless you pre-create the bucket *and* add an RLS INSERT policy. |
+> | Secret / service_role | `sb_secret_…` or a long `eyJ…` JWT | ✅ Creates the bucket and uploads automatically. |
+>
+> The secret key bypasses row-level security, so it must **only** live in
+> backend env vars — never in the app, never committed.
+
+#### Using a publishable key anyway
+The server accepts it, but you must do the setup by hand:
+
+1. **Storage → New bucket** → name `broskie-uploads` → tick **Public**
+2. **Storage → Policies** → on `storage.objects`, add an **INSERT** policy
+   allowing the `anon` role for that bucket
+
+Without both steps you'll see `Bucket not found` or `row violates row-level
+security policy` in the logs, and uploads silently fall back to local disk
+(the message still sends — the image just won't survive a redeploy).
 
 ### 3. Add the variables on Railway
 Your service → **Variables** → add:
 
 ```
 SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
-SUPABASE_SERVICE_KEY=eyJhbGciOi...        # service_role key
+SUPABASE_SERVICE_KEY=sb_secret_...        # the SECRET key (see warning above)
 SUPABASE_BUCKET=broskie-uploads           # optional, this is the default
 ```
+
+`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are also
+accepted as aliases, but the `NEXT_PUBLIC_` prefix is a Next.js convention
+meaning "safe to expose in the browser" — it has no special meaning here, and
+these values are only ever read server-side.
 
 Railway redeploys automatically.
 
@@ -48,8 +72,16 @@ Check the deploy logs for:
 [storage] Supabase Storage (bucket "broskie-uploads")
 ```
 
-If you instead see `local disk … files are lost on redeploy`, the env vars
-aren't set (check for typos or stray whitespace).
+The line also tells you which key type was detected:
+
+```
+[storage] Supabase Storage (bucket "broskie-uploads", secret key)        ← good
+[storage] Supabase Storage (bucket "broskie-uploads", publishable/anon key)
+[storage] local disk (server/uploads) — files are lost on redeploy       ← vars not set
+```
+
+If a publishable key can't create the bucket, the logs print the exact steps to
+fix it.
 
 The bucket is created automatically on first boot as a **public** bucket with a
 25 MB limit. You can also create it by hand under **Storage → New bucket**.
