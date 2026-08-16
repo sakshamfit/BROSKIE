@@ -172,6 +172,27 @@ export function sketchBox(theme, weight = 'ink', size = 56, color) {
   };
 }
 
+/**
+ * A "drawn by hand" portrait frame — never a perfect circle. Each corner
+ * gets its own uneven radius (deterministically varied by `seed` so the
+ * same avatar always wobbles the same way, but different avatars don't
+ * all look identical), like a quick pencil circle that doesn't quite close.
+ */
+export function sketchAvatarFrame(theme, size = 56, weight = 'ink', color, seed = 0) {
+  const w = typeof weight === 'number' ? weight : stroke[weight] ?? stroke.ink;
+  // four base "wobble" ratios, rotated by the seed so avatars vary a little
+  const ratios = [0.62, 0.38, 0.55, 0.44];
+  const r = [0, 1, 2, 3].map((i) => Math.round(size * ratios[(i + seed) % 4]));
+  return {
+    borderWidth: w,
+    borderColor: color || theme.ink,
+    borderTopLeftRadius: r[0],
+    borderTopRightRadius: r[1],
+    borderBottomRightRadius: r[2],
+    borderBottomLeftRadius: r[3],
+  };
+}
+
 /** Faint pencil outline for "further away" surfaces (cards, list rows). */
 export function pencilBox(theme, color) {
   return {

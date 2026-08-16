@@ -128,9 +128,7 @@ function ProfileHero({ user, theme, joinYear, connected }) {
   return (
     <View style={s.hero}>
       <Pressable onPress={pickAvatar} style={s.avatarWrap} disabled={uploading}>
-        <View style={[s.avatarFrame, inkBox(theme, 'bold')]}>
-          <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={112} />
-        </View>
+        <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={112} shape="sketch" weight="bold" />
         <View style={[s.editBadge, inkBox(theme, 'ink'), { backgroundColor: theme.card }]}>
           {uploading ? (
             <ActivityIndicator size="small" color={theme.ink} />

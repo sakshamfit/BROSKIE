@@ -4,7 +4,7 @@ import Icon from '../icons/Icon';
 import Emoji from '../icons/Emoji';
 import {
   colorFor, initials, AVATAR_INK, radius, type, tokens, stroke,
-  inkBox, sketchBox, pencilBox, inkUnderline, dashedRule, marker, pressedInk,
+  inkBox, sketchBox, sketchAvatarFrame, pencilBox, inkUnderline, dashedRule, marker, pressedInk,
 } from '../theme';
 import { mediaUrl } from '../api';
 import { useTheme } from '../store/ThemeContext';
@@ -252,25 +252,33 @@ export function Highlight({ children, style }) {
 /* avatar — sketched square-ish portrait                               */
 /* ------------------------------------------------------------------ */
 
-export function Avatar({ uri, name, id, size = 48, group = false, online = false, unread = false, weight = 'ink' }) {
+export function Avatar({ uri, name, id, size = 48, group = false, online = false, unread = false, weight = 'ink', shape = 'circle' }) {
   const { theme } = useTheme();
   const src = mediaUrl(uri);
   const fill = theme.dark ? theme.cardAlt : colorFor(id || name || '');
   const ink = theme.dark ? theme.ink : AVATAR_INK;
   const lineColor = weight === 'thin' ? theme.graphite : theme.ink;
 
+  // 'sketch' = drawn-by-hand portrait frame (uneven corners, never a
+  // perfect circle) for the Settings profile hero; every other avatar in
+  // the app (chat rows, headers, member lists) stays the circular ink ring.
+  const lineWidth = stroke[weight] ?? stroke.ink;
+  const seed = String(id || name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const frameStyle = shape === 'sketch'
+    ? sketchAvatarFrame(theme, size, lineWidth, lineColor, seed)
+    : { borderRadius: radius.full, borderWidth: lineWidth, borderColor: lineColor };
+
   return (
     <View style={{ width: size, height: size }}>
-      {/* circular, per the mockup's rounded-full avatars, with an ink stroke */}
+      {/* circular by default (per the mockup's rounded-full avatars); pass
+          shape="sketch" for a hand-drawn, uneven pencil-outline portrait */}
       <View
         style={[
           {
             width: size, height: size, overflow: 'hidden', backgroundColor: fill,
             alignItems: 'center', justifyContent: 'center',
-            borderRadius: radius.full,
-            borderWidth: weight === 'thin' ? 1 : stroke.ink,
-            borderColor: lineColor,
           },
+          frameStyle,
         ]}
       >
         {src ? (

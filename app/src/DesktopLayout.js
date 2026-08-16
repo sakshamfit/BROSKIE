@@ -49,23 +49,23 @@ export default function SplitLayout() {
   const openOverlay = (name, params) => setOverlay({ name, params });
   const closeOverlay = () => setOverlay(null);
 
-  // Settings has its own little navigation stack inside the overlay panel
-  // (Settings -> PersonalInfo / Security / Appearance -> back to Settings).
+  // Settings is a full-screen top-level section here (like Chats/See/
+  // Network) — NOT a popup — with its own little navigation stack for the
+  // Personal Information / Security / Appearance drill-downs.
   const [settingsSub, setSettingsSub] = useState(null);
-  const closeSettingsOverlay = () => { closeOverlay(); setSettingsSub(null); };
 
   const settingsNav = {
     navigate: (name) => {
       if (['PersonalInfo', 'Security', 'Appearance'].includes(name)) setSettingsSub(name);
     },
-    goBack: () => (settingsSub ? setSettingsSub(null) : closeOverlay()),
+    goBack: () => (settingsSub ? setSettingsSub(null) : setTab('chats')),
     replace: () => {},
   };
 
   const listNav = {
     navigate: (name, params) => {
       if (name === 'Conversation') setSelectedChatId(params.chatId);
-      else if (name === 'Settings') openOverlay('Settings');
+      else if (name === 'Settings') { setSettingsSub(null); setTab('settings'); }
       else if (name === 'NewChat') openOverlay('NewChat');
     },
     goBack: () => {},
@@ -99,8 +99,15 @@ export default function SplitLayout() {
     if (Platform.OS !== 'android') return undefined;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (overlay) {
-        if (overlay.name === 'Settings' && settingsSub) setSettingsSub(null);
-        else closeOverlay();
+        closeOverlay();
+        return true;
+      }
+      if (tab === 'settings' && settingsSub) {
+        setSettingsSub(null);
+        return true;
+      }
+      if (tab === 'settings') {
+        setTab('chats');
         return true;
       }
       if (selectedChatId) {
@@ -110,16 +117,16 @@ export default function SplitLayout() {
       return false;
     });
     return () => sub.remove();
-  }, [overlay, settingsSub, selectedChatId]);
+  }, [overlay, tab, settingsSub, selectedChatId]);
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
       <SideNav
         active={tab}
         railOnly={railOnly}
-        onNavigate={setTab}
+        onNavigate={(key) => { setSettingsSub(null); setTab(key); }}
         onNewChat={() => openOverlay('NewChat')}
-        onSettings={() => openOverlay('Settings')}
+        onSettings={() => { setSettingsSub(null); setTab('settings'); }}
         onHelp={() => openOverlay('Help')}
         onLogout={logout}
       />
@@ -155,17 +162,21 @@ export default function SplitLayout() {
             <NetworkScreen />
           </View>
         )}
+
+        {/* Settings is a full-screen section, same as Chats/See/Network —
+            not a centered popup — matching the mockup's own full-page layout. */}
+        {tab === 'settings' && (
+          <View style={s.fullPane}>
+            {settingsSub === 'PersonalInfo' && <PersonalInfoScreen navigation={settingsNav} embedded />}
+            {settingsSub === 'Security' && <SecurityScreen navigation={settingsNav} embedded />}
+            {settingsSub === 'Appearance' && <AppearanceScreen navigation={settingsNav} embedded />}
+            {!settingsSub && <SettingsScreen navigation={settingsNav} embedded />}
+          </View>
+        )}
       </View>
 
       <OverlayPanel visible={overlay?.name === 'NewChat'} onClose={closeOverlay} width={480}>
         <NewChatScreen navigation={overlayNav} />
-      </OverlayPanel>
-
-      <OverlayPanel visible={overlay?.name === 'Settings'} onClose={closeSettingsOverlay} width={480}>
-        {settingsSub === 'PersonalInfo' && <PersonalInfoScreen navigation={settingsNav} />}
-        {settingsSub === 'Security' && <SecurityScreen navigation={settingsNav} />}
-        {settingsSub === 'Appearance' && <AppearanceScreen navigation={settingsNav} />}
-        {!settingsSub && <SettingsScreen navigation={settingsNav} />}
       </OverlayPanel>
 
       <OverlayPanel visible={overlay?.name === 'ChatInfo'} onClose={closeOverlay} width={420}>
