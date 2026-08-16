@@ -1,4 +1,5 @@
 /* Seeds demo users, chats, messages and statuses so the app is alive on first run. */
+require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const { customAlphabet } = require('nanoid');
 const db = require('./db');
