@@ -8,7 +8,6 @@
   },
   "scripts": {
     "build": "cd server && npm install && npm run build",
-    "build:frontend": "cd app && npm install && npx expo export --platform web --output-dir dist",
     "start": "cd server && npm start",
     "seed": "cd server && npm run seed",
     "dev:server": "cd server && npm run dev",

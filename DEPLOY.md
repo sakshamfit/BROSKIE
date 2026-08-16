@@ -9,33 +9,30 @@ specifically need a CDN.
 ## Why one host wins here
 
 友達 is two programs: an Expo web frontend and a Node/Socket.IO backend.
-Vercel and Cloudflare Workers can both host the frontend, but **neither can
-host the backend** — Socket.IO needs a process that stays alive holding
-WebSocket connections, while serverless functions (Vercel) and Workers
-(Cloudflare) both spin up per-request and die. So "just use Vercel" or
-"just use Cloudflare" is not an option; the backend always needs a real host
-(Railway or Render).
+Vercel can host the frontend but **cannot host the backend** — Socket.IO needs
+a process that stays alive holding WebSocket connections, and Vercel's
+serverless functions spin up per-request and die. So "just use Vercel" is not
+an option; the backend always needs a real host.
 
 Given the backend must live on Railway/Render anyway, having it serve the
 frontend too costs nothing and removes work:
 
-| | One host (Railway/Render) | Two hosts (Vercel/Cloudflare + Railway) |
+| | One host (Railway/Render) | Two hosts (Vercel + Railway) |
 |---|---|---|
 | Services to manage | 1 | 2 |
-| CORS config | none — same origin | must allow the frontend's domain |
+| CORS config | none — same origin | must allow the Vercel domain |
 | `EXPO_PUBLIC_API_URL` | not needed | required, baked in at build time |
 | Redeploy after backend URL change | never | rebuild frontend every time |
 | Mixed-content (https/http) risk | none | real |
 | Cost | one free tier | two free tiers |
-| Static asset CDN | ❌ served by Node | ✅ edge CDN |
+| Static asset CDN | ❌ served by Node | ✅ Vercel edge |
 
-The only real advantage of splitting is the edge CDN. For a chat app — where
+The only real advantage of splitting is Vercel's CDN. For a chat app — where
 the bottleneck is the WebSocket round-trip, not a 1.5 MB one-time bundle — that
 is not worth doubling the moving parts.
 
 **Use two hosts only if** you expect heavy global traffic on the static bundle,
-or you specifically want Vercel/Cloudflare's platform features (preview
-deployments, edge network, etc). Steps for both are below.
+or you want Vercel preview deployments per pull request.
 
 ---
 
@@ -101,50 +98,6 @@ Only if you want the Vercel CDN. `vercel.json` is already in the repo.
 
 ---
 
-## Alternative: two hosts (Cloudflare Workers + Railway)
-
-Same idea as the Vercel option above — Cloudflare only hosts the **static
-frontend**; the backend still needs Railway or Render, for the same reason
-as Vercel: Socket.IO needs a long-lived process, and Workers (like
-serverless functions) spin up per-request and can't hold that connection.
-`wrangler.jsonc` is already in the repo, configured as **assets-only** (no
-Worker script) — it just serves the exported static site.
-
-> **If you saw `Could not detect a directory containing static files` while
-> deploying:** that means Cloudflare's dashboard build ran the default
-> `npx wrangler deploy` without first exporting the app, so `app/dist`
-> didn't exist yet. Setting the build command below fixes it.
-
-1. **Backend on Railway first** (steps above) and copy its URL
-2. **Cloudflare dashboard** → Workers & Pages → **Create** → connect the
-   `BROSKIE` repo (Git integration, not a manual upload)
-3. **Build settings**:
-   | Field | Value |
-   |---|---|
-   | Build command | `npm run build:frontend` |
-   | Deploy command | `npx wrangler deploy` |
-   | Root directory | *(leave empty — repo root, so `wrangler.jsonc` is found)* |
-4. **Environment variables** (Settings → Variables, **before** the first
-   build — Expo inlines `EXPO_PUBLIC_*` at build time):
-
-   | Name | Value |
-   |---|---|
-   | `EXPO_PUBLIC_API_URL` | `https://your-backend.up.railway.app` |
-
-   No trailing slash.
-5. Lock down CORS on the backend the same way as the Vercel steps above,
-   using your `*.workers.dev` (or custom) domain for `CORS_ORIGIN`.
-6. Deploy. `wrangler.jsonc` sets `not_found_handling: single-page-application`
-   so client-side routes and refreshing on a sub-page both work correctly.
-
-### Deploying by hand instead of Git integration
-```bash
-npm run build:frontend   # exports the Expo web build into app/dist
-npx wrangler deploy      # uploads app/dist per wrangler.jsonc
-```
-
----
-
 ## How the app finds the API
 
 `app/src/api.js` resolves the base URL in this order:
@@ -206,11 +159,9 @@ entirely and enables multiple server instances).
 | "Reconnecting…" in Settings | Backend asleep, or (two-host) wrong `EXPO_PUBLIC_API_URL` |
 | Blank page, 404 on refresh | Web build missing — run `npm run build` so `server/public` exists |
 | "Failed to fetch" on login | Two-host: backend `http://` while site is `https://` (mixed content) |
-| Messages send but never arrive | WebSockets blocked — the host must support them (Vercel functions and Cloudflare Workers don't hold persistent connections) |
+| Messages send but never arrive | WebSockets blocked — the host must support them (Vercel functions don't) |
 | Chats/communities/posts vanish after redeploy | No persistent volume attached yet — see "Never lose data on deploy" above |
 | Images 404 after redeploy | `server/uploads` is ephemeral without a volume — attach one (above) or set up Supabase Storage (see `SUPABASE.md`) |
-| Cloudflare: `Could not detect a directory containing static files` | The dashboard ran `wrangler deploy` without exporting the app first (no `app/dist` yet) — set the build command to `npm run build:frontend`, see the Cloudflare section above |
-| Cloudflare: site loads but "Failed to fetch" / spinner forever | `EXPO_PUBLIC_API_URL` wasn't set before the build (Expo bakes it in at build time) — set it and trigger a fresh deploy, don't just re-run the old build |
 
 ## Before real users
 
