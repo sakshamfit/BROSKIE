@@ -25,13 +25,13 @@ import { ThemeProvider, useTheme } from './src/store/ThemeContext';
 import Navigation from './src/Navigation';
 import { Loading } from './src/components/common';
 
-/** On wide screens (web preview) centre the app on a "sheet of paper". */
+/** On web, expand to full browser — no phone frame. */
 function PhoneFrame({ children }) {
   const { theme } = useTheme();
   if (Platform.OS !== 'web') return children;
   return (
-    <View style={[styles.webRoot, { backgroundColor: theme.dark ? '#141313' : '#e9e4e2' }]}>
-      <View style={[styles.phone, { backgroundColor: theme.bg }]}>{children}</View>
+    <View style={[styles.webRoot, { backgroundColor: theme.bg }]}>
+      {children}
     </View>
   );
 }
@@ -82,5 +82,5 @@ export default function App() {
 
 const styles = StyleSheet.create({
   webRoot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  phone: { flex: 1, width: '100%', maxWidth: 460, maxHeight: 960, overflow: 'hidden' },
+  phone: { flex: 1, width: '100%' },
 });
