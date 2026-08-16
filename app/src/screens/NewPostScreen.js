@@ -12,7 +12,8 @@ import useResponsive from '../hooks/useResponsive';
 import AudiencePicker from '../components/AudiencePicker';
 import SongCard from '../components/SongCard';
 import SongPicker from '../components/SongPicker';
-import { dashedRule, marker, radius, rippleFor, type } from '../theme';
+import { rippleFor } from '../components/common';
+import { dashedRule, marker, radius, type } from '../theme';
 
 /**
  * Full-screen "New Post" composer for The Network — a dedicated page
