@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const SECRET = process.env.JWT_SECRET || 'tomodachi-dev-secret-change-me';
 
 function sign(user) {
-  return jwt.sign({ id: user.id, phone: user.phone }, SECRET, { expiresIn: '30d' });
+  return jwt.sign({ id: user.id, username: user.username }, SECRET, { expiresIn: '30d' });
 }
 
 function verify(token) {

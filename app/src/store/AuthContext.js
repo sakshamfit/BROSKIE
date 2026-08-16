@@ -38,13 +38,13 @@ export function AuthProvider({ children }) {
     setUser(usr);
   }, []);
 
-  const login = useCallback(async (phone, password) => {
-    const { token, user } = await api.login({ phone, password });
+  const login = useCallback(async (username, password) => {
+    const { token, user } = await api.login({ username, password });
     await persist(token, user);
   }, [persist]);
 
-  const register = useCallback(async (phone, name, password) => {
-    const { token, user } = await api.register({ phone, name, password });
+  const register = useCallback(async (username, name, password, phone) => {
+    const { token, user } = await api.register({ username, name, password, phone });
     await persist(token, user);
   }, [persist]);
 

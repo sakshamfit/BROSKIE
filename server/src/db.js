@@ -13,6 +13,7 @@ db.pragma('foreign_keys = ON');
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
+  username      TEXT UNIQUE,
   phone         TEXT UNIQUE NOT NULL,
   name          TEXT NOT NULL,
   about         TEXT DEFAULT 'Hey there! I am using 友達.',
@@ -144,6 +145,8 @@ function addColumnIfMissing(table, column, ddl) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
   if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
 }
+addColumnIfMissing('users', 'username', 'username TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)');
 addColumnIfMissing('statuses', 'song', 'song TEXT');
 addColumnIfMissing('statuses', 'audience', "audience TEXT DEFAULT 'public'");
 

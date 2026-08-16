@@ -160,7 +160,7 @@ export default function NetworkScreen() {
         <Avatar uri={item.author.avatar} name={item.author.name} id={item.author.id} size={38} />
         <View style={{ flex: 1 }}>
           <Text style={[type.labelSm, { color: theme.ink }]} numberOfLines={1}>
-            {handleFor(item.author.name)}
+            {handleFor(item.author)}
           </Text>
           <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]}>
             {formatChatTime(item.createdAt)}
@@ -417,7 +417,7 @@ function CommentsSheet({ post, onClose, onCounted }) {
                   <Avatar uri={item.author.avatar} name={item.author.name} id={item.author.id} size={30} />
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-                      <Text style={[type.labelXs, { color: theme.ink }]}>{handleFor(item.author.name)}</Text>
+                      <Text style={[type.labelXs, { color: theme.ink }]}>{handleFor(item.author)}</Text>
                       <Text style={[type.labelXs, { color: theme.muted, fontSize: 9 }]}>{formatChatTime(item.createdAt)}</Text>
                     </View>
                     <EmojiText style={[type.bodySm, { color: theme.text, marginTop: 3 }]}>{item.body}</EmojiText>

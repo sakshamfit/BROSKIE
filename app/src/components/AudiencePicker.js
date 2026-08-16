@@ -31,7 +31,10 @@ export default function AudiencePicker({ audience, onChange, recipientIds, onCha
     api.users().then(({ users }) => setUsers(users)).catch(() => {}).finally(() => setLoading(false));
   }, [audience]);
 
-  const filtered = users.filter((u) => u.name.toLowerCase().includes(query.toLowerCase()));
+  const filtered = users.filter((u) => {
+    const q = query.toLowerCase();
+    return u.name.toLowerCase().includes(q) || (u.username && u.username.includes(q));
+  });
 
   const toggle = (id) => {
     onChangeRecipients(recipientIds.includes(id) ? recipientIds.filter((x) => x !== id) : [...recipientIds, id]);

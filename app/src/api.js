@@ -67,6 +67,7 @@ async function request(path, { method = 'GET', body, isForm } = {}) {
 export const api = {
   register: (payload) => request('/api/auth/register', { method: 'POST', body: payload }),
   login: (payload) => request('/api/auth/login', { method: 'POST', body: payload }),
+  usernameAvailable: (username) => request(`/api/auth/username-available?username=${encodeURIComponent(username)}`),
   me: () => request('/api/me'),
   updateMe: (payload) => request('/api/me', { method: 'PATCH', body: payload }),
   users: (q = '') => request(`/api/users?q=${encodeURIComponent(q)}`),

@@ -18,6 +18,15 @@ import {
   JetBrainsMono_500Medium,
   JetBrainsMono_700Bold,
 } from '@expo-google-fonts/jetbrains-mono';
+import {
+  Anybody_800ExtraBold,
+  Anybody_900Black,
+} from '@expo-google-fonts/anybody';
+import {
+  SpaceMono_400Regular,
+  SpaceMono_700Bold,
+} from '@expo-google-fonts/space-mono';
+import { HankenGrotesk_400Regular } from '@expo-google-fonts/hanken-grotesk';
 
 import { AuthProvider } from './src/store/AuthContext';
 import { ChatProvider } from './src/store/ChatContext';
@@ -62,6 +71,11 @@ export default function App() {
     Karla_700Bold,
     JetBrainsMono_500Medium,
     JetBrainsMono_700Bold,
+    Anybody_800ExtraBold,
+    Anybody_900Black,
+    SpaceMono_400Regular,
+    SpaceMono_700Bold,
+    Hanken_400Regular: HankenGrotesk_400Regular,
   });
 
   return (

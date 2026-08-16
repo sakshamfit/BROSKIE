@@ -1,33 +1,84 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
-  Platform, ScrollView,
+  Platform, ScrollView, ActivityIndicator, Animated, Easing,
 } from 'react-native';
+import Svg, { Defs, Pattern, Circle, Rect } from 'react-native-svg';
 import Icon from '../icons/Icon';
 import { useAuth } from '../store/AuthContext';
-import { useTheme } from '../store/ThemeContext';
-import { InkButton, InkField, Rule } from '../components/common';
-import { type, inkBox, marker, stroke } from '../theme';
+import { api } from '../api';
+
+/**
+ * "Enter the Void" — dark manga/glitch login screen. Scoped ONLY to Auth;
+ * the rest of the app keeps the Graphite & Pulp paper theme. Colours and
+ * type scale below are lifted straight from the supplied mockup's Tailwind
+ * config, hand-mapped to React Native style objects (no CDN Tailwind here).
+ */
+const VOID = {
+  background: '#131313',
+  surfaceContainerLowest: '#0e0e0e',
+  onBackground: '#e5e2e1',
+  onSurfaceVariant: '#b9cacb',
+  outline: '#849495',
+  outlineVariant: '#3b494b',
+  primaryContainer: '#00f0ff',   // cyan accent
+  onPrimaryContainer: '#006970',
+  onTertiaryFixed: '#1a1c1c',    // near-black ink used for the brutalist card
+  tertiary: '#f5f5f5',           // brutalist card background (near white)
+  secondaryContainer: '#ff525c', // hot red/pink accent
+  onSecondaryContainer: '#5b000f',
+  error: '#ffb4ab',
+};
+
+const USERNAME_RE = /^[a-z0-9](?:[a-z0-9._]{1,22})[a-z0-9]$/;
 
 export default function AuthScreen() {
   const { login, register } = useAuth();
-  const { theme } = useTheme();
-  const [mode, setMode] = useState('login');
-  const [phone, setPhone] = useState('+919000000001');
+  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [username, setUsername] = useState('');
   const [name, setName] = useState('');
-  const [password, setPassword] = useState('1234');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [focus, setFocus] = useState(null);
 
+  const [checking, setChecking] = useState(false);
+  const [availability, setAvailability] = useState(null); // { available, error }
+  const checkTimer = useRef(null);
+
+  useEffect(() => {
+    if (mode !== 'register') { setAvailability(null); return; }
+    clearTimeout(checkTimer.current);
+    const u = username.trim().toLowerCase();
+    if (u.length < 3) { setAvailability(null); return; }
+    setChecking(true);
+    checkTimer.current = setTimeout(async () => {
+      try {
+        const r = await api.usernameAvailable(u);
+        setAvailability(r);
+      } catch {
+        setAvailability(null);
+      } finally {
+        setChecking(false);
+      }
+    }, 400);
+    return () => clearTimeout(checkTimer.current);
+  }, [username, mode]);
+
   const submit = async () => {
     setError('');
-    if (!phone.trim() || !password) return setError('Phone number and password are required.');
+    const u = username.trim().toLowerCase();
+    if (!u || !password) return setError('Operator ID and Access Key are required.');
+    if (!USERNAME_RE.test(u) || u.length < 3) {
+      return setError('Operator ID must be 3–24 chars: letters, numbers, "." or "_".');
+    }
     if (mode === 'register' && !name.trim()) return setError('Please enter your name.');
     setBusy(true);
     try {
-      if (mode === 'login') await login(phone.trim(), password);
-      else await register(phone.trim(), name.trim(), password);
+      if (mode === 'login') await login(u, password);
+      else await register(u, name.trim(), password, phone.trim() || undefined);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -35,128 +86,457 @@ export default function AuthScreen() {
     }
   };
 
-  const s = makeStyles(theme);
-
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-        {/* masthead */}
-        <View style={s.masthead}>
-          <View style={[s.logoBox, inkBox(theme, 'bold')]}>
-            <Icon name="chatbubbles" size={30} color={theme.ink} />
-          </View>
-          <Text style={s.title}>友達</Text>
-          <View style={s.taglineWrap}>
-            <Text style={s.tagline}>messages between friends</Text>
-          </View>
-        </View>
+    <View style={s.root}>
+      <HalftoneBackground />
+      <SpeedLines />
 
-        <Rule style={{ marginBottom: 26 }} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+          <View style={s.layout}>
+            {/* -------- Branding splash -------- */}
+            <View style={s.brandSection}>
+              <GlitchWordmark />
+              <View style={s.tagBadge}>
+                <Text style={s.tagBadgeText}>SYSTEM: V.01-SHONEN</Text>
+              </View>
+              <Text style={s.scribble}>AWAKEN!</Text>
+            </View>
 
-        {/* mode switch — highlighter marks the active one */}
-        <View style={s.tabs}>
-          {['login', 'register'].map((m) => {
-            const active = mode === m;
-            return (
-              <Pressable key={m} onPress={() => { setMode(m); setError(''); }} style={s.tab}>
-                <View style={active ? marker(theme, 2) : null}>
-                  <Text style={[type.labelSm, { color: active ? theme.ink : theme.muted, paddingHorizontal: 6, paddingVertical: 3 }]}>
-                    {m === 'login' ? 'LOG IN' : 'SIGN UP'}
-                  </Text>
+            {/* -------- Sync Link card -------- */}
+            <View style={s.cardWrap}>
+              <View style={s.cardShadow} />
+              <View style={s.card}>
+                <View style={s.cardHeader}>
+                  <Icon name="person-circle" size={34} color={VOID.onTertiaryFixed} />
+                  <Text style={s.cardTitle}>Sync Link</Text>
                 </View>
-              </Pressable>
-            );
-          })}
-        </View>
 
-        {mode === 'register' && (
-          <View style={s.fieldWrap}>
-            <Text style={s.fieldLabel}>NAME</Text>
-            <InkField focused={focus === 'name'}>
-              <TextInput
-                style={s.input} placeholder="your name" placeholderTextColor={theme.muted}
-                value={name} onChangeText={setName} autoCapitalize="words"
-                onFocus={() => setFocus('name')} onBlur={() => setFocus(null)}
-              />
-            </InkField>
+                <View style={s.modeRow}>
+                  {['login', 'register'].map((m) => {
+                    const active = mode === m;
+                    return (
+                      <Pressable
+                        key={m}
+                        onPress={() => { setMode(m); setError(''); }}
+                        style={[s.modeTab, active && s.modeTabActive]}
+                      >
+                        <Text style={[s.modeTabText, active && s.modeTabTextActive]}>
+                          {m === 'login' ? 'LOG IN' : 'SIGN UP'}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {mode === 'register' && (
+                  <Field
+                    icon="badge"
+                    label="Callsign"
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="Your display name"
+                    focused={focus === 'name'}
+                    onFocus={() => setFocus('name')}
+                    onBlur={() => setFocus(null)}
+                    autoCapitalize="words"
+                  />
+                )}
+
+                <Field
+                  icon="badge"
+                  label="Operator ID"
+                  value={username}
+                  onChangeText={setUsername}
+                  placeholder="Enter alphanumeric code"
+                  focused={focus === 'uid'}
+                  onFocus={() => setFocus('uid')}
+                  onBlur={() => setFocus(null)}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  suffix={
+                    mode === 'register' ? (
+                      checking ? (
+                        <ActivityIndicator size="small" color={VOID.onTertiaryFixed} />
+                      ) : availability ? (
+                        <Icon
+                          name={availability.available ? 'checkmark-circle' : 'alert-circle'}
+                          size={18}
+                          color={availability.available ? '#0a8a2f' : VOID.secondaryContainer}
+                        />
+                      ) : null
+                    ) : null
+                  }
+                />
+                {mode === 'register' && availability && !availability.available && (
+                  <Text style={s.fieldHint}>{availability.error}</Text>
+                )}
+                {mode === 'register' && !availability && (
+                  <Text style={s.fieldHintMuted}>3–24 chars · letters, numbers, "." or "_" · must be unique</Text>
+                )}
+
+                {mode === 'register' && (
+                  <Field
+                    icon="call"
+                    label="Comm Channel (optional)"
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="+91 00000 00000"
+                    focused={focus === 'phone'}
+                    onFocus={() => setFocus('phone')}
+                    onBlur={() => setFocus(null)}
+                    keyboardType="phone-pad"
+                  />
+                )}
+
+                <Field
+                  icon="key"
+                  label="Access Key"
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="••••••••"
+                  focused={focus === 'key'}
+                  onFocus={() => setFocus('key')}
+                  onBlur={() => setFocus(null)}
+                  secureTextEntry
+                />
+
+                <View style={s.optionsRow}>
+                  <Pressable onPress={() => setRemember((v) => !v)} style={s.rememberRow}>
+                    <View style={[s.checkbox, remember && s.checkboxChecked]}>
+                      {remember && <Icon name="checkmark" size={13} color={VOID.tertiary} />}
+                    </View>
+                    <Text style={s.rememberText}>REMEMBER ME</Text>
+                  </Pressable>
+                  <Text style={s.lostKey}>LOST KEY?</Text>
+                </View>
+
+                {!!error && (
+                  <View style={s.errorRow}>
+                    <Icon name="alert-circle" size={15} color={VOID.secondaryContainer} />
+                    <Text style={s.errorText}>{error}</Text>
+                  </View>
+                )}
+
+                <Pressable
+                  onPress={submit}
+                  disabled={busy}
+                  style={({ pressed }) => [s.submitBtn, pressed && s.submitBtnPressed, busy && { opacity: 0.6 }]}
+                >
+                  {busy ? (
+                    <ActivityIndicator color={VOID.primaryContainer} />
+                  ) : (
+                    <>
+                      <Text style={s.submitText}>{mode === 'login' ? 'ENTER THE VOID' : 'CREATE OPERATOR'}</Text>
+                      <Icon name="arrow-forward" size={20} color={VOID.background} />
+                    </>
+                  )}
+                </Pressable>
+
+                <View style={s.sticker}>
+                  <Text style={s.stickerText}>LOCKED OUT?</Text>
+                </View>
+              </View>
+              <View style={s.cornerBR} />
+            </View>
           </View>
-        )}
 
-        <View style={s.fieldWrap}>
-          <Text style={s.fieldLabel}>PHONE</Text>
-          <InkField focused={focus === 'phone'}>
-            <TextInput
-              style={s.input} placeholder="+91 00000 00000" placeholderTextColor={theme.muted}
-              value={phone} onChangeText={setPhone} keyboardType="phone-pad" autoCapitalize="none"
-              onFocus={() => setFocus('phone')} onBlur={() => setFocus(null)}
-            />
-          </InkField>
-        </View>
-
-        <View style={s.fieldWrap}>
-          <Text style={s.fieldLabel}>PASSWORD</Text>
-          <InkField focused={focus === 'pass'}>
-            <TextInput
-              style={s.input} placeholder="••••" placeholderTextColor={theme.muted}
-              value={password} onChangeText={setPassword} secureTextEntry
-              onFocus={() => setFocus('pass')} onBlur={() => setFocus(null)}
-            />
-          </InkField>
-        </View>
-
-        {!!error && (
-          <View style={s.errorBox}>
-            <Icon name="alert-circle" size={15} color={theme.danger} />
-            <Text style={[type.bodySm, { color: theme.danger, flex: 1 }]}>{error}</Text>
-          </View>
-        )}
-
-        <InkButton
-          label={mode === 'login' ? 'Log in' : 'Create account'}
-          onPress={submit}
-          busy={busy}
-          filled
-          style={{ marginTop: 22 }}
-        />
-
-        <Rule style={{ marginTop: 34, marginBottom: 16 }} />
-
-        <Text style={[type.labelSm, { color: theme.muted, marginBottom: 12 }]}>DEMO ACCOUNTS · PW 1234</Text>
-        {[
-          ['+919000000001', 'You (Demo)'],
-          ['+919000000002', 'Ananya Sharma'],
-          ['+919000000003', 'Rohit Verma'],
-        ].map(([p, n]) => (
-          <Pressable
-            key={p}
-            onPress={() => { setPhone(p); setPassword('1234'); setMode('login'); }}
-            style={({ pressed }) => [s.demoRow, pressed ? marker(theme, 1) : null]}
-          >
-            <Text style={[type.labelSm, { color: theme.ink }]}>{p}</Text>
-            <Text style={[type.bodySm, { color: theme.subtext }]}>{n}</Text>
-          </Pressable>
-        ))}
-
-        <Text style={[type.bodySm, { color: theme.muted, marginTop: 18, fontSize: 12.5, lineHeight: 19 }]}>
-          Open a second browser tab and log in as someone else to chat in real time.
-        </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <DemoAccounts onPick={(u) => { setUsername(u); setPassword('1234'); setMode('login'); }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
-const makeStyles = (t) => StyleSheet.create({
-  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32, paddingVertical: 48, maxWidth: 460, width: '100%', alignSelf: 'center' },
-  masthead: { alignItems: 'flex-start' },
-  logoBox: { width: 60, height: 60, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
-  title: { ...type.headlineLg, color: t.text },
-  taglineWrap: { marginTop: 6 },
-  tagline: { ...type.bodyMd, color: t.subtext, fontStyle: 'italic' },
-  tabs: { flexDirection: 'row', gap: 20, marginBottom: 28 },
-  tab: { paddingVertical: 2 },
-  fieldWrap: { marginBottom: 22 },
-  fieldLabel: { ...type.labelXs, color: t.muted, marginBottom: 2 },
-  input: { flex: 1, paddingVertical: 10, ...type.bodyLg, color: t.text, outlineStyle: 'none' },
-  errorBox: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 6 },
-  demoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 9 },
+/* ------------------------------------------------------------------ */
+/* pieces                                                              */
+/* ------------------------------------------------------------------ */
+
+function Field({ icon, label, suffix, focused, ...inputProps }) {
+  return (
+    <View style={s.fieldWrap}>
+      <View style={s.fieldLabelRow}>
+        <Icon name={icon} size={13} color={VOID.onTertiaryFixed} />
+        <Text style={s.fieldLabel}>{label}</Text>
+      </View>
+      <View style={s.fieldInputRow}>
+        <TextInput
+          style={s.fieldInput}
+          placeholderTextColor={VOID.outline}
+          {...inputProps}
+        />
+        {suffix}
+      </View>
+      <View style={[s.fieldUnderline, focused && s.fieldUnderlineActive]} />
+    </View>
+  );
+}
+
+function DemoAccounts({ onPick }) {
+  const demo = [
+    ['you', 'You (Demo)'],
+    ['ananya', 'Ananya Sharma'],
+    ['rohit', 'Rohit Verma'],
+  ];
+  return (
+    <View style={s.demoWrap}>
+      <Text style={s.demoTitle}>DEMO OPERATORS · KEY 1234</Text>
+      {demo.map(([u, n]) => (
+        <Pressable key={u} onPress={() => onPick(u)} style={({ pressed }) => [s.demoRow, pressed && { opacity: 0.6 }]}>
+          <Text style={s.demoUsername}>@{u}</Text>
+          <Text style={s.demoName}>{n}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** Halftone dot-grid background, tiled via an SVG pattern (works everywhere, no images). */
+function HalftoneBackground() {
+  return (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+      <Defs>
+        <Pattern id="halftone" width="8" height="8" patternUnits="userSpaceOnUse">
+          <Circle cx="2" cy="2" r="1" fill="#353535" opacity={0.4} />
+        </Pattern>
+      </Defs>
+      <Rect x="0" y="0" width="100%" height="100%" fill="url(#halftone)" />
+    </Svg>
+  );
+}
+
+/** Diagonal cyan speed-line overlay, looping via a native Animated translate. */
+function SpeedLines() {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(anim, { toValue: 1, duration: 2200, easing: Easing.linear, useNativeDriver: true })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim]);
+
+  const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 100] });
+  const lines = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Animated.View style={[s.speedLinesTrack, { transform: [{ translateX }] }]}>
+        {lines.map((i) => (
+          <View key={i} style={s.speedLine} />
+        ))}
+      </Animated.View>
+    </View>
+  );
+}
+
+/** Red/cyan double-exposed "glitch" wordmark, built from stacked offset text layers. */
+function GlitchWordmark() {
+  return (
+    <View style={s.glitchWrap}>
+      <Text style={[s.glitchText, s.glitchLayerRed]}>友達</Text>
+      <Text style={[s.glitchText, s.glitchLayerCyan]}>友達</Text>
+      <Text style={s.glitchText}>友達</Text>
+      <Text style={s.wordmarkSub}>TOMODACHI</Text>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* styles                                                              */
+/* ------------------------------------------------------------------ */
+
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: VOID.background },
+  scroll: { flexGrow: 1, minHeight: '100%' },
+
+  layout: {
+    flex: 1,
+    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+    minHeight: 640,
+  },
+
+  brandSection: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+  },
+
+  glitchWrap: { alignItems: 'center' },
+  glitchText: {
+    fontFamily: 'Anybody_900Black',
+    fontSize: 88,
+    lineHeight: 92,
+    fontStyle: 'italic',
+    color: VOID.onBackground,
+    textAlign: 'center',
+  },
+  glitchLayerRed: {
+    position: 'absolute',
+    color: VOID.secondaryContainer,
+    opacity: 0.7,
+    transform: [{ translateX: 4 }, { translateY: -3 }],
+  },
+  glitchLayerCyan: {
+    position: 'absolute',
+    color: VOID.primaryContainer,
+    opacity: 0.7,
+    transform: [{ translateX: -4 }, { translateY: 3 }],
+  },
+  wordmarkSub: {
+    fontFamily: 'Anybody_800ExtraBold',
+    fontSize: 30,
+    color: VOID.primaryContainer,
+    marginTop: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 4,
+    textAlign: 'center',
+  },
+
+  tagBadge: {
+    marginTop: 28,
+    backgroundColor: VOID.onTertiaryFixed,
+    borderWidth: 2,
+    borderColor: VOID.primaryContainer,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    transform: [{ skewX: '-12deg' }],
+  },
+  tagBadgeText: {
+    fontFamily: 'SpaceMono_700Bold',
+    fontSize: 12,
+    letterSpacing: 2,
+    color: VOID.primaryContainer,
+  },
+
+  scribble: {
+    position: 'absolute',
+    bottom: '22%',
+    left: '18%',
+    fontFamily: 'Bricolage_600SemiBold',
+    fontSize: 24,
+    color: VOID.secondaryContainer,
+    opacity: 0.85,
+    transform: [{ rotate: '-12deg' }],
+    display: Platform.OS === 'web' ? 'flex' : 'none',
+  },
+
+  cardWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+    position: 'relative',
+  },
+  cardShadow: {
+    position: 'absolute',
+    top: 32 + 12,
+    left: 24 + 12,
+    right: 24 - 12,
+    bottom: 32 - 12,
+    maxWidth: 420,
+    alignSelf: 'center',
+    width: '100%',
+    backgroundColor: '#000',
+  },
+  card: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: VOID.tertiary,
+    borderWidth: 4,
+    borderColor: VOID.onTertiaryFixed,
+    padding: 28,
+    transform: [{ rotate: '1deg' }],
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingBottom: 16,
+    marginBottom: 24,
+    borderBottomWidth: 4,
+    borderBottomColor: VOID.onTertiaryFixed,
+  },
+  cardTitle: {
+    fontFamily: 'Anybody_800ExtraBold',
+    fontSize: 26,
+    color: VOID.onTertiaryFixed,
+    textTransform: 'uppercase',
+  },
+
+  modeRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
+  modeTab: { flex: 1, borderWidth: 2, borderColor: VOID.onTertiaryFixed, paddingVertical: 9, alignItems: 'center' },
+  modeTabActive: { backgroundColor: VOID.onTertiaryFixed },
+  modeTabText: { fontFamily: 'SpaceMono_700Bold', fontSize: 12, letterSpacing: 1.5, color: VOID.onTertiaryFixed },
+  modeTabTextActive: { color: VOID.primaryContainer },
+
+  fieldWrap: { marginBottom: 22, position: 'relative' },
+  fieldLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  fieldLabel: {
+    fontFamily: 'SpaceMono_700Bold', fontSize: 11, letterSpacing: 1.5,
+    color: '#5d5f5f', textTransform: 'uppercase',
+  },
+  fieldInputRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderBottomWidth: 4, borderBottomColor: VOID.onTertiaryFixed, paddingVertical: 8,
+  },
+  fieldInput: {
+    flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 15, color: VOID.onTertiaryFixed,
+    paddingVertical: 2, outlineStyle: 'none',
+  },
+  fieldUnderline: { height: 3, backgroundColor: 'transparent', marginTop: -3 },
+  fieldUnderlineActive: { backgroundColor: VOID.primaryContainer },
+  fieldHint: { fontFamily: 'SpaceMono_400Regular', fontSize: 11, color: VOID.secondaryContainer, marginTop: -14, marginBottom: 18 },
+  fieldHintMuted: { fontFamily: 'SpaceMono_400Regular', fontSize: 11, color: '#7d7d7d', marginTop: -14, marginBottom: 18 },
+
+  optionsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 8 },
+  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  checkbox: { width: 20, height: 20, borderWidth: 2, borderColor: VOID.onTertiaryFixed, alignItems: 'center', justifyContent: 'center' },
+  checkboxChecked: { backgroundColor: VOID.onTertiaryFixed },
+  rememberText: { fontFamily: 'SpaceMono_700Bold', fontSize: 11, letterSpacing: 1, color: '#5d5f5f' },
+  lostKey: {
+    fontFamily: 'SpaceMono_700Bold', fontSize: 11, letterSpacing: 1, color: VOID.secondaryContainer,
+    textDecorationLine: 'underline',
+  },
+
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
+  errorText: { flex: 1, fontFamily: 'SpaceMono_400Regular', fontSize: 12, color: VOID.secondaryContainer },
+
+  submitBtn: {
+    marginTop: 26,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12,
+    backgroundColor: VOID.background,
+    borderWidth: 4, borderColor: VOID.onTertiaryFixed,
+    paddingVertical: 16,
+  },
+  submitBtnPressed: { backgroundColor: VOID.primaryContainer, transform: [{ translateX: 4 }, { translateY: 4 }] },
+  submitText: {
+    fontFamily: 'Anybody_800ExtraBold', fontSize: 18, color: VOID.primaryContainer,
+    textTransform: 'uppercase', letterSpacing: 1.5,
+  },
+
+  sticker: {
+    position: 'absolute', top: -18, right: -14,
+    backgroundColor: VOID.secondaryContainer, borderWidth: 2, borderColor: VOID.onTertiaryFixed,
+    paddingHorizontal: 12, paddingVertical: 5, transform: [{ rotate: '12deg' }],
+  },
+  stickerText: { fontFamily: 'Bricolage_600SemiBold', fontSize: 13, color: VOID.onSecondaryContainer },
+
+  cornerBR: {
+    position: 'absolute', bottom: 32, right: 24, width: 56, height: 56,
+    borderBottomWidth: 8, borderRightWidth: 8, borderColor: VOID.onTertiaryFixed,
+    display: Platform.OS === 'web' ? 'flex' : 'none',
+  },
+
+  speedLinesTrack: { flexDirection: 'row', width: '220%', height: '100%' },
+  speedLine: { width: 2, height: '100%', marginRight: 98, backgroundColor: 'rgba(0,240,255,0.08)' },
+
+  demoWrap: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 24 },
+  demoTitle: { fontFamily: 'SpaceMono_700Bold', fontSize: 11, letterSpacing: 1.5, color: VOID.outline, marginBottom: 12 },
+  demoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  demoUsername: { fontFamily: 'SpaceMono_700Bold', fontSize: 13, color: VOID.primaryContainer },
+  demoName: { fontFamily: 'Hanken_400Regular', fontSize: 13, color: VOID.onSurfaceVariant },
 });

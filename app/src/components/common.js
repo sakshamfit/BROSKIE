@@ -415,8 +415,13 @@ export function lastSeenText(isOnline, lastSeen) {
   return `last seen ${formatChatTime(lastSeen)}`;
 }
 
-export function handleFor(name = '', phone = '') {
-  const base = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '');
+/** Prefer the user's real, unique username; fall back to a slug of their name. */
+export function handleFor(nameOrUser = '', phone = '') {
+  if (nameOrUser && typeof nameOrUser === 'object') {
+    if (nameOrUser.username) return '@' + nameOrUser.username;
+    return handleFor(nameOrUser.name, nameOrUser.phone);
+  }
+  const base = String(nameOrUser).toLowerCase().replace(/[^a-z0-9]+/g, '');
   return '@' + (base || String(phone).replace(/\D/g, '').slice(-6) || 'user');
 }
 

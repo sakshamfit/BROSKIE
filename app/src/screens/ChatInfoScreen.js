@@ -41,7 +41,7 @@ export default function ChatInfoScreen({ route, navigation }) {
           <EmojiText style={[type.headlineMd, { color: theme.text, marginTop: 16, textAlign: 'center' }]}>{chat.name}</EmojiText>
           {chat.type === 'direct' ? (
             <Text style={[type.labelSm, { color: theme.graphite, marginTop: 6 }]}>
-              {handleFor(chat.name)}
+              {handleFor(chat)}
             </Text>
           ) : null}
           <Text style={[type.bodySm, { color: theme.subtext, marginTop: 8, textAlign: 'center' }]}>
@@ -75,7 +75,7 @@ export default function ChatInfoScreen({ route, navigation }) {
                       {m.id === user.id ? 'You' : m.name}
                     </EmojiText>
                     <Text style={[type.labelXs, { color: theme.graphite, marginTop: 2 }]}>
-                      {handleFor(m.name, m.phone)}
+                      {handleFor(m)}
                     </Text>
                   </View>
                   {m.role === 'admin' && <TapeChip label="ADMIN" tone="accent" />}

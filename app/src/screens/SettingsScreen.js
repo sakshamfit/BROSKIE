@@ -15,18 +15,28 @@ export default function SettingsScreen({ navigation }) {
   const [editing, setEditing] = useState(null);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const s = makeStyles(theme);
 
   const openEdit = (field) => {
-    setDraft(field === 'name' ? user.name : user.about);
+    setSaveError('');
+    setDraft(field === 'name' ? user.name : field === 'username' ? user.username : user.about);
     setEditing(field);
   };
 
   const save = async () => {
     setSaving(true);
-    try { await updateProfile({ [editing]: draft.trim() }); setEditing(null); }
-    finally { setSaving(false); }
+    setSaveError('');
+    try {
+      const value = editing === 'username' ? draft.trim().toLowerCase() : draft.trim();
+      await updateProfile({ [editing]: value });
+      setEditing(null);
+    } catch (e) {
+      setSaveError(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const Row = ({ icon, label, value, onPress, right, danger, last }) => (
@@ -58,7 +68,7 @@ export default function SettingsScreen({ navigation }) {
           <View style={{ flex: 1 }}>
             <EmojiText style={[type.headlineMd, { color: theme.text }]}>{user?.name}</EmojiText>
             <Text style={[type.labelXs, { color: theme.graphite, marginTop: 4 }]}>
-              {handleFor(user?.name, user?.phone)}
+              {handleFor(user)}
             </Text>
             <View style={s.connRow}>
               <View style={[s.dot, { backgroundColor: connected ? theme.highlighter : theme.danger, borderWidth: 1, borderColor: theme.ink }]} />
@@ -70,9 +80,12 @@ export default function SettingsScreen({ navigation }) {
         </PaperCard>
 
         <PaperCard style={s.group}>
+          <Row icon="badge" label="Username" value={user?.username ? `@${user.username}` : 'Not set'} onPress={() => openEdit('username')} />
           <Row icon="person-outline" label="Name" value={user?.name} onPress={() => openEdit('name')} />
           <Row icon="information-circle-outline" label="About" value={user?.about} onPress={() => openEdit('about')} />
-          <Row icon="call-outline" label="Phone" value={user?.phone} />
+          {!!user?.phone && !user.phone.startsWith('unset:') && (
+            <Row icon="call-outline" label="Phone" value={user.phone} />
+          )}
         </PaperCard>
 
         <PaperCard style={s.group}>
@@ -112,12 +125,16 @@ export default function SettingsScreen({ navigation }) {
               <TextInput
                 style={s.dialogInput}
                 value={draft}
-                onChangeText={setDraft}
+                onChangeText={(v) => { setDraft(v); if (saveError) setSaveError(''); }}
                 autoFocus
                 multiline={editing === 'about'}
+                autoCapitalize={editing === 'username' ? 'none' : 'sentences'}
                 placeholderTextColor={theme.muted}
               />
             </InkField>
+            {!!saveError && (
+              <Text style={[type.bodySm, { color: theme.danger, marginTop: -10, marginBottom: 10 }]}>{saveError}</Text>
+            )}
             <View style={s.dialogActions}>
               <Pressable onPress={() => setEditing(null)} style={s.dialogBtn}>
                 <Text style={[type.labelSm, { color: theme.subtext }]}>CANCEL</Text>

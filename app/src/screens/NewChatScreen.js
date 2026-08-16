@@ -25,9 +25,14 @@ export default function NewChatScreen({ navigation }) {
     api.users().then(({ users }) => setUsers(users)).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  const filtered = users.filter(
-    (u) => u.name.toLowerCase().includes(query.toLowerCase()) || u.phone.includes(query)
-  );
+  const filtered = users.filter((u) => {
+    const q = query.toLowerCase();
+    return (
+      u.name.toLowerCase().includes(q) ||
+      (u.username && u.username.includes(q)) ||
+      u.phone.includes(query)
+    );
+  });
 
   const openDirect = async (u) => {
     setBusy(true);
@@ -119,7 +124,7 @@ export default function NewChatScreen({ navigation }) {
                 <View style={{ flex: 1 }}>
                   <EmojiText style={[type.headlineSm, { color: theme.text }]}>{item.name}</EmojiText>
                   <Text style={[type.labelXs, { color: theme.graphite, marginTop: 3 }]}>
-                    {handleFor(item.name, item.phone)}
+                    {handleFor(item)}
                   </Text>
                 </View>
               </Pressable>

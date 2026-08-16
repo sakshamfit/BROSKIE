@@ -12,16 +12,16 @@ db.exec(`DELETE FROM status_views; DELETE FROM statuses; DELETE FROM reactions; 
          DELETE FROM messages; DELETE FROM chat_members; DELETE FROM chats; DELETE FROM users;`);
 
 const people = [
-  { name: 'You (Demo)', phone: '+919000000001', about: 'Building things on Arena.' },
-  { name: 'Ananya Sharma', phone: '+919000000002', about: 'Busy' },
-  { name: 'Rohit Verma', phone: '+919000000003', about: 'At the gym 🏋️' },
-  { name: 'Priya Nair', phone: '+919000000004', about: 'Available' },
-  { name: 'Karan Mehta', phone: '+919000000005', about: 'Sleeping 😴' },
+  { name: 'You (Demo)', username: 'you', phone: '+919000000001', about: 'Building things on Arena.' },
+  { name: 'Ananya Sharma', username: 'ananya', phone: '+919000000002', about: 'Busy' },
+  { name: 'Rohit Verma', username: 'rohit', phone: '+919000000003', about: 'At the gym 🏋️' },
+  { name: 'Priya Nair', username: 'priya', phone: '+919000000004', about: 'Available' },
+  { name: 'Karan Mehta', username: 'karan', phone: '+919000000005', about: 'Sleeping 😴' },
 ];
 
 const insertUser = db.prepare(
-  `INSERT INTO users (id, phone, name, about, avatar, password_hash, last_seen, is_online, created_at)
-   VALUES (@id, @phone, @name, @about, @avatar, @password_hash, @last_seen, @is_online, @created_at)`
+  `INSERT INTO users (id, username, phone, name, about, avatar, password_hash, last_seen, is_online, created_at)
+   VALUES (@id, @username, @phone, @name, @about, @avatar, @password_hash, @last_seen, @is_online, @created_at)`
 );
 
 const ids = {};
@@ -29,7 +29,7 @@ people.forEach((p, i) => {
   const id = nano();
   ids[p.name] = id;
   insertUser.run({
-    id, phone: p.phone, name: p.name, about: p.about, avatar: null,
+    id, username: p.username, phone: p.phone, name: p.name, about: p.about, avatar: null,
     password_hash: bcrypt.hashSync('1234', 8),
     last_seen: now - mins(i * 7), is_online: 0, created_at: now - mins(10000),
   });
@@ -113,7 +113,7 @@ const insertStatus = db.prepare(
 
 console.log('Seeded 友達 demo data.');
 console.log('Login with any of these (password: 1234):');
-people.forEach((p) => console.log(`  ${p.phone}  ->  ${p.name}`));
+people.forEach((p) => console.log(`  ${p.username}  ->  ${p.name}`));
 
 /* ---- The Network: seed public posts ---- */
 const insertPost = db.prepare(

@@ -39,6 +39,7 @@ const upload = multer({
 const publicUser = (u) =>
   u && {
     id: u.id,
+    username: u.username,
     phone: u.phone,
     name: u.name,
     about: u.about,
@@ -47,7 +48,26 @@ const publicUser = (u) =>
     isOnline: !!u.is_online,
   };
 
+const USERNAME_RE = /^[a-z0-9](?:[a-z0-9._]{1,22})[a-z0-9]$/;
+
+function normalizeUsername(raw) {
+  return String(raw || '').trim().toLowerCase();
+}
+
+function validateUsername(raw) {
+  const u = normalizeUsername(raw);
+  if (!u) return 'Username is required';
+  if (u.length < 3 || u.length > 24) return 'Username must be 3–24 characters';
+  if (!USERNAME_RE.test(u)) {
+    return 'Username can only contain letters, numbers, "." and "_", and must start/end with a letter or number';
+  }
+  if (/[._]{2,}/.test(u)) return 'Username cannot have consecutive "." or "_"';
+  return null;
+}
+
 const getUser = (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+const getUserByUsername = (username) =>
+  db.prepare('SELECT * FROM users WHERE username = ?').get(normalizeUsername(username));
 
 function memberIds(chatId) {
   return db.prepare('SELECT user_id FROM chat_members WHERE chat_id = ?').all(chatId).map((r) => r.user_id);
@@ -127,6 +147,7 @@ function chatSummary(chatId, viewerId) {
     id: chat.id,
     type: chat.type,
     name: chat.type === 'group' ? chat.name : other ? other.name : 'Unknown',
+    username: chat.type === 'direct' && other ? other.username : null,
     avatar: chat.type === 'group' ? chat.avatar : other ? other.avatar : null,
     about: other ? other.about : null,
     otherUserId: other ? other.id : null,
@@ -171,17 +192,39 @@ function userChats(userId) {
 
 app.get('/api/health', (req, res) => res.json({ ok: true, time: now() }));
 
+app.get('/api/auth/username-available', (req, res) => {
+  const raw = req.query.username;
+  const err = validateUsername(raw);
+  if (err) return res.json({ available: false, error: err });
+  const taken = !!getUserByUsername(raw);
+  res.json({ available: !taken, error: taken ? 'That username is already taken' : null });
+});
+
 app.post('/api/auth/register', (req, res) => {
-  const { phone, name, password } = req.body || {};
-  if (!phone || !name || !password) return res.status(400).json({ error: 'phone, name and password are required' });
+  const { username, phone, name, password } = req.body || {};
+  if (!name || !password) return res.status(400).json({ error: 'name and password are required' });
   if (String(password).length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
 
-  const exists = db.prepare('SELECT id FROM users WHERE phone = ?').get(phone);
-  if (exists) return res.status(409).json({ error: 'That phone number is already registered' });
+  const usernameErr = validateUsername(username);
+  if (usernameErr) return res.status(400).json({ error: usernameErr });
+  const normalizedUsername = normalizeUsername(username);
+
+  if (getUserByUsername(normalizedUsername)) {
+    return res.status(409).json({ error: 'That username is already taken' });
+  }
+
+  const trimmedPhone = phone ? String(phone).trim() : null;
+  if (trimmedPhone) {
+    const phoneExists = db.prepare('SELECT id FROM users WHERE phone = ?').get(trimmedPhone);
+    if (phoneExists) return res.status(409).json({ error: 'That phone number is already registered' });
+  }
 
   const user = {
     id: nano(),
-    phone: String(phone).trim(),
+    username: normalizedUsername,
+    // phone is optional now but the column is NOT NULL — fall back to a
+    // unique placeholder so old schema constraints keep working.
+    phone: trimmedPhone || `unset:${nano()}`,
     name: String(name).trim(),
     about: 'Hey there! I am using 友達.',
     avatar: null,
@@ -191,30 +234,41 @@ app.post('/api/auth/register', (req, res) => {
     created_at: now(),
   };
   db.prepare(
-    `INSERT INTO users (id, phone, name, about, avatar, password_hash, last_seen, is_online, created_at)
-     VALUES (@id, @phone, @name, @about, @avatar, @password_hash, @last_seen, @is_online, @created_at)`
+    `INSERT INTO users (id, username, phone, name, about, avatar, password_hash, last_seen, is_online, created_at)
+     VALUES (@id, @username, @phone, @name, @about, @avatar, @password_hash, @last_seen, @is_online, @created_at)`
   ).run(user);
 
   res.json({ token: sign(user), user: publicUser(user) });
 });
 
 app.post('/api/auth/login', (req, res) => {
-  const { phone, password } = req.body || {};
-  const user = db.prepare('SELECT * FROM users WHERE phone = ?').get(String(phone || '').trim());
+  const { username, password } = req.body || {};
+  const user = getUserByUsername(username);
   if (!user || !bcrypt.compareSync(String(password || ''), user.password_hash))
-    return res.status(401).json({ error: 'Invalid phone number or password' });
+    return res.status(401).json({ error: 'Invalid username or password' });
   res.json({ token: sign(user), user: publicUser(user) });
 });
 
 app.get('/api/me', requireAuth, (req, res) => res.json({ user: publicUser(getUser(req.userId)) }));
 
 app.patch('/api/me', requireAuth, (req, res) => {
-  const { name, about, avatar } = req.body || {};
+  const { name, about, avatar, username } = req.body || {};
   const u = getUser(req.userId);
-  db.prepare('UPDATE users SET name = ?, about = ?, avatar = ? WHERE id = ?').run(
+
+  let nextUsername = u.username;
+  if (username !== undefined && normalizeUsername(username) !== u.username) {
+    const err = validateUsername(username);
+    if (err) return res.status(400).json({ error: err });
+    const taken = getUserByUsername(username);
+    if (taken && taken.id !== req.userId) return res.status(409).json({ error: 'That username is already taken' });
+    nextUsername = normalizeUsername(username);
+  }
+
+  db.prepare('UPDATE users SET name = ?, about = ?, avatar = ?, username = ? WHERE id = ?').run(
     name ?? u.name,
     about ?? u.about,
     avatar ?? u.avatar,
+    nextUsername,
     req.userId
   );
   const updated = publicUser(getUser(req.userId));
@@ -226,7 +280,10 @@ app.get('/api/users', requireAuth, (req, res) => {
   const q = String(req.query.q || '').toLowerCase();
   const all = db.prepare('SELECT * FROM users WHERE id != ? ORDER BY name').all(req.userId);
   const filtered = q
-    ? all.filter((u) => u.name.toLowerCase().includes(q) || u.phone.includes(q))
+    ? all.filter((u) =>
+        u.name.toLowerCase().includes(q) ||
+        (u.username && u.username.includes(q)) ||
+        u.phone.includes(q))
     : all;
   res.json({ users: filtered.map(publicUser) });
 });
@@ -489,7 +546,7 @@ function hydratePost(row, viewerId) {
   return {
     id: row.id,
     userId: row.user_id,
-    author: author ? { id: author.id, name: author.name, avatar: author.avatar } : { id: row.user_id, name: 'Unknown', avatar: null },
+    author: author ? { id: author.id, name: author.name, avatar: author.avatar, username: author.username } : { id: row.user_id, name: 'Unknown', avatar: null, username: null },
     title: row.title || '',
     body: row.body,
     mediaUrl: row.media_url,
@@ -582,7 +639,7 @@ app.get('/api/posts/:id/comments', requireAuth, (req, res) => {
         body: c.body,
         createdAt: c.created_at,
         userId: c.user_id,
-        author: u ? { id: u.id, name: u.name, avatar: u.avatar } : { id: c.user_id, name: 'Unknown', avatar: null },
+        author: u ? { id: u.id, name: u.name, avatar: u.avatar, username: u.username } : { id: c.user_id, name: 'Unknown', avatar: null, username: null },
         mine: c.user_id === req.userId,
       };
     }),
@@ -605,7 +662,7 @@ app.post('/api/posts/:id/comments', requireAuth, (req, res) => {
   res.json({
     comment: {
       id: c.id, body: c.body, createdAt: c.created_at, userId: c.user_id,
-      author: { id: u.id, name: u.name, avatar: u.avatar }, mine: true,
+      author: { id: u.id, name: u.name, avatar: u.avatar, username: u.username }, mine: true,
     },
   });
 });

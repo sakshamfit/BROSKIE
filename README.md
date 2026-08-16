@@ -26,13 +26,13 @@ npx expo start          # press w for web, or scan the QR with Expo Go
 
 ### Demo logins — password `1234` for all
 
-| Phone | Name |
+| Username | Name |
 |---|---|
-| `+919000000001` | You (Demo) |
-| `+919000000002` | Ananya Sharma |
-| `+919000000003` | Rohit Verma |
-| `+919000000004` | Priya Nair |
-| `+919000000005` | Karan Mehta |
+| `you` | You (Demo) |
+| `ananya` | Ananya Sharma |
+| `rohit` | Rohit Verma |
+| `priya` | Priya Nair |
+| `karan` | Karan Mehta |
 
 **To see real-time messaging:** open the app in two browser tabs (or a browser + phone),
 log in as two different people, and message between them. Typing indicators, delivery
@@ -51,8 +51,9 @@ EXPO_PUBLIC_API_URL=http://192.168.1.42:4000
 
 ## Features
 
-**Accounts & profile** — register/login with phone + password, bcrypt hashing, JWT
-sessions persisted via AsyncStorage, editable name/about, auto-login on relaunch.
+**Accounts & profile** — register/login with a unique username + password (phone is
+optional, for display only), bcrypt hashing, JWT sessions persisted via AsyncStorage,
+editable name/username/about, auto-login on relaunch.
 
 **Messaging** — 1:1 and group chats, optimistic sending, swipe-free reply threading,
 emoji reactions, delete-for-everyone, image sharing with lightbox, voice-note UI with
