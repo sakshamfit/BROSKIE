@@ -27,6 +27,7 @@ import {
   SpaceMono_700Bold,
 } from '@expo-google-fonts/space-mono';
 import { HankenGrotesk_400Regular } from '@expo-google-fonts/hanken-grotesk';
+import { Caveat_600SemiBold, Caveat_700Bold } from '@expo-google-fonts/caveat';
 
 import { AuthProvider } from './src/store/AuthContext';
 import { ChatProvider } from './src/store/ChatContext';
@@ -78,6 +79,8 @@ export default function App() {
     SpaceMono_400Regular,
     SpaceMono_700Bold,
     Hanken_400Regular: HankenGrotesk_400Regular,
+    Caveat_600SemiBold,
+    Caveat_700Bold,
   });
 
   return (

@@ -6,12 +6,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
-import * as ImagePicker from 'expo-image-picker';
 import { api, mediaUrl } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFor } from '../components/common';
+import { AUDIENCE } from '../components/AudiencePicker';
+import SongCard from '../components/SongCard';
+import NewPostScreen from './NewPostScreen';
 import { type, inkBox, marker, dashedRule, stroke, radius } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
@@ -33,13 +35,7 @@ export default function NetworkScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const [draft, setDraft] = useState('');
-  const [draftTag, setDraftTag] = useState('');
-  const [draftImage, setDraftImage] = useState(null);
-  const [showTagInput, setShowTagInput] = useState(false);
-  const [posting, setPosting] = useState(false);
-  const [error, setError] = useState('');
-
+  const [composerOpen, setComposerOpen] = useState(false);
   const [commentsFor, setCommentsFor] = useState(null);
   const [lightbox, setLightbox] = useState(null);
 
@@ -59,14 +55,14 @@ export default function NetworkScreen() {
         await load(activeTag);
         setTags((await api.postTags()).tags);
       } catch (e) {
-        setError(e.message);
+        // non-fatal — feed just starts empty
       } finally {
         setLoading(false);
       }
     })();
   }, [load, activeTag]);
 
-  /* live updates from other users */
+  /* live updates from other users (audience-filtered server-side) */
   useEffect(() => {
     if (!onPostEvent) return;
     return onPostEvent((ev, payload) => {
@@ -74,7 +70,7 @@ export default function NetworkScreen() {
         setPosts((prev) => {
           if (prev.some((p) => p.id === payload.id)) return prev;
           if (activeTag && payload.tag !== activeTag) return prev;
-          return [{ ...payload, mine: payload.userId === user?.id }, ...prev];
+          return [payload, ...prev];
         });
       } else if (ev === 'post:deleted') {
         setPosts((prev) => prev.filter((p) => p.id !== payload.id));
@@ -107,34 +103,9 @@ export default function NetworkScreen() {
 
   /* ---------------- actions ---------------- */
 
-  const pickImage = async () => {
-    try {
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-      if (res.canceled || !res.assets?.length) return;
-      setDraftImage(res.assets[0]);
-    } catch (e) { setError(e.message); }
-  };
-
-  const submit = async () => {
-    const body = draft.trim();
-    if (!body && !draftImage) { setError('Scribble something first.'); return; }
-    setPosting(true);
-    setError('');
-    try {
-      let url = null;
-      if (draftImage) {
-        const up = await api.uploadFile(draftImage.uri, draftImage.fileName || 'post.jpg', draftImage.mimeType || 'image/jpeg');
-        url = up.url;
-      }
-      const { post } = await api.createPost({ body, tag: draftTag.trim() || null, mediaUrl: url });
-      setPosts((prev) => (prev.some((p) => p.id === post.id) ? prev : [post, ...prev]));
-      setDraft(''); setDraftTag(''); setDraftImage(null); setShowTagInput(false);
-      api.postTags().then((r) => setTags(r.tags)).catch(() => {});
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setPosting(false);
-    }
+  const onPosted = (post) => {
+    setPosts((prev) => (prev.some((p) => p.id === post.id) ? prev : [post, ...prev]));
+    api.postTags().then((r) => setTags(r.tags)).catch(() => {});
   };
 
   const toggleLike = async (post) => {
@@ -159,134 +130,81 @@ export default function NetworkScreen() {
 
   /* ---------------- render ---------------- */
 
-  const renderPost = ({ item, index }) => (
-    <View style={[s.note, { transform: [{ rotate: tiltFor(index) }], backgroundColor: index % 2 ? theme.cardAlt : theme.card }]}>
-      <View style={s.noteHead}>
-        <Avatar uri={item.author.avatar} name={item.author.name} id={item.author.id} size={38} />
-        <View style={{ flex: 1 }}>
-          <Text style={[type.labelSm, { color: theme.ink }]} numberOfLines={1}>
-            {handleFor(item.author)}
-          </Text>
-          <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]}>
-            {formatChatTime(item.createdAt)}
-          </Text>
+  const renderPost = ({ item, index }) => {
+    const audienceMeta = AUDIENCE[item.audience] || AUDIENCE.public;
+    return (
+      <View style={[s.note, { transform: [{ rotate: tiltFor(index) }], backgroundColor: index % 2 ? theme.cardAlt : theme.card }]}>
+        <View style={s.noteHead}>
+          <Avatar uri={item.author.avatar} name={item.author.name} id={item.author.id} size={38} />
+          <View style={{ flex: 1 }}>
+            <Text style={[type.labelSm, { color: theme.ink }]} numberOfLines={1}>
+              {handleFor(item.author)}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 }}>
+              <Icon name={audienceMeta.icon} size={11} color={theme.muted} />
+              <Text style={[type.labelXs, { color: theme.muted }]}>
+                {formatChatTime(item.createdAt)} · {audienceMeta.label}
+              </Text>
+            </View>
+          </View>
+          {item.mine && (
+            <Pressable onPress={() => removePost(item)} hitSlop={8} style={{ padding: 4 }}>
+              <Icon name="trash-outline" size={16} color={theme.muted} />
+            </Pressable>
+          )}
         </View>
-        {item.mine && (
-          <Pressable onPress={() => removePost(item)} hitSlop={8} style={{ padding: 4 }}>
-            <Icon name="trash-outline" size={16} color={theme.muted} />
+
+        {!!item.title && (
+          <EmojiText style={[type.headlineSm, { color: theme.text, marginTop: 12 }]}>{item.title}</EmojiText>
+        )}
+        {!!item.body && (
+          <EmojiText style={[type.bodyMd, { color: theme.text, marginTop: item.title ? 6 : 12 }]}>
+            {item.body}
+          </EmojiText>
+        )}
+
+        {!!item.mediaUrl && (
+          <Pressable onPress={() => setLightbox(mediaUrl(item.mediaUrl))} style={[s.noteImage, inkBox(theme, 'ink')]}>
+            <Image source={{ uri: mediaUrl(item.mediaUrl) }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
           </Pressable>
         )}
-      </View>
 
-      {!!item.title && (
-        <EmojiText style={[type.headlineSm, { color: theme.text, marginTop: 12 }]}>{item.title}</EmojiText>
-      )}
-      {!!item.body && (
-        <EmojiText style={[type.bodyMd, { color: theme.text, marginTop: item.title ? 6 : 12 }]}>
-          {item.body}
-        </EmojiText>
-      )}
+        {!!item.song && (
+          <View style={{ marginTop: 12 }}>
+            <SongCard song={item.song} compact />
+          </View>
+        )}
 
-      {!!item.mediaUrl && (
-        <Pressable onPress={() => setLightbox(mediaUrl(item.mediaUrl))} style={[s.noteImage, inkBox(theme, 'ink')]}>
-          <Image source={{ uri: mediaUrl(item.mediaUrl) }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-        </Pressable>
-      )}
+        {!!item.tag && (
+          <View style={{ marginTop: 12, alignSelf: 'flex-start' }}>
+            <Pressable onPress={() => setActiveTag(item.tag === activeTag ? null : item.tag)}>
+              <TapeChip label={`#${item.tag}`} tone={item.tag === activeTag ? 'accent' : 'ink'} />
+            </Pressable>
+          </View>
+        )}
 
-      {!!item.tag && (
-        <View style={{ marginTop: 12, alignSelf: 'flex-start' }}>
-          <Pressable onPress={() => setActiveTag(item.tag === activeTag ? null : item.tag)}>
-            <TapeChip label={`#${item.tag}`} tone={item.tag === activeTag ? 'accent' : 'ink'} />
+        <View style={[dashedRule(theme), { marginTop: 16, marginBottom: 12 }]} />
+
+        <View style={s.actions}>
+          <Pressable onPress={() => toggleLike(item)} style={({ pressed }) => [s.action, pressed && marker(theme, 1)]} hitSlop={6}>
+            <Icon name={item.liked ? 'heart' : 'heart-outline'} size={17} color={item.liked ? theme.ink : theme.graphite} />
+            <Text style={[type.labelSm, { color: item.liked ? theme.ink : theme.graphite }]}>{item.likes}</Text>
+          </Pressable>
+          <Pressable onPress={() => setCommentsFor(item)} style={({ pressed }) => [s.action, pressed && marker(theme, 1)]} hitSlop={6}>
+            <Icon name="chatbubble-outline" size={16} color={theme.graphite} />
+            <Text style={[type.labelSm, { color: theme.graphite }]}>{item.comments}</Text>
           </Pressable>
         </View>
-      )}
-
-      <View style={[dashedRule(theme), { marginTop: 16, marginBottom: 12 }]} />
-
-      <View style={s.actions}>
-        <Pressable onPress={() => toggleLike(item)} style={({ pressed }) => [s.action, pressed && marker(theme, 1)]} hitSlop={6}>
-          <Icon name={item.liked ? 'heart' : 'heart-outline'} size={17} color={item.liked ? theme.ink : theme.graphite} />
-          <Text style={[type.labelSm, { color: item.liked ? theme.ink : theme.graphite }]}>{item.likes}</Text>
-        </Pressable>
-        <Pressable onPress={() => setCommentsFor(item)} style={({ pressed }) => [s.action, pressed && marker(theme, 1)]} hitSlop={6}>
-          <Icon name="chatbubble-outline" size={16} color={theme.graphite} />
-          <Text style={[type.labelSm, { color: theme.graphite }]}>{item.comments}</Text>
-        </Pressable>
       </View>
-    </View>
-  );
+    );
+  };
 
-  const Composer = (
-    <View style={s.composerWrap}>
+  const ListHeader = (
+    <View style={s.headerWrap}>
       <Text style={s.pageTitle}>The Network</Text>
       <Text style={[type.labelXs, { color: theme.muted, marginBottom: 18 }]}>
-        PUBLIC · EVERYONE CAN SEE THIS
+        SHARE PUBLICLY, WITH FRIENDS, OR JUST THE PEOPLE YOU PICK
       </Text>
-
-      <View style={[s.composer, inkBox(theme, 'ink')]}>
-        <TextInput
-          style={s.composerInput}
-          placeholder="Scribble a thought…"
-          placeholderTextColor={theme.muted}
-          value={draft}
-          onChangeText={(v) => { setDraft(v); if (error) setError(''); }}
-          multiline
-          maxLength={2000}
-        />
-
-        {!!draftImage && (
-          <View style={[s.draftImageWrap, inkBox(theme, 'thin')]}>
-            <Image source={{ uri: draftImage.uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-            <Pressable onPress={() => setDraftImage(null)} style={[s.draftImageX, { backgroundColor: theme.ink }]}>
-              <Icon name="close" size={13} color={theme.onPrimary} />
-            </Pressable>
-          </View>
-        )}
-
-        {showTagInput && (
-          <View style={s.tagRow}>
-            <Text style={[type.labelSm, { color: theme.graphite }]}>#</Text>
-            <TextInput
-              style={s.tagInput}
-              placeholder="tag"
-              placeholderTextColor={theme.muted}
-              value={draftTag}
-              onChangeText={setDraftTag}
-              autoCapitalize="none"
-              maxLength={24}
-            />
-          </View>
-        )}
-
-        <View style={[dashedRule(theme), { marginVertical: 12 }]} />
-
-        <View style={s.composerBar}>
-          <View style={{ flexDirection: 'row', gap: 16 }}>
-            <Pressable onPress={pickImage} hitSlop={8}>
-              <Icon name="image-outline" size={19} color={theme.graphite} />
-            </Pressable>
-            <Pressable onPress={() => setShowTagInput((v) => !v)} hitSlop={8}>
-              <Icon name="pricetag-outline" size={18} color={showTagInput ? theme.ink : theme.graphite} />
-            </Pressable>
-          </View>
-          <Pressable
-            onPress={submit}
-            disabled={posting}
-            style={({ pressed }) => [s.postBtn, inkBox(theme, 'ink'), pressed ? marker(theme, 2) : null, posting && { opacity: 0.5 }]}
-          >
-            {posting
-              ? <ActivityIndicator size="small" color={theme.ink} />
-              : <Text style={[type.labelSm, { color: theme.ink }]}>POST</Text>}
-          </Pressable>
-        </View>
-      </View>
-
-      {!!error && (
-        <View style={s.errorRow}>
-          <Icon name="alert-circle" size={14} color={theme.danger} />
-          <Text style={[type.bodySm, { color: theme.danger }]}>{error}</Text>
-        </View>
-      )}
 
       {tags.length > 0 && (
         <View style={s.tagsWrap}>
@@ -319,7 +237,7 @@ export default function NetworkScreen() {
         data={posts}
         keyExtractor={(i) => i.id}
         renderItem={renderPost}
-        ListHeaderComponent={Composer}
+        ListHeaderComponent={ListHeader}
         contentContainerStyle={[s.list, isTablet && s.listWide]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.ink} />}
         onEndReached={loadMore}
@@ -336,9 +254,23 @@ export default function NetworkScreen() {
           <EmptyState
             icon="globe-outline"
             title={activeTag ? `Nothing tagged #${activeTag}` : 'Nothing pinned yet'}
-            subtitle={activeTag ? 'Try another tag, or clear the filter.' : 'Be the first to scribble something for the world.'}
+            subtitle={activeTag ? 'Try another tag, or clear the filter.' : 'Tap the pencil to sketch the first page.'}
           />
         }
+      />
+
+      <Pressable
+        onPress={() => setComposerOpen(true)}
+        android_ripple={rippleFor(theme, { borderless: true, radius: 30 })}
+        style={({ pressed }) => [s.fab, inkBox(theme, 'bold'), { backgroundColor: pressed && Platform.OS !== 'android' ? theme.highlighter : theme.ink }]}
+      >
+        <Icon name="create-outline" size={21} color={theme.onPrimary} />
+      </Pressable>
+
+      <NewPostScreen
+        visible={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        onPosted={onPosted}
       />
 
       <CommentsSheet
@@ -474,18 +406,9 @@ const makeStyles = (t) => StyleSheet.create({
   list: { paddingHorizontal: 20, paddingBottom: 120 },
   listWide: { maxWidth: 640, width: '100%', alignSelf: 'center' },
 
-  composerWrap: { paddingTop: 22 },
+  headerWrap: { paddingTop: 22 },
   pageTitle: { ...type.headlineLg, color: t.text, transform: [{ rotate: '-1deg' }] },
-  composer: { padding: 14, backgroundColor: t.card, marginTop: 4 },
-  composerInput: { ...type.bodyMd, color: t.text, minHeight: 62, textAlignVertical: 'top', outlineStyle: 'none' },
-  composerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  postBtn: { paddingHorizontal: 18, paddingVertical: 7, minWidth: 74, alignItems: 'center' },
-  tagRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10 },
-  tagInput: { flex: 1, ...type.labelSm, color: t.text, paddingVertical: 6, outlineStyle: 'none' },
-  draftImageWrap: { width: '100%', height: 150, marginTop: 12, overflow: 'hidden' },
-  draftImageX: { position: 'absolute', top: 6, right: 6, width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
-  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
-  tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 18 },
+  tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
 
   note: { padding: 18, marginBottom: 22, borderWidth: 1, borderColor: t.graphiteLine,
     borderTopLeftRadius: 2, borderTopRightRadius: 5, borderBottomRightRadius: 2, borderBottomLeftRadius: 4 },
@@ -493,6 +416,11 @@ const makeStyles = (t) => StyleSheet.create({
   noteImage: { width: '100%', height: 190, marginTop: 14, overflow: 'hidden' },
   actions: { flexDirection: 'row', gap: 22 },
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2, paddingHorizontal: 2 },
+
+  fab: {
+    position: 'absolute', right: 24, bottom: 26, width: 54, height: 54,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   lightbox: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
 

@@ -113,13 +113,23 @@ CREATE TABLE IF NOT EXISTS posts (
   title      TEXT DEFAULT '',
   body       TEXT NOT NULL DEFAULT '',
   media_url  TEXT,
+  song       TEXT,
   tag        TEXT,
+  audience   TEXT DEFAULT 'public',
   created_at INTEGER NOT NULL,
   deleted    INTEGER DEFAULT 0,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_posts_tag ON posts(tag);
+
+/* audience list for 'selected' (hand-picked) private posts */
+CREATE TABLE IF NOT EXISTS post_recipients (
+  post_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  PRIMARY KEY (post_id, user_id),
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS post_likes (
   post_id TEXT NOT NULL,
@@ -149,5 +159,7 @@ addColumnIfMissing('users', 'username', 'username TEXT');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)');
 addColumnIfMissing('statuses', 'song', 'song TEXT');
 addColumnIfMissing('statuses', 'audience', "audience TEXT DEFAULT 'public'");
+addColumnIfMissing('posts', 'song', 'song TEXT');
+addColumnIfMissing('posts', 'audience', "audience TEXT DEFAULT 'public'");
 
 module.exports = db;

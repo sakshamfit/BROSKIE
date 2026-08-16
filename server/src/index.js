@@ -465,6 +465,28 @@ function canViewStatus(statusId, authorId, audience, viewerId) {
   return false;
 }
 
+/** Can `viewerId` see a Network post authored by `authorId` with the given audience? */
+function canViewPost(postId, authorId, audience, viewerId) {
+  if (authorId === viewerId) return true;
+  if (audience === 'public') return true;
+  if (audience === 'contacts') return contactIds(authorId).includes(viewerId);
+  if (audience === 'selected') {
+    return !!db.prepare('SELECT 1 FROM post_recipients WHERE post_id = ? AND user_id = ?').get(postId, viewerId);
+  }
+  return false;
+}
+
+/** Every userId allowed to see a post with the given audience (for realtime fan-out). */
+function postAudienceIds(postId, authorId, audience) {
+  if (audience === 'public') return [...sockets.keys()];
+  if (audience === 'contacts') return [...new Set([authorId, ...contactIds(authorId)])];
+  if (audience === 'selected') {
+    const rows = db.prepare('SELECT user_id FROM post_recipients WHERE post_id = ?').all(postId);
+    return [...new Set([authorId, ...rows.map((r) => r.user_id)])];
+  }
+  return [authorId];
+}
+
 function hydrateStatus(s, viewerId) {
   return {
     id: s.id, type: s.type, body: s.body, mediaUrl: s.media_url, bg: s.bg,
@@ -584,7 +606,9 @@ function hydratePost(row, viewerId) {
     title: row.title || '',
     body: row.body,
     mediaUrl: row.media_url,
+    song: row.song ? JSON.parse(row.song) : null,
     tag: row.tag,
+    audience: row.audience || 'public',
     createdAt: row.created_at,
     likes,
     comments,
@@ -596,28 +620,54 @@ function hydratePost(row, viewerId) {
 /** GET /api/posts?before=<ts>&limit=20&tag=process&userId=… */
 app.get('/api/posts', requireAuth, (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 20, 50);
-  const before = Number(req.query.before) || Date.now() + 1;
   const { tag, userId } = req.query;
+  let before = Number(req.query.before) || Date.now() + 1;
 
   let sql = 'SELECT * FROM posts WHERE deleted = 0 AND created_at < ?';
-  const params = [before];
-  if (tag) { sql += ' AND tag = ?'; params.push(String(tag).replace(/^#/, '')); }
-  if (userId) { sql += ' AND user_id = ?'; params.push(userId); }
+  const baseParams = [];
+  if (tag) { sql += ' AND tag = ?'; baseParams.push(String(tag).replace(/^#/, '')); }
+  if (userId) { sql += ' AND user_id = ?'; baseParams.push(userId); }
   sql += ' ORDER BY created_at DESC LIMIT ?';
-  params.push(limit);
 
-  const rows = db.prepare(sql).all(...params);
+  // Audience filtering happens in JS, so a raw page of `limit` rows can come
+  // up short after filtering. Keep fetching further pages (moving the
+  // cursor back) until we have enough visible posts or run out of rows.
+  const batchSize = Math.max(limit * 2, 20);
+  const visible = [];
+  let exhausted = false;
+  for (let i = 0; i < 5 && visible.length < limit; i++) {
+    const rows = db.prepare(sql).all(before, ...baseParams, batchSize);
+    if (!rows.length) { exhausted = true; break; }
+    rows.forEach((r) => {
+      if (visible.length < limit && canViewPost(r.id, r.user_id, r.audience || 'public', req.userId)) {
+        visible.push(r);
+      }
+    });
+    before = rows[rows.length - 1].created_at;
+    if (rows.length < batchSize) { exhausted = true; break; }
+  }
+
   res.json({
-    posts: rows.map((r) => hydratePost(r, req.userId)),
-    nextBefore: rows.length === limit ? rows[rows.length - 1].created_at : null,
+    posts: visible.map((r) => hydratePost(r, req.userId)),
+    // `before` has already been advanced past every row we've examined
+    // (visible or filtered-out), so resuming from it never skips a post.
+    nextBefore: !exhausted && visible.length === limit ? before : null,
   });
 });
 
 app.post('/api/posts', requireAuth, (req, res) => {
-  const { body = '', title = '', mediaUrl = null, tag = null } = req.body || {};
+  const {
+    body = '', title = '', mediaUrl = null, tag = null,
+    song = null, audience = 'public', recipientIds = [],
+  } = req.body || {};
   const text = String(body).trim();
-  if (!text && !mediaUrl) return res.status(400).json({ error: 'Write something or attach an image' });
+  if (!text && !mediaUrl && !song) return res.status(400).json({ error: 'Write something, or attach a photo or a song' });
   if (text.length > 2000) return res.status(400).json({ error: 'Post is too long (2000 characters max)' });
+
+  const aud = ['public', 'contacts', 'selected'].includes(audience) ? audience : 'public';
+  if (aud === 'selected' && !recipientIds.length) {
+    return res.status(400).json({ error: 'Pick at least one person for a targeted post.' });
+  }
 
   const post = {
     id: nano(),
@@ -625,17 +675,32 @@ app.post('/api/posts', requireAuth, (req, res) => {
     title: String(title).trim().slice(0, 120),
     body: text.slice(0, 2000),
     media_url: mediaUrl,
+    song: song ? JSON.stringify(song) : null,
     tag: tag ? String(tag).replace(/^#/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24) || null : null,
+    audience: aud,
     created_at: now(),
   };
   db.prepare(
-    `INSERT INTO posts (id, user_id, title, body, media_url, tag, created_at)
-     VALUES (@id, @user_id, @title, @body, @media_url, @tag, @created_at)`
+    `INSERT INTO posts (id, user_id, title, body, media_url, song, tag, audience, created_at)
+     VALUES (@id, @user_id, @title, @body, @media_url, @song, @tag, @audience, @created_at)`
   ).run(post);
 
+  if (aud === 'selected') {
+    const stmt = db.prepare('INSERT OR IGNORE INTO post_recipients (post_id, user_id) VALUES (?, ?)');
+    recipientIds.filter((id) => getUser(id)).forEach((id) => stmt.run(post.id, id));
+  }
+
   const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(post.id);
-  // everyone online sees new posts appear live
-  io.emit('post:new', hydratePost(row, null));
+
+  // Only notify sockets that are allowed to see it.
+  const targets = aud === 'public'
+    ? [...sockets.keys()]
+    : aud === 'contacts'
+      ? contactIds(req.userId)
+      : recipientIds;
+  targets.forEach((uid) => emitToUser(uid, 'post:new', hydratePost(row, uid)));
+  emitToUser(req.userId, 'post:new', hydratePost(row, req.userId));
+
   res.json({ post: hydratePost(row, req.userId) });
 });
 
@@ -644,24 +709,31 @@ app.delete('/api/posts/:id', requireAuth, (req, res) => {
   if (!row) return res.status(404).json({ error: 'Post not found' });
   if (row.user_id !== req.userId) return res.status(403).json({ error: 'Not your post' });
   db.prepare('UPDATE posts SET deleted = 1 WHERE id = ?').run(req.params.id);
-  io.emit('post:deleted', { id: req.params.id });
+  postAudienceIds(row.id, row.user_id, row.audience || 'public').forEach((uid) => emitToUser(uid, 'post:deleted', { id: req.params.id }));
   res.json({ ok: true });
 });
 
 app.post('/api/posts/:id/like', requireAuth, (req, res) => {
   const row = db.prepare('SELECT * FROM posts WHERE id = ? AND deleted = 0').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Post not found' });
+  if (!canViewPost(row.id, row.user_id, row.audience || 'public', req.userId)) {
+    return res.status(403).json({ error: 'Not visible to you' });
+  }
 
   const existing = db.prepare('SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?').get(row.id, req.userId);
   if (existing) db.prepare('DELETE FROM post_likes WHERE post_id = ? AND user_id = ?').run(row.id, req.userId);
   else db.prepare('INSERT INTO post_likes (post_id, user_id, at) VALUES (?,?,?)').run(row.id, req.userId, now());
 
   const likes = db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id = ?').get(row.id).c;
-  io.emit('post:likes', { id: row.id, likes });
+  postAudienceIds(row.id, row.user_id, row.audience || 'public').forEach((uid) => emitToUser(uid, 'post:likes', { id: row.id, likes }));
   res.json({ liked: !existing, likes });
 });
 
 app.get('/api/posts/:id/comments', requireAuth, (req, res) => {
+  const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(req.params.id);
+  if (!post || !canViewPost(post.id, post.user_id, post.audience || 'public', req.userId)) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
   const rows = db
     .prepare('SELECT * FROM post_comments WHERE post_id = ? ORDER BY created_at ASC LIMIT 200')
     .all(req.params.id);
@@ -682,7 +754,9 @@ app.get('/api/posts/:id/comments', requireAuth, (req, res) => {
 
 app.post('/api/posts/:id/comments', requireAuth, (req, res) => {
   const post = db.prepare('SELECT * FROM posts WHERE id = ? AND deleted = 0').get(req.params.id);
-  if (!post) return res.status(404).json({ error: 'Post not found' });
+  if (!post || !canViewPost(post.id, post.user_id, post.audience || 'public', req.userId)) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
   const text = String(req.body?.body || '').trim();
   if (!text) return res.status(400).json({ error: 'Comment cannot be empty' });
 
@@ -690,7 +764,7 @@ app.post('/api/posts/:id/comments', requireAuth, (req, res) => {
   db.prepare('INSERT INTO post_comments (id, post_id, user_id, body, created_at) VALUES (@id,@post_id,@user_id,@body,@created_at)').run(c);
 
   const count = db.prepare('SELECT COUNT(*) c FROM post_comments WHERE post_id = ?').get(post.id).c;
-  io.emit('post:comments', { id: post.id, comments: count });
+  postAudienceIds(post.id, post.user_id, post.audience || 'public').forEach((uid) => emitToUser(uid, 'post:comments', { id: post.id, comments: count }));
 
   const u = getUser(req.userId);
   res.json({

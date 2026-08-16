@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -91,9 +91,17 @@ export default function SettingsScreen({ navigation, embedded = false }) {
 
         <InkButton label="Log out" icon="log-out-outline" onPress={handleLogout} danger style={{ marginTop: 8 }} />
 
-        <Text style={[type.labelXs, { textAlign: 'center', color: theme.muted, marginTop: 10, lineHeight: 16 }]}>
-          友達 · GRAPHITE & PULP{'\n'}NOT AFFILIATED WITH WHATSAPP
-        </Text>
+        <View style={{ marginTop: 18, alignItems: 'center' }}>
+          <Text style={[type.labelXs, { textAlign: 'center', color: theme.text, fontWeight: '700' }]}>
+            SAKSHAMFIT
+          </Text>
+          <Pressable onPress={() => Linking.openURL('https://instagram.com/saxamfit')} hitSlop={6} style={{ marginTop: 4 }}>
+            <Text style={[type.labelXs, { textAlign: 'center', color: theme.muted, lineHeight: 16 }]}>
+              CRAFTED & SKETCHED BY{' '}
+              <Text style={{ color: theme.ink, textDecorationLine: 'underline' }}>@saxamfit</Text>
+            </Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );

@@ -14,6 +14,7 @@ import useResponsive from '../hooks/useResponsive';
 import { Avatar, formatChatTime } from '../components/common';
 import AudiencePicker, { AUDIENCE } from '../components/AudiencePicker';
 import SongCard from '../components/SongCard';
+import SongPicker from '../components/SongPicker';
 import { radius, type, inkBox, marker, dashedRule, stroke, tokens } from '../theme';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -458,86 +459,6 @@ function Composer({ visible, onClose, onPosted }) {
 
       <SongPicker visible={songPicker} onClose={() => setSongPicker(false)} onSelect={(t) => { setSong(t); setSongPicker(false); }} />
     </>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* song picker (Jamendo search)                                        */
-/* ------------------------------------------------------------------ */
-
-function SongPicker({ visible, onClose, onSelect }) {
-  const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  const s = makeStyles(theme);
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [configured, setConfigured] = useState(true);
-  const [notice, setNotice] = useState('');
-
-  const search = async (q) => {
-    setQuery(q);
-    if (q.trim().length < 2) { setResults([]); return; }
-    setLoading(true);
-    try {
-      const { tracks, configured: c, error } = await api.searchSongs(q.trim());
-      setResults(tracks);
-      setConfigured(c !== false);
-      setNotice(error || '');
-    } catch { setResults([]); } finally { setLoading(false); }
-  };
-
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={[s.composerScreen, { backgroundColor: theme.bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <View style={s.composerTopBar}>
-          <Pressable onPress={onClose} hitSlop={8} style={{ padding: 6 }}>
-            <Icon name="close" size={24} color={theme.ink} />
-          </Pressable>
-          <Text style={[type.headlineSm, { color: theme.text }]}>Add a song</Text>
-          <View style={{ width: 36 }} />
-        </View>
-
-        <View style={[s.searchWrap, inkBox(theme, 'ink')]}>
-          <Icon name="search" size={18} color={theme.muted} />
-          <TextInput
-            value={query}
-            onChangeText={search}
-            placeholder="Search songs or artists…"
-            placeholderTextColor={theme.muted}
-            style={s.searchWrapInput}
-            autoFocus
-          />
-        </View>
-
-        {!configured && (
-          <Text style={[type.bodySm, { color: theme.muted, marginTop: 16, paddingHorizontal: 4 }]}>
-            Song search isn't configured on the server yet — set JAMENDO_CLIENT_ID.
-          </Text>
-        )}
-        {configured && !!notice && (
-          <Text style={[type.bodySm, { color: theme.muted, marginTop: 16, paddingHorizontal: 4 }]}>
-            Song search is temporarily unavailable ({notice}). You can still post text and photo pages.
-          </Text>
-        )}
-
-        {loading ? (
-          <ActivityIndicator color={theme.ink} style={{ marginTop: 30 }} />
-        ) : (
-          <FlatList
-            data={results}
-            keyExtractor={(t) => t.id}
-            contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
-            ItemSeparatorComponent={() => <View style={[dashedRule(theme), { marginVertical: 2 }]} />}
-            renderItem={({ item }) => (
-              <Pressable onPress={() => onSelect(item)} style={({ pressed }) => [pressed ? marker(theme, 1) : null]}>
-                <SongCard song={item} />
-              </Pressable>
-            )}
-          />
-        )}
-      </View>
-    </Modal>
   );
 }
 
