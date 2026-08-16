@@ -25,13 +25,16 @@ import { ThemeProvider, useTheme } from './src/store/ThemeContext';
 import Navigation from './src/Navigation';
 import { Loading } from './src/components/common';
 
-/** On web, expand to full browser — no phone frame. */
+/** On web, expand to full browser — no phone frame.
+ *  We still wrap in a flex View because React Navigation's container needs
+ *  an explicit parent to fill — without it, alignItems: center on webRoot
+ *  collapses the container to its content's width (0). */
 function PhoneFrame({ children }) {
   const { theme } = useTheme();
   if (Platform.OS !== 'web') return children;
   return (
     <View style={[styles.webRoot, { backgroundColor: theme.bg }]}>
-      {children}
+      <View style={styles.fullBleed}>{children}</View>
     </View>
   );
 }
@@ -82,5 +85,5 @@ export default function App() {
 
 const styles = StyleSheet.create({
   webRoot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  phone: { flex: 1, width: '100%' },
+  fullBleed: { flex: 1, width: '100%', height: '100%' },
 });
