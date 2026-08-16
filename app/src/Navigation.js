@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { useTheme } from './store/ThemeContext';
 import { useChat } from './store/ChatContext';
 import { Loading, EmptyState, CountBead, Rule } from './components/common';
 import { radius, type, inkBox, marker, dashedRule, stroke } from './theme';
+import DesktopLayout from './DesktopLayout';
 
 import AuthScreen from './screens/AuthScreen';
 import ChatListScreen from './screens/ChatListScreen';
@@ -21,6 +22,9 @@ import SettingsScreen from './screens/SettingsScreen';
 import ChatInfoScreen from './screens/ChatInfoScreen';
 
 const Stack = createNativeStackNavigator();
+
+/** Wide web viewport (tablet-landscape and up) gets the sidebar + split view. */
+const DESKTOP_BREAKPOINT = 860;
 
 /** Floating clay tab bar */
 function HomeTabs({ navigation }) {
@@ -103,8 +107,14 @@ function CallsPlaceholder() {
 export default function Navigation() {
   const { user, booting } = useAuth();
   const { theme, mode } = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === 'web' && width >= DESKTOP_BREAKPOINT;
 
   if (booting) return <Loading label="STARTING 友達" />;
+
+  if (user && isDesktopWeb) {
+    return <DesktopLayout />;
+  }
 
   const navTheme = {
     ...(mode === 'dark' ? DarkTheme : DefaultTheme),

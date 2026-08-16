@@ -16,7 +16,7 @@ import MessageBubble from '../components/MessageBubble';
 import { api, mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 
-export default function ConversationScreen({ route, navigation }) {
+export default function ConversationScreen({ route, navigation, embedded = false }) {
   const { chatId } = route.params;
   const { chats, messages, typing, loadMessages, sendMessage, markRead, setTypingState, react, deleteMessage } = useChat();
   const { user } = useAuth();
@@ -121,9 +121,11 @@ export default function ConversationScreen({ route, navigation }) {
       {/* header — floating clay bar */}
       <View style={s.headerWrap}>
         <View style={s.header}>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={s.backBtn}>
-            <Icon name="arrow-back" size={22} color={theme.primary} />
-          </Pressable>
+          {!embedded && (
+            <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={s.backBtn}>
+              <Icon name="arrow-back" size={22} color={theme.primary} />
+            </Pressable>
+          )}
           <Pressable style={s.headerInfo} onPress={() => navigation.navigate('ChatInfo', { chatId })}>
             <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={42} />
             <View style={{ flex: 1 }}>
