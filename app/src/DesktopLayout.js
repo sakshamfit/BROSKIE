@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Pressable, StyleSheet, Modal, BackHandler, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './icons/Icon';
 import SideNav from './components/SideNav';
 import { useTheme } from './store/ThemeContext';
 import { useAuth } from './store/AuthContext';
 import { useChat } from './store/ChatContext';
+import useResponsive from './hooks/useResponsive';
 import { type, inkBox, stroke } from './theme';
 
 import ChatListScreen from './screens/ChatListScreen';
@@ -19,20 +21,30 @@ import SecurityScreen from './screens/SecurityScreen';
 import AppearanceScreen from './screens/AppearanceScreen';
 
 /**
- * Desktop web shell — persistent sidebar + master/detail split, matching the
- * "Graphite & Pulp" web mockup: SideNavBar | Inbox column | Chat canvas.
- * Screens are unchanged; they're driven by a tiny navigation shim so the
- * exact same components work full-screen on mobile and split-pane here.
+ * Split shell for wide viewports — desktop web AND real tablets/foldables
+ * (iPad, Android tablets, unfolded foldables) once there's enough width in
+ * either orientation: persistent sidebar + Inbox column + chat canvas,
+ * matching the "Graphite & Pulp" web mockup. Screens are unchanged; they're
+ * driven by a tiny navigation shim so the exact same components work
+ * full-screen on phones and split-pane here.
  */
-export default function DesktopLayout() {
+export default function SplitLayout() {
   const { theme } = useTheme();
   const { logout } = useAuth();
   const { chats } = useChat();
+  const { breakpoint, insets, isWeb } = useResponsive();
   const [tab, setTab] = useState('chats');
   const [selectedChatId, setSelectedChatId] = useState(null);
   const [overlay, setOverlay] = useState(null); // { name, params }
 
-  const s = makeStyles(theme);
+  // On native tablets the sidebar sits inside the device's safe area
+  // (status bar / notch / home indicator); web ignores this (insets are 0).
+  const s = makeStyles(theme, insets, isWeb);
+
+  // Narrower "expanded" tablets get an icon-only rail to leave more room
+  // for the list + detail panes; "large" (wide desktop / big tablets in
+  // landscape) gets the full labeled sidebar.
+  const railOnly = breakpoint === 'expanded';
 
   const openOverlay = (name, params) => setOverlay({ name, params });
   const closeOverlay = () => setOverlay(null);
@@ -81,10 +93,30 @@ export default function DesktopLayout() {
 
   const selectedChat = chats.find((c) => c.id === selectedChatId);
 
+  // Android hardware back: close whatever is on top instead of exiting the
+  // app (matches how the native stack navigator behaves on phones).
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (overlay) {
+        if (overlay.name === 'Settings' && settingsSub) setSettingsSub(null);
+        else closeOverlay();
+        return true;
+      }
+      if (selectedChatId) {
+        setSelectedChatId(null);
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [overlay, settingsSub, selectedChatId]);
+
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
       <SideNav
         active={tab}
+        railOnly={railOnly}
         onNavigate={setTab}
         onNewChat={() => openOverlay('NewChat')}
         onSettings={() => openOverlay('Settings')}
@@ -186,7 +218,7 @@ function OverlayPanel({ visible, onClose, width = 480, children }) {
           style={[
             styles.overlayPanel,
             inkBox(theme, 'bold'),
-            { width, backgroundColor: theme.bg },
+            { width, maxWidth: '92%', backgroundColor: theme.bg },
           ]}
         >
           <View style={{ flex: 1 }}>{children}</View>
@@ -196,10 +228,15 @@ function OverlayPanel({ visible, onClose, width = 480, children }) {
   );
 }
 
-const makeStyles = (t) => StyleSheet.create({
-  root: { flex: 1, flexDirection: 'row', height: '100%' },
+const makeStyles = (t, insets, isWeb) => StyleSheet.create({
+  root: {
+    flex: 1, flexDirection: 'row', height: '100%',
+    // Native tablets: respect the notch/status bar/home-indicator; web ignores (0).
+    paddingTop: isWeb ? 0 : insets.top,
+    paddingBottom: isWeb ? 0 : insets.bottom,
+  },
   main: { flex: 1, flexDirection: 'row' },
-  listPane: { width: 360, borderRightWidth: stroke.thin, borderStyle: 'dashed', height: '100%' },
+  listPane: { width: 360, maxWidth: '42%', borderRightWidth: stroke.thin, borderStyle: 'dashed', height: '100%' },
   detailPane: { flex: 1, height: '100%' },
   fullPane: { flex: 1, height: '100%' },
   centeredPane: { alignItems: 'center' },

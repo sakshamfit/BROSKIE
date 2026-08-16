@@ -1,35 +1,41 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
+import useResponsive from '../hooks/useResponsive';
 import { PaperCard } from '../components/common';
 import { type, inkBox, marker, lightTheme, darkTheme } from '../theme';
 
-/** "Appearance" — theme mode picker + a live preview of the type scale. */
-export default function AppearanceScreen({ navigation }) {
-  const { theme, mode, toggle } = useTheme();
-  const s = makeStyles(theme);
+const SYSTEM_SETTING_NAME = Platform.select({
+  ios: 'your iOS Display & Brightness setting',
+  android: 'your Android system theme',
+  default: 'your device theme',
+});
 
-  const setMode = (target) => {
-    if (target !== mode) toggle();
-  };
+/** "Appearance" — theme mode picker (Light / Dark / System) + a live preview of the type scale. */
+export default function AppearanceScreen({ navigation, embedded = false }) {
+  const { theme, preference, setThemePreference } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { isTablet } = useResponsive();
+  const s = makeStyles(theme);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={s.header}>
+      <View style={[s.header, !embedded && { paddingTop: 20 + insets.top }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={{ padding: 6 }}>
           <Icon name="arrow-back" size={22} color={theme.ink} />
         </Pressable>
         <Text style={[type.headlineMd, { color: theme.text }]}>Appearance</Text>
       </View>
 
-      <ScrollView contentContainerStyle={s.scroll}>
+      <ScrollView contentContainerStyle={[s.scroll, isTablet && s.scrollWide]}>
         <Text style={[type.labelXs, { color: theme.muted, marginBottom: 10 }]}>THEME</Text>
         <View style={s.themeRow}>
           <ThemePreviewCard
             label="Light"
-            active={mode === 'light'}
-            onPress={() => setMode('light')}
+            active={preference === 'light'}
+            onPress={() => setThemePreference('light')}
             bg={lightTheme.bg}
             ink={lightTheme.ink}
             card={lightTheme.card}
@@ -37,14 +43,30 @@ export default function AppearanceScreen({ navigation }) {
           />
           <ThemePreviewCard
             label="Dark"
-            active={mode === 'dark'}
-            onPress={() => setMode('dark')}
+            active={preference === 'dark'}
+            onPress={() => setThemePreference('dark')}
             bg={darkTheme.bg}
             ink={darkTheme.ink}
             card={darkTheme.card}
             outerTheme={theme}
           />
+          <ThemePreviewCard
+            label="System"
+            icon="phone-portrait-outline"
+            active={preference === 'system'}
+            onPress={() => setThemePreference('system')}
+            bg={theme.bg}
+            ink={theme.ink}
+            card={theme.card}
+            outerTheme={theme}
+            split
+          />
         </View>
+        {preference === 'system' && (
+          <Text style={[type.bodySm, { color: theme.subtext, marginTop: 10 }]}>
+            Follows {SYSTEM_SETTING_NAME} automatically.
+          </Text>
+        )}
 
         <Text style={[type.labelXs, { color: theme.muted, marginTop: 28, marginBottom: 10 }]}>TYPOGRAPHY</Text>
         <PaperCard weight="thin" style={{ gap: 16 }}>
@@ -71,7 +93,7 @@ export default function AppearanceScreen({ navigation }) {
   );
 }
 
-function ThemePreviewCard({ label, active, onPress, bg, ink, card, outerTheme }) {
+function ThemePreviewCard({ label, active, onPress, bg, ink, card, outerTheme, split, icon }) {
   const s = makeStyles(outerTheme);
   return (
     <Pressable
@@ -82,9 +104,17 @@ function ThemePreviewCard({ label, active, onPress, bg, ink, card, outerTheme })
         pressed ? marker(outerTheme, 1) : null,
       ]}
     >
-      <View style={[s.swatch, { backgroundColor: bg, borderColor: ink }]}>
-        <View style={[s.swatchInner, { backgroundColor: card, borderColor: ink }]} />
-      </View>
+      {split ? (
+        <View style={[s.swatch, s.swatchSplit, { borderColor: ink }]}>
+          <View style={[s.swatchHalf, { backgroundColor: lightTheme.bg }]} />
+          <View style={[s.swatchHalf, { backgroundColor: darkTheme.bg }]} />
+          <Icon name={icon} size={16} color={outerTheme.ink} style={s.swatchIcon} />
+        </View>
+      ) : (
+        <View style={[s.swatch, { backgroundColor: bg, borderColor: ink }]}>
+          <View style={[s.swatchInner, { backgroundColor: card, borderColor: ink }]} />
+        </View>
+      )}
       <View style={s.themeLabelRow}>
         <Text style={[type.bodyStrong, { color: outerTheme.text }]}>{label}</Text>
         {active && <Icon name="checkmark-circle" size={16} color={outerTheme.ink} />}
@@ -96,9 +126,13 @@ function ThemePreviewCard({ label, active, onPress, bg, ink, card, outerTheme })
 const makeStyles = (t) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14 },
   scroll: { padding: 20, paddingBottom: 40 },
-  themeRow: { flexDirection: 'row', gap: 14 },
-  themeCard: { flex: 1, padding: 12 },
-  swatch: { width: '100%', aspectRatio: 1.4, borderWidth: 2, padding: 10, justifyContent: 'flex-end' },
+  scrollWide: { maxWidth: 560, width: '100%', alignSelf: 'center' },
+  themeRow: { flexDirection: 'row', gap: 12 },
+  themeCard: { flex: 1, padding: 10 },
+  swatch: { width: '100%', aspectRatio: 1.1, borderWidth: 2, padding: 8, justifyContent: 'flex-end', overflow: 'hidden' },
   swatchInner: { height: '55%', borderWidth: 1.5, borderRadius: 3 },
+  swatchSplit: { flexDirection: 'row', padding: 0, position: 'relative' },
+  swatchHalf: { flex: 1, height: '100%' },
+  swatchIcon: { position: 'absolute', top: '50%', left: '50%', marginTop: -8, marginLeft: -8 },
   themeLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
 });

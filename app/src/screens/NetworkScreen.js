@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, TextInput, Pressable, StyleSheet, Image,
   ActivityIndicator, RefreshControl, Modal, Platform, KeyboardAvoidingView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import * as ImagePicker from 'expo-image-picker';
@@ -10,8 +11,10 @@ import { api, mediaUrl } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime } from '../components/common';
+import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFor } from '../components/common';
 import { type, inkBox, marker, dashedRule, stroke, radius } from '../theme';
+import useResponsive from '../hooks/useResponsive';
+import { confirm } from '../hooks/confirm';
 
 /* Sticky notes alternate their tilt, like scraps pinned to a board. */
 const tiltFor = (i) => (i % 2 === 0 ? '-0.8deg' : '0.7deg');
@@ -20,6 +23,7 @@ export default function NetworkScreen() {
   const { user } = useAuth();
   const { onPostEvent } = useChat();
   const { theme } = useTheme();
+  const { isTablet } = useResponsive();
 
   const [posts, setPosts] = useState([]);
   const [tags, setTags] = useState([]);
@@ -147,7 +151,8 @@ export default function NetworkScreen() {
   };
 
   const removePost = async (post) => {
-    if (Platform.OS === 'web' && !window.confirm('Tear up this post?')) return;
+    const ok = await confirm('Tear up this post?', { title: 'Delete post', confirmLabel: 'Delete', destructive: true });
+    if (!ok) return;
     setPosts((prev) => prev.filter((p) => p.id !== post.id));
     try { await api.deletePost(post.id); } catch { load(activeTag); }
   };
@@ -315,7 +320,7 @@ export default function NetworkScreen() {
         keyExtractor={(i) => i.id}
         renderItem={renderPost}
         ListHeaderComponent={Composer}
-        contentContainerStyle={s.list}
+        contentContainerStyle={[s.list, isTablet && s.listWide]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.ink} />}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
@@ -357,6 +362,7 @@ export default function NetworkScreen() {
 
 function CommentsSheet({ post, onClose, onCounted }) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [list, setList] = useState([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -389,7 +395,10 @@ function CommentsSheet({ post, onClose, onCounted }) {
       <View style={[s.sheetOverlay, { backgroundColor: theme.overlay }]}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={[s.sheet, { backgroundColor: theme.bg, borderTopWidth: stroke.bold, borderTopColor: theme.ink }]}
+          style={[
+            s.sheet,
+            { backgroundColor: theme.bg, borderTopWidth: stroke.bold, borderTopColor: theme.ink, paddingBottom: Math.max(insets.bottom, 24) },
+          ]}
         >
           <View style={s.sheetHead}>
             <Text style={[type.headlineSm, { color: theme.text, flex: 1 }]}>Comments</Text>
@@ -463,6 +472,7 @@ function CommentsSheet({ post, onClose, onCounted }) {
 
 const makeStyles = (t) => StyleSheet.create({
   list: { paddingHorizontal: 20, paddingBottom: 120 },
+  listWide: { maxWidth: 640, width: '100%', alignSelf: 'center' },
 
   composerWrap: { paddingTop: 22 },
   pageTitle: { ...type.headlineLg, color: t.text, transform: [{ rotate: '-1deg' }] },

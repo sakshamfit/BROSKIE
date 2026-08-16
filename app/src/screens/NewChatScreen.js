@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
@@ -8,8 +9,9 @@ import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, InkField, InkIconButton, InkCheckbox, handleFor, Rule } from '../components/common';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
 
-export default function NewChatScreen({ navigation }) {
+export default function NewChatScreen({ navigation, embedded = false }) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const { upsertChat, refreshChats } = useChat();
   const [users, setUsers] = useState([]);
   const [query, setQuery] = useState('');
@@ -59,7 +61,7 @@ export default function NewChatScreen({ navigation }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={s.header}>
+      <View style={[s.header, !embedded && { paddingTop: 20 + insets.top }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={{ padding: 6 }}>
           <Icon name="arrow-back" size={22} color={theme.ink} />
         </Pressable>

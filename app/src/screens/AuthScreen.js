@@ -3,10 +3,12 @@ import {
   View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
   Platform, ScrollView, ActivityIndicator, Animated, Easing,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, Pattern, Circle, Rect } from 'react-native-svg';
 import Icon from '../icons/Icon';
 import { useAuth } from '../store/AuthContext';
 import { api } from '../api';
+import useResponsive from '../hooks/useResponsive';
 
 /**
  * "Enter the Void" — dark manga/glitch login screen. Scoped ONLY to Auth;
@@ -34,6 +36,8 @@ const USERNAME_RE = /^[a-z0-9](?:[a-z0-9._]{1,22})[a-z0-9]$/;
 
 export default function AuthScreen() {
   const { login, register } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { isSplitCapable, isSmallPhone } = useResponsive();
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
@@ -87,26 +91,39 @@ export default function AuthScreen() {
   };
 
   return (
-    <View style={s.root}>
+    <View style={[s.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <HalftoneBackground />
       <SpeedLines />
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      >
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-          <View style={s.layout}>
-            {/* -------- Branding splash -------- */}
-            <View style={s.brandSection}>
-              <GlitchWordmark />
-              <View style={s.tagBadge}>
-                <Text style={s.tagBadgeText}>SYSTEM: V.01-SHONEN</Text>
+          <View style={[s.layout, { flexDirection: isSplitCapable ? 'row' : 'column' }]}>
+            {/* -------- Branding splash — hidden on phones to leave room for the
+                form (matches how the mockup's own layout collapses on small
+                screens); tablets/desktop keep the full split. -------- */}
+            {isSplitCapable && (
+              <View style={s.brandSection}>
+                <GlitchWordmark small={isSmallPhone} />
+                <View style={s.tagBadge}>
+                  <Text style={s.tagBadgeText}>SYSTEM: V.01-SHONEN</Text>
+                </View>
+                <Text style={s.scribble}>AWAKEN!</Text>
               </View>
-              <Text style={s.scribble}>AWAKEN!</Text>
-            </View>
+            )}
+            {!isSplitCapable && (
+              <View style={s.brandSectionCompact}>
+                <GlitchWordmark small={isSmallPhone} compact />
+              </View>
+            )}
 
             {/* -------- Sync Link card -------- */}
             <View style={s.cardWrap}>
               <View style={s.cardShadow} />
-              <View style={s.card}>
+              <View style={[s.card, isSmallPhone && s.cardCompact]}>
                 <View style={s.cardHeader}>
                   <Icon name="person-circle" size={34} color={VOID.onTertiaryFixed} />
                   <Text style={s.cardTitle}>Sync Link</Text>
@@ -119,6 +136,7 @@ export default function AuthScreen() {
                       <Pressable
                         key={m}
                         onPress={() => { setMode(m); setError(''); }}
+                        android_ripple={{ color: 'rgba(0,240,255,0.25)' }}
                         style={[s.modeTab, active && s.modeTabActive]}
                       >
                         <Text style={[s.modeTabText, active && s.modeTabTextActive]}>
@@ -221,7 +239,8 @@ export default function AuthScreen() {
                 <Pressable
                   onPress={submit}
                   disabled={busy}
-                  style={({ pressed }) => [s.submitBtn, pressed && s.submitBtnPressed, busy && { opacity: 0.6 }]}
+                  android_ripple={{ color: VOID.primaryContainer }}
+                  style={({ pressed }) => [s.submitBtn, Platform.OS !== 'android' && pressed && s.submitBtnPressed, busy && { opacity: 0.6 }]}
                 >
                   {busy ? (
                     <ActivityIndicator color={VOID.primaryContainer} />
@@ -331,13 +350,16 @@ function SpeedLines() {
 }
 
 /** Red/cyan double-exposed "glitch" wordmark, built from stacked offset text layers. */
-function GlitchWordmark() {
+function GlitchWordmark({ small = false, compact = false }) {
+  const size = compact ? (small ? 44 : 56) : (small ? 64 : 88);
+  const textStyle = [s.glitchText, { fontSize: size, lineHeight: size + 4 }];
+  const offset = compact ? 2 : 4;
   return (
     <View style={s.glitchWrap}>
-      <Text style={[s.glitchText, s.glitchLayerRed]}>友達</Text>
-      <Text style={[s.glitchText, s.glitchLayerCyan]}>友達</Text>
-      <Text style={s.glitchText}>友達</Text>
-      <Text style={s.wordmarkSub}>TOMODACHI</Text>
+      <Text style={[textStyle, s.glitchLayerRed, { transform: [{ translateX: offset }, { translateY: -offset * 0.75 }] }]}>友達</Text>
+      <Text style={[textStyle, s.glitchLayerCyan, { transform: [{ translateX: -offset }, { translateY: offset * 0.75 }] }]}>友達</Text>
+      <Text style={textStyle}>友達</Text>
+      <Text style={[s.wordmarkSub, compact && { fontSize: 18, letterSpacing: 2, marginTop: 4 }]}>TOMODACHI</Text>
     </View>
   );
 }
@@ -352,7 +374,6 @@ const s = StyleSheet.create({
 
   layout: {
     flex: 1,
-    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
     minHeight: 640,
   },
 
@@ -363,12 +384,17 @@ const s = StyleSheet.create({
     paddingVertical: 40,
     paddingHorizontal: 24,
   },
+  brandSectionCompact: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 28,
+    paddingBottom: 12,
+    paddingHorizontal: 24,
+  },
 
   glitchWrap: { alignItems: 'center' },
   glitchText: {
     fontFamily: 'Anybody_900Black',
-    fontSize: 88,
-    lineHeight: 92,
     fontStyle: 'italic',
     color: VOID.onBackground,
     textAlign: 'center',
@@ -420,7 +446,6 @@ const s = StyleSheet.create({
     color: VOID.secondaryContainer,
     opacity: 0.85,
     transform: [{ rotate: '-12deg' }],
-    display: Platform.OS === 'web' ? 'flex' : 'none',
   },
 
   cardWrap: {
@@ -451,6 +476,7 @@ const s = StyleSheet.create({
     padding: 28,
     transform: [{ rotate: '1deg' }],
   },
+  cardCompact: { padding: 18, borderWidth: 3, transform: [{ rotate: '0.5deg' }] },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -528,7 +554,6 @@ const s = StyleSheet.create({
   cornerBR: {
     position: 'absolute', bottom: 32, right: 24, width: 56, height: 56,
     borderBottomWidth: 8, borderRightWidth: 8, borderColor: VOID.onTertiaryFixed,
-    display: Platform.OS === 'web' ? 'flex' : 'none',
   },
 
   speedLinesTrack: { flexDirection: 'row', width: '220%', height: '100%' },

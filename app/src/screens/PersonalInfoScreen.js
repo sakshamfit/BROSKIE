@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, TextInput, Modal, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
+import useResponsive from '../hooks/useResponsive';
 import { PaperCard, InkField, InkButton, handleFor } from '../components/common';
 import { type, inkBox, marker } from '../theme';
 
 /** "Personal Information" — Name, Username, About, Phone. */
-export default function PersonalInfoScreen({ navigation }) {
+export default function PersonalInfoScreen({ navigation, embedded = false }) {
   const { user, updateProfile } = useAuth();
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { isTablet } = useResponsive();
   const s = makeStyles(theme);
 
   const [editing, setEditing] = useState(null);
@@ -58,14 +62,14 @@ export default function PersonalInfoScreen({ navigation }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={s.header}>
+      <View style={[s.header, !embedded && { paddingTop: 20 + insets.top }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={{ padding: 6 }}>
           <Icon name="arrow-back" size={22} color={theme.ink} />
         </Pressable>
         <Text style={[type.headlineMd, { color: theme.text }]}>Personal Information</Text>
       </View>
 
-      <ScrollView contentContainerStyle={s.scroll}>
+      <ScrollView contentContainerStyle={[s.scroll, isTablet && s.scrollWide]}>
         <Text style={[type.labelXs, { color: theme.muted, marginBottom: 10 }]}>IDENTITY</Text>
         <View style={{ gap: 10, marginBottom: 24 }}>
           <Row icon="person-outline" label="Name" value={user?.name} onPress={() => openEdit('name')} />
@@ -127,6 +131,7 @@ export default function PersonalInfoScreen({ navigation }) {
 const makeStyles = (t) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14 },
   scroll: { padding: 20, paddingBottom: 40 },
+  scrollWide: { maxWidth: 560, width: '100%', alignSelf: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 14, paddingVertical: 13 },
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
   dialog: { width: '100%', maxWidth: 360 },

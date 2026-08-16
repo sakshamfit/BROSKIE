@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
+import useResponsive from '../hooks/useResponsive';
 import { Avatar, InkButton, TapeChip, handleFor } from '../components/common';
+import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
 
@@ -15,24 +18,31 @@ import { radius, type, inkBox, marker, dashedRule } from '../theme';
  * (Account Settings, Preferences) whose rows drill into their own screens,
  * matching the supplied "Settings" mockup.
  */
-export default function SettingsScreen({ navigation }) {
+export default function SettingsScreen({ navigation, embedded = false }) {
   const { user, logout } = useAuth();
-  const { theme, mode, toggle } = useTheme();
+  const { theme, mode, preference, toggle } = useTheme();
   const { connected } = useChat();
+  const insets = useSafeAreaInsets();
+  const { isTablet } = useResponsive();
   const s = makeStyles(theme);
 
   const joinYear = user?.createdAt ? new Date(user.createdAt).getFullYear() : null;
 
+  const handleLogout = async () => {
+    const ok = await confirm('Log out of 友達?', { title: 'Log out', confirmLabel: 'Log out', destructive: true });
+    if (ok) logout();
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={s.header}>
+      <View style={[s.header, !embedded && { paddingTop: 20 + insets.top }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={{ padding: 6 }}>
           <Icon name="arrow-back" size={22} color={theme.ink} />
         </Pressable>
         <Text style={[type.headlineMd, { color: theme.text }]}>Settings</Text>
       </View>
 
-      <ScrollView contentContainerStyle={s.scroll}>
+      <ScrollView contentContainerStyle={[s.scroll, isTablet && s.scrollWide]}>
         {/* -------- Profile hero -------- */}
         <ProfileHero user={user} theme={theme} joinYear={joinYear} connected={connected} />
 
@@ -63,7 +73,9 @@ export default function SettingsScreen({ navigation }) {
             <Icon name={mode === 'dark' ? 'moon' : 'sunny-outline'} size={19} color={theme.ink} style={{ width: 26 }} />
             <View style={{ flex: 1 }}>
               <Text style={[type.bodyLg, { color: theme.text }]}>Dark mode</Text>
-              <Text style={[type.labelXs, { color: theme.graphite, marginTop: 3 }]}>{mode === 'dark' ? 'ON' : 'OFF'}</Text>
+              <Text style={[type.labelXs, { color: theme.graphite, marginTop: 3 }]}>
+                {preference === 'system' ? `SYSTEM (${mode.toUpperCase()})` : mode === 'dark' ? 'ON' : 'OFF'}
+              </Text>
             </View>
             <HandDrawnToggle value={mode === 'dark'} onToggle={toggle} theme={theme} />
           </View>
@@ -77,7 +89,7 @@ export default function SettingsScreen({ navigation }) {
           />
         </View>
 
-        <InkButton label="Log out" icon="log-out-outline" onPress={logout} danger style={{ marginTop: 8 }} />
+        <InkButton label="Log out" icon="log-out-outline" onPress={handleLogout} danger style={{ marginTop: 8 }} />
 
         <Text style={[type.labelXs, { textAlign: 'center', color: theme.muted, marginTop: 10, lineHeight: 16 }]}>
           友達 · GRAPHITE & PULP{'\n'}NOT AFFILIATED WITH WHATSAPP
@@ -211,6 +223,7 @@ function HandDrawnToggle({ value, onToggle, theme }) {
 const makeStyles = (t) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14 },
   scroll: { padding: 20, paddingBottom: 40 },
+  scrollWide: { maxWidth: 640, width: '100%', alignSelf: 'center' },
 
   hero: { flexDirection: 'row', alignItems: 'center', gap: 20, marginBottom: 8 },
   avatarWrap: { position: 'relative' },

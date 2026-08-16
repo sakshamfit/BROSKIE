@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, Image, StyleSheet, Pressable, ActivityIndicator, Platform } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji from '../icons/Emoji';
 import {
@@ -8,6 +8,17 @@ import {
 } from '../theme';
 import { mediaUrl } from '../api';
 import { useTheme } from '../store/ThemeContext';
+
+/**
+ * Platform-native press feedback: Android gets a Material ripple,
+ * iOS keeps the existing ink/highlighter fade. Pass straight into a
+ * Pressable's `android_ripple` prop.
+ */
+export function rippleFor(theme, { borderless = false, radius: rippleRadius } = {}) {
+  return Platform.OS === 'android'
+    ? { color: theme.ripple, borderless, radius: rippleRadius }
+    : undefined;
+}
 
 /* ------------------------------------------------------------------ */
 /* paper primitives                                                    */
@@ -51,10 +62,11 @@ export function PaperSurface({ children, onPress, onLongPress, style, weight = '
       onPress={onPress}
       onLongPress={onLongPress}
       disabled={disabled}
+      android_ripple={rippleFor(theme)}
       style={({ pressed }) => [
         { backgroundColor: theme.card },
         outline,
-        pressed ? pressedInk(theme) : null,
+        pressed && Platform.OS !== 'android' ? pressedInk(theme) : null,
         disabled && { opacity: 0.5 },
         style,
       ]}
@@ -70,16 +82,18 @@ export function InkButton({ label, onPress, icon, style, textStyle, disabled, bu
   const { theme } = useTheme();
   const lineColor = danger ? theme.danger : theme.ink;
   const fg = filled ? theme.onPrimary : danger ? theme.danger : theme.ink;
+  const isAndroid = Platform.OS === 'android';
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || busy}
+      android_ripple={rippleFor(theme, { color: filled ? 'rgba(255,255,255,0.25)' : theme.ripple })}
       style={({ pressed }) => [
         styles.btn,
         inkBox(theme, 'ink', lineColor),
         filled && { backgroundColor: lineColor },
-        pressed && !filled ? marker(theme, 2) : null,
-        pressed && filled ? { opacity: 0.82 } : null,
+        pressed && !filled && !isAndroid ? marker(theme, 2) : null,
+        pressed && filled && !isAndroid ? { opacity: 0.82 } : null,
         (disabled || busy) && { opacity: 0.45 },
         style,
       ]}
@@ -99,16 +113,22 @@ export function InkButton({ label, onPress, icon, style, textStyle, disabled, bu
 /** Square-ish icon button drawn in ink. */
 export function InkIconButton({ name, onPress, size = 40, iconSize = 19, iconColor, style, weight = 'ink', disabled, active }) {
   const { theme } = useTheme();
+  const isAndroid = Platform.OS === 'android';
+  // Real devices need a minimum ~44dp tap target (Apple HIG / Material both
+  // recommend this) even when the drawn box itself is smaller — hitSlop
+  // widens the touchable area without changing the visual size.
+  const slop = Math.max(0, Math.ceil((44 - size) / 2));
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      hitSlop={6}
+      hitSlop={Math.max(slop, 6)}
+      android_ripple={rippleFor(theme, { borderless: true, radius: size * 0.8 })}
       style={({ pressed }) => [
         { width: size, height: size, alignItems: 'center', justifyContent: 'center' },
         inkBox(theme, weight),
         active ? marker(theme, 2) : null,
-        pressed ? marker(theme, 1) : null,
+        pressed && !isAndroid ? marker(theme, 1) : null,
         disabled && { opacity: 0.4 },
         style,
       ]}
@@ -344,7 +364,8 @@ export function IconButton({ name, onPress, size = 22, color, style }) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [{ padding: 8, opacity: pressed ? 0.55 : 1 }, style]}
+      android_ripple={rippleFor(theme, { borderless: true, radius: 24 })}
+      style={({ pressed }) => [{ padding: 8, opacity: pressed && Platform.OS !== 'android' ? 0.55 : 1 }, style]}
       hitSlop={6}
     >
       <Icon name={name} size={size} color={color || theme.ink} />

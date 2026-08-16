@@ -33,6 +33,7 @@ import { ChatProvider } from './src/store/ChatContext';
 import { ThemeProvider, useTheme } from './src/store/ThemeContext';
 import Navigation from './src/Navigation';
 import { Loading } from './src/components/common';
+import OrientationManager from './src/components/OrientationManager';
 
 /** On web, expand to full browser — no phone frame.
  *  We still wrap in a flex View because React Navigation's container needs
@@ -53,6 +54,7 @@ function Root() {
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} backgroundColor={theme.bg} />
+      <OrientationManager />
       <PhoneFrame>
         <Navigation />
       </PhoneFrame>

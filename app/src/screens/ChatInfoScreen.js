@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { useChat } from '../store/ChatContext';
@@ -9,11 +10,12 @@ import { Avatar, lastSeenText, PaperCard, TapeChip, handleFor, Rule } from '../c
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
 import { api } from '../api';
 
-export default function ChatInfoScreen({ route, navigation }) {
+export default function ChatInfoScreen({ route, navigation, embedded = false }) {
   const { chatId } = route.params;
   const { chats, refreshChats } = useChat();
   const { user } = useAuth();
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const chat = chats.find((c) => c.id === chatId);
   const s = makeStyles(theme);
 
@@ -31,7 +33,7 @@ export default function ChatInfoScreen({ route, navigation }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <ScrollView contentContainerStyle={s.scroll}>
+      <ScrollView contentContainerStyle={[s.scroll, !embedded && { paddingTop: 16 + insets.top }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={s.back}>
           <Icon name="arrow-back" size={22} color={theme.ink} />
         </Pressable>

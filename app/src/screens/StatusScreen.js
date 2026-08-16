@@ -1,14 +1,16 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput, RefreshControl,
-  ActivityIndicator, Image, FlatList, useWindowDimensions,
+  ActivityIndicator, Image, FlatList,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api, mediaUrl } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
+import useResponsive from '../hooks/useResponsive';
 import { Avatar, formatChatTime } from '../components/common';
 import AudiencePicker, { AUDIENCE } from '../components/AudiencePicker';
 import SongCard from '../components/SongCard';
@@ -23,7 +25,8 @@ export default function StatusScreen() {
   const { user } = useAuth();
   const { theme } = useTheme();
   const { onStatusEvent } = useChat();
-  const { width } = useWindowDimensions();
+  const { width } = useResponsive();
+  const insets = useSafeAreaInsets();
   const [data, setData] = useState({ mine: null, others: [] });
   const [composer, setComposer] = useState(false);
   const [viewer, setViewer] = useState(null);
@@ -182,7 +185,7 @@ export default function StatusScreen() {
       {/* viewer */}
       <Modal visible={!!viewer} animationType="fade" onRequestClose={() => { setViewer(null); load(); }}>
         {current && (
-          <View style={[s.viewer, { backgroundColor: current.type === 'image' ? '#111' : current.bg }]}>
+          <View style={[s.viewer, { backgroundColor: current.type === 'image' ? '#111' : current.bg, paddingTop: 48 + insets.top, paddingBottom: insets.bottom }]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={nextStatus} />
             <View style={s.progressRow} pointerEvents="none">
               {viewer.group.items.map((_, i) => (
@@ -302,6 +305,7 @@ function cardFg(item, theme) {
 
 function Composer({ visible, onClose, onPosted }) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const s = makeStyles(theme);
   const [body, setBody] = useState('');
   const [bg, setBg] = useState(BG_COLORS[0]);
@@ -356,7 +360,7 @@ function Composer({ visible, onClose, onPosted }) {
   return (
     <>
       <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-        <View style={[s.composerScreen, { backgroundColor: theme.bg }]}>
+        <View style={[s.composerScreen, { backgroundColor: theme.bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           <ScrollView contentContainerStyle={s.composerScroll} keyboardShouldPersistTaps="handled">
             <View style={s.composerTopBar}>
               <Pressable onPress={onClose} hitSlop={8} style={{ padding: 6 }}>
@@ -463,6 +467,7 @@ function Composer({ visible, onClose, onPosted }) {
 
 function SongPicker({ visible, onClose, onSelect }) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const s = makeStyles(theme);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -484,7 +489,7 @@ function SongPicker({ visible, onClose, onSelect }) {
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={[s.composerScreen, { backgroundColor: theme.bg }]}>
+      <View style={[s.composerScreen, { backgroundColor: theme.bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View style={s.composerTopBar}>
           <Pressable onPress={onClose} hitSlop={8} style={{ padding: 6 }}>
             <Icon name="close" size={24} color={theme.ink} />

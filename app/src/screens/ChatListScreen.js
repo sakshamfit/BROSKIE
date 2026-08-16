@@ -13,6 +13,7 @@ import {
 } from '../components/common';
 import { type, inkBox, marker, stroke } from '../theme';
 import { api } from '../api';
+import { confirm } from '../hooks/confirm';
 
 /* each divider leans a slightly different way, like a hand-ruled line */
 const TILTS = [-0.5, 0.8, -0.3, 0.6, -0.7, 0.4];
@@ -53,12 +54,10 @@ export default function ChatListScreen({ navigation }) {
 
   const toggleArchive = async (chat) => { await api.archive(chat.id, !chat.archived); refreshChats(); };
 
-  const onLongPress = (chat) => {
-    if (Platform.OS === 'web') {
-      if (window.confirm(`${chat.archived ? 'Unarchive' : 'Archive'} "${chat.name}"?`)) toggleArchive(chat);
-      return;
-    }
-    toggleArchive(chat);
+  const onLongPress = async (chat) => {
+    const action = chat.archived ? 'Unarchive' : 'Archive';
+    const ok = await confirm(`${action} "${chat.name}"?`, { title: action, confirmLabel: action });
+    if (ok) toggleArchive(chat);
   };
 
   const renderChat = ({ item, index }) => {

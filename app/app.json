@@ -3,9 +3,9 @@
     "name": "友達",
     "slug": "tomodachi",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -17,7 +17,8 @@
       "bundleIdentifier": "ai.arena.tomodachi",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "友達 uses the microphone to record voice messages.",
-        "NSPhotoLibraryUsageDescription": "友達 needs photo access so you can share images in chats."
+        "NSPhotoLibraryUsageDescription": "友達 needs photo access so you can share images in chats.",
+        "UIRequiresFullScreen": false
       }
     },
     "android": {
@@ -26,6 +27,8 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#075E54"
       },
+      "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE"
@@ -43,7 +46,9 @@
           "photosPermission": "Allow 友達 to access your photos to share them in chats."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-screen-orientation",
+      "expo-asset"
     ]
   }
 }

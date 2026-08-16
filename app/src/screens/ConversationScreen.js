@@ -3,14 +3,16 @@ import {
   View, Text, FlatList, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
   Platform, Modal, Image, ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import * as ImagePicker from 'expo-image-picker';
 import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
+import useResponsive from '../hooks/useResponsive';
 import {
-  Avatar, EmojiPicker, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule,
+  Avatar, EmojiPicker, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor,
 } from '../components/common';
 import MessageBubble from '../components/MessageBubble';
 import { api, mediaUrl } from '../api';
@@ -21,6 +23,8 @@ export default function ConversationScreen({ route, navigation, embedded = false
   const { chats, messages, typing, loadMessages, sendMessage, markRead, setTypingState, react, deleteMessage } = useChat();
   const { user } = useAuth();
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { isTablet } = useResponsive();
 
   const chat = chats.find((c) => c.id === chatId);
   const list = messages[chatId] || [];
@@ -117,9 +121,14 @@ export default function ConversationScreen({ route, navigation, embedded = false
       : lastSeenText(chat.isOnline, chat.lastSeen);
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.chatBg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* header — floating clay bar */}
-      <View style={s.headerWrap}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: theme.chatBg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+    >
+      {/* header — floating clay bar; own top inset only when not embedded
+          in the desktop/tablet split (that shell already pads for the notch). */}
+      <View style={[s.headerWrap, !embedded && { paddingTop: 18 + insets.top }]}>
         <View style={s.header}>
           {!embedded && (
             <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={s.backBtn}>
@@ -207,8 +216,9 @@ export default function ConversationScreen({ route, navigation, embedded = false
 
       <EmojiPicker visible={showEmoji} onSelect={(e) => setText((v) => v + e)} />
 
-      {/* composer */}
-      <View style={s.composerWrap}>
+      {/* composer — bottom safe-area (home indicator / gesture bar) only
+          applies full-screen; the desktop/tablet split already handles it. */}
+      <View style={[s.composerWrap, !embedded && { paddingBottom: Math.max(insets.bottom, 12) }]}>
         {recording ? (
           <InkField style={s.inputBar}>
             <View style={[s.recDot, { backgroundColor: theme.danger }]} />
@@ -255,10 +265,11 @@ export default function ConversationScreen({ route, navigation, embedded = false
 
         <Pressable
           onPress={() => { if (text.trim()) send(); else if (recording) stopRecording(); else setRecording(true); }}
+          android_ripple={rippleFor(theme, { color: 'rgba(255,255,255,0.3)' })}
           style={({ pressed }) => [
             s.sendBtn,
             inkBox(theme, 'bold'),
-            { backgroundColor: pressed ? theme.highlighter : theme.ink },
+            { backgroundColor: pressed && Platform.OS !== 'android' ? theme.highlighter : theme.ink },
           ]}
         >
           <Icon

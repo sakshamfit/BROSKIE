@@ -1,17 +1,23 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, TextInput, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { api } from '../api';
+import useResponsive from '../hooks/useResponsive';
+import { confirm } from '../hooks/confirm';
 import { PaperCard, InkField, InkButton, Rule } from '../components/common';
 import { type, inkBox } from '../theme';
 
 /** "Security & Privacy" — change password + a read-only session summary. */
-export default function SecurityScreen({ navigation }) {
+export default function SecurityScreen({ navigation, embedded = false }) {
   const { theme } = useTheme();
   const { logout } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { isTablet, isWeb } = useResponsive();
   const s = makeStyles(theme);
+  const deviceIcon = isWeb ? 'desktop-outline' : isTablet ? 'laptop-outline' : 'phone-portrait-outline';
 
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -38,21 +44,21 @@ export default function SecurityScreen({ navigation }) {
     }
   };
 
-  const signOutEverywhere = () => {
-    if (Platform.OS === 'web' && !window.confirm('Log out of this session?')) return;
-    logout();
+  const signOutEverywhere = async () => {
+    const ok = await confirm('Log out of this session?', { title: 'Log out', confirmLabel: 'Log out', destructive: true });
+    if (ok) logout();
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={s.header}>
+      <View style={[s.header, !embedded && { paddingTop: 20 + insets.top }]}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={{ padding: 6 }}>
           <Icon name="arrow-back" size={22} color={theme.ink} />
         </Pressable>
         <Text style={[type.headlineMd, { color: theme.text }]}>Security & Privacy</Text>
       </View>
 
-      <ScrollView contentContainerStyle={s.scroll}>
+      <ScrollView contentContainerStyle={[s.scroll, isTablet && s.scrollWide]}>
         <View style={s.sectionHead}>
           <Icon name="shield-checkmark-outline" size={18} color={theme.ink} />
           <Text style={[type.labelXs, { color: theme.muted }]}>CHANGE PASSWORD</Text>
@@ -109,7 +115,7 @@ export default function SecurityScreen({ navigation }) {
         </View>
         <PaperCard weight="thin">
           <View style={s.sessionRow}>
-            <Icon name={Platform.OS === 'web' ? 'desktop-outline' : 'phone-portrait-outline'} size={19} color={theme.ink} />
+            <Icon name={deviceIcon} size={19} color={theme.ink} />
             <View style={{ flex: 1 }}>
               <Text style={[type.bodyMd, { color: theme.text }]}>This device</Text>
               <Text style={[type.labelXs, { color: theme.graphite, marginTop: 2 }]}>ACTIVE NOW · CURRENT SESSION</Text>
@@ -149,6 +155,7 @@ function Field({ theme, label, ...props }) {
 const makeStyles = (t) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14 },
   scroll: { padding: 20, paddingBottom: 40 },
+  scrollWide: { maxWidth: 560, width: '100%', alignSelf: 'center' },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   msgRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sessionRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 6 },

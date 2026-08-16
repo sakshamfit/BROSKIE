@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './icons/Icon';
 
 import { useAuth } from './store/AuthContext';
 import { useTheme } from './store/ThemeContext';
 import { useChat } from './store/ChatContext';
-import { Loading, EmptyState, CountBead, Rule } from './components/common';
-import { radius, type, inkBox, marker, dashedRule, stroke } from './theme';
-import DesktopLayout from './DesktopLayout';
+import useResponsive from './hooks/useResponsive';
+import { Loading, EmptyState, CountBead } from './components/common';
+import { type, marker, stroke } from './theme';
+import SplitLayout from './DesktopLayout';
 
 import AuthScreen from './screens/AuthScreen';
 import ChatListScreen from './screens/ChatListScreen';
@@ -26,13 +27,11 @@ import AppearanceScreen from './screens/AppearanceScreen';
 
 const Stack = createNativeStackNavigator();
 
-/** Wide web viewport (tablet-landscape and up) gets the sidebar + split view. */
-const DESKTOP_BREAKPOINT = 860;
-
-/** Floating clay tab bar */
+/** Floating tab bar — bottom nav for phones (and tablets in portrait narrower than split). */
 function HomeTabs({ navigation }) {
   const { theme } = useTheme();
   const { chats } = useChat();
+  const insets = useSafeAreaInsets();
   const [tab, setTab] = useState('chats');
   const unread = chats.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
   const s = makeStyles(theme);
@@ -46,25 +45,37 @@ function HomeTabs({ navigation }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={{ flex: 1 }}>
+      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.bg }}>
         {tab === 'chats' && <ChatListScreen navigation={navigation} />}
         {tab === 'network' && <NetworkScreen navigation={navigation} />}
         {tab === 'status' && <StatusScreen navigation={navigation} />}
         {tab === 'calls' && <CallsPlaceholder />}
-      </View>
+      </SafeAreaView>
 
-      <SafeAreaView edges={['bottom']} style={{ backgroundColor: 'transparent' }}>
-        <View style={[s.tabBar, { backgroundColor: theme.bg, borderTopWidth: stroke.ink, borderTopColor: theme.ink }]}>
+      {/* SafeAreaView only pads the notch/home-indicator; the bar itself owns its own padding
+          so short-device landscape (home indicator on the SIDE) doesn't eat the bar's height. */}
+      <SafeAreaView edges={['bottom', 'left', 'right']} style={{ backgroundColor: 'transparent' }}>
+        <View
+          style={[
+            s.tabBar,
+            {
+              backgroundColor: theme.bg, borderTopWidth: stroke.ink, borderTopColor: theme.ink,
+              paddingBottom: Math.max(insets.bottom > 0 ? 6 : 10, 6),
+            },
+          ]}
+        >
           {TABS.map((t) => {
             const active = tab === t.key;
             return (
               <Pressable
                 key={t.key}
                 onPress={() => (t.key === 'settings' ? navigation.navigate('Settings') : setTab(t.key))}
+                hitSlop={6}
+                android_ripple={{ color: theme.ripple, borderless: false, radius: 42 }}
                 style={({ pressed }) => [
                   s.tabItem,
                   active ? [s.tabActive, { backgroundColor: theme.tabActiveBg, borderColor: theme.ink }] : null,
-                  pressed && !active ? marker(theme, 1) : null,
+                  Platform.OS === 'ios' && pressed && !active ? marker(theme, 1) : null,
                 ]}
               >
                 <View>
@@ -110,13 +121,16 @@ function CallsPlaceholder() {
 export default function Navigation() {
   const { user, booting } = useAuth();
   const { theme, mode } = useTheme();
-  const { width } = useWindowDimensions();
-  const isDesktopWeb = Platform.OS === 'web' && width >= DESKTOP_BREAKPOINT;
+  const { isSplitCapable } = useResponsive();
 
   if (booting) return <Loading label="STARTING 友達" />;
 
-  if (user && isDesktopWeb) {
-    return <DesktopLayout />;
+  // Wide web viewports AND tablets (in either orientation, once there's
+  // enough width) get the persistent sidebar + master/detail split.
+  // Phones — iOS and Android, portrait or landscape — always get the
+  // bottom-tab flow below, matching native messaging-app conventions.
+  if (user && isSplitCapable) {
+    return <SplitLayout />;
   }
 
   const navTheme = {
@@ -133,7 +147,16 @@ export default function Navigation() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: Platform.OS === 'web' ? 'none' : 'default', contentStyle: { backgroundColor: theme.bg } }}>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          animation: Platform.OS === 'web' ? 'none' : 'default',
+          contentStyle: { backgroundColor: theme.bg },
+          // iOS: native swipe-back gesture; Android: system back button already works.
+          gestureEnabled: Platform.OS === 'ios',
+          fullScreenGestureEnabled: Platform.OS === 'ios',
+        }}
+      >
         {!user ? (
           <Stack.Screen name="Auth" component={AuthScreen} />
         ) : (
@@ -156,11 +179,11 @@ export default function Navigation() {
 const makeStyles = (t) => StyleSheet.create({
   tabBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingTop: 10, paddingBottom: 6, paddingHorizontal: 12,
+    paddingTop: 10, paddingHorizontal: 12,
   },
   tabItem: {
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: 5,
-    paddingVertical: 8, marginHorizontal: 5,
+    paddingVertical: 8, marginHorizontal: 5, minHeight: 44, borderRadius: 999,
   },
   tabActive: { borderWidth: 1, borderRadius: 999 },
   tabBadge: { position: 'absolute', right: -11, top: -7 },
