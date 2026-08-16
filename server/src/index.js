@@ -46,6 +46,7 @@ const publicUser = (u) =>
     avatar: u.avatar,
     lastSeen: u.last_seen,
     isOnline: !!u.is_online,
+    createdAt: u.created_at,
   };
 
 const USERNAME_RE = /^[a-z0-9](?:[a-z0-9._]{1,22})[a-z0-9]$/;
@@ -252,7 +253,7 @@ app.post('/api/auth/login', (req, res) => {
 app.get('/api/me', requireAuth, (req, res) => res.json({ user: publicUser(getUser(req.userId)) }));
 
 app.patch('/api/me', requireAuth, (req, res) => {
-  const { name, about, avatar, username } = req.body || {};
+  const { name, about, avatar, username, phone } = req.body || {};
   const u = getUser(req.userId);
 
   let nextUsername = u.username;
@@ -264,16 +265,44 @@ app.patch('/api/me', requireAuth, (req, res) => {
     nextUsername = normalizeUsername(username);
   }
 
-  db.prepare('UPDATE users SET name = ?, about = ?, avatar = ?, username = ? WHERE id = ?').run(
+  let nextPhone = u.phone;
+  if (phone !== undefined) {
+    const trimmed = String(phone).trim();
+    nextPhone = trimmed || `unset:${nano()}`;
+    if (trimmed) {
+      const taken = db.prepare('SELECT id FROM users WHERE phone = ?').get(trimmed);
+      if (taken && taken.id !== req.userId) return res.status(409).json({ error: 'That phone number is already registered' });
+    }
+  }
+
+  db.prepare('UPDATE users SET name = ?, about = ?, avatar = ?, username = ?, phone = ? WHERE id = ?').run(
     name ?? u.name,
     about ?? u.about,
     avatar ?? u.avatar,
     nextUsername,
+    nextPhone,
     req.userId
   );
   const updated = publicUser(getUser(req.userId));
   io.emit('user:updated', updated);
   res.json({ user: updated });
+});
+
+app.post('/api/me/password', requireAuth, (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current and new password are required' });
+  }
+  if (String(newPassword).length < 4) {
+    return res.status(400).json({ error: 'New password must be at least 4 characters' });
+  }
+  const u = getUser(req.userId);
+  if (!bcrypt.compareSync(String(currentPassword), u.password_hash)) {
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+  const hash = bcrypt.hashSync(String(newPassword), 8);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.userId);
+  res.json({ ok: true });
 });
 
 app.get('/api/users', requireAuth, (req, res) => {

@@ -20,6 +20,9 @@ import StatusScreen from './screens/StatusScreen';
 import NetworkScreen from './screens/NetworkScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ChatInfoScreen from './screens/ChatInfoScreen';
+import PersonalInfoScreen from './screens/PersonalInfoScreen';
+import SecurityScreen from './screens/SecurityScreen';
+import AppearanceScreen from './screens/AppearanceScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -140,6 +143,9 @@ export default function Navigation() {
             <Stack.Screen name="NewChat" component={NewChatScreen} />
             <Stack.Screen name="ChatInfo" component={ChatInfoScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
+            <Stack.Screen name="Security" component={SecurityScreen} />
+            <Stack.Screen name="Appearance" component={AppearanceScreen} />
           </>
         )}
       </Stack.Navigator>

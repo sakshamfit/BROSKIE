@@ -1,57 +1,27 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, TextInput, Switch, Modal } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
-import { Avatar, PaperCard, InkButton, InkField, Rule, handleFor } from '../components/common';
+import { Avatar, InkButton, TapeChip, handleFor } from '../components/common';
+import { api } from '../api';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
 
+/**
+ * Settings hub — profile hero (editable avatar) + two grouped sections
+ * (Account Settings, Preferences) whose rows drill into their own screens,
+ * matching the supplied "Settings" mockup.
+ */
 export default function SettingsScreen({ navigation }) {
-  const { user, logout, updateProfile } = useAuth();
+  const { user, logout } = useAuth();
   const { theme, mode, toggle } = useTheme();
   const { connected } = useChat();
-  const [editing, setEditing] = useState(null);
-  const [draft, setDraft] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState('');
-
   const s = makeStyles(theme);
 
-  const openEdit = (field) => {
-    setSaveError('');
-    setDraft(field === 'name' ? user.name : field === 'username' ? user.username : user.about);
-    setEditing(field);
-  };
-
-  const save = async () => {
-    setSaving(true);
-    setSaveError('');
-    try {
-      const value = editing === 'username' ? draft.trim().toLowerCase() : draft.trim();
-      await updateProfile({ [editing]: value });
-      setEditing(null);
-    } catch (e) {
-      setSaveError(e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const Row = ({ icon, label, value, onPress, right, danger, last }) => (
-    <Pressable
-      style={({ pressed }) => [s.row, pressed && onPress ? { opacity: 0.7 } : null]}
-      onPress={onPress}
-    >
-      <Icon name={icon} size={19} color={danger ? theme.danger : theme.ink} style={{ width: 26 }} />
-      <View style={{ flex: 1 }}>
-        <Text style={[type.bodyMd, { color: danger ? theme.danger : theme.text }]}>{label}</Text>
-        {!!value && <EmojiText style={[type.bodySm, { color: theme.subtext, marginTop: 2 }]} numberOfLines={1}>{value}</EmojiText>}
-      </View>
-      {right}
-    </Pressable>
-  );
+  const joinYear = user?.createdAt ? new Date(user.createdAt).getFullYear() : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -63,103 +33,197 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll}>
-        <PaperCard style={s.profile} weight="ink">
-          <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={80} />
-          <View style={{ flex: 1 }}>
-            <EmojiText style={[type.headlineMd, { color: theme.text }]}>{user?.name}</EmojiText>
-            <Text style={[type.labelXs, { color: theme.graphite, marginTop: 4 }]}>
-              {handleFor(user)}
-            </Text>
-            <View style={s.connRow}>
-              <View style={[s.dot, { backgroundColor: connected ? theme.highlighter : theme.danger, borderWidth: 1, borderColor: theme.ink }]} />
-              <Text style={[type.labelXs, { color: theme.subtext }]}>
-                {connected ? 'Connected' : 'Reconnecting…'}
-              </Text>
-            </View>
-          </View>
-        </PaperCard>
+        {/* -------- Profile hero -------- */}
+        <ProfileHero user={user} theme={theme} joinYear={joinYear} connected={connected} />
 
-        <PaperCard style={s.group}>
-          <Row icon="badge" label="Username" value={user?.username ? `@${user.username}` : 'Not set'} onPress={() => openEdit('username')} />
-          <Row icon="person-outline" label="Name" value={user?.name} onPress={() => openEdit('name')} />
-          <Row icon="information-circle-outline" label="About" value={user?.about} onPress={() => openEdit('about')} />
-          {!!user?.phone && !user.phone.startsWith('unset:') && (
-            <Row icon="call-outline" label="Phone" value={user.phone} />
-          )}
-        </PaperCard>
-
-        <PaperCard style={s.group}>
-          <Row
-            icon={mode === 'dark' ? 'moon' : 'sunny-outline'}
-            label="Dark mode"
-            value={mode === 'dark' ? 'On' : 'Off'}
-            onPress={toggle}
-            right={
-              <Switch
-                value={mode === 'dark'}
-                onValueChange={toggle}
-                trackColor={{ true: theme.highlighter, false: theme.cardAlt }}
-                thumbColor={theme.ink}
-              />
-            }
+        {/* -------- Account Settings -------- */}
+        <SectionHeading theme={theme} label="Account Settings" tilt="-1deg" />
+        <View style={s.group}>
+          <NavRow
+            theme={theme}
+            icon="person-outline"
+            title="Personal Information"
+            subtitle="Name, Username, Phone"
+            onPress={() => navigation.navigate('PersonalInfo')}
           />
-          <Row icon="notifications-outline" label="Notifications" value="Message tones, groups" />
-          <Row icon="lock-closed-outline" label="Privacy" value="Last seen, read receipts" />
-          <Row icon="cloud-upload-outline" label="Chat backup" value="Never backed up" />
-        </PaperCard>
+          <Divider theme={theme} />
+          <NavRow
+            theme={theme}
+            icon="lock-closed-outline"
+            title="Security & Privacy"
+            subtitle="Password, Sessions"
+            onPress={() => navigation.navigate('Security')}
+          />
+        </View>
 
-        <InkButton label="Log out" icon="log-out-outline" onPress={logout} danger />
+        {/* -------- Preferences -------- */}
+        <SectionHeading theme={theme} label="Preferences" tilt="1deg" />
+        <View style={s.group}>
+          <View style={[s.row, s.rowStatic, inkBox(theme, 'thin')]}>
+            <Icon name={mode === 'dark' ? 'moon' : 'sunny-outline'} size={19} color={theme.ink} style={{ width: 26 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={[type.bodyLg, { color: theme.text }]}>Dark mode</Text>
+              <Text style={[type.labelXs, { color: theme.graphite, marginTop: 3 }]}>{mode === 'dark' ? 'ON' : 'OFF'}</Text>
+            </View>
+            <HandDrawnToggle value={mode === 'dark'} onToggle={toggle} theme={theme} />
+          </View>
+          <Divider theme={theme} />
+          <NavRow
+            theme={theme}
+            icon="color-palette-outline"
+            title="Appearance"
+            subtitle="Theme, Typography"
+            onPress={() => navigation.navigate('Appearance')}
+          />
+        </View>
+
+        <InkButton label="Log out" icon="log-out-outline" onPress={logout} danger style={{ marginTop: 8 }} />
 
         <Text style={[type.labelXs, { textAlign: 'center', color: theme.muted, marginTop: 10, lineHeight: 16 }]}>
           友達 · GRAPHITE & PULP{'\n'}NOT AFFILIATED WITH WHATSAPP
         </Text>
       </ScrollView>
-
-      <Modal visible={!!editing} transparent animationType="fade" onRequestClose={() => setEditing(null)}>
-        <View style={[s.overlay, { backgroundColor: theme.overlay }]}>
-          <PaperCard style={s.dialog} weight="ink">
-            <Text style={[type.headlineMd, { color: theme.text, marginBottom: 18, textTransform: 'capitalize' }]}>
-              Edit {editing}
-            </Text>
-            <InkField style={s.dialogInputWrap}>
-              <TextInput
-                style={s.dialogInput}
-                value={draft}
-                onChangeText={(v) => { setDraft(v); if (saveError) setSaveError(''); }}
-                autoFocus
-                multiline={editing === 'about'}
-                autoCapitalize={editing === 'username' ? 'none' : 'sentences'}
-                placeholderTextColor={theme.muted}
-              />
-            </InkField>
-            {!!saveError && (
-              <Text style={[type.bodySm, { color: theme.danger, marginTop: -10, marginBottom: 10 }]}>{saveError}</Text>
-            )}
-            <View style={s.dialogActions}>
-              <Pressable onPress={() => setEditing(null)} style={s.dialogBtn}>
-                <Text style={[type.labelSm, { color: theme.subtext }]}>CANCEL</Text>
-              </Pressable>
-              <InkButton label={saving ? 'Saving…' : 'Save'} onPress={save} disabled={saving} filled style={{ paddingVertical: 10, paddingHorizontal: 22 }} />
-            </View>
-          </PaperCard>
-        </View>
-      </Modal>
     </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* profile hero                                                        */
+/* ------------------------------------------------------------------ */
+
+function ProfileHero({ user, theme, joinYear, connected }) {
+  const { updateProfile } = useAuth();
+  const [uploading, setUploading] = useState(false);
+  const s = makeStyles(theme);
+
+  const pickAvatar = async () => {
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'], quality: 0.8, allowsEditing: true, aspect: [1, 1],
+      });
+      if (res.canceled || !res.assets?.length) return;
+      setUploading(true);
+      const asset = res.assets[0];
+      const { url } = await api.uploadFile(asset.uri, asset.fileName || 'avatar.jpg', asset.mimeType || 'image/jpeg');
+      await updateProfile({ avatar: url });
+    } catch (e) {
+      console.warn('avatar upload failed', e.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <View style={s.hero}>
+      <Pressable onPress={pickAvatar} style={s.avatarWrap} disabled={uploading}>
+        <View style={[s.avatarFrame, inkBox(theme, 'bold')]}>
+          <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={112} />
+        </View>
+        <View style={[s.editBadge, inkBox(theme, 'ink'), { backgroundColor: theme.card }]}>
+          {uploading ? (
+            <ActivityIndicator size="small" color={theme.ink} />
+          ) : (
+            <Icon name="create-outline" size={15} color={theme.ink} />
+          )}
+        </View>
+      </Pressable>
+
+      <View style={s.heroBody}>
+        <EmojiText style={[type.headlineLg, { fontSize: 30, color: theme.text }]}>{user?.name}</EmojiText>
+        <Text style={[type.labelSm, { color: theme.graphite, marginTop: 4 }]}>{handleFor(user)}</Text>
+        {!!user?.about && (
+          <EmojiText style={[type.bodyMd, { color: theme.subtext, marginTop: 10 }]} numberOfLines={2}>
+            {user.about}
+          </EmojiText>
+        )}
+        <View style={s.chipsRow}>
+          <View style={[s.connDot, { backgroundColor: connected ? theme.highlighter : theme.danger, borderColor: theme.ink }]} />
+          <Text style={[type.labelXs, { color: theme.subtext, marginRight: 10 }]}>
+            {connected ? 'CONNECTED' : 'RECONNECTING…'}
+          </Text>
+          {!!joinYear && <TapeChip label={`JOINED ${joinYear}`} />}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* shared pieces                                                       */
+/* ------------------------------------------------------------------ */
+
+function SectionHeading({ theme, label, tilt }) {
+  return (
+    <View style={{ marginTop: 28, marginBottom: 12 }}>
+      <View style={{ alignSelf: 'flex-start' }}>
+        <Text style={[type.headlineMd, { fontSize: 22, color: theme.text }]}>{label}</Text>
+        <View style={{ height: 3, backgroundColor: theme.ink, opacity: 0.75, borderRadius: 3, marginTop: 4, transform: [{ rotate: tilt }] }} />
+      </View>
+    </View>
+  );
+}
+
+function NavRow({ theme, icon, title, subtitle, onPress }) {
+  const s = makeStyles(theme);
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed, hovered }) => [s.row, inkBox(theme, 'thin'), (pressed || hovered) ? { backgroundColor: theme.cardAlt } : null]}
+    >
+      <Icon name={icon} size={19} color={theme.graphite} style={{ width: 26 }} />
+      <View style={{ flex: 1 }}>
+        <Text style={[type.bodyLg, { color: theme.text }]}>{title}</Text>
+        <Text style={[type.labelXs, { color: theme.graphite, marginTop: 3 }]}>{subtitle.toUpperCase()}</Text>
+      </View>
+      <Icon name="chevron-forward-outline" size={17} color={theme.muted} />
+    </Pressable>
+  );
+}
+
+function Divider({ theme }) {
+  return <View style={{ height: 10 }} />;
+}
+
+/** Hand-drawn pill toggle — ink outline, sketch-square thumb. */
+function HandDrawnToggle({ value, onToggle, theme }) {
+  return (
+    <Pressable
+      onPress={onToggle}
+      style={[
+        {
+          width: 52, height: 28, borderRadius: radius.full, padding: 3, justifyContent: 'center',
+          borderWidth: 2, borderColor: theme.ink,
+          backgroundColor: value ? theme.highlighter : theme.cardAlt,
+        },
+      ]}
+    >
+      <View
+        style={{
+          width: 20, height: 20, borderRadius: radius.full, backgroundColor: theme.ink,
+          borderWidth: 1, borderColor: theme.ink,
+          transform: [{ translateX: value ? 22 : 0 }],
+        }}
+      />
+    </Pressable>
   );
 }
 
 const makeStyles = (t) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14 },
-  scroll: { padding: 20, paddingBottom: 40, gap: 20 },
-  profile: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  connRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8 },
-  dot: { width: 9, height: 9, borderRadius: radius.full },
-  group: { padding: 6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 12, paddingVertical: 13 },
-  overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
-  dialog: { width: '100%', maxWidth: 360 },
-  dialogInputWrap: { paddingHorizontal: 2, minHeight: 48, justifyContent: 'center' },
-  dialogInput: { ...type.bodyLg, color: t.text, paddingVertical: 11, outlineStyle: 'none' },
-  dialogActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 14, marginTop: 22 },
-  dialogBtn: { paddingHorizontal: 14, paddingVertical: 10 },
+  scroll: { padding: 20, paddingBottom: 40 },
+
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 20, marginBottom: 8 },
+  avatarWrap: { position: 'relative' },
+  avatarFrame: { padding: 4, borderRadius: 999 },
+  editBadge: {
+    position: 'absolute', right: -2, bottom: -2, width: 30, height: 30, borderRadius: 999,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  heroBody: { flex: 1, minWidth: 0 },
+  chipsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, flexWrap: 'wrap', gap: 6 },
+  connDot: { width: 9, height: 9, borderRadius: radius.full, borderWidth: 1 },
+
+  group: { gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 14, paddingVertical: 14, backgroundColor: 'transparent' },
+  rowStatic: { paddingVertical: 12 },
 });

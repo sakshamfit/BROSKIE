@@ -14,6 +14,9 @@ import SettingsScreen from './screens/SettingsScreen';
 import ChatInfoScreen from './screens/ChatInfoScreen';
 import NetworkScreen from './screens/NetworkScreen';
 import StatusScreen from './screens/StatusScreen';
+import PersonalInfoScreen from './screens/PersonalInfoScreen';
+import SecurityScreen from './screens/SecurityScreen';
+import AppearanceScreen from './screens/AppearanceScreen';
 
 /**
  * Desktop web shell — persistent sidebar + master/detail split, matching the
@@ -33,6 +36,19 @@ export default function DesktopLayout() {
 
   const openOverlay = (name, params) => setOverlay({ name, params });
   const closeOverlay = () => setOverlay(null);
+
+  // Settings has its own little navigation stack inside the overlay panel
+  // (Settings -> PersonalInfo / Security / Appearance -> back to Settings).
+  const [settingsSub, setSettingsSub] = useState(null);
+  const closeSettingsOverlay = () => { closeOverlay(); setSettingsSub(null); };
+
+  const settingsNav = {
+    navigate: (name) => {
+      if (['PersonalInfo', 'Security', 'Appearance'].includes(name)) setSettingsSub(name);
+    },
+    goBack: () => (settingsSub ? setSettingsSub(null) : closeOverlay()),
+    replace: () => {},
+  };
 
   const listNav = {
     navigate: (name, params) => {
@@ -113,8 +129,11 @@ export default function DesktopLayout() {
         <NewChatScreen navigation={overlayNav} />
       </OverlayPanel>
 
-      <OverlayPanel visible={overlay?.name === 'Settings'} onClose={closeOverlay} width={480}>
-        <SettingsScreen navigation={overlayNav} />
+      <OverlayPanel visible={overlay?.name === 'Settings'} onClose={closeSettingsOverlay} width={480}>
+        {settingsSub === 'PersonalInfo' && <PersonalInfoScreen navigation={settingsNav} />}
+        {settingsSub === 'Security' && <SecurityScreen navigation={settingsNav} />}
+        {settingsSub === 'Appearance' && <AppearanceScreen navigation={settingsNav} />}
+        {!settingsSub && <SettingsScreen navigation={settingsNav} />}
       </OverlayPanel>
 
       <OverlayPanel visible={overlay?.name === 'ChatInfo'} onClose={closeOverlay} width={420}>

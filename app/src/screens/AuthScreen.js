@@ -131,7 +131,7 @@ export default function AuthScreen() {
 
                 {mode === 'register' && (
                   <Field
-                    icon="badge"
+                    icon="id-card-outline"
                     label="Callsign"
                     value={name}
                     onChangeText={setName}
@@ -144,7 +144,7 @@ export default function AuthScreen() {
                 )}
 
                 <Field
-                  icon="badge"
+                  icon="id-card-outline"
                   label="Operator ID"
                   value={username}
                   onChangeText={setUsername}
