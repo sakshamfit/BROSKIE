@@ -15,6 +15,7 @@ export function ChatProvider({ children }) {
   const socketRef = useRef(null);
   const postListeners = useRef(new Set());
   const statusListeners = useRef(new Set());
+  const communityListeners = useRef(new Set());
 
   /** Subscribe to post:* socket events. Returns an unsubscribe fn. */
   const onPostEvent = useCallback((fn) => {
@@ -26,6 +27,12 @@ export function ChatProvider({ children }) {
   const onStatusEvent = useCallback((fn) => {
     statusListeners.current.add(fn);
     return () => statusListeners.current.delete(fn);
+  }, []);
+
+  /** Subscribe to community:* socket events. Returns an unsubscribe fn. */
+  const onCommunityEvent = useCallback((fn) => {
+    communityListeners.current.add(fn);
+    return () => communityListeners.current.delete(fn);
   }, []);
 
   const sortChats = (list) =>
@@ -89,6 +96,14 @@ export function ChatProvider({ children }) {
 
     socket.on('status:new', (payload) => {
       statusListeners.current.forEach((fn) => fn('status:new', payload));
+    });
+
+    // Communities — re-broadcast to any subscribed screen
+    ['community:updated', 'community:deleted', 'community:request', 'community:approved',
+     'community:declined', 'community:added', 'community:removed', 'community:left'].forEach((ev) => {
+      socket.on(ev, (payload) => {
+        communityListeners.current.forEach((fn) => fn(ev, payload));
+      });
     });
 
     socket.on('presence', ({ userId, isOnline, lastSeen }) => {
@@ -173,7 +188,7 @@ export function ChatProvider({ children }) {
       value={{
         chats, messages, typing, connected,
         refreshChats, loadMessages, sendMessage, markRead,
-        setTypingState, react, deleteMessage, upsertChat, onPostEvent, onStatusEvent,
+        setTypingState, react, deleteMessage, upsertChat, onPostEvent, onStatusEvent, onCommunityEvent,
       }}
     >
       {children}

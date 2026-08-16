@@ -159,7 +159,9 @@ export default function SplitLayout() {
 
         {tab === 'network' && (
           <View style={[s.fullPane, s.centeredPane]}>
-            <NetworkScreen />
+            <NetworkScreen
+              onOpenChat={(chatId) => { setTab('chats'); setSelectedChatId(chatId); }}
+            />
           </View>
         )}
 

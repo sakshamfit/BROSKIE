@@ -47,7 +47,12 @@ function HomeTabs({ navigation }) {
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.bg }}>
         {tab === 'chats' && <ChatListScreen navigation={navigation} />}
-        {tab === 'network' && <NetworkScreen navigation={navigation} />}
+        {tab === 'network' && (
+          <NetworkScreen
+            navigation={navigation}
+            onOpenChat={(chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); }}
+          />
+        )}
         {tab === 'status' && <StatusScreen navigation={navigation} />}
         {tab === 'calls' && <CallsPlaceholder />}
       </SafeAreaView>

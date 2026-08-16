@@ -34,7 +34,15 @@ const BUCKET = process.env.SUPABASE_BUCKET || 'tomodachi-uploads';
 const isPublishableKey =
   !!SUPABASE_SERVICE_KEY && /^sb_publishable_/.test(SUPABASE_SERVICE_KEY);
 
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+// Same override pattern as db.js: point this at a mounted persistent volume
+// (Railway Volume, Render Disk) so local-disk uploads survive redeploys too.
+// Falls back to server/uploads for local dev (zero config). Irrelevant once
+// Supabase Storage is configured (SUPABASE_URL + key), since that path never
+// touches local disk at all.
+const VOLUME_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH;
+const UPLOAD_DIR = VOLUME_DIR
+  ? path.join(path.resolve(VOLUME_DIR), 'uploads')
+  : path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 let supabase = null;

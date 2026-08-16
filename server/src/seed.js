@@ -8,7 +8,8 @@ const nano = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
 const now = Date.now();
 const mins = (n) => n * 60 * 1000;
 
-db.exec(`DELETE FROM status_views; DELETE FROM statuses; DELETE FROM reactions; DELETE FROM receipts;
+db.exec(`DELETE FROM community_requests; DELETE FROM community_members; DELETE FROM communities;
+         DELETE FROM status_views; DELETE FROM statuses; DELETE FROM reactions; DELETE FROM receipts;
          DELETE FROM messages; DELETE FROM chat_members; DELETE FROM chats; DELETE FROM users;`);
 
 const people = [
@@ -172,3 +173,67 @@ POSTS.forEach((p) => {
 });
 
 console.log(`Seeded ${POSTS.length} public posts on The Network.`);
+
+/* ---- Communities: purpose-based groups ---- */
+function makeCommunity({ name, description, category, createdBy, joinPolicy = 'request', visibility = 'public', members = [], minsAgo = 0 }) {
+  const id = nano();
+  const chatId = nano();
+  const t = now - mins(minsAgo);
+  db.prepare('INSERT INTO chats (id, type, name, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?)')
+    .run(chatId, 'group', name, createdBy, t, t);
+  const addChatMember = db.prepare('INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)');
+  const addCommunityMember = db.prepare('INSERT INTO community_members (community_id, user_id, role, joined_at) VALUES (?,?,?,?)');
+  addChatMember.run(chatId, createdBy, 'admin', t);
+  members.filter((uid) => uid !== createdBy).forEach((uid) => addChatMember.run(chatId, uid, 'member', t));
+
+  db.prepare(
+    `INSERT INTO communities (id, name, description, category, avatar, chat_id, created_by, join_policy, visibility, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(id, name, description, category, null, chatId, createdBy, joinPolicy, visibility, t, t);
+
+  addCommunityMember.run(id, createdBy, 'admin', t);
+  members.filter((uid) => uid !== createdBy).forEach((uid) => addCommunityMember.run(id, uid, 'member', t));
+  return id;
+}
+
+makeCommunity({
+  name: 'Rishikesh Weekend Trip',
+  description: 'Planning the Rishikesh getaway — cabs, camping spot, and who is bringing the speaker.',
+  category: 'trip',
+  createdBy: me,
+  joinPolicy: 'open',
+  members: [ids['Ananya Sharma'], ids['Rohit Verma'], ids['Priya Nair'], ids['Karan Mehta']],
+  minsAgo: 300,
+});
+
+makeCommunity({
+  name: 'Saturday Club Night',
+  description: 'Whoever is up for going out this Saturday — venue TBD, drop your vibe.',
+  category: 'club',
+  createdBy: ids['Ananya Sharma'],
+  joinPolicy: 'request',
+  members: [ids['Priya Nair']],
+  minsAgo: 120,
+});
+
+makeCommunity({
+  name: 'Morning Runners',
+  description: '6 AM runs around the lake, all paces welcome. Chai afterwards, non-negotiable.',
+  category: 'run',
+  createdBy: ids['Rohit Verma'],
+  joinPolicy: 'open',
+  members: [me, ids['Karan Mehta']],
+  minsAgo: 1000,
+});
+
+makeCommunity({
+  name: 'Chai & Sketchbooks',
+  description: 'Casual hangout — bring a sketchbook, we bring the chai. No plans, just vibes.',
+  category: 'chai',
+  createdBy: ids['Priya Nair'],
+  joinPolicy: 'request',
+  members: [],
+  minsAgo: 60,
+});
+
+console.log('Seeded 4 communities.');

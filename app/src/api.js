@@ -102,6 +102,28 @@ export const api = {
   viewStatus: (id) => request(`/api/status/${id}/view`, { method: 'POST' }),
   searchSongs: (q) => request(`/api/songs/search?q=${encodeURIComponent(q)}`),
 
+  // Communities — purpose-based groups (club night, house party, trip planning, running, chai chat...)
+  communities: ({ category, mine } = {}) => {
+    const q = new URLSearchParams();
+    if (category) q.set('category', category);
+    if (mine) q.set('mine', '1');
+    return request(`/api/communities?${q.toString()}`);
+  },
+  communityCategories: () => request('/api/communities/categories'),
+  community: (id) => request(`/api/communities/${id}`),
+  createCommunity: (payload) => request('/api/communities', { method: 'POST', body: payload }),
+  updateCommunity: (id, payload) => request(`/api/communities/${id}`, { method: 'PATCH', body: payload }),
+  deleteCommunity: (id) => request(`/api/communities/${id}`, { method: 'DELETE' }),
+  joinCommunity: (id) => request(`/api/communities/${id}/join`, { method: 'POST', body: {} }),
+  leaveCommunity: (id) => request(`/api/communities/${id}/leave`, { method: 'POST', body: {} }),
+  communityRequests: (id) => request(`/api/communities/${id}/requests`),
+  respondCommunityRequest: (id, userId, action) =>
+    request(`/api/communities/${id}/requests/${userId}`, { method: 'POST', body: { action } }),
+  addCommunityMember: (id, userId) => request(`/api/communities/${id}/members`, { method: 'POST', body: { userId } }),
+  setCommunityMemberRole: (id, userId, role) =>
+    request(`/api/communities/${id}/members/${userId}`, { method: 'PATCH', body: { role } }),
+  removeCommunityMember: (id, userId) => request(`/api/communities/${id}/members/${userId}`, { method: 'DELETE' }),
+
   async uploadFile(uri, name = 'upload.jpg', type = 'image/jpeg') {
     const form = new FormData();
     if (Platform.OS === 'web') {

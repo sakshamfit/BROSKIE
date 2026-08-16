@@ -785,6 +785,339 @@ app.get('/api/posts-tags', requireAuth, (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* communities — purpose-based groups on The Network                  */
+/* (club nights, house parties, chai chats, trip planning, running…)  */
+/* ------------------------------------------------------------------ */
+
+const COMMUNITY_CATEGORIES = ['club', 'party', 'chai', 'trip', 'run', 'game', 'study', 'custom'];
+const JOIN_POLICIES = ['open', 'request', 'invite'];
+
+function communityMemberIds(communityId) {
+  return db.prepare('SELECT user_id FROM community_members WHERE community_id = ?').all(communityId).map((r) => r.user_id);
+}
+
+function communityRole(communityId, userId) {
+  const row = db.prepare('SELECT role FROM community_members WHERE community_id = ? AND user_id = ?').get(communityId, userId);
+  return row ? row.role : null;
+}
+
+function hydrateCommunity(row, viewerId) {
+  if (!row) return null;
+  const members = db
+    .prepare(
+      `SELECT u.id, u.username, u.name, u.avatar, cm.role FROM community_members cm
+       JOIN users u ON u.id = cm.user_id WHERE cm.community_id = ? ORDER BY cm.role = 'admin' DESC, cm.joined_at ASC`
+    )
+    .all(row.id);
+  const me = members.find((m) => m.id === viewerId);
+  const pendingRequest = !me
+    ? !!db.prepare('SELECT 1 FROM community_requests WHERE community_id = ? AND user_id = ?').get(row.id, viewerId)
+    : false;
+  const requestCount =
+    me && me.role === 'admin'
+      ? db.prepare('SELECT COUNT(*) c FROM community_requests WHERE community_id = ?').get(row.id).c
+      : 0;
+
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || '',
+    category: row.category,
+    avatar: row.avatar,
+    chatId: row.chat_id,
+    createdBy: row.created_by,
+    joinPolicy: row.join_policy,
+    visibility: row.visibility,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    memberCount: members.length,
+    members: members.map((m) => ({ id: m.id, username: m.username, name: m.name, avatar: m.avatar, role: m.role })),
+    role: me ? me.role : null,
+    isMember: !!me,
+    pendingRequest,
+    requestCount,
+  };
+}
+
+/** Everyone gets to see public communities in the discover list; unlisted ones only show to members. */
+app.get('/api/communities', requireAuth, (req, res) => {
+  const { category, mine } = req.query;
+  let rows;
+  if (mine === '1' || mine === 'true') {
+    rows = db
+      .prepare(
+        `SELECT c.* FROM communities c
+         JOIN community_members cm ON cm.community_id = c.id
+         WHERE cm.user_id = ? ORDER BY c.updated_at DESC`
+      )
+      .all(req.userId);
+  } else {
+    rows = db
+      .prepare(
+        `SELECT * FROM communities WHERE visibility = 'public'
+         ${category ? 'AND category = ?' : ''} ORDER BY updated_at DESC`
+      )
+      .all(...(category ? [category] : []));
+  }
+  res.json({ communities: rows.map((r) => hydrateCommunity(r, req.userId)) });
+});
+
+app.get('/api/communities/categories', requireAuth, (req, res) => {
+  res.json({ categories: COMMUNITY_CATEGORIES });
+});
+
+app.get('/api/communities/:id', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  const isMember = !!communityRole(row.id, req.userId);
+  if (row.visibility === 'unlisted' && !isMember) return res.status(404).json({ error: 'Community not found' });
+  res.json({ community: hydrateCommunity(row, req.userId) });
+});
+
+app.post('/api/communities', requireAuth, (req, res) => {
+  const { name, description = '', category = 'custom', avatar, joinPolicy = 'request', visibility = 'public' } = req.body || {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Community name is required' });
+  if (!COMMUNITY_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid category' });
+  if (!JOIN_POLICIES.includes(joinPolicy)) return res.status(400).json({ error: 'Invalid join policy' });
+  if (!['public', 'unlisted'].includes(visibility)) return res.status(400).json({ error: 'Invalid visibility' });
+
+  const id = nano();
+  const t = now();
+  const trimmedName = String(name).trim();
+
+  // A community always owns a backing group chat, so members can actually
+  // talk — reuses all existing messaging/typing/receipts/reactions machinery
+  // instead of duplicating it.
+  const chatId = nano();
+  db.prepare('INSERT INTO chats (id, type, name, avatar, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?)').run(
+    chatId, 'group', trimmedName, avatar || null, req.userId, t, t
+  );
+  db.prepare('INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(chatId, req.userId, 'admin', t);
+
+  db.prepare(
+    `INSERT INTO communities (id, name, description, category, avatar, chat_id, created_by, join_policy, visibility, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(id, trimmedName, String(description || '').trim(), category, avatar || null, chatId, req.userId, joinPolicy, visibility, t, t);
+  db.prepare('INSERT INTO community_members (community_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(id, req.userId, 'admin', t);
+
+  const creator = getUser(req.userId);
+  insertSystemMessage(chatId, `${creator.name} started the community "${trimmedName}"`);
+
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(id);
+  res.json({ community: hydrateCommunity(row, req.userId) });
+});
+
+app.patch('/api/communities/:id', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  if (communityRole(row.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Only admins can edit this community' });
+
+  const { name, description, category, avatar, joinPolicy, visibility } = req.body || {};
+  if (category !== undefined && !COMMUNITY_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid category' });
+  if (joinPolicy !== undefined && !JOIN_POLICIES.includes(joinPolicy)) return res.status(400).json({ error: 'Invalid join policy' });
+  if (visibility !== undefined && !['public', 'unlisted'].includes(visibility)) return res.status(400).json({ error: 'Invalid visibility' });
+
+  db.prepare(
+    `UPDATE communities SET
+       name = COALESCE(?, name), description = COALESCE(?, description), category = COALESCE(?, category),
+       avatar = COALESCE(?, avatar), join_policy = COALESCE(?, join_policy), visibility = COALESCE(?, visibility),
+       updated_at = ? WHERE id = ?`
+  ).run(
+    name ? String(name).trim() : null, description != null ? String(description).trim() : null, category || null,
+    avatar || null, joinPolicy || null, visibility || null, now(), row.id
+  );
+
+  const updated = db.prepare('SELECT * FROM communities WHERE id = ?').get(row.id);
+  communityMemberIds(row.id).forEach((uid) => emitToUser(uid, 'community:updated', hydrateCommunity(updated, uid)));
+  res.json({ community: hydrateCommunity(updated, req.userId) });
+});
+
+app.delete('/api/communities/:id', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  if (row.created_by !== req.userId) return res.status(403).json({ error: 'Only the creator can disband this community' });
+  const members = communityMemberIds(row.id);
+  db.prepare('DELETE FROM communities WHERE id = ?').run(row.id);
+  if (row.chat_id) db.prepare('DELETE FROM chats WHERE id = ?').run(row.chat_id); // cascades chat_members/messages
+  members.forEach((uid) => emitToUser(uid, 'community:deleted', { id: row.id }));
+  res.json({ ok: true });
+});
+
+/** Join (or request to join) a community — behaviour depends on join_policy. */
+app.post('/api/communities/:id/join', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  if (communityRole(row.id, req.userId)) return res.status(400).json({ error: 'Already a member' });
+
+  const t = now();
+
+  if (row.join_policy === 'invite') {
+    return res.status(403).json({ error: 'This community is invite-only — ask an admin to add you' });
+  }
+
+  if (row.join_policy === 'request') {
+    db.prepare('INSERT OR IGNORE INTO community_requests (community_id, user_id, requested_at) VALUES (?,?,?)').run(row.id, req.userId, t);
+    const requester = getUser(req.userId);
+    db.prepare('SELECT user_id FROM community_members WHERE community_id = ? AND role = ?').all(row.id, 'admin')
+      .forEach((a) => emitToUser(a.user_id, 'community:request', { communityId: row.id, user: publicUser(requester) }));
+    return res.json({ status: 'requested' });
+  }
+
+  // open — join immediately, and join the backing chat too
+  db.prepare('INSERT INTO community_members (community_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(row.id, req.userId, 'member', t);
+  if (row.chat_id) {
+    db.prepare('INSERT OR IGNORE INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(row.chat_id, req.userId, 'member', t);
+    const joiner = getUser(req.userId);
+    insertSystemMessage(row.chat_id, `${joiner.name} joined the community`);
+    memberIds(row.chat_id).forEach((uid) => emitToUser(uid, 'chat:new', chatSummary(row.chat_id, uid)));
+  }
+  db.prepare('UPDATE communities SET updated_at = ? WHERE id = ?').run(t, row.id);
+  const updated = db.prepare('SELECT * FROM communities WHERE id = ?').get(row.id);
+  communityMemberIds(row.id).forEach((uid) => emitToUser(uid, 'community:updated', hydrateCommunity(updated, uid)));
+  res.json({ status: 'joined', community: hydrateCommunity(updated, req.userId) });
+});
+
+/** Leave a community you're a member of (admins must transfer/disband instead of leaving into zero-admin state). */
+app.post('/api/communities/:id/leave', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  const role = communityRole(row.id, req.userId);
+  if (!role) return res.status(400).json({ error: 'Not a member' });
+
+  const admins = db.prepare(`SELECT COUNT(*) c FROM community_members WHERE community_id = ? AND role = 'admin'`).get(row.id).c;
+  if (role === 'admin' && admins <= 1) {
+    return res.status(400).json({ error: 'You are the only admin — promote someone else first or disband the community' });
+  }
+
+  db.prepare('DELETE FROM community_members WHERE community_id = ? AND user_id = ?').run(row.id, req.userId);
+  if (row.chat_id) {
+    db.prepare('DELETE FROM chat_members WHERE chat_id = ? AND user_id = ?').run(row.chat_id, req.userId);
+    const leaver = getUser(req.userId);
+    insertSystemMessage(row.chat_id, `${leaver.name} left the community`);
+  }
+  emitToUser(req.userId, 'community:left', { id: row.id });
+  const updated = db.prepare('SELECT * FROM communities WHERE id = ?').get(row.id);
+  communityMemberIds(row.id).forEach((uid) => emitToUser(uid, 'community:updated', hydrateCommunity(updated, uid)));
+  res.json({ ok: true });
+});
+
+/** Admin-only: list pending join requests. */
+app.get('/api/communities/:id/requests', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  if (communityRole(row.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Admins only' });
+  const rows = db
+    .prepare(
+      `SELECT u.id, u.username, u.name, u.avatar, r.requested_at FROM community_requests r
+       JOIN users u ON u.id = r.user_id WHERE r.community_id = ? ORDER BY r.requested_at ASC`
+    )
+    .all(row.id);
+  res.json({ requests: rows.map((r) => ({ user: { id: r.id, username: r.username, name: r.name, avatar: r.avatar }, requestedAt: r.requested_at })) });
+});
+
+/** Admin-only: approve or decline a join request. */
+app.post('/api/communities/:id/requests/:userId', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  if (communityRole(row.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Admins only' });
+
+  const { action } = req.body || {}; // 'approve' | 'decline'
+  const targetId = req.params.userId;
+  const hasRequest = db.prepare('SELECT 1 FROM community_requests WHERE community_id = ? AND user_id = ?').get(row.id, targetId);
+  if (!hasRequest) return res.status(404).json({ error: 'No pending request from this user' });
+
+  db.prepare('DELETE FROM community_requests WHERE community_id = ? AND user_id = ?').run(row.id, targetId);
+
+  if (action === 'approve') {
+    const t = now();
+    db.prepare('INSERT OR IGNORE INTO community_members (community_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(row.id, targetId, 'member', t);
+    if (row.chat_id) {
+      db.prepare('INSERT OR IGNORE INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(row.chat_id, targetId, 'member', t);
+      const joiner = getUser(targetId);
+      insertSystemMessage(row.chat_id, `${joiner.name} joined the community`);
+      memberIds(row.chat_id).forEach((uid) => emitToUser(uid, 'chat:new', chatSummary(row.chat_id, uid)));
+    }
+    db.prepare('UPDATE communities SET updated_at = ? WHERE id = ?').run(t, row.id);
+    emitToUser(targetId, 'community:approved', { id: row.id });
+  } else {
+    emitToUser(targetId, 'community:declined', { id: row.id });
+  }
+
+  const updated = db.prepare('SELECT * FROM communities WHERE id = ?').get(row.id);
+  communityMemberIds(row.id).forEach((uid) => emitToUser(uid, 'community:updated', hydrateCommunity(updated, uid)));
+  res.json({ ok: true });
+});
+
+/** Admin-only: directly add a member (invite-only communities, or shortcutting a request). */
+app.post('/api/communities/:id/members', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  if (communityRole(row.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Admins only' });
+  const { userId: targetId } = req.body || {};
+  if (!targetId || !getUser(targetId)) return res.status(400).json({ error: 'Unknown user' });
+  if (communityRole(row.id, targetId)) return res.status(400).json({ error: 'Already a member' });
+
+  const t = now();
+  db.prepare('INSERT INTO community_members (community_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(row.id, targetId, 'member', t);
+  db.prepare('DELETE FROM community_requests WHERE community_id = ? AND user_id = ?').run(row.id, targetId);
+  if (row.chat_id) {
+    db.prepare('INSERT OR IGNORE INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(row.chat_id, targetId, 'member', t);
+    const added = getUser(targetId);
+    insertSystemMessage(row.chat_id, `${added.name} was added to the community`);
+    memberIds(row.chat_id).forEach((uid) => emitToUser(uid, 'chat:new', chatSummary(row.chat_id, uid)));
+  }
+  db.prepare('UPDATE communities SET updated_at = ? WHERE id = ?').run(t, row.id);
+  emitToUser(targetId, 'community:added', { id: row.id });
+  const updated = db.prepare('SELECT * FROM communities WHERE id = ?').get(row.id);
+  communityMemberIds(row.id).forEach((uid) => emitToUser(uid, 'community:updated', hydrateCommunity(updated, uid)));
+  res.json({ community: hydrateCommunity(updated, req.userId) });
+});
+
+/** Admin-only: remove a member, or promote/demote a member's role. */
+app.patch('/api/communities/:id/members/:userId', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  if (communityRole(row.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Admins only' });
+  const targetId = req.params.userId;
+  const targetRole = communityRole(row.id, targetId);
+  if (!targetRole) return res.status(404).json({ error: 'Not a member' });
+
+  const { role } = req.body || {};
+  if (role && ['admin', 'member'].includes(role)) {
+    db.prepare('UPDATE community_members SET role = ? WHERE community_id = ? AND user_id = ?').run(role, row.id, targetId);
+    if (row.chat_id) db.prepare('UPDATE chat_members SET role = ? WHERE chat_id = ? AND user_id = ?').run(role, row.chat_id, targetId);
+  }
+
+  const updated = db.prepare('SELECT * FROM communities WHERE id = ?').get(row.id);
+  communityMemberIds(row.id).forEach((uid) => emitToUser(uid, 'community:updated', hydrateCommunity(updated, uid)));
+  res.json({ community: hydrateCommunity(updated, req.userId) });
+});
+
+app.delete('/api/communities/:id/members/:userId', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  const targetId = req.params.userId;
+  const isSelf = targetId === req.userId;
+  if (!isSelf && communityRole(row.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Admins only' });
+  const targetRole = communityRole(row.id, targetId);
+  if (!targetRole) return res.status(404).json({ error: 'Not a member' });
+
+  const admins = db.prepare(`SELECT COUNT(*) c FROM community_members WHERE community_id = ? AND role = 'admin'`).get(row.id).c;
+  if (targetRole === 'admin' && admins <= 1) return res.status(400).json({ error: 'Cannot remove the only admin' });
+
+  db.prepare('DELETE FROM community_members WHERE community_id = ? AND user_id = ?').run(row.id, targetId);
+  if (row.chat_id) {
+    db.prepare('DELETE FROM chat_members WHERE chat_id = ? AND user_id = ?').run(row.chat_id, targetId);
+    const target = getUser(targetId);
+    insertSystemMessage(row.chat_id, isSelf ? `${target.name} left the community` : `${target.name} was removed from the community`);
+  }
+  emitToUser(targetId, 'community:removed', { id: row.id });
+  const updated = db.prepare('SELECT * FROM communities WHERE id = ?').get(row.id);
+  communityMemberIds(row.id).forEach((uid) => emitToUser(uid, 'community:updated', hydrateCommunity(updated, uid)));
+  res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ */
 /* socket.io realtime                                                  */
 /* ------------------------------------------------------------------ */
 

@@ -10,8 +10,18 @@ services:
         generateValue: true
       - key: NODE_VERSION
         value: "20"
-    # Persist the SQLite database across deploys (paid plans only).
+      # Only takes effect once the `disk:` block below is uncommented (Render
+      # Disks require a paid plan — Starter or up). server/src/db.js and
+      # server/src/storage.js both read DATA_DIR and, if set, store the
+      # SQLite file + locally-uploaded photos there instead of the
+      # container's ephemeral filesystem, so they survive every redeploy.
+      - key: DATA_DIR
+        value: /var/data
+    # Persist chats/users/messages (SQLite) and local-disk photo uploads
+    # across deploys — Render Disks require a paid plan (Free tier has no
+    # persistent disk at all, so DATA_DIR is a no-op there). Uncomment once
+    # you've upgraded the plan above:
     # disk:
     #   name: tomodachi-data
-    #   mountPath: /opt/render/project/src/server/data
+    #   mountPath: /var/data
     #   sizeGB: 1

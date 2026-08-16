@@ -3,7 +3,20 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// DATA_DIR can be pointed at a mounted persistent volume (Railway Volume,
+// Render Disk, etc.) so the SQLite file — and locally-stored uploads —
+// survive redeploys instead of resetting every time the container rebuilds.
+//
+//   1. Explicit DATA_DIR env var always wins.
+//   2. RAILWAY_VOLUME_MOUNT_PATH is set automatically by Railway once a
+//      Volume is attached to the service, so we pick it up with zero config
+//      the moment a volume exists — see DEPLOY.md for the one-time setup.
+//   3. Falls back to server/data for local dev / no-volume deploys.
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : process.env.RAILWAY_VOLUME_MOUNT_PATH
+    ? path.resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH)
+    : path.join(__dirname, '..', 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const db = new Database(path.join(DATA_DIR, 'tomodachi.db'));
@@ -148,6 +161,44 @@ CREATE TABLE IF NOT EXISTS post_comments (
   FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_comments_post ON post_comments(post_id, created_at);
+
+/* ---- Communities: purpose-based groups (club night, house party, trip planning, etc.) ---- */
+
+CREATE TABLE IF NOT EXISTS communities (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  description   TEXT DEFAULT '',
+  category      TEXT DEFAULT 'custom',   -- club | party | chai | trip | run | custom | ...
+  avatar        TEXT,
+  chat_id       TEXT,                     -- linked group chat (created alongside)
+  created_by    TEXT NOT NULL,
+  join_policy   TEXT DEFAULT 'request',   -- open | request | invite
+  visibility    TEXT DEFAULT 'public',    -- public (discoverable) | unlisted (link/invite only)
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_communities_category ON communities(category);
+
+CREATE TABLE IF NOT EXISTS community_members (
+  community_id TEXT NOT NULL,
+  user_id      TEXT NOT NULL,
+  role         TEXT DEFAULT 'member',    -- admin | member
+  joined_at    INTEGER NOT NULL,
+  PRIMARY KEY (community_id, user_id),
+  FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+/* pending join requests when join_policy = 'request' */
+CREATE TABLE IF NOT EXISTS community_requests (
+  community_id TEXT NOT NULL,
+  user_id      TEXT NOT NULL,
+  requested_at INTEGER NOT NULL,
+  PRIMARY KEY (community_id, user_id),
+  FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 `);
 
 /* ---- lightweight migrations for columns added after initial release ---- */
@@ -163,3 +214,4 @@ addColumnIfMissing('posts', 'song', 'song TEXT');
 addColumnIfMissing('posts', 'audience', "audience TEXT DEFAULT 'public'");
 
 module.exports = db;
+module.exports.DATA_DIR = DATA_DIR;

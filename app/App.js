@@ -28,6 +28,7 @@ import {
 } from '@expo-google-fonts/space-mono';
 import { HankenGrotesk_400Regular } from '@expo-google-fonts/hanken-grotesk';
 import { Caveat_600SemiBold, Caveat_700Bold } from '@expo-google-fonts/caveat';
+import { Analytics } from '@vercel/analytics/react';
 
 import { AuthProvider } from './src/store/AuthContext';
 import { ChatProvider } from './src/store/ChatContext';
@@ -56,6 +57,11 @@ function Root() {
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} backgroundColor={theme.bg} />
       <OrientationManager />
+      {/* Vercel Web Analytics — page views only load the tracking script in a
+          real browser (it injects a <script> tag into document.head), so it's
+          gated to web. It silently no-ops if the app isn't served from
+          Vercel (the /_vercel/insights/script.js request just 404s quietly). */}
+      {Platform.OS === 'web' && <Analytics />}
       <PhoneFrame>
         <Navigation />
       </PhoneFrame>

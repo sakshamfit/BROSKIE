@@ -110,10 +110,46 @@ Only if you want the Vercel CDN. `vercel.json` is already in the repo.
 
 ## Verify the deployment
 
-1. Open the URL, log in as `+919000000001` / `1234`
+1. Open the URL, log in as `you` / `1234`
 2. **Settings** → the dot under your name should say **Connected** (green)
-3. Open a second browser/incognito, log in as `+919000000002`, message between
+3. Open a second browser/incognito, log in as `ananya`, message between
    them — delivery, typing indicators and blue ticks should be instant
+
+## Never lose data on deploy (persistent storage)
+
+By default, 友達's SQLite database (`server/data/tomodachi.db`) and any
+locally-stored photo uploads (`server/uploads`) live on the container's
+**ephemeral disk** — every redeploy on Railway/Render wipes them, so chats,
+users, communities and posts all reset. Fix this once, before real users
+touch the app:
+
+### Railway (recommended — takes ~1 minute)
+1. Open your Railway project → the 友達 service → **Volumes** tab → **+ New Volume**
+2. Attach it to the service, mount path can be anything, e.g. `/data`
+3. Redeploy — that's it. `server/src/db.js` and `server/src/storage.js` both
+   auto-detect Railway's `RAILWAY_VOLUME_MOUNT_PATH` env var (Railway sets it
+   automatically once a volume is attached) and store the database + local
+   uploads there instead of the ephemeral container disk. No code changes,
+   no env vars to set by hand.
+
+### Render
+Render Disks require a **paid plan** (Starter or up — the Free tier has no
+persistent disk at all). If you're on a paid plan:
+1. Uncomment the `disk:` block in `render.yaml` (mount path `/var/data` is
+   already wired to the `DATA_DIR` env var right above it) and redeploy via
+   Blueprint, **or**
+2. In the dashboard: your service → **Disks** → **Add Disk** → mount path
+   `/var/data`, then add an env var `DATA_DIR=/var/data`
+
+### Any other host
+Set `DATA_DIR=/path/to/a/mounted/volume` yourself — both `db.js` and
+`storage.js` respect it directly.
+
+### If you'd rather not manage a volume at all
+Move photo uploads to Supabase Storage (**see `SUPABASE.md`**, ~3 minutes)
+and the database to Supabase Postgres (a real refactor — `better-sqlite3` is
+synchronous, `pg` is not — but it removes the single-disk dependency
+entirely and enables multiple server instances).
 
 ## Troubleshooting
 
@@ -124,13 +160,17 @@ Only if you want the Vercel CDN. `vercel.json` is already in the repo.
 | Blank page, 404 on refresh | Web build missing — run `npm run build` so `server/public` exists |
 | "Failed to fetch" on login | Two-host: backend `http://` while site is `https://` (mixed content) |
 | Messages send but never arrive | WebSockets blocked — the host must support them (Vercel functions don't) |
-| Chats vanish after redeploy | Ephemeral disk wiped SQLite → attach a volume or move to Postgres |
-| Images 404 after redeploy | `server/uploads` is ephemeral — set up Supabase Storage (see `SUPABASE.md`) |
+| Chats/communities/posts vanish after redeploy | No persistent volume attached yet — see "Never lose data on deploy" above |
+| Images 404 after redeploy | `server/uploads` is ephemeral without a volume — attach one (above) or set up Supabase Storage (see `SUPABASE.md`) |
 
 ## Before real users
 
 - Set a strong `JWT_SECRET` (never ship the dev fallback)
 - Change the demo password `1234` / remove seeded accounts
-- Attach a persistent volume, or migrate SQLite → Postgres
+- Attach a persistent volume (see above), or migrate SQLite → Postgres
 - Move uploads to object storage — **see `SUPABASE.md`** (3-minute setup)
 - Restrict CORS to your own domain
+- **Vercel Web Analytics**: if you deploy the frontend on Vercel, page-view
+  analytics are already wired in (`<Analytics />` from `@vercel/analytics/react`
+  in `app/App.js`) — just flip it on in the Vercel dashboard under your
+  project → **Analytics** → **Enable**. It silently no-ops on any other host.

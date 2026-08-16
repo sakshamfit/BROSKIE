@@ -14,6 +14,7 @@ import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFo
 import { AUDIENCE } from '../components/AudiencePicker';
 import SongCard from '../components/SongCard';
 import NewPostScreen from './NewPostScreen';
+import CommunitiesScreen from './CommunitiesScreen';
 import { type, inkBox, marker, dashedRule, stroke, radius } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
@@ -21,11 +22,12 @@ import { confirm } from '../hooks/confirm';
 /* Sticky notes alternate their tilt, like scraps pinned to a board. */
 const tiltFor = (i) => (i % 2 === 0 ? '-0.8deg' : '0.7deg');
 
-export default function NetworkScreen() {
+export default function NetworkScreen({ navigation, onOpenChat }) {
   const { user } = useAuth();
   const { onPostEvent } = useChat();
   const { theme } = useTheme();
   const { isTablet } = useResponsive();
+  const [section, setSection] = useState('feed'); // feed | communities
 
   const [posts, setPosts] = useState([]);
   const [tags, setTags] = useState([]);
@@ -199,12 +201,27 @@ export default function NetworkScreen() {
     );
   };
 
+  const SectionToggle = (
+    <View style={s.sectionRow}>
+      <Pressable onPress={() => setSection('feed')} style={[s.sectionBtn, section === 'feed' && s.sectionActive, { borderColor: theme.ink }]}>
+        <Icon name="albums-outline" size={14} color={section === 'feed' ? theme.onPrimary : theme.text} />
+        <Text style={[type.labelSm, { color: section === 'feed' ? theme.onPrimary : theme.text }]}>FEED</Text>
+      </Pressable>
+      <Pressable onPress={() => setSection('communities')} style={[s.sectionBtn, section === 'communities' && s.sectionActive, { borderColor: theme.ink }]}>
+        <Icon name="people-outline" size={14} color={section === 'communities' ? theme.onPrimary : theme.text} />
+        <Text style={[type.labelSm, { color: section === 'communities' ? theme.onPrimary : theme.text }]}>COMMUNITIES</Text>
+      </Pressable>
+    </View>
+  );
+
   const ListHeader = (
     <View style={s.headerWrap}>
       <Text style={s.pageTitle}>The Network</Text>
-      <Text style={[type.labelXs, { color: theme.muted, marginBottom: 18 }]}>
+      <Text style={[type.labelXs, { color: theme.muted, marginBottom: 14 }]}>
         SHARE PUBLICLY, WITH FRIENDS, OR JUST THE PEOPLE YOU PICK
       </Text>
+
+      {SectionToggle}
 
       {tags.length > 0 && (
         <View style={s.tagsWrap}>
@@ -222,6 +239,21 @@ export default function NetworkScreen() {
       <Rule style={{ marginTop: 18, marginBottom: 4 }} />
     </View>
   );
+
+  if (section === 'communities') {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.bg }}>
+        <View style={[s.communitiesHeaderWrap, isTablet && s.listWide]}>
+          <Text style={s.pageTitle}>The Network</Text>
+          <Text style={[type.labelXs, { color: theme.muted, marginBottom: 14 }]}>
+            SHARE PUBLICLY, WITH FRIENDS, OR JUST THE PEOPLE YOU PICK
+          </Text>
+          {SectionToggle}
+        </View>
+        <CommunitiesScreen onOpenChat={onOpenChat} />
+      </View>
+    );
+  }
 
   if (loading) {
     return (
@@ -409,6 +441,11 @@ const makeStyles = (t) => StyleSheet.create({
   headerWrap: { paddingTop: 22 },
   pageTitle: { ...type.headlineLg, color: t.text, transform: [{ rotate: '-1deg' }] },
   tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+
+  communitiesHeaderWrap: { paddingTop: 22, paddingHorizontal: 20 },
+  sectionRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
+  sectionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 16 },
+  sectionActive: { backgroundColor: t.ink },
 
   note: { padding: 18, marginBottom: 22, borderWidth: 1, borderColor: t.graphiteLine,
     borderTopLeftRadius: 2, borderTopRightRadius: 5, borderBottomRightRadius: 2, borderBottomLeftRadius: 4 },
