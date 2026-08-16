@@ -6,7 +6,8 @@ import { type, inkBox, marker } from '../theme';
 
 /**
  * A "song sketched onto paper" card — album art behind an ink frame, with a
- * play/pause control for the 30s Spotify preview (when one exists).
+ * play/pause control for the streamed preview (when one exists) — Jamendo
+ * returns full-length tracks, so this plays the whole song, not just 30s.
  */
 export default function SongCard({ song, compact = false, tint }) {
   const { theme } = useTheme();

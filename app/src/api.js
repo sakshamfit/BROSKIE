@@ -99,7 +99,7 @@ export const api = {
   statuses: () => request('/api/status'),
   postStatus: (payload) => request('/api/status', { method: 'POST', body: payload }),
   viewStatus: (id) => request(`/api/status/${id}/view`, { method: 'POST' }),
-  searchSongs: (q) => request(`/api/spotify/search?q=${encodeURIComponent(q)}`),
+  searchSongs: (q) => request(`/api/songs/search?q=${encodeURIComponent(q)}`),
 
   async uploadFile(uri, name = 'upload.jpg', type = 'image/jpeg') {
     const form = new FormData();

@@ -458,7 +458,7 @@ function Composer({ visible, onClose, onPosted }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* song picker (Spotify search)                                        */
+/* song picker (Jamendo search)                                        */
 /* ------------------------------------------------------------------ */
 
 function SongPicker({ visible, onClose, onSelect }) {
@@ -507,7 +507,7 @@ function SongPicker({ visible, onClose, onSelect }) {
 
         {!configured && (
           <Text style={[type.bodySm, { color: theme.muted, marginTop: 16, paddingHorizontal: 4 }]}>
-            Song search isn't configured on the server yet — set SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET.
+            Song search isn't configured on the server yet — set JAMENDO_CLIENT_ID.
           </Text>
         )}
         {configured && !!notice && (

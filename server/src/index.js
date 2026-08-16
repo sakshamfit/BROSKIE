@@ -11,7 +11,7 @@ const { customAlphabet } = require('nanoid');
 
 const db = require('./db');
 const { sign, verify, requireAuth } = require('./auth');
-const spotify = require('./spotify');
+const jamendo = require('./jamendo');
 
 const nano = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
 const now = () => Date.now();
@@ -514,21 +514,26 @@ app.post('/api/status/:id/view', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-/** Song search for status composer — proxies Spotify's Client Credentials API. */
-app.get('/api/spotify/search', requireAuth, async (req, res) => {
-  if (!spotify.isConfigured()) return res.json({ tracks: [], configured: false });
+/** Song search for status composer — proxies Jamendo's public track search API. */
+app.get('/api/songs/search', requireAuth, async (req, res) => {
+  if (!jamendo.isConfigured()) return res.json({ tracks: [], configured: false });
   const q = String(req.query.q || '').trim();
   if (!q) return res.json({ tracks: [], configured: true });
   try {
-    const tracks = await spotify.searchTracks(q);
+    const tracks = await jamendo.searchTracks(q);
     res.json({ tracks, configured: true });
   } catch (e) {
-    console.error('[spotify]', e.message);
+    console.error('[jamendo]', e.message);
     // Surface a 200 with an explanatory message instead of a hard error —
     // song attachment is optional, the rest of the status composer must
-    // keep working even if Spotify's API rejects this app/account.
+    // keep working even if the song search API has a hiccup.
     res.json({ tracks: [], configured: true, error: e.message });
   }
+});
+
+// Backwards-compatible alias for the older Spotify-named route.
+app.get('/api/spotify/search', requireAuth, (req, res) => {
+  res.redirect(307, `/api/songs/search?q=${encodeURIComponent(req.query.q || '')}`);
 });
 
 /* ------------------------------------------------------------------ */
