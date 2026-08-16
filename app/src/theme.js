@@ -52,6 +52,7 @@ export const tokens = {
   onPrimaryFixedVariant: '#474746',
   secondaryFixed: '#e2e3de',
   secondaryFixedDim: '#c6c7c2',
+  tertiaryFixed: '#e3e3dd',
 
   /* Highlighter — the one vivid accent, used sparingly. Felt-tip yellow. */
   highlighter: '#FFE24D',
@@ -145,6 +146,29 @@ export function inkBox(theme, weight = 'ink', color) {
     borderBottomRightRadius: radius.DEFAULT,
     borderBottomLeftRadius: radius.md,
     backgroundColor: 'transparent',
+  };
+}
+
+/**
+ * The classic "hand-drawn box" — CSS does this with
+ *   border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+ * RN has no elliptical radii, so we approximate with strongly asymmetric
+ * per-corner values scaled to the element. Produces a lopsided, sketched
+ * outline instead of a machined rectangle.
+ */
+export function sketchBox(theme, weight = 'ink', size = 56, color) {
+  const w = typeof weight === 'number' ? weight : stroke[weight] ?? stroke.ink;
+  const big = Math.round(size * 0.5);
+  const mid = Math.round(size * 0.42);
+  const small = Math.max(4, Math.round(size * 0.15));
+  const tiny = Math.max(3, Math.round(size * 0.12));
+  return {
+    borderWidth: w,
+    borderColor: color || theme.ink,
+    borderTopLeftRadius: big,
+    borderTopRightRadius: tiny,
+    borderBottomRightRadius: mid,
+    borderBottomLeftRadius: small,
   };
 }
 
@@ -256,6 +280,7 @@ export const lightTheme = {
   ripple: 'rgba(0,0,0,0.06)',
   overlay: 'rgba(28,27,27,0.55)',
   border: tokens.outlineVariant,
+  tabActiveBg: tokens.tertiaryFixed,   // pale paper fill behind the active tab
 };
 
 /** Dark = ink-on-slate (chalkboard rather than paper). */
@@ -309,6 +334,7 @@ export const darkTheme = {
   ripple: 'rgba(255,255,255,0.07)',
   overlay: 'rgba(0,0,0,0.65)',
   border: '#4a4848',
+  tabActiveBg: '#2e2d2d',
 };
 
 /* ------------------------------------------------------------------ */

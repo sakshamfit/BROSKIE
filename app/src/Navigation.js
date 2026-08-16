@@ -31,10 +31,10 @@ function HomeTabs({ navigation }) {
   const s = makeStyles(theme);
 
   const TABS = [
-    { key: 'chats', label: 'Chats', icon: 'chatbubbles', badge: unread },
-    { key: 'network', label: 'Network', icon: 'globe' },
-    { key: 'status', label: 'Status', icon: 'radio-button-on' },
-    { key: 'calls', label: 'Calls', icon: 'call' },
+    { key: 'chats', label: 'Chats', icon: 'chatbubble', badge: unread },
+    { key: 'status', label: 'See', icon: 'eye' },
+    { key: 'network', label: 'Network', icon: 'people' },
+    { key: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
   return (
@@ -53,10 +53,10 @@ function HomeTabs({ navigation }) {
             return (
               <Pressable
                 key={t.key}
-                onPress={() => setTab(t.key)}
+                onPress={() => (t.key === 'settings' ? navigation.navigate('Settings') : setTab(t.key))}
                 style={({ pressed }) => [
                   s.tabItem,
-                  active ? marker(theme, 2) : null,
+                  active ? [s.tabActive, { backgroundColor: theme.tabActiveBg, borderColor: theme.ink }] : null,
                   pressed && !active ? marker(theme, 1) : null,
                 ]}
               >
@@ -144,7 +144,8 @@ const makeStyles = (t) => StyleSheet.create({
   },
   tabItem: {
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: 5,
-    paddingVertical: 7, marginHorizontal: 6,
+    paddingVertical: 8, marginHorizontal: 5,
   },
+  tabActive: { borderWidth: 1, borderRadius: 999 },
   tabBadge: { position: 'absolute', right: -11, top: -7 },
 });

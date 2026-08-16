@@ -4,7 +4,7 @@ import Icon from '../icons/Icon';
 import Emoji from '../icons/Emoji';
 import {
   colorFor, initials, AVATAR_INK, radius, type, tokens, stroke,
-  inkBox, pencilBox, inkUnderline, dashedRule, marker, pressedInk,
+  inkBox, sketchBox, pencilBox, inkUnderline, dashedRule, marker, pressedInk,
 } from '../theme';
 import { mediaUrl } from '../api';
 import { useTheme } from '../store/ThemeContext';
@@ -191,6 +191,37 @@ export function Rule({ style }) {
   return <View style={[dashedRule(theme), { marginVertical: 12 }, style]} />;
 }
 
+/**
+ * Messy hand-ruled divider: uneven dash runs at a slight angle, as if drawn
+ * along a ruler with a leaking pen. `tilt` varies per row so no two match.
+ */
+export function SketchDivider({ tilt = -0.5, style }) {
+  const { theme } = useTheme();
+  // deterministic-but-irregular dash pattern
+  const dashes = [10, 4, 16, 6, 12, 3, 20, 8, 14, 5, 18, 7, 11, 4, 15];
+  return (
+    <View
+      style={[
+        { flexDirection: 'row', alignItems: 'center', height: 1, opacity: 0.55, transform: [{ rotate: `${tilt}deg` }] },
+        style,
+      ]}
+    >
+      {dashes.map((w, i) => (
+        <View
+          key={i}
+          style={{
+            width: w,
+            height: i % 3 === 0 ? 1.4 : 1,
+            marginRight: i % 2 ? 5 : 3,
+            backgroundColor: i % 4 === 0 ? theme.graphiteLine : theme.graphite,
+          }}
+        />
+      ))}
+      <View style={{ flex: 1, height: 1, backgroundColor: theme.graphiteLine }} />
+    </View>
+  );
+}
+
 /** Highlighter scribble used for focus / active emphasis. */
 export function Highlight({ children, style }) {
   const { theme } = useTheme();
@@ -201,35 +232,55 @@ export function Highlight({ children, style }) {
 /* avatar — sketched square-ish portrait                               */
 /* ------------------------------------------------------------------ */
 
-export function Avatar({ uri, name, id, size = 48, group = false, online = false }) {
+export function Avatar({ uri, name, id, size = 48, group = false, online = false, unread = false, weight = 'ink' }) {
   const { theme } = useTheme();
   const src = mediaUrl(uri);
   const fill = theme.dark ? theme.cardAlt : colorFor(id || name || '');
   const ink = theme.dark ? theme.ink : AVATAR_INK;
+  const lineColor = weight === 'thin' ? theme.graphite : theme.ink;
 
   return (
     <View style={{ width: size, height: size }}>
+      {/* circular, per the mockup's rounded-full avatars, with an ink stroke */}
       <View
         style={[
-          { width: size, height: size, overflow: 'hidden', backgroundColor: fill, alignItems: 'center', justifyContent: 'center' },
-          inkBox(theme, 'ink'),
+          {
+            width: size, height: size, overflow: 'hidden', backgroundColor: fill,
+            alignItems: 'center', justifyContent: 'center',
+            borderRadius: radius.full,
+            borderWidth: weight === 'thin' ? 1 : stroke.ink,
+            borderColor: lineColor,
+          },
         ]}
       >
         {src ? (
           <Image source={{ uri: src }} style={{ width: size, height: size }} />
         ) : group ? (
-          <Icon name="people" size={size * 0.46} color={ink} />
+          <Icon name="people" size={size * 0.44} color={ink} />
         ) : (
-          <Text style={{ color: ink, fontFamily: type.head(700), fontSize: size * 0.36, letterSpacing: -0.3 }}>
+          <Text style={{ color: ink, fontFamily: type.head(700), fontSize: size * 0.34, letterSpacing: -0.3 }}>
             {initials(name)}
           </Text>
         )}
       </View>
-      {online && (
+
+      {/* unread: solid ink blob pinned to the corner (per the sketch mockup) */}
+      {unread && (
         <View
           style={{
             position: 'absolute', right: -4, top: -4,
-            width: 10, height: 10, borderRadius: radius.full,
+            width: 15, height: 15, borderRadius: radius.full,
+            backgroundColor: theme.ink,
+            borderWidth: 2, borderColor: theme.bg,
+          }}
+        />
+      )}
+
+      {online && !unread && (
+        <View
+          style={{
+            position: 'absolute', right: -4, top: -4,
+            width: 11, height: 11, borderRadius: radius.full,
             backgroundColor: theme.highlighter,
             borderWidth: 1.5, borderColor: theme.ink,
           }}
