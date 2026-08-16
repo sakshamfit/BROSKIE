@@ -78,10 +78,12 @@ CREATE TABLE IF NOT EXISTS reactions (
 CREATE TABLE IF NOT EXISTS statuses (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL,
-  type       TEXT DEFAULT 'text',               -- text | image
+  type       TEXT DEFAULT 'text',               -- text | image | song
   body       TEXT,
   media_url  TEXT,
   bg         TEXT DEFAULT '#075E54',
+  song       TEXT,                               -- JSON blob: {id,name,artist,albumArt,previewUrl,url}
+  audience   TEXT DEFAULT 'public',              -- public | contacts | selected
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -92,6 +94,14 @@ CREATE TABLE IF NOT EXISTS status_views (
   user_id   TEXT NOT NULL,
   at        INTEGER NOT NULL,
   PRIMARY KEY (status_id, user_id)
+);
+
+/* audience list for 'selected' (hand-picked) private statuses */
+CREATE TABLE IF NOT EXISTS status_recipients (
+  status_id TEXT NOT NULL,
+  user_id   TEXT NOT NULL,
+  PRIMARY KEY (status_id, user_id),
+  FOREIGN KEY (status_id) REFERENCES statuses(id) ON DELETE CASCADE
 );
 
 /* ---- The Network: public, worldwide posts ---- */
@@ -128,5 +138,13 @@ CREATE TABLE IF NOT EXISTS post_comments (
 );
 CREATE INDEX IF NOT EXISTS idx_comments_post ON post_comments(post_id, created_at);
 `);
+
+/* ---- lightweight migrations for columns added after initial release ---- */
+function addColumnIfMissing(table, column, ddl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
+addColumnIfMissing('statuses', 'song', 'song TEXT');
+addColumnIfMissing('statuses', 'audience', "audience TEXT DEFAULT 'public'");
 
 module.exports = db;

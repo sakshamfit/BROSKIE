@@ -11,6 +11,7 @@ const { customAlphabet } = require('nanoid');
 
 const db = require('./db');
 const { sign, verify, requireAuth } = require('./auth');
+const spotify = require('./spotify');
 
 const nano = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
 const now = () => Date.now();
@@ -139,6 +140,18 @@ function chatSummary(chatId, viewerId) {
     unread,
     updatedAt: chat.updated_at,
   };
+}
+
+/** Everyone who shares a chat (direct or group) with this user — the "contacts" audience. */
+function contactIds(userId) {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT cm2.user_id FROM chat_members cm1
+       JOIN chat_members cm2 ON cm2.chat_id = cm1.chat_id AND cm2.user_id != cm1.user_id
+       WHERE cm1.user_id = ?`
+    )
+    .all(userId);
+  return rows.map((r) => r.user_id);
 }
 
 function userChats(userId) {
@@ -355,16 +368,35 @@ function insertSystemMessage(chatId, body) {
 /* status / stories                                                    */
 /* ------------------------------------------------------------------ */
 
+/** Can `viewerId` see a status posted by `authorId` with the given audience? */
+function canViewStatus(statusId, authorId, audience, viewerId) {
+  if (authorId === viewerId) return true;
+  if (audience === 'public') return true;
+  if (audience === 'contacts') return contactIds(authorId).includes(viewerId);
+  if (audience === 'selected') {
+    return !!db.prepare('SELECT 1 FROM status_recipients WHERE status_id = ? AND user_id = ?').get(statusId, viewerId);
+  }
+  return false;
+}
+
+function hydrateStatus(s, viewerId) {
+  return {
+    id: s.id, type: s.type, body: s.body, mediaUrl: s.media_url, bg: s.bg,
+    song: s.song ? JSON.parse(s.song) : null,
+    audience: s.audience || 'public',
+    createdAt: s.created_at,
+    viewed: !!db.prepare('SELECT 1 FROM status_views WHERE status_id = ? AND user_id = ?').get(s.id, viewerId),
+  };
+}
+
 app.get('/api/status', requireAuth, (req, res) => {
   db.prepare('DELETE FROM statuses WHERE expires_at < ?').run(now());
   const rows = db.prepare('SELECT * FROM statuses ORDER BY created_at ASC').all();
+  const visible = rows.filter((s) => canViewStatus(s.id, s.user_id, s.audience || 'public', req.userId));
+
   const byUser = {};
-  rows.forEach((s) => {
-    (byUser[s.user_id] ||= []).push({
-      id: s.id, type: s.type, body: s.body, mediaUrl: s.media_url, bg: s.bg,
-      createdAt: s.created_at,
-      viewed: !!db.prepare('SELECT 1 FROM status_views WHERE status_id = ? AND user_id = ?').get(s.id, req.userId),
-    });
+  visible.forEach((s) => {
+    (byUser[s.user_id] ||= []).push(hydrateStatus(s, req.userId));
   });
   const groups = Object.entries(byUser).map(([userId, items]) => ({
     user: publicUser(getUser(userId)),
@@ -379,19 +411,67 @@ app.get('/api/status', requireAuth, (req, res) => {
 });
 
 app.post('/api/status', requireAuth, (req, res) => {
-  const { type = 'text', body = '', mediaUrl = null, bg = '#075E54' } = req.body || {};
-  const s = { id: nano(), user_id: req.userId, type, body, media_url: mediaUrl, bg, created_at: now(), expires_at: now() + 24 * 3600 * 1000 };
+  const {
+    type = 'text', body = '', mediaUrl = null, bg = '#075E54',
+    song = null, audience = 'public', recipientIds = [],
+  } = req.body || {};
+
+  const aud = ['public', 'contacts', 'selected'].includes(audience) ? audience : 'public';
+  if (aud === 'selected' && !recipientIds.length) {
+    return res.status(400).json({ error: 'Pick at least one person for a private status.' });
+  }
+
+  const s = {
+    id: nano(), user_id: req.userId, type, body, media_url: mediaUrl, bg,
+    song: song ? JSON.stringify(song) : null, audience: aud,
+    created_at: now(), expires_at: now() + 24 * 3600 * 1000,
+  };
   db.prepare(
-    `INSERT INTO statuses (id, user_id, type, body, media_url, bg, created_at, expires_at)
-     VALUES (@id, @user_id, @type, @body, @media_url, @bg, @created_at, @expires_at)`
+    `INSERT INTO statuses (id, user_id, type, body, media_url, bg, song, audience, created_at, expires_at)
+     VALUES (@id, @user_id, @type, @body, @media_url, @bg, @song, @audience, @created_at, @expires_at)`
   ).run(s);
-  io.emit('status:new', { userId: req.userId });
-  res.json({ ok: true });
+
+  if (aud === 'selected') {
+    const stmt = db.prepare('INSERT OR IGNORE INTO status_recipients (status_id, user_id) VALUES (?, ?)');
+    recipientIds.filter((id) => getUser(id)).forEach((id) => stmt.run(s.id, id));
+  }
+
+  // Only notify sockets that are allowed to see it.
+  const targets = aud === 'public'
+    ? [...sockets.keys()]
+    : aud === 'contacts'
+      ? contactIds(req.userId)
+      : recipientIds;
+  targets.forEach((uid) => emitToUser(uid, 'status:new', { userId: req.userId }));
+  emitToUser(req.userId, 'status:new', { userId: req.userId });
+
+  res.json({ ok: true, status: hydrateStatus(s, req.userId) });
 });
 
 app.post('/api/status/:id/view', requireAuth, (req, res) => {
+  const s = db.prepare('SELECT * FROM statuses WHERE id = ?').get(req.params.id);
+  if (!s || !canViewStatus(s.id, s.user_id, s.audience || 'public', req.userId)) {
+    return res.status(404).json({ error: 'Status not found' });
+  }
   db.prepare('INSERT OR IGNORE INTO status_views (status_id, user_id, at) VALUES (?,?,?)').run(req.params.id, req.userId, now());
   res.json({ ok: true });
+});
+
+/** Song search for status composer — proxies Spotify's Client Credentials API. */
+app.get('/api/spotify/search', requireAuth, async (req, res) => {
+  if (!spotify.isConfigured()) return res.json({ tracks: [], configured: false });
+  const q = String(req.query.q || '').trim();
+  if (!q) return res.json({ tracks: [], configured: true });
+  try {
+    const tracks = await spotify.searchTracks(q);
+    res.json({ tracks, configured: true });
+  } catch (e) {
+    console.error('[spotify]', e.message);
+    // Surface a 200 with an explanatory message instead of a hard error —
+    // song attachment is optional, the rest of the status composer must
+    // keep working even if Spotify's API rejects this app/account.
+    res.json({ tracks: [], configured: true, error: e.message });
+  }
 });
 
 /* ------------------------------------------------------------------ */

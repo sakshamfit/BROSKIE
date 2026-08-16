@@ -14,11 +14,18 @@ export function ChatProvider({ children }) {
   const [connected, setConnected] = useState(false);
   const socketRef = useRef(null);
   const postListeners = useRef(new Set());
+  const statusListeners = useRef(new Set());
 
   /** Subscribe to post:* socket events. Returns an unsubscribe fn. */
   const onPostEvent = useCallback((fn) => {
     postListeners.current.add(fn);
     return () => postListeners.current.delete(fn);
+  }, []);
+
+  /** Subscribe to status:* socket events. Returns an unsubscribe fn. */
+  const onStatusEvent = useCallback((fn) => {
+    statusListeners.current.add(fn);
+    return () => statusListeners.current.delete(fn);
   }, []);
 
   const sortChats = (list) =>
@@ -78,6 +85,10 @@ export function ChatProvider({ children }) {
       socket.on(ev, (payload) => {
         postListeners.current.forEach((fn) => fn(ev, payload));
       });
+    });
+
+    socket.on('status:new', (payload) => {
+      statusListeners.current.forEach((fn) => fn('status:new', payload));
     });
 
     socket.on('presence', ({ userId, isOnline, lastSeen }) => {
@@ -162,7 +173,7 @@ export function ChatProvider({ children }) {
       value={{
         chats, messages, typing, connected,
         refreshChats, loadMessages, sendMessage, markRead,
-        setTypingState, react, deleteMessage, upsertChat, onPostEvent,
+        setTypingState, react, deleteMessage, upsertChat, onPostEvent, onStatusEvent,
       }}
     >
       {children}
