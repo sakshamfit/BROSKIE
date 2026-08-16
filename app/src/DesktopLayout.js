@@ -19,6 +19,10 @@ import StatusScreen from './screens/StatusScreen';
 import PersonalInfoScreen from './screens/PersonalInfoScreen';
 import SecurityScreen from './screens/SecurityScreen';
 import AppearanceScreen from './screens/AppearanceScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
+import PrivacyScreen from './screens/PrivacyScreen';
+import BlockedUsersScreen from './screens/BlockedUsersScreen';
+import HelpScreen from './screens/HelpScreen';
 
 /**
  * Split shell for wide viewports — desktop web AND real tablets/foldables
@@ -51,14 +55,30 @@ export default function SplitLayout() {
 
   // Settings is a full-screen top-level section here (like Chats/See/
   // Network) — NOT a popup — with its own little navigation stack for the
-  // Personal Information / Security / Appearance drill-downs.
+  // Personal Information / Security / Privacy / Notifications / Appearance
+  // / Blocked Contacts drill-downs.
+  const SETTINGS_SUBSCREENS = ['PersonalInfo', 'Security', 'Privacy', 'Notifications', 'Appearance', 'BlockedUsers'];
   const [settingsSub, setSettingsSub] = useState(null);
 
   const settingsNav = {
     navigate: (name) => {
-      if (['PersonalInfo', 'Security', 'Appearance'].includes(name)) setSettingsSub(name);
+      if (name === 'Help') { openOverlay('Help'); return; }
+      if (SETTINGS_SUBSCREENS.includes(name)) setSettingsSub(name);
     },
     goBack: () => (settingsSub ? setSettingsSub(null) : setTab('chats')),
+    replace: () => {},
+  };
+
+  // Privacy screen navigates one level deeper into Blocked Contacts; that
+  // screen's own back button should return to Privacy, not to Settings.
+  const privacyNav = {
+    navigate: (name) => { if (name === 'BlockedUsers') setSettingsSub('BlockedUsers'); },
+    goBack: () => setSettingsSub(null),
+    replace: () => {},
+  };
+  const blockedUsersNav = {
+    navigate: () => {},
+    goBack: () => setSettingsSub('Privacy'),
     replace: () => {},
   };
 
@@ -100,6 +120,10 @@ export default function SplitLayout() {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (overlay) {
         closeOverlay();
+        return true;
+      }
+      if (tab === 'settings' && settingsSub === 'BlockedUsers') {
+        setSettingsSub('Privacy');
         return true;
       }
       if (tab === 'settings' && settingsSub) {
@@ -171,6 +195,9 @@ export default function SplitLayout() {
           <View style={s.fullPane}>
             {settingsSub === 'PersonalInfo' && <PersonalInfoScreen navigation={settingsNav} embedded />}
             {settingsSub === 'Security' && <SecurityScreen navigation={settingsNav} embedded />}
+            {settingsSub === 'Privacy' && <PrivacyScreen navigation={privacyNav} embedded />}
+            {settingsSub === 'BlockedUsers' && <BlockedUsersScreen navigation={blockedUsersNav} embedded />}
+            {settingsSub === 'Notifications' && <NotificationsScreen navigation={settingsNav} embedded />}
             {settingsSub === 'Appearance' && <AppearanceScreen navigation={settingsNav} embedded />}
             {!settingsSub && <SettingsScreen navigation={settingsNav} embedded />}
           </View>
@@ -187,21 +214,12 @@ export default function SplitLayout() {
         )}
       </OverlayPanel>
 
-      <Modal visible={overlay?.name === 'Help'} transparent animationType="fade" onRequestClose={closeOverlay}>
-        <Pressable style={s.helpBackdrop} onPress={closeOverlay}>
-          <Pressable style={[s.helpCard, inkBox(theme, 'bold'), { backgroundColor: theme.bg }]}>
-            <Text style={[type.headlineSm, { color: theme.text, marginBottom: 10 }]}>友達 · Graphite &amp; Pulp</Text>
-            <Text style={[type.bodyMd, { color: theme.subtext, marginBottom: 6 }]}>
-              A realtime messenger sketched in ink on paper. Long-press messages to react,
-              reply or delete. Long-press a chat to archive it.
-            </Text>
-            <Text style={[type.bodySm, { color: theme.muted }]}>Not affiliated with WhatsApp.</Text>
-            <Pressable onPress={closeOverlay} style={[s.helpClose, inkBox(theme, 'thin')]}>
-              <Icon name="close" size={16} color={theme.ink} />
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Full Help & Guide, same content as the phone's Help screen — shown
+          as a large overlay panel rather than a tiny popup, since it now has
+          real substance (expandable topics + FAQ) instead of one paragraph. */}
+      <OverlayPanel visible={overlay?.name === 'Help'} onClose={closeOverlay} width={620}>
+        <HelpScreen navigation={{ goBack: closeOverlay }} embedded />
+      </OverlayPanel>
     </View>
   );
 }
@@ -253,9 +271,6 @@ const makeStyles = (t, insets, isWeb) => StyleSheet.create({
   detailPane: { flex: 1, height: '100%' },
   fullPane: { flex: 1, height: '100%' },
   centeredPane: { alignItems: 'center' },
-  helpBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  helpCard: { width: '100%', maxWidth: 420, padding: 24 },
-  helpClose: { position: 'absolute', top: 12, right: 12, width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
 });
 
 const styles = StyleSheet.create({

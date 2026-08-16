@@ -24,6 +24,10 @@ import ChatInfoScreen from './screens/ChatInfoScreen';
 import PersonalInfoScreen from './screens/PersonalInfoScreen';
 import SecurityScreen from './screens/SecurityScreen';
 import AppearanceScreen from './screens/AppearanceScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
+import PrivacyScreen from './screens/PrivacyScreen';
+import BlockedUsersScreen from './screens/BlockedUsersScreen';
+import HelpScreen from './screens/HelpScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -174,6 +178,10 @@ export default function Navigation() {
             <Stack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
             <Stack.Screen name="Security" component={SecurityScreen} />
             <Stack.Screen name="Appearance" component={AppearanceScreen} />
+            <Stack.Screen name="Notifications" component={NotificationsScreen} />
+            <Stack.Screen name="Privacy" component={PrivacyScreen} />
+            <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
+            <Stack.Screen name="Help" component={HelpScreen} />
           </>
         )}
       </Stack.Navigator>

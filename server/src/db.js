@@ -199,6 +199,16 @@ CREATE TABLE IF NOT EXISTS community_requests (
   FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+/* ---- Blocking: real, server-enforced (not cosmetic) ---- */
+CREATE TABLE IF NOT EXISTS blocked_users (
+  blocker_id TEXT NOT NULL,
+  blocked_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (blocker_id, blocked_id),
+  FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
+);
 `);
 
 /* ---- lightweight migrations for columns added after initial release ---- */
@@ -212,6 +222,11 @@ addColumnIfMissing('statuses', 'song', 'song TEXT');
 addColumnIfMissing('statuses', 'audience', "audience TEXT DEFAULT 'public'");
 addColumnIfMissing('posts', 'song', 'song TEXT');
 addColumnIfMissing('posts', 'audience', "audience TEXT DEFAULT 'public'");
+// A single JSON blob for notification/privacy preferences — avoids a new
+// migration every time a toggle is added. Server validates/merges keys
+// (see DEFAULT_SETTINGS + sanitizeSettings in index.js) so bad client
+// input can't corrupt it or add arbitrary keys.
+addColumnIfMissing('users', 'settings', "settings TEXT DEFAULT '{}'");
 
 module.exports = db;
 module.exports.DATA_DIR = DATA_DIR;

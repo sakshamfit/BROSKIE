@@ -36,6 +36,81 @@ const upload = multer({
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* user preferences — notifications + privacy                         */
+/* ------------------------------------------------------------------ */
+
+const DEFAULT_SETTINGS = {
+  notifications: {
+    messages: true,        // new chat messages
+    messagePreview: true,  // show text/photo preview vs "New message"
+    status: true,          // someone posted to See
+    network: true,         // new Network posts from people you follow-ish (public feed)
+    communityActivity: true, // join requests / approvals / added-to-community
+    sound: true,
+  },
+  privacy: {
+    lastSeen: 'everyone',   // everyone | contacts | nobody — who sees your last-seen/online dot
+    readReceipts: true,     // off = you don't send blue ticks AND you don't see others' either (mirrors WhatsApp)
+  },
+};
+
+function sanitizeSettings(input, base = DEFAULT_SETTINGS) {
+  const out = { notifications: { ...base.notifications }, privacy: { ...base.privacy } };
+  if (input && typeof input === 'object') {
+    if (input.notifications && typeof input.notifications === 'object') {
+      Object.keys(DEFAULT_SETTINGS.notifications).forEach((k) => {
+        if (typeof input.notifications[k] === 'boolean') out.notifications[k] = input.notifications[k];
+      });
+    }
+    if (input.privacy && typeof input.privacy === 'object') {
+      if (['everyone', 'contacts', 'nobody'].includes(input.privacy.lastSeen)) out.privacy.lastSeen = input.privacy.lastSeen;
+      if (typeof input.privacy.readReceipts === 'boolean') out.privacy.readReceipts = input.privacy.readReceipts;
+    }
+  }
+  return out;
+}
+
+function getSettings(u) {
+  let parsed = {};
+  try { parsed = JSON.parse(u?.settings || '{}'); } catch { parsed = {}; }
+  return sanitizeSettings(parsed);
+}
+
+function areContacts(idA, idB) {
+  return !!db
+    .prepare(
+      `SELECT 1 FROM chat_members a JOIN chat_members b ON a.chat_id = b.chat_id
+       WHERE a.user_id = ? AND b.user_id = ? LIMIT 1`
+    )
+    .get(idA, idB);
+}
+
+function isBlocked(blockerId, blockedId) {
+  return !!db.prepare('SELECT 1 FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?').get(blockerId, blockedId);
+}
+
+/** True if either side has blocked the other — used to hard-stop messaging/visibility both ways. */
+function blockedEitherWay(idA, idB) {
+  return isBlocked(idA, idB) || isBlocked(idB, idA);
+}
+
+/**
+ * Presence fields respect the target user's last-seen privacy setting.
+ * `viewerId` null/undefined means "no relationship" (e.g. public feed) —
+ * treated the same as a stranger.
+ */
+function presenceFor(target, viewerId) {
+  if (!target) return { isOnline: false, lastSeen: 0 };
+  if (viewerId && target.id === viewerId) return { isOnline: !!target.is_online, lastSeen: target.last_seen };
+  const settings = getSettings(target);
+  const pref = settings.privacy.lastSeen;
+  const allowed =
+    pref === 'everyone' || (pref === 'contacts' && viewerId && areContacts(target.id, viewerId));
+  if (!allowed) return { isOnline: false, lastSeen: 0 };
+  return { isOnline: !!target.is_online, lastSeen: target.last_seen };
+}
+
 const publicUser = (u) =>
   u && {
     id: u.id,
@@ -85,6 +160,16 @@ function hydrateMessage(m, viewerId) {
   let status = 'sent';
   if (others.length && others.every((id) => delivered.has(id) || readers.has(id))) status = 'delivered';
   if (others.length && others.every((id) => readers.has(id))) status = 'read';
+
+  // Real "read receipts" toggle: mirrors WhatsApp — turn it off and you stop
+  // BOTH sending read confirmations (enforced at mark-read time, see
+  // socket.on('message:read')) AND seeing anyone else's, even in your own
+  // sent messages. So if the person currently looking at this chat has it
+  // disabled, a computed 'read' status never surfaces to them.
+  if (status === 'read' && viewerId) {
+    const viewer = getUser(viewerId);
+    if (viewer && !getSettings(viewer).privacy.readReceipts) status = 'delivered';
+  }
 
   let replyTo = null;
   if (m.reply_to) {
@@ -143,6 +228,7 @@ function chatSummary(chatId, viewerId) {
     .get(chatId, viewerId, viewerId).c;
 
   const archived = (chat.archived_by || '').split(',').filter(Boolean).includes(viewerId);
+  const otherPresence = other ? presenceFor(other, viewerId) : { isOnline: false, lastSeen: 0 };
 
   return {
     id: chat.id,
@@ -152,8 +238,8 @@ function chatSummary(chatId, viewerId) {
     avatar: chat.type === 'group' ? chat.avatar : other ? other.avatar : null,
     about: other ? other.about : null,
     otherUserId: other ? other.id : null,
-    isOnline: other ? !!other.is_online : false,
-    lastSeen: other ? other.last_seen : 0,
+    isOnline: otherPresence.isOnline,
+    lastSeen: otherPresence.lastSeen,
     muted: me ? !!me.muted : false,
     archived,
     role: me ? me.role : 'member',
@@ -239,7 +325,7 @@ app.post('/api/auth/register', (req, res) => {
      VALUES (@id, @username, @phone, @name, @about, @avatar, @password_hash, @last_seen, @is_online, @created_at)`
   ).run(user);
 
-  res.json({ token: sign(user), user: publicUser(user) });
+  res.json({ token: sign(user), user: { ...publicUser(user), settings: getSettings(user) } });
 });
 
 app.post('/api/auth/login', (req, res) => {
@@ -247,10 +333,31 @@ app.post('/api/auth/login', (req, res) => {
   const user = getUserByUsername(username);
   if (!user || !bcrypt.compareSync(String(password || ''), user.password_hash))
     return res.status(401).json({ error: 'Invalid username or password' });
-  res.json({ token: sign(user), user: publicUser(user) });
+  res.json({ token: sign(user), user: { ...publicUser(user), settings: getSettings(user) } });
 });
 
-app.get('/api/me', requireAuth, (req, res) => res.json({ user: publicUser(getUser(req.userId)) }));
+app.get('/api/me', requireAuth, (req, res) => {
+  const u = getUser(req.userId);
+  res.json({ user: { ...publicUser(u), settings: getSettings(u) } });
+});
+
+app.patch('/api/me/settings', requireAuth, (req, res) => {
+  const u = getUser(req.userId);
+  const current = getSettings(u);
+  // Sanitize the incoming patch against the CURRENT (already-valid) settings
+  // as the base, not the hardcoded defaults — so an invalid/garbage value in
+  // one field (e.g. a bad lastSeen string) is simply ignored rather than
+  // silently resetting that field to its default.
+  const merged = sanitizeSettings(
+    {
+      notifications: { ...current.notifications, ...(req.body?.notifications || {}) },
+      privacy: { ...current.privacy, ...(req.body?.privacy || {}) },
+    },
+    current
+  );
+  db.prepare('UPDATE users SET settings = ? WHERE id = ?').run(JSON.stringify(merged), req.userId);
+  res.json({ settings: merged });
+});
 
 app.patch('/api/me', requireAuth, (req, res) => {
   const { name, about, avatar, username, phone } = req.body || {};
@@ -314,7 +421,40 @@ app.get('/api/users', requireAuth, (req, res) => {
         (u.username && u.username.includes(q)) ||
         u.phone.includes(q))
     : all;
-  res.json({ users: filtered.map(publicUser) });
+  res.json({
+    users: filtered.map((u) => ({
+      ...publicUser(u),
+      ...presenceFor(u, req.userId),
+      blocked: isBlocked(req.userId, u.id),
+    })),
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* blocking — real enforcement, not cosmetic                          */
+/* ------------------------------------------------------------------ */
+
+app.get('/api/blocked', requireAuth, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT u.* FROM blocked_users b JOIN users u ON u.id = b.blocked_id
+       WHERE b.blocker_id = ? ORDER BY b.created_at DESC`
+    )
+    .all(req.userId);
+  res.json({ users: rows.map(publicUser) });
+});
+
+app.post('/api/blocked/:userId', requireAuth, (req, res) => {
+  const target = getUser(req.params.userId);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.id === req.userId) return res.status(400).json({ error: "You can't block yourself" });
+  db.prepare('INSERT OR IGNORE INTO blocked_users (blocker_id, blocked_id, created_at) VALUES (?,?,?)').run(req.userId, target.id, now());
+  res.json({ ok: true });
+});
+
+app.delete('/api/blocked/:userId', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?').run(req.userId, req.params.userId);
+  res.json({ ok: true });
 });
 
 /* ------------------------------------------------------------------ */
@@ -345,6 +485,9 @@ app.get('/api/chats', requireAuth, (req, res) => res.json({ chats: userChats(req
 app.post('/api/chats/direct', requireAuth, (req, res) => {
   const { userId } = req.body || {};
   if (!userId || !getUser(userId)) return res.status(400).json({ error: 'Unknown user' });
+  if (blockedEitherWay(req.userId, userId)) {
+    return res.status(403).json({ error: "You can't message this person" });
+  }
 
   const existing = db
     .prepare(
@@ -457,6 +600,7 @@ function insertSystemMessage(chatId, body) {
 /** Can `viewerId` see a status posted by `authorId` with the given audience? */
 function canViewStatus(statusId, authorId, audience, viewerId) {
   if (authorId === viewerId) return true;
+  if (blockedEitherWay(authorId, viewerId)) return false;
   if (audience === 'public') return true;
   if (audience === 'contacts') return contactIds(authorId).includes(viewerId);
   if (audience === 'selected') {
@@ -468,6 +612,7 @@ function canViewStatus(statusId, authorId, audience, viewerId) {
 /** Can `viewerId` see a Network post authored by `authorId` with the given audience? */
 function canViewPost(postId, authorId, audience, viewerId) {
   if (authorId === viewerId) return true;
+  if (blockedEitherWay(authorId, viewerId)) return false;
   if (audience === 'public') return true;
   if (audience === 'contacts') return contactIds(authorId).includes(viewerId);
   if (audience === 'selected') {
@@ -476,15 +621,16 @@ function canViewPost(postId, authorId, audience, viewerId) {
   return false;
 }
 
-/** Every userId allowed to see a post with the given audience (for realtime fan-out). */
+/** Every userId allowed to see a post with the given audience (for realtime fan-out), minus anyone blocked either way. */
 function postAudienceIds(postId, authorId, audience) {
-  if (audience === 'public') return [...sockets.keys()];
-  if (audience === 'contacts') return [...new Set([authorId, ...contactIds(authorId)])];
-  if (audience === 'selected') {
+  let ids;
+  if (audience === 'public') ids = [...sockets.keys()];
+  else if (audience === 'contacts') ids = [...new Set([authorId, ...contactIds(authorId)])];
+  else if (audience === 'selected') {
     const rows = db.prepare('SELECT user_id FROM post_recipients WHERE post_id = ?').all(postId);
-    return [...new Set([authorId, ...rows.map((r) => r.user_id)])];
-  }
-  return [authorId];
+    ids = [...new Set([authorId, ...rows.map((r) => r.user_id)])];
+  } else ids = [authorId];
+  return ids.filter((id) => id === authorId || !blockedEitherWay(authorId, id));
 }
 
 function hydrateStatus(s, viewerId) {
@@ -544,12 +690,14 @@ app.post('/api/status', requireAuth, (req, res) => {
     recipientIds.filter((id) => getUser(id)).forEach((id) => stmt.run(s.id, id));
   }
 
-  // Only notify sockets that are allowed to see it.
-  const targets = aud === 'public'
+  // Only notify sockets that are allowed to see it (and never someone
+  // blocked either way, regardless of audience).
+  const targets = (aud === 'public'
     ? [...sockets.keys()]
     : aud === 'contacts'
       ? contactIds(req.userId)
-      : recipientIds;
+      : recipientIds
+  ).filter((id) => !blockedEitherWay(req.userId, id));
   targets.forEach((uid) => emitToUser(uid, 'status:new', { userId: req.userId }));
   emitToUser(req.userId, 'status:new', { userId: req.userId });
 
@@ -1175,6 +1323,14 @@ io.on('connection', (socket) => {
       const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
       if (!isMember) return ack?.({ error: 'Not a member' });
 
+      // Blocking is enforced here (not just at chat-creation time) so it
+      // also stops messages in an already-existing direct chat.
+      const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
+      if (chat && chat.type === 'direct') {
+        const otherId = memberIds(chatId).find((x) => x !== uid);
+        if (otherId && blockedEitherWay(uid, otherId)) return ack?.({ error: "You can't message this person" });
+      }
+
       const msg = {
         id: nano(), chat_id: chatId, sender_id: uid, type,
         body: String(body).slice(0, 5000), media_url: mediaUrl,
@@ -1201,6 +1357,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on('message:read', ({ chatId }) => {
+    // Real "read receipts" toggle: if I've turned mine off, I still get
+    // marked as having "seen" it for my own unread badge (delivered), but I
+    // never write a 'read' receipt — so nobody else ever sees a blue tick
+    // from me, matching the WhatsApp trade-off (turn it off for others,
+    // lose seeing it from others too).
+    const myReadReceiptsOn = getSettings(getUser(uid)).privacy.readReceipts;
     const rows = db
       .prepare(
         `SELECT * FROM messages WHERE chat_id = ? AND sender_id != ?
@@ -1209,7 +1371,9 @@ io.on('connection', (socket) => {
       .all(chatId, uid, uid);
     rows.forEach((m) => {
       db.prepare('INSERT OR IGNORE INTO receipts (message_id, user_id, state, at) VALUES (?,?,?,?)').run(m.id, uid, 'delivered', now());
-      db.prepare('INSERT OR IGNORE INTO receipts (message_id, user_id, state, at) VALUES (?,?,?,?)').run(m.id, uid, 'read', now());
+      if (myReadReceiptsOn) {
+        db.prepare('INSERT OR IGNORE INTO receipts (message_id, user_id, state, at) VALUES (?,?,?,?)').run(m.id, uid, 'read', now());
+      }
     });
     if (rows.length) {
       rows.forEach((m) => {

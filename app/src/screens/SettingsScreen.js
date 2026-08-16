@@ -64,6 +64,14 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             subtitle="Password, Sessions"
             onPress={() => navigation.navigate('Security')}
           />
+          <Divider theme={theme} />
+          <NavRow
+            theme={theme}
+            icon="shield-checkmark-outline"
+            title="Privacy"
+            subtitle="Last seen, read receipts, blocked contacts"
+            onPress={() => navigation.navigate('Privacy')}
+          />
         </View>
 
         {/* -------- Preferences -------- */}
@@ -86,6 +94,26 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             title="Appearance"
             subtitle="Theme, Typography"
             onPress={() => navigation.navigate('Appearance')}
+          />
+          <Divider theme={theme} />
+          <NavRow
+            theme={theme}
+            icon="notifications-outline"
+            title="Notifications"
+            subtitle="Messages, Status, Network, Sound"
+            onPress={() => navigation.navigate('Notifications')}
+          />
+        </View>
+
+        {/* -------- Support -------- */}
+        <SectionHeading theme={theme} label="Support" tilt="-1deg" />
+        <View style={s.group}>
+          <NavRow
+            theme={theme}
+            icon="help-circle-outline"
+            title="Help & Guide"
+            subtitle="How to use every key feature"
+            onPress={() => navigation.navigate('Help')}
           />
         </View>
 

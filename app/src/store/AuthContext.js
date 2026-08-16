@@ -57,12 +57,18 @@ export function AuthProvider({ children }) {
 
   const updateProfile = useCallback(async (patch) => {
     const { user } = await api.updateMe(patch);
-    setUser(user);
+    setUser((prev) => ({ ...prev, ...user }));
     return user;
   }, []);
 
+  const updateSettings = useCallback(async (patch) => {
+    const { settings } = await api.updateSettings(patch);
+    setUser((prev) => (prev ? { ...prev, settings } : prev));
+    return settings;
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, token, booting, login, register, logout, updateProfile }}>
+    <AuthContext.Provider value={{ user, token, booting, login, register, logout, updateProfile, updateSettings }}>
       {children}
     </AuthContext.Provider>
   );

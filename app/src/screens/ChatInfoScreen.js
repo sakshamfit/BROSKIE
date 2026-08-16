@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -8,6 +8,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, lastSeenText, PaperCard, TapeChip, handleFor, Rule } from '../components/common';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
+import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 
 export default function ChatInfoScreen({ route, navigation, embedded = false }) {
@@ -18,16 +19,44 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
   const insets = useSafeAreaInsets();
   const chat = chats.find((c) => c.id === chatId);
   const s = makeStyles(theme);
+  const [blocked, setBlocked] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (chat?.type !== 'direct' || !chat.otherUserId) return;
+    api.users().then(({ users }) => {
+      const other = users.find((u) => u.id === chat.otherUserId);
+      if (other) setBlocked(!!other.blocked);
+    }).catch(() => {});
+  }, [chat?.otherUserId]);
 
   if (!chat) return <View style={{ flex: 1, backgroundColor: theme.bg }} />;
 
   const toggleMute = async () => { await api.mute(chatId, !chat.muted); refreshChats(); };
   const toggleArchive = async () => { await api.archive(chatId, !chat.archived); refreshChats(); navigation.goBack(); };
 
-  const Row = ({ icon, label, onPress }) => (
-    <Pressable style={({ pressed }) => [s.row, pressed && marker(theme, 1)]} onPress={onPress}>
-      <Icon name={icon} size={19} color={theme.ink} style={{ width: 26 }} />
-      <Text style={[type.bodyMd, { color: theme.text }]}>{label}</Text>
+  const toggleBlock = async () => {
+    const ok = await confirm(
+      blocked
+        ? `Unblock ${chat.name}? They'll be able to message you and see your public posts again.`
+        : `Block ${chat.name}? They won't be able to message you, and neither of you will see each other's Status or Network posts.`,
+      { title: blocked ? 'Unblock' : 'Block', confirmLabel: blocked ? 'Unblock' : 'Block', destructive: !blocked }
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      if (blocked) await api.unblockUser(chat.otherUserId);
+      else await api.blockUser(chat.otherUserId);
+      setBlocked(!blocked);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const Row = ({ icon, label, onPress, danger }) => (
+    <Pressable style={({ pressed }) => [s.row, pressed && marker(theme, 1)]} onPress={onPress} disabled={busy}>
+      <Icon name={icon} size={19} color={danger ? theme.danger : theme.ink} style={{ width: 26 }} />
+      <Text style={[type.bodyMd, { color: danger ? theme.danger : theme.text }]}>{label}</Text>
     </Pressable>
   );
 
@@ -62,6 +91,17 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
           <Row icon={chat.muted ? 'volume-mute' : 'notifications-outline'} label={chat.muted ? 'Unmute notifications' : 'Mute notifications'} onPress={toggleMute} />
           <Row icon="archive-outline" label={chat.archived ? 'Unarchive chat' : 'Archive chat'} onPress={toggleArchive} />
         </PaperCard>
+
+        {chat.type === 'direct' && (
+          <PaperCard style={{ padding: 6 }}>
+            <Row
+              icon={blocked ? 'checkmark-circle' : 'ban-outline'}
+              label={blocked ? `Unblock ${chat.name}` : `Block ${chat.name}`}
+              onPress={toggleBlock}
+              danger={!blocked}
+            />
+          </PaperCard>
+        )}
 
         {chat.type === 'group' && (
           <PaperCard>
@@ -98,3 +138,4 @@ const makeStyles = (t) => StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 12, paddingVertical: 13 },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
 });
+

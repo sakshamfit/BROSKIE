@@ -208,7 +208,7 @@ export default function AuthScreen() {
                 )}
 
                 <Field
-                  icon="key"
+                  icon="key-outline"
                   label="Access Key"
                   value={password}
                   onChangeText={setPassword}

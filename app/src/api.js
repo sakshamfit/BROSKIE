@@ -70,8 +70,14 @@ export const api = {
   usernameAvailable: (username) => request(`/api/auth/username-available?username=${encodeURIComponent(username)}`),
   me: () => request('/api/me'),
   updateMe: (payload) => request('/api/me', { method: 'PATCH', body: payload }),
+  updateSettings: (payload) => request('/api/me/settings', { method: 'PATCH', body: payload }),
   changePassword: (payload) => request('/api/me/password', { method: 'POST', body: payload }),
   users: (q = '') => request(`/api/users?q=${encodeURIComponent(q)}`),
+
+  // Blocking — real, server-enforced
+  blockedUsers: () => request('/api/blocked'),
+  blockUser: (userId) => request(`/api/blocked/${userId}`, { method: 'POST', body: {} }),
+  unblockUser: (userId) => request(`/api/blocked/${userId}`, { method: 'DELETE' }),
 
   chats: () => request('/api/chats'),
   directChat: (userId) => request('/api/chats/direct', { method: 'POST', body: { userId } }),
