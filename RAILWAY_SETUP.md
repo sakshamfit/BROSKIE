@@ -25,12 +25,15 @@ In your Railway project dashboard → **Variables**, add these:
 In Railway → **Settings** → **Networking** → **Generate Domain**.  
 Copy the URL — it'll look like `https://your-app.up.railway.app`
 
-## Step 4 — Seed Demo Data
+## Step 4 — Create your account
 
-In Railway's **Shell** tab (or via Railway CLI), run:
-```bash
-cd server && node src/seed.js
-```
+There's no demo data seeded anymore — the app runs entirely on real
+accounts. Open the deployed app and use **Sign Up** to create your own
+account with a username and password; anyone else who wants an account
+signs up the same way. (If you specifically want throwaway test data for
+local development only, `cd server && node src/seed.js --yes-wipe-real-data`
+still exists — the flag is required on purpose since it wipes every
+existing user/chat first. Never run it against a production database.)
 
 ## Step 5 — Point Vercel Frontend to Railway
 
@@ -42,9 +45,9 @@ cd server && node src/seed.js
 
 ## Step 6 — Verify
 
-1. Open `https://broskie-mu.vercel.app` — log in as `+919000000001` / `1234`
+1. Open `https://broskie-mu.vercel.app` — sign up for an account (or log in with one you already created)
 2. Open **Settings** — the connection dot should show **Connected** (yellow/green)
-3. Open a second browser tab as `+919000000002` and send a message to yourself — it should arrive instantly with blue ticks
+3. Open a second browser tab, sign up as a second account, and message between them — it should arrive instantly with blue ticks
 
 ---
 

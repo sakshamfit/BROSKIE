@@ -139,6 +139,14 @@ export default function SettingsScreen({ navigation, embedded = false }) {
 /* profile hero                                                        */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Profile photo can only be ADDED or REPLACED here — there is deliberately
+ * no "remove photo" affordance. `ImagePicker.launchImageLibraryAsync`
+ * either returns a picked image or is cancelled (never an empty/cleared
+ * result), so there's no client-side path to clear it either way; the
+ * server additionally refuses to accept an empty/null avatar value on
+ * PATCH /api/me as a second layer of enforcement.
+ */
 function ProfileHero({ user, theme, joinYear, connected }) {
   const { updateProfile } = useAuth();
   const [uploading, setUploading] = useState(false);

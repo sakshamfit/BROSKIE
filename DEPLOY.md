@@ -61,8 +61,12 @@ and the server serves it automatically when that folder exists.
 3. Free tier sleeps when idle; the first request wakes it (~30s) and sockets
    reconnect on their own.
 
-### Seed demo users (optional)
-In the host's shell: `cd server && npm run seed`
+### Create your first account
+No demo users are seeded — the database starts empty. Open the deployed
+app and use **Sign Up** to create a real account. (`node src/seed.js
+--yes-wipe-real-data` still exists for local dev sample data only — the
+flag is required on purpose because it **wipes all existing users/chats
+first**; never run it against a real/production database.)
 
 ### Run single-host mode locally
 ```bash
@@ -166,7 +170,8 @@ entirely and enables multiple server instances).
 ## Before real users
 
 - Set a strong `JWT_SECRET` (never ship the dev fallback)
-- Change the demo password `1234` / remove seeded accounts
+- The database starts empty (no seeded demo accounts) — real users sign up
+  with their own username/password
 - Attach a persistent volume (see above), or migrate SQLite → Postgres
 - Move uploads to object storage — **see `SUPABASE.md`** (3-minute setup)
 - Restrict CORS to your own domain

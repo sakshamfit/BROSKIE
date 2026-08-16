@@ -12,12 +12,39 @@ const fs = require('fs');
 //      Volume is attached to the service, so we pick it up with zero config
 //      the moment a volume exists — see DEPLOY.md for the one-time setup.
 //   3. Falls back to server/data for local dev / no-volume deploys.
+const usingPersistentVolume = !!(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH);
 const DATA_DIR = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)
   : process.env.RAILWAY_VOLUME_MOUNT_PATH
     ? path.resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH)
     : path.join(__dirname, '..', 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// Loud, impossible-to-miss startup warning when running on a known
+// ephemeral-disk host (Railway or Render, detected via the env vars they
+// auto-inject — not NODE_ENV, which Railway doesn't reliably set) with no
+// volume attached: every redeploy on those hosts wipes the container's own
+// disk, so without DATA_DIR/RAILWAY_VOLUME_MOUNT_PATH set, all users/chats/
+// messages/posts/communities silently disappear on the next push. This is
+// the actual failure mode behind "I pushed an update and lost my data" —
+// surfacing it at boot means it shows up in deploy logs immediately
+// instead of being discovered after the fact.
+const onKnownEphemeralHost = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RENDER);
+if (!usingPersistentVolume && onKnownEphemeralHost) {
+  console.warn(
+    '\n⚠️  ⚠️  ⚠️  NO PERSISTENT STORAGE CONFIGURED  ⚠️  ⚠️  ⚠️\n' +
+    '  The database is being written to the container\'s own ephemeral disk.\n' +
+    '  On Railway/Render, EVERY REDEPLOY WIPES THIS — all users, chats,\n' +
+    '  messages, statuses, posts and communities will be permanently lost\n' +
+    '  the next time you push an update.\n\n' +
+    '  Fix: attach a persistent volume and it will be picked up automatically.\n' +
+    '    Railway → your service → Volumes tab → New Volume (auto-detected via\n' +
+    '      RAILWAY_VOLUME_MOUNT_PATH, no other config needed)\n' +
+    '    Render  → your service → Disks → Add Disk, then set DATA_DIR to its\n' +
+    '      mount path (Render Disks require a paid plan)\n' +
+    '  See DEPLOY.md → "Never lose data on deploy" for full steps.\n'
+  );
+}
 
 const db = new Database(path.join(DATA_DIR, 'tomodachi.db'));
 db.pragma('journal_mode = WAL');

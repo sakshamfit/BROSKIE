@@ -15,7 +15,6 @@ Two processes. Open two terminals.
 # 1. backend  (http://localhost:4000)
 cd server
 npm install
-npm run seed     # creates demo users, chats, statuses
 npm start
 
 # 2. app
@@ -24,19 +23,22 @@ npm install
 npx expo start          # press w for web, or scan the QR with Expo Go
 ```
 
-### Demo logins — password `1234` for all
-
-| Username | Name |
-|---|---|
-| `you` | You (Demo) |
-| `ananya` | Ananya Sharma |
-| `rohit` | Rohit Verma |
-| `priya` | Priya Nair |
-| `karan` | Karan Mehta |
+The database starts completely empty — there's no seeded demo data. Use
+**Sign Up** on the login screen to create a real account (username +
+password); do that again in a second browser tab/device to create a second
+account to message with.
 
 **To see real-time messaging:** open the app in two browser tabs (or a browser + phone),
-log in as two different people, and message between them. Typing indicators, delivery
+log in as two different accounts, and message between them. Typing indicators, delivery
 and blue ticks all update live.
+
+### Local test data (optional, dev-only)
+
+If you want throwaway sample users/chats/posts while developing locally,
+`cd server && node src/seed.js --yes-wipe-real-data` will create them.
+The flag is required on purpose — this script **wipes all existing
+users/chats/posts first**, so never run it against a database you care
+about (and never run it in production).
 
 ### Running on a physical device
 

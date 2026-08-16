@@ -259,8 +259,6 @@ export default function AuthScreen() {
               <View style={s.cornerBR} />
             </View>
           </View>
-
-          <DemoAccounts onPick={(u) => { setUsername(u); setPassword('1234'); setMode('login'); }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -287,25 +285,6 @@ function Field({ icon, label, suffix, focused, ...inputProps }) {
         {suffix}
       </View>
       <View style={[s.fieldUnderline, focused && s.fieldUnderlineActive]} />
-    </View>
-  );
-}
-
-function DemoAccounts({ onPick }) {
-  const demo = [
-    ['you', 'You (Demo)'],
-    ['ananya', 'Ananya Sharma'],
-    ['rohit', 'Rohit Verma'],
-  ];
-  return (
-    <View style={s.demoWrap}>
-      <Text style={s.demoTitle}>DEMO OPERATORS · KEY 1234</Text>
-      {demo.map(([u, n]) => (
-        <Pressable key={u} onPress={() => onPick(u)} style={({ pressed }) => [s.demoRow, pressed && { opacity: 0.6 }]}>
-          <Text style={s.demoUsername}>@{u}</Text>
-          <Text style={s.demoName}>{n}</Text>
-        </Pressable>
-      ))}
     </View>
   );
 }
@@ -558,10 +537,4 @@ const s = StyleSheet.create({
 
   speedLinesTrack: { flexDirection: 'row', width: '220%', height: '100%' },
   speedLine: { width: 2, height: '100%', marginRight: 98, backgroundColor: 'rgba(0,240,255,0.08)' },
-
-  demoWrap: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 24 },
-  demoTitle: { fontFamily: 'SpaceMono_700Bold', fontSize: 11, letterSpacing: 1.5, color: VOID.outline, marginBottom: 12 },
-  demoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
-  demoUsername: { fontFamily: 'SpaceMono_700Bold', fontSize: 13, color: VOID.primaryContainer },
-  demoName: { fontFamily: 'Hanken_400Regular', fontSize: 13, color: VOID.onSurfaceVariant },
 });

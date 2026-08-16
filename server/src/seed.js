@@ -1,8 +1,35 @@
-/* Seeds demo users, chats, messages and statuses so the app is alive on first run. */
+/**
+ * DEV-ONLY sample data generator — NOT run automatically anywhere (not in
+ * `build`, `start`, `postinstall`, or any deploy config). It exists purely
+ * so a fresh local checkout has something to look at; the deployed app is
+ * expected to run entirely on real accounts created via Sign Up.
+ *
+ * WARNING — THIS WIPES EVERY USER, CHAT, MESSAGE, STATUS, POST AND
+ * COMMUNITY FIRST. Never run this against a database with real user data,
+ * local or deployed. Guarded below: it refuses to run unless you pass
+ * `--yes-wipe-real-data` or set `ALLOW_SEED_WIPE=1`, specifically so it
+ * can't be triggered by a copy-pasted command against production without
+ * a second, explicit confirmation.
+ */
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const { customAlphabet } = require('nanoid');
 const db = require('./db');
+
+const confirmed = process.argv.includes('--yes-wipe-real-data') || process.env.ALLOW_SEED_WIPE === '1';
+if (!confirmed) {
+  console.error(
+    '\n✖ Refusing to run: this script DELETES every user, chat, message, status,\n' +
+    '  post and community in the database before inserting sample data.\n\n' +
+    '  This is a dev-only convenience for a fresh local checkout — it is not\n' +
+    '  meant to run against any database with real accounts in it (local or\n' +
+    '  deployed).\n\n' +
+    '  If you are certain this database only has throwaway data, re-run with:\n' +
+    '    node src/seed.js --yes-wipe-real-data\n' +
+    '  or set ALLOW_SEED_WIPE=1 in the environment.\n'
+  );
+  process.exit(1);
+}
 
 const nano = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
 const now = Date.now();
