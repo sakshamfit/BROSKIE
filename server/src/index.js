@@ -169,7 +169,7 @@ app.post('/api/auth/register', (req, res) => {
     id: nano(),
     phone: String(phone).trim(),
     name: String(name).trim(),
-    about: 'Hey there! I am using BROSKIE.',
+    about: 'Hey there! I am using 友達.',
     avatar: null,
     password_hash: bcrypt.hashSync(String(password), 8),
     last_seen: now(),
@@ -710,7 +710,7 @@ if (fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
 } else {
   app.get('/', (req, res) =>
     res.json({
-      name: 'BROSKIE API',
+      name: '友達 API',
       status: 'ok',
       hint: 'No web build found. Run `npm run build` to serve the app from this server.',
     })
@@ -719,7 +719,7 @@ if (fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, '0.0.0.0', async () => {
-  console.log(`BROSKIE server listening on http://0.0.0.0:${PORT}`);
+  console.log(`友達 server listening on http://0.0.0.0:${PORT}`);
   console.log(`[storage] ${storage.describe()}`);
   await storage.ensureBucket();
 });

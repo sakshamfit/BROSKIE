@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "BROSKIE",
-    "slug": "broskie",
+    "name": "友達",
+    "slug": "tomodachi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,14 +14,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ai.arena.broskie",
+      "bundleIdentifier": "ai.arena.tomodachi",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "BROSKIE uses the microphone to record voice messages.",
-        "NSPhotoLibraryUsageDescription": "BROSKIE needs photo access so you can share images in chats."
+        "NSMicrophoneUsageDescription": "友達 uses the microphone to record voice messages.",
+        "NSPhotoLibraryUsageDescription": "友達 needs photo access so you can share images in chats."
       }
     },
     "android": {
-      "package": "ai.arena.broskie",
+      "package": "ai.arena.tomodachi",
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#075E54"
@@ -40,7 +40,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow BROSKIE to access your photos to share them in chats."
+          "photosPermission": "Allow 友達 to access your photos to share them in chats."
         }
       ],
       "expo-font"

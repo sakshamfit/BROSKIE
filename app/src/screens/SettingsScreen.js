@@ -98,7 +98,7 @@ export default function SettingsScreen({ navigation }) {
         <InkButton label="Log out" icon="log-out-outline" onPress={logout} danger />
 
         <Text style={[type.labelXs, { textAlign: 'center', color: theme.muted, marginTop: 10, lineHeight: 16 }]}>
-          BROSKIE · GRAPHITE & PULP{'\n'}NOT AFFILIATED WITH WHATSAPP
+          友達 · GRAPHITE & PULP{'\n'}NOT AFFILIATED WITH WHATSAPP
         </Text>
       </ScrollView>
 

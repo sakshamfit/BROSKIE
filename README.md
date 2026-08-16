@@ -1,4 +1,4 @@
-# BROSKIE — an ink-and-paper messenger
+# 友達 — an ink-and-paper messenger
 
 A full-stack, real-time messaging app: **Expo / React Native** client + **Node, Socket.IO, SQLite** backend.
 Runs on iOS, Android and the web from one codebase.

@@ -72,7 +72,7 @@ export default function App() {
               </ChatProvider>
             </AuthProvider>
           ) : (
-            <Loading label="LOADING BROSKIE" />
+            <Loading label="LOADING 友達" />
           )}
         </ThemeProvider>
       </SafeAreaProvider>

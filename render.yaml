@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: broskie
+    name: tomodachi
     runtime: node
     plan: free
     buildCommand: npm run build
@@ -12,6 +12,6 @@ services:
         value: "20"
     # Persist the SQLite database across deploys (paid plans only).
     # disk:
-    #   name: broskie-data
+    #   name: tomodachi-data
     #   mountPath: /opt/render/project/src/server/data
     #   sizeGB: 1

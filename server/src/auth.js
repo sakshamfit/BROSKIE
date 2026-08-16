@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-const SECRET = process.env.JWT_SECRET || 'broskie-dev-secret-change-me';
+const SECRET = process.env.JWT_SECRET || 'tomodachi-dev-secret-change-me';
 
 function sign(user) {
   return jwt.sign({ id: user.id, phone: user.phone }, SECRET, { expiresIn: '30d' });

@@ -45,9 +45,9 @@ export default function AuthScreen() {
           <View style={[s.logoBox, inkBox(theme, 'bold')]}>
             <Icon name="chatbubbles" size={30} color={theme.ink} />
           </View>
-          <Text style={s.title}>BROSKIE</Text>
+          <Text style={s.title}>友達</Text>
           <View style={s.taglineWrap}>
-            <Text style={s.tagline}>messages, sketched by hand</Text>
+            <Text style={s.tagline}>messages between friends</Text>
           </View>
         </View>
 

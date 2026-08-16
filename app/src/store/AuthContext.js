@@ -5,7 +5,7 @@ import { api, setToken } from '../api';
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
-const TOKEN_KEY = 'broskie.token';
+const TOKEN_KEY = 'tomodachi.token';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);

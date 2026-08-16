@@ -5,7 +5,7 @@ import { lightTheme, darkTheme } from '../theme';
 const ThemeContext = createContext(null);
 export const useTheme = () => useContext(ThemeContext);
 
-const KEY = 'broskie.theme';
+const KEY = 'tomodachi.theme';
 
 export function ThemeProvider({ children }) {
   const [mode, setMode] = useState('light');

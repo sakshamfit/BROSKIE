@@ -110,7 +110,7 @@ const insertStatus = db.prepare(
   });
 });
 
-console.log('Seeded BROSKIE demo data.');
+console.log('Seeded 友達 demo data.');
 console.log('Login with any of these (password: 1234):');
 people.forEach((p) => console.log(`  ${p.phone}  ->  ${p.name}`));
 

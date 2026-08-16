@@ -24,7 +24,7 @@ const SUPABASE_SERVICE_KEY =
   process.env.SUPABASE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.SUPABASE_PUBLISHABLE_KEY;
-const BUCKET = process.env.SUPABASE_BUCKET || 'broskie-uploads';
+const BUCKET = process.env.SUPABASE_BUCKET || 'tomodachi-uploads';
 
 /**
  * Publishable/anon keys can upload only if the bucket already exists AND an

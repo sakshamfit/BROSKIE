@@ -1,5 +1,5 @@
 /**
- * BROSKIE — "Graphite & Pulp" design system.
+ * 友達 — "Graphite & Pulp" design system.
  *
  * Artisanal / tactile minimalism: ink strokes on warm off-white paper.
  * NO digital shadows, NO elevation tints, NO blur. Depth comes from
@@ -231,7 +231,7 @@ export const clayAvatar = () => ({});
 
 export const lightTheme = {
   dark: false,
-  name: 'BROSKIE',
+  name: '友達',
 
   bg: tokens.surface,             // warm pulp paper
   chatBg: tokens.surface,
@@ -286,7 +286,7 @@ export const lightTheme = {
 /** Dark = ink-on-slate (chalkboard rather than paper). */
 export const darkTheme = {
   dark: true,
-  name: 'BROSKIE',
+  name: '友達',
 
   bg: '#1c1b1b',
   chatBg: '#1c1b1b',

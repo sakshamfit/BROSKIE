@@ -1,4 +1,4 @@
-# Deploying BROSKIE
+# Deploying 友達
 
 **Recommendation: deploy to ONE host.** It is simpler, cheaper, faster, and
 removes a whole class of bugs. Details below, plus the two-host option if you
@@ -8,7 +8,7 @@ specifically need a CDN.
 
 ## Why one host wins here
 
-BROSKIE is two programs: an Expo web frontend and a Node/Socket.IO backend.
+友達 is two programs: an Expo web frontend and a Node/Socket.IO backend.
 Vercel can host the frontend but **cannot host the backend** — Socket.IO needs
 a process that stays alive holding WebSocket connections, and Vercel's
 serverless functions spin up per-request and die. So "just use Vercel" is not
@@ -79,7 +79,7 @@ npm start         # http://localhost:4000 serves everything
 Only if you want the Vercel CDN. `vercel.json` is already in the repo.
 
 1. **Backend on Railway first** (steps above) and copy its URL
-2. **Vercel** → import `sakshamfit/BROSKIE`
+2. **Vercel** → import the `BROSKIE` repo
 3. Add environment variable **before** deploying:
 
    | Name | Value |

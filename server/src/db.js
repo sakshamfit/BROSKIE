@@ -5,7 +5,7 @@ const fs = require('fs');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const db = new Database(path.join(DATA_DIR, 'broskie.db'));
+const db = new Database(path.join(DATA_DIR, 'tomodachi.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
   phone         TEXT UNIQUE NOT NULL,
   name          TEXT NOT NULL,
-  about         TEXT DEFAULT 'Hey there! I am using BROSKIE.',
+  about         TEXT DEFAULT 'Hey there! I am using 友達.',
   avatar        TEXT,
   password_hash TEXT NOT NULL,
   last_seen     INTEGER DEFAULT 0,

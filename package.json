@@ -1,8 +1,8 @@
 {
-  "name": "broskie",
+  "name": "tomodachi",
   "version": "1.0.0",
   "private": true,
-  "description": "BROSKIE — realtime claymorphic messenger. Root manifest so hosts (Railway/Render/Nixpacks) detect a Node project and delegate to server/.",
+  "description": "友達 — realtime ink-and-paper messenger. Root manifest so hosts (Railway/Render/Nixpacks) detect a Node project and delegate to server/.",
   "engines": {
     "node": "20.x"
   },

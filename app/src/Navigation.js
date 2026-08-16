@@ -104,7 +104,7 @@ export default function Navigation() {
   const { user, booting } = useAuth();
   const { theme, mode } = useTheme();
 
-  if (booting) return <Loading label="STARTING BROSKIE" />;
+  if (booting) return <Loading label="STARTING 友達" />;
 
   const navTheme = {
     ...(mode === 'dark' ? DarkTheme : DefaultTheme),

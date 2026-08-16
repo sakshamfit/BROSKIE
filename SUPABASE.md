@@ -1,6 +1,6 @@
-# Supabase Storage for BROSKIE uploads
+# Supabase Storage for 友達 uploads
 
-By default BROSKIE writes uploaded photos to `server/uploads` on local disk.
+By default 友達 writes uploaded photos to `server/uploads` on local disk.
 On Railway/Render that disk is **ephemeral** — every redeploy wipes it and
 previously shared images 404.
 
@@ -41,7 +41,7 @@ https://supabase.com → **New project**. Any region; the free tier is fine
 #### Using a publishable key anyway
 The server accepts it, but you must do the setup by hand:
 
-1. **Storage → New bucket** → name `broskie-uploads` → tick **Public**
+1. **Storage → New bucket** → name `tomodachi-uploads` → tick **Public**
 2. **Storage → Policies** → on `storage.objects`, add an **INSERT** policy
    allowing the `anon` role for that bucket
 
@@ -55,7 +55,7 @@ Your service → **Variables** → add:
 ```
 SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 SUPABASE_SERVICE_KEY=sb_secret_...        # the SECRET key (see warning above)
-SUPABASE_BUCKET=broskie-uploads           # optional, this is the default
+SUPABASE_BUCKET=tomodachi-uploads           # optional, this is the default
 ```
 
 `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are also
@@ -69,14 +69,14 @@ Railway redeploys automatically.
 Check the deploy logs for:
 
 ```
-[storage] Supabase Storage (bucket "broskie-uploads")
+[storage] Supabase Storage (bucket "tomodachi-uploads")
 ```
 
 The line also tells you which key type was detected:
 
 ```
-[storage] Supabase Storage (bucket "broskie-uploads", secret key)        ← good
-[storage] Supabase Storage (bucket "broskie-uploads", publishable/anon key)
+[storage] Supabase Storage (bucket "tomodachi-uploads", secret key)        ← good
+[storage] Supabase Storage (bucket "tomodachi-uploads", publishable/anon key)
 [storage] local disk (server/uploads) — files are lost on redeploy       ← vars not set
 ```
 
@@ -106,7 +106,7 @@ which returns the URL stored in the message row:
 
 | Backend | Stored URL |
 |---|---|
-| Supabase | `https://xxxx.supabase.co/storage/v1/object/public/broskie-uploads/ab12.png` |
+| Supabase | `https://xxxx.supabase.co/storage/v1/object/public/tomodachi-uploads/ab12.png` |
 | Local | `/uploads/ab12.png` |
 
 The client's `mediaUrl()` passes absolute URLs through untouched and prefixes
