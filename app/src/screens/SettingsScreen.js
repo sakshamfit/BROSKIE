@@ -29,8 +29,9 @@ export default function SettingsScreen({ navigation, embedded = false }) {
   const joinYear = user?.createdAt ? new Date(user.createdAt).getFullYear() : null;
 
   const handleLogout = async () => {
-    const ok = await confirm('Log out of 友達?', { title: 'Log out', confirmLabel: 'Log out', destructive: true });
-    if (ok) await logout();
+    // End the session immediately. The profile-photo removal action still
+    // uses a confirmation; logout is intentionally one reliable tap.
+    await logout();
   };
 
   return (

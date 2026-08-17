@@ -48,17 +48,19 @@ export function AuthProvider({ children }) {
     await persist(token, user);
   }, [persist]);
 
-  const logout = useCallback(async () => {
-    // Always clear in-memory credentials even if device storage is unavailable.
-    // Without finally, a storage error left the UI authenticated and made Log out
-    // appear to do nothing.
-    try {
-      await AsyncStorage.removeItem(TOKEN_KEY);
-    } finally {
-      setToken(null);
-      setTok(null);
-      setUser(null);
-    }
+  const logout = useCallback(() => {
+    // Clear the active app session first. This must never wait on device
+    // storage: browser privacy modes or a storage failure previously kept the
+    // old screen mounted and made Log out appear to do nothing.
+    setToken(null);
+    setTok(null);
+    setUser(null);
+
+    // Removing the remembered token is best-effort; a failure here must not
+    // prevent the current session from ending.
+    return AsyncStorage.removeItem(TOKEN_KEY).catch((error) => {
+      console.warn('Could not clear remembered session:', error?.message);
+    });
   }, []);
 
   const updateProfile = useCallback(async (patch) => {
