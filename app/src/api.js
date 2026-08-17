@@ -1,5 +1,9 @@
 import { Platform } from 'react-native';
 
+// Public Railway origin used by native builds when no EXPO_PUBLIC_API_URL was
+// supplied at build time. Browser deployments still use their same origin.
+const DEFAULT_MOBILE_API_URL = 'https://broskie-h.up.railway.app';
+
 /**
  * Resolve the backend URL.
  *
@@ -8,7 +12,7 @@ import { Platform } from 'react-native';
  *                       lives at the SAME origin -> '' (relative URLs)
  * - Web preview (e2b):  same host, port 4000 -> https://4000-<sandbox>.e2b.app
  * - Local web dev:      http://localhost:4000
- * - Native fallback:    http://localhost:4000
+ * - Native fallback:    the production Railway API (override with EXPO_PUBLIC_API_URL)
  */
 function resolveBase() {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '');
@@ -28,7 +32,7 @@ function resolveBase() {
     // Anything else (production single-host): same origin, use relative paths.
     return '';
   }
-  return 'http://localhost:4000';
+  return DEFAULT_MOBILE_API_URL;
 }
 
 export const API_URL = resolveBase();
