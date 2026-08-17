@@ -8,7 +8,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
 import useResponsive from '../hooks/useResponsive';
-import { Avatar, InkButton, TapeChip, handleFor } from '../components/common';
+import { Avatar, InkButton, TapeChip, handleFor, MotionIn } from '../components/common';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
@@ -46,10 +46,10 @@ export default function SettingsScreen({ navigation, embedded = false }) {
 
       <ScrollView contentContainerStyle={[s.scroll, isTablet && s.scrollWide]}>
         {/* -------- Profile hero -------- */}
-        <ProfileHero user={user} theme={theme} joinYear={joinYear} connected={connected} />
+        <MotionIn><ProfileHero user={user} theme={theme} joinYear={joinYear} connected={connected} /></MotionIn>
 
         {/* -------- Account Settings -------- */}
-        <SectionHeading theme={theme} label="Account Settings" tilt="-1deg" />
+        <MotionIn delay={60}><SectionHeading theme={theme} label="Account Settings" tilt="-1deg" />
         <View style={s.group}>
           <NavRow
             theme={theme}
@@ -74,10 +74,10 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             subtitle="Last seen, read receipts, blocked contacts"
             onPress={() => navigation.navigate('Privacy')}
           />
-        </View>
+        </View></MotionIn>
 
         {/* -------- Preferences -------- */}
-        <SectionHeading theme={theme} label="Preferences" tilt="1deg" />
+        <MotionIn delay={110}><SectionHeading theme={theme} label="Preferences" tilt="1deg" />
         <View style={s.group}>
           <View style={[s.row, s.rowStatic, inkBox(theme, 'thin')]}>
             <Icon name={theme.dark ? 'moon' : 'sunny-outline'} size={19} color={theme.ink} style={{ width: 26 }} />
@@ -113,7 +113,7 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             subtitle="Messages you've bookmarked"
             onPress={() => navigation.navigate('Starred')}
           />
-        </View>
+        </View></MotionIn>
 
         {/* -------- Support -------- */}
         <SectionHeading theme={theme} label="Support" tilt="-1deg" />

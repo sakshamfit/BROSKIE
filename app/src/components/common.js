@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, Image, StyleSheet, Pressable, ActivityIndicator, Platform } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, Image, StyleSheet, Pressable, ActivityIndicator, Platform, Animated, Easing } from 'react-native';
 import Icon from '../icons/Icon';
 import {
   colorFor, initials, AVATAR_INK, radius, type, tokens, stroke,
@@ -17,6 +17,21 @@ export function rippleFor(theme, { borderless = false, radius: rippleRadius } = 
   return Platform.OS === 'android'
     ? { color: theme.ripple, borderless, radius: rippleRadius }
     : undefined;
+}
+
+/** Subtle entrance motion for panels and screen content. */
+export function MotionIn({ children, delay = 0, distance = 10, style }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(distance)).current;
+  useEffect(() => {
+    const animation = Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 220, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 280, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [delay, opacity, translateY]);
+  return <Animated.View style={[{ opacity, transform: [{ translateY }] }, style]}>{children}</Animated.View>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -82,30 +97,38 @@ export function InkButton({ label, onPress, icon, style, textStyle, disabled, bu
   const lineColor = danger ? theme.danger : theme.ink;
   const fg = filled ? theme.onPrimary : danger ? theme.danger : theme.ink;
   const isAndroid = Platform.OS === 'android';
+  const scale = useRef(new Animated.Value(1)).current;
+  const setPressed = (pressed) => Animated.spring(scale, {
+    toValue: pressed ? 0.965 : 1, useNativeDriver: true, speed: 38, bounciness: 5,
+  }).start();
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled || busy}
-      android_ripple={rippleFor(theme, { color: filled ? 'rgba(255,255,255,0.25)' : theme.ripple })}
-      style={({ pressed }) => [
-        styles.btn,
-        inkBox(theme, 'ink', lineColor),
-        filled && { backgroundColor: lineColor },
-        pressed && !filled && !isAndroid ? marker(theme, 2) : null,
-        pressed && filled && !isAndroid ? { opacity: 0.82 } : null,
-        (disabled || busy) && { opacity: 0.45 },
-        style,
-      ]}
-    >
-      {busy ? (
-        <ActivityIndicator color={fg} />
-      ) : (
-        <>
-          {!!icon && <Icon name={icon} size={18} color={fg} />}
-          <Text style={[type.bodyStrong, { color: fg }, textStyle]}>{label}</Text>
-        </>
-      )}
-    </Pressable>
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => setPressed(true)}
+        onPressOut={() => setPressed(false)}
+        disabled={disabled || busy}
+        android_ripple={rippleFor(theme, { color: filled ? 'rgba(255,255,255,0.25)' : theme.ripple })}
+        style={({ pressed }) => [
+          styles.btn,
+          inkBox(theme, 'ink', lineColor),
+          filled && { backgroundColor: lineColor },
+          pressed && !filled && !isAndroid ? marker(theme, 2) : null,
+          pressed && filled && !isAndroid ? { opacity: 0.82 } : null,
+          (disabled || busy) && { opacity: 0.45 },
+          style,
+        ]}
+      >
+        {busy ? (
+          <ActivityIndicator color={fg} />
+        ) : (
+          <>
+            {!!icon && <Icon name={icon} size={18} color={fg} />}
+            <Text style={[type.bodyStrong, { color: fg }, textStyle]}>{label}</Text>
+          </>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
 

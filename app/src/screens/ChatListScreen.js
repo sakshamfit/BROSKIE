@@ -9,7 +9,7 @@ import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import {
-  Avatar, Ticks, EmptyState, formatChatTime, SketchDivider, InkIconButton, Rule, PaperCard,
+  Avatar, Ticks, EmptyState, formatChatTime, SketchDivider, InkIconButton, Rule, PaperCard, MotionIn,
 } from '../components/common';
 import { type, inkBox, marker, stroke } from '../theme';
 import { api } from '../api';
@@ -169,7 +169,8 @@ export default function ChatListScreen({ navigation }) {
         contentContainerStyle={[s.listContent, !visible.length && { flexGrow: 1 }]}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
-          <View>
+          <MotionIn distance={8}>
+            <View>
             <View style={[s.recentCard, { backgroundColor: theme.card, borderColor: theme.ink }]}>
               <Text style={s.recentTitle}>RECENT CHATS</Text>
               <View style={[s.inkLine, { backgroundColor: theme.ink }]} />
@@ -232,7 +233,8 @@ export default function ChatListScreen({ navigation }) {
                 <Text style={[type.bodyMd, { flex: 1, color: theme.text }]}>Back to chats</Text>
               </Pressable>
             )}
-          </View>
+            </View>
+          </MotionIn>
         }
         ListEmptyComponent={
           <EmptyState
