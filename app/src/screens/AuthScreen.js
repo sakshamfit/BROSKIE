@@ -77,9 +77,9 @@ export default function AuthScreen() {
   const submit = async () => {
     setError('');
     const u = username.trim().toLowerCase();
-    if (!u || !password) return setError('Operator ID and Access Key are required.');
+    if (!u || !password) return setError('Username and password are required.');
     if (!USERNAME_RE.test(u) || u.length < 3) {
-      return setError('Operator ID must be 3–24 chars: letters, numbers, "." or "_".');
+      return setError('Username must be 3–24 characters: letters, numbers, "." or "_".');
     }
     if (mode === 'register' && !name.trim()) return setError('Please enter your name.');
     if (mode === 'register' && !isStrongPassword(password)) return setError(PASSWORD_HINT);
@@ -154,7 +154,7 @@ export default function AuthScreen() {
                 {mode === 'register' && (
                   <Field
                     icon="id-card-outline"
-                    label="Callsign"
+                    label="Enter name"
                     value={name}
                     onChangeText={setName}
                     placeholder="Your display name"
@@ -167,7 +167,7 @@ export default function AuthScreen() {
 
                 <Field
                   icon="id-card-outline"
-                  label="Operator ID"
+                  label="Username"
                   value={username}
                   onChangeText={setUsername}
                   placeholder="Enter alphanumeric code"
@@ -213,7 +213,7 @@ export default function AuthScreen() {
 
                 <Field
                   icon="key-outline"
-                  label="Access Key"
+                  label="Password"
                   value={password}
                   onChangeText={setPassword}
                   placeholder="••••••••"
@@ -232,7 +232,7 @@ export default function AuthScreen() {
                     </View>
                     <Text style={s.rememberText}>REMEMBER ME</Text>
                   </Pressable>
-                  <Text style={s.lostKey}>LOST KEY?</Text>
+                  <Text style={s.lostKey}>FORGOT PASSWORD?</Text>
                 </View>
 
                 {!!error && (
