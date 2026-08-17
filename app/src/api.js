@@ -82,10 +82,32 @@ export const api = {
   chats: () => request('/api/chats'),
   directChat: (userId) => request('/api/chats/direct', { method: 'POST', body: { userId } }),
   groupChat: (payload) => request('/api/chats/group', { method: 'POST', body: payload }),
+  updateChat: (chatId, payload) => request(`/api/chats/${chatId}`, { method: 'PATCH', body: payload }),
   messages: (chatId) => request(`/api/chats/${chatId}/messages`),
   archive: (chatId, archived) => request(`/api/chats/${chatId}/archive`, { method: 'POST', body: { archived } }),
   mute: (chatId, muted) => request(`/api/chats/${chatId}/mute`, { method: 'POST', body: { muted } }),
-  search: (q) => request(`/api/search?q=${encodeURIComponent(q)}`),
+  pin: (chatId, pinned) => request(`/api/chats/${chatId}/pin`, { method: 'POST', body: { pinned } }),
+  setDisappear: (chatId, seconds) => request(`/api/chats/${chatId}/disappear`, { method: 'POST', body: { seconds } }),
+  search: (q, chatId) =>
+    request(`/api/search?q=${encodeURIComponent(q)}${chatId ? `&chatId=${encodeURIComponent(chatId)}` : ''}`),
+
+  // Group admin controls
+  setGroupMemberRole: (chatId, userId, role) =>
+    request(`/api/chats/${chatId}/group/members/${userId}/role`, { method: 'POST', body: { role } }),
+  removeGroupMember: (chatId, userId) =>
+    request(`/api/chats/${chatId}/group/members/${userId}`, { method: 'DELETE' }),
+  leaveGroup: (chatId) => request(`/api/chats/${chatId}/group/leave`, { method: 'POST', body: {} }),
+
+  // Starred messages
+  starred: () => request('/api/starred'),
+  starMessage: (messageId) => request(`/api/messages/${messageId}/star`, { method: 'POST', body: {} }),
+  unstarMessage: (messageId) => request(`/api/messages/${messageId}/star`, { method: 'DELETE' }),
+  setMessageTimer: (messageId, seconds) =>
+    request(`/api/messages/${messageId}/disappear`, { method: 'POST', body: { seconds } }),
+
+  // Forwarding
+  forwardMessage: (messageId, chatIds) =>
+    request('/api/messages/forward', { method: 'POST', body: { messageId, chatIds } }),
 
   // The Network — public posts
   posts: ({ before, limit = 20, tag, userId } = {}) => {

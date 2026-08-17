@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Platform,
+  View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Platform, Modal,
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import Icon from '../icons/Icon';
@@ -9,17 +9,16 @@ import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import {
-  Avatar, Ticks, EmptyState, formatChatTime, SketchDivider, InkIconButton, Rule,
+  Avatar, Ticks, EmptyState, formatChatTime, SketchDivider, InkIconButton, Rule, PaperCard,
 } from '../components/common';
 import { type, inkBox, marker, stroke } from '../theme';
 import { api } from '../api';
-import { confirm } from '../hooks/confirm';
 
 /* each divider leans a slightly different way, like a hand-ruled line */
 const TILTS = [-0.5, 0.8, -0.3, 0.6, -0.7, 0.4];
 
 export default function ChatListScreen({ navigation }) {
-  const { chats, refreshChats, typing } = useChat();
+  const { chats, refreshChats, typing, markRead } = useChat();
   const { user } = useAuth();
   const { theme } = useTheme();
   const [query, setQuery] = useState('');
@@ -27,6 +26,7 @@ export default function ChatListScreen({ navigation }) {
   const [msgResults, setMsgResults] = useState([]);
   const [showArchived, setShowArchived] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [sheetChat, setSheetChat] = useState(null); // long-press action sheet
 
   const s = makeStyles(theme);
 
@@ -52,13 +52,11 @@ export default function ChatListScreen({ navigation }) {
     return base.filter((c) => c.name?.toLowerCase().includes(q));
   }, [chats, query, showArchived]);
 
-  const toggleArchive = async (chat) => { await api.archive(chat.id, !chat.archived); refreshChats(); };
+  const pinnedCount = visible.filter((c) => c.pinned).length;
 
-  const onLongPress = async (chat) => {
-    const action = chat.archived ? 'Unarchive' : 'Archive';
-    const ok = await confirm(`${action} "${chat.name}"?`, { title: action, confirmLabel: action });
-    if (ok) toggleArchive(chat);
-  };
+  const toggleArchive = async (chat) => { await api.archive(chat.id, !chat.archived); refreshChats(); };
+  const togglePin = async (chat) => { await api.pin(chat.id, !chat.pinned); refreshChats(); };
+  const toggleMute = async (chat) => { await api.mute(chat.id, !chat.muted); refreshChats(); };
 
   const renderChat = ({ item, index }) => {
     const typers = Object.values(typing[item.id] || {});
@@ -72,6 +70,7 @@ export default function ChatListScreen({ navigation }) {
       if (lm.deleted) preview = 'message deleted';
       else if (lm.type === 'image') preview = 'Photo';
       else if (lm.type === 'voice') preview = 'Voice message';
+      else if (lm.type === 'poll') preview = '📊 Poll';
       else if (lm.type === 'system') preview = lm.body;
       else preview = lm.body;
       if (item.type === 'group' && lm.type !== 'system' && !isMine) {
@@ -84,7 +83,8 @@ export default function ChatListScreen({ navigation }) {
       <>
         <Pressable
           onPress={() => navigation.navigate('Conversation', { chatId: item.id })}
-          onLongPress={() => onLongPress(item)}
+          onLongPress={() => setSheetChat(item)}
+          delayLongPress={280}
           style={({ pressed }) => [s.row, pressed ? marker(theme, 1) : null]}
         >
           <Avatar
@@ -100,7 +100,10 @@ export default function ChatListScreen({ navigation }) {
 
           <View style={s.rowBody}>
             <View style={s.rowTop}>
-              <EmojiText style={s.name} numberOfLines={1}>{item.name}</EmojiText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginRight: 10 }}>
+                {item.pinned && <Icon name="pin" size={13} color={theme.ink} />}
+                <EmojiText style={s.name} numberOfLines={1}>{item.name}</EmojiText>
+              </View>
               <Text style={[s.time, hasUnread && { color: theme.ink }]}>
                 {formatChatTime(lm?.createdAt || item.updatedAt)}
               </Text>
@@ -198,6 +201,13 @@ export default function ChatListScreen({ navigation }) {
               </View>
             )}
 
+            {!showArchived && pinnedCount > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 10 }}>
+                <Icon name="pin" size={14} color={theme.ink} />
+                <Text style={[type.labelXs, { color: theme.muted, letterSpacing: 1 }]}>PINNED</Text>
+              </View>
+            )}
+
             {!showArchived && archivedCount > 0 && (
               <Pressable style={({ pressed }) => [s.archiveRow, pressed ? marker(theme, 1) : null]} onPress={() => setShowArchived(true)}>
                 <Icon name="archive-outline" size={17} color={theme.ink} />
@@ -228,9 +238,69 @@ export default function ChatListScreen({ navigation }) {
       >
         <Icon name="create-outline" size={21} color={theme.onPrimary} />
       </Pressable>
+
+      {/* long-press action sheet */}
+      <Modal visible={!!sheetChat} transparent animationType="fade" onRequestClose={() => setSheetChat(null)}>
+        <Pressable style={[s.overlay, { backgroundColor: theme.overlay }]} onPress={() => setSheetChat(null)}>
+          <PaperCard weight="ink" style={s.sheet}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+              <Avatar
+                uri={sheetChat?.avatar} name={sheetChat?.name}
+                id={sheetChat?.otherUserId || sheetChat?.id}
+                group={sheetChat?.type === 'group'} size={44}
+              />
+              <View style={{ flex: 1 }}>
+                <EmojiText style={[type.headlineSm, { color: theme.text }]} numberOfLines={1}>{sheetChat?.name}</EmojiText>
+                <Text style={[type.bodySm, { color: theme.subtext }]}>
+                  {sheetChat?.type === 'group' ? 'Group chat' : 'Direct chat'}
+                </Text>
+              </View>
+              <Pressable onPress={() => setSheetChat(null)} hitSlop={8}>
+                <Icon name="close" size={20} color={theme.muted} />
+              </Pressable>
+            </View>
+            <Rule style={{ marginVertical: 6 }} />
+            <SheetRow
+              icon={sheetChat?.pinned ? 'pin' : 'pin-outline'}
+              label={sheetChat?.pinned ? 'Unpin chat' : 'Pin chat'}
+              onPress={() => { const c = sheetChat; setSheetChat(null); togglePin(c); }}
+            />
+            <SheetRow
+              icon={sheetChat?.muted ? 'volume-mute' : 'notifications-outline'}
+              label={sheetChat?.muted ? 'Unmute notifications' : 'Mute notifications'}
+              onPress={() => { const c = sheetChat; setSheetChat(null); toggleMute(c); }}
+            />
+            <SheetRow
+              icon="archive-outline"
+              label={sheetChat?.archived ? 'Unarchive chat' : 'Archive chat'}
+              onPress={() => { const c = sheetChat; setSheetChat(null); toggleArchive(c); }}
+            />
+            {sheetChat?.unread > 0 && (
+              <SheetRow
+                icon="checkmark-done"
+                label="Mark as read"
+                onPress={() => { const c = sheetChat; setSheetChat(null); markRead(c.id); }}
+              />
+            )}
+          </PaperCard>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
+
+function SheetRow({ icon, label, onPress }) {
+  const { theme } = useTheme();
+  return (
+    <Pressable style={({ pressed }) => [s2.row, pressed ? marker(theme, 1) : null]} onPress={onPress}>
+      <Icon name={icon} size={18} color={theme.ink} />
+      <Text style={[type.bodyMd, { color: theme.text }]}>{label}</Text>
+    </Pressable>
+  );
+}
+const s2 = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 6, paddingVertical: 12 },
+});
 
 /** Zig-zag scribble under the focused search field (real jagged stroke). */
 function Scribble() {
@@ -275,7 +345,7 @@ const makeStyles = (t) => StyleSheet.create({
   row: { flexDirection: 'row', paddingHorizontal: 8, paddingVertical: 12, alignItems: 'center', gap: 16 },
   rowBody: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 },
-  name: { ...type.headlineSm, color: t.text, flex: 1, marginRight: 10 },
+  name: { ...type.headlineSm, color: t.text, flexShrink: 1 },
   time: { ...type.labelXs, color: t.muted },
   rowBottom: { flexDirection: 'row', alignItems: 'center' },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 },
@@ -288,4 +358,6 @@ const makeStyles = (t) => StyleSheet.create({
   archiveRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 8, paddingVertical: 14, marginBottom: 6 },
   resultsWrap: { paddingTop: 16 },
   resultRow: { flexDirection: 'row', gap: 12, alignItems: 'center', paddingVertical: 10 },
+  overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
+  sheet: { width: '100%', maxWidth: 340, padding: 16 },
 });

@@ -12,16 +12,21 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import {
-  Avatar, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor,
+  Avatar, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor, formatTime,
 } from '../components/common';
 import EmojiPicker from '../components/EmojiPicker';
-import MessageBubble from '../components/MessageBubble';
+import MessageBubble, { DISAPPEAR_OPTIONS } from '../components/MessageBubble';
+import ForwardSheet from '../components/ForwardSheet';
+import PollComposer from '../components/PollComposer';
 import { api, mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 
 export default function ConversationScreen({ route, navigation, embedded = false }) {
   const { chatId } = route.params;
-  const { chats, messages, typing, loadMessages, sendMessage, markRead, setTypingState, react, deleteMessage, startCall, call } = useChat();
+  const {
+    chats, messages, typing, loadMessages, sendMessage, markRead, setTypingState,
+    react, deleteMessage, editMessage, createPoll, votePoll, startCall, call,
+  } = useChat();
   const { user } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -31,6 +36,7 @@ export default function ConversationScreen({ route, navigation, embedded = false
   const list = messages[chatId] || [];
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
+  const [editing, setEditing] = useState(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [lightbox, setLightbox] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -39,6 +45,18 @@ export default function ConversationScreen({ route, navigation, embedded = false
   const listRef = useRef(null);
   const typingTimer = useRef(null);
   const recTimer = useRef(null);
+
+  // in-chat search
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const searchTimer = useRef(null);
+
+  // forward + timer + poll modals
+  const [forwardMsg, setForwardMsg] = useState(null);
+  const [timerMsg, setTimerMsg] = useState(null);
+  const [pollOpen, setPollOpen] = useState(false);
 
   const s = makeStyles(theme);
 
@@ -69,6 +87,15 @@ export default function ConversationScreen({ route, navigation, embedded = false
   const send = () => {
     const body = text.trim();
     if (!body) return;
+    if (editing) {
+      editMessage(editing.id, body)
+        .then(() => {})
+        .catch((e) => console.warn('edit failed', e.message));
+      setEditing(null);
+      setText('');
+      setTypingState(chatId, false);
+      return;
+    }
     sendMessage(chatId, {
       type: 'text',
       body,
@@ -100,6 +127,21 @@ export default function ConversationScreen({ route, navigation, embedded = false
     sendMessage(chatId, { type: 'voice', mediaUrl: null, duration: secs, body: '' });
   };
 
+  /* ---- in-chat search ---- */
+  const runInChatSearch = useCallback((q) => {
+    setSearchQ(q);
+    clearTimeout(searchTimer.current);
+    if (q.trim().length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const { messages: res } = await api.search(q.trim(), chatId);
+        setSearchResults(res);
+      } catch { setSearchResults([]); }
+      finally { setSearching(false); }
+    }, 250);
+  }, [chatId]);
+
   const rows = useMemo(() => {
     const out = [];
     let lastDay = null;
@@ -110,6 +152,55 @@ export default function ConversationScreen({ route, navigation, embedded = false
     });
     return out;
   }, [list]);
+
+  const scrollToMessage = useCallback((messageId) => {
+    const idx = rows.findIndex((r) => r._type === 'msg' && r.id === messageId);
+    if (idx === -1) return;
+    listRef.current?.scrollToIndex({ index: idx, viewPosition: 0.4, animated: true });
+  }, [rows]);
+
+  const startEdit = (message) => {
+    setEditing(message);
+    setText(message.body || '');
+    setShowEmoji(false);
+  };
+
+  const toggleStar = async (message) => {
+    try {
+      const { starred } = message.starred
+        ? await api.unstarMessage(message.id)
+        : await api.starMessage(message.id);
+      setMessagesLocalStar(message.id, starred);
+    } catch (e) { console.warn('star failed', e.message); }
+  };
+
+  // small local patch helper: keep message list in sync with star/timer changes
+  // without waiting for the socket round-trip (the server also broadcasts
+  // message:updated so other clients stay in sync).
+  const setMessagesLocalStar = (id, starred) => {
+    setMessages((prev) => {
+      const entry = Object.entries(prev).find(([, list]) => list.some((m) => m.id === id));
+      if (!entry) return prev;
+      const [cid, list] = entry;
+      return { ...prev, [cid]: list.map((m) => (m.id === id ? { ...m, starred } : m)) };
+    });
+  };
+
+  const setMessageTimer = async (message, seconds) => {
+    try {
+      const { expiresAt } = await api.setMessageTimer(message.id, seconds);
+      setMessages((prev) => {
+        const entry = Object.entries(prev).find(([, list]) => list.some((m) => m.id === message.id));
+        if (!entry) return prev;
+        const [cid, list] = entry;
+        return { ...prev, [cid]: list.map((m) => (m.id === message.id ? { ...m, expiresAt } : m)) };
+      });
+    } catch (e) { console.warn('timer failed', e.message); }
+  };
+
+  const onVote = async (messageId, pollId, optionIndex) => {
+    try { await votePoll(messageId, pollId, optionIndex); } catch (e) { console.warn('vote failed', e.message); }
+  };
 
   if (!chat) {
     return <View style={[s.center, { backgroundColor: theme.bg }]}><ActivityIndicator color={theme.primary} /></View>;
@@ -145,6 +236,21 @@ export default function ConversationScreen({ route, navigation, embedded = false
               </Text>
             </View>
           </Pressable>
+          <InkIconButton
+            name="search"
+            size={36}
+            iconSize={16}
+            active={searchOpen}
+            onPress={() => { setSearchOpen((v) => !v); setSearchQ(''); setSearchResults([]); }}
+          />
+          {chat.type === 'group' && (
+            <InkIconButton
+              name="bar-chart-outline"
+              size={36}
+              iconSize={17}
+              onPress={() => setPollOpen(true)}
+            />
+          )}
           {chat.type === 'direct' && (
             <>
               <InkIconButton
@@ -167,12 +273,66 @@ export default function ConversationScreen({ route, navigation, embedded = false
         <Rule style={{ marginHorizontal: 20, marginTop: 10, marginBottom: 0 }} />
       </View>
 
+      {/* in-chat search bar + results */}
+      {searchOpen && (
+        <View style={[s.searchWrap, { borderBottomWidth: stroke.thin, borderBottomColor: theme.graphiteLine }]}>
+          <View style={s.searchRow}>
+            <Icon name="search" size={17} color={theme.graphite} />
+            <TextInput
+              autoFocus
+              value={searchQ}
+              onChangeText={runInChatSearch}
+              placeholder={`Search in ${chat.name}…`}
+              placeholderTextColor={theme.muted}
+              style={[s.searchInput, { color: theme.text }]}
+            />
+            {searching && <ActivityIndicator size="small" color={theme.muted} />}
+            {!!searchQ && (
+              <Pressable onPress={() => runInChatSearch('')} hitSlop={8}>
+                <Icon name="close-circle" size={18} color={theme.muted} />
+              </Pressable>
+            )}
+          </View>
+          {searchResults.length > 0 && (
+            <View style={s.searchResults}>
+              <Text style={[type.labelXs, { color: theme.muted, paddingHorizontal: 4, marginBottom: 6 }]}>
+                {searchResults.length} FOUND
+              </Text>
+              {searchResults.slice(0, 8).map((m) => (
+                <Pressable
+                  key={m.id}
+                  style={({ pressed }) => [s.resultRow, pressed ? marker(theme, 1) : null]}
+                  onPress={() => scrollToMessage(m.id)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <EmojiText style={[type.bodyMd, { color: theme.text }]} numberOfLines={1}>
+                      {m.type === 'image' ? '📷 Photo' : m.type === 'voice' ? '🎤 Voice message' : m.body}
+                    </EmojiText>
+                    {m.type === 'text' && <Text style={[type.labelXs, { color: theme.muted }]}>{m.senderId === user.id ? 'You' : nameFor(m.senderId)}</Text>}
+                  </View>
+                  <Text style={[type.labelXs, { color: theme.muted }]}>{formatTime(m.createdAt)}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {searchQ.trim().length >= 2 && !searching && searchResults.length === 0 && (
+            <Text style={[type.bodySm, { color: theme.muted, padding: 8, paddingHorizontal: 4 }]}>No matches</Text>
+          )}
+        </View>
+      )}
+
       <FlatList
         ref={listRef}
         data={rows}
         keyExtractor={(i) => i.id}
         contentContainerStyle={{ paddingVertical: 14, flexGrow: 1, justifyContent: 'flex-end' }}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+        onScrollToIndexFailed={(info) => {
+          // Rows vary in height; fall back to an estimated offset, then retry.
+          setTimeout(() => {
+            listRef.current?.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index - 200), animated: false });
+          }, 60);
+        }}
         renderItem={({ item }) =>
           item._type === 'day' ? (
             <View style={s.dayWrap}>
@@ -190,6 +350,11 @@ export default function ConversationScreen({ route, navigation, embedded = false
               onReact={react}
               onDelete={deleteMessage}
               onImagePress={setLightbox}
+              onEdit={startEdit}
+              onForward={setForwardMsg}
+              onStar={toggleStar}
+              onSetTimer={setTimerMsg}
+              onVotePoll={onVote}
             />
           )
         }
@@ -231,6 +396,18 @@ export default function ConversationScreen({ route, navigation, embedded = false
         </View>
       )}
 
+      {editing && (
+        <View style={[s.editBar, { borderColor: theme.ink, backgroundColor: theme.cardAlt }]}>
+          <Icon name="create-outline" size={15} color={theme.ink} />
+          <Text style={[type.labelXs, { color: theme.ink, flex: 1 }]} numberOfLines={1}>
+            EDITING — {editing.body}
+          </Text>
+          <Pressable onPress={() => { setEditing(null); setText(''); }} hitSlop={8}>
+            <Icon name="close" size={18} color={theme.muted} />
+          </Pressable>
+        </View>
+      )}
+
       <EmojiPicker visible={showEmoji} onSelect={(e) => setText((v) => v + e)} />
 
       {/* composer — bottom safe-area (home indicator / gesture bar) only
@@ -253,7 +430,7 @@ export default function ConversationScreen({ route, navigation, embedded = false
             </Pressable>
             <TextInput
               style={s.input}
-              placeholder="Message"
+              placeholder={editing ? 'Edit message…' : 'Message'}
               placeholderTextColor={theme.muted}
               value={text}
               onChangeText={onChangeText}
@@ -267,12 +444,14 @@ export default function ConversationScreen({ route, navigation, embedded = false
                 }
               }}
             />
-            <Pressable onPress={pickImage} hitSlop={6} disabled={uploading}>
-              {uploading
-                ? <ActivityIndicator size="small" color={theme.muted} />
-                : <Icon name="attach" size={22} color={theme.muted} style={{ transform: [{ rotate: '45deg' }] }} />}
-            </Pressable>
-            {!text.trim() && (
+            {!editing && (
+              <Pressable onPress={pickImage} hitSlop={6} disabled={uploading}>
+                {uploading
+                  ? <ActivityIndicator size="small" color={theme.muted} />
+                  : <Icon name="attach" size={22} color={theme.muted} style={{ transform: [{ rotate: '45deg' }] }} />}
+              </Pressable>
+            )}
+            {!editing && !text.trim() && (
               <Pressable onPress={pickImage} hitSlop={6}>
                 <Icon name="camera-outline" size={22} color={theme.muted} />
               </Pressable>
@@ -281,7 +460,7 @@ export default function ConversationScreen({ route, navigation, embedded = false
         )}
 
         <Pressable
-          onPress={() => { if (text.trim()) send(); else if (recording) stopRecording(); else setRecording(true); }}
+          onPress={() => { if (text.trim()) send(); else if (editing) setEditing(null); else if (recording) stopRecording(); else setRecording(true); }}
           android_ripple={rippleFor(theme, { color: 'rgba(255,255,255,0.3)' })}
           style={({ pressed }) => [
             s.sendBtn,
@@ -290,7 +469,7 @@ export default function ConversationScreen({ route, navigation, embedded = false
           ]}
         >
           <Icon
-            name={text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
+            name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
             size={18}
             color={theme.onPrimary}
           />
@@ -305,6 +484,59 @@ export default function ConversationScreen({ route, navigation, embedded = false
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* forward picker */}
+      <ForwardSheet visible={!!forwardMsg} message={forwardMsg} onClose={() => setForwardMsg(null)} />
+
+      {/* per-message disappearing timer */}
+      <Modal visible={!!timerMsg} transparent animationType="fade" onRequestClose={() => setTimerMsg(null)}>
+        <Pressable style={[s.overlay, { backgroundColor: theme.overlay }]} onPress={() => setTimerMsg(null)}>
+          <Pressable style={[s.timerSheet, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
+            <Text style={[type.headlineSm, { color: theme.text }]}>Disappear in…</Text>
+            <Text style={[type.bodySm, { color: theme.subtext, marginTop: 4, marginBottom: 12 }]}>
+              The message self-destructs after the timer.
+            </Text>
+            <View style={{ gap: 8 }}>
+              {(() => {
+                const remaining = timerMsg.expiresAt ? Math.round((timerMsg.expiresAt - Date.now()) / 1000) : 0;
+                const isActive = (sec) => (sec === 0 ? remaining === 0 : Math.abs(remaining - sec) < Math.max(2, sec * 0.05));
+                return (
+                  <>
+                    <Pressable
+                      style={({ pressed }) => [s.timerOpt, inkBox(theme, 'thin'), pressed ? marker(theme, 1) : null]}
+                      onPress={() => { setMessageTimer(timerMsg, 0); setTimerMsg(null); }}
+                    >
+                      <Icon name="time-outline" size={18} color={theme.ink} />
+                      <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]}>Off — keep forever</Text>
+                      {isActive(0) && <Icon name="checkmark" size={18} color={theme.ink} />}
+                    </Pressable>
+                    {DISAPPEAR_OPTIONS.map((o) => (
+                      <Pressable
+                        key={o.seconds}
+                        style={({ pressed }) => [s.timerOpt, inkBox(theme, 'thin'), pressed ? marker(theme, 1) : null]}
+                        onPress={() => { setMessageTimer(timerMsg, o.seconds); setTimerMsg(null); }}
+                      >
+                        <Icon name="timer-outline" size={18} color={theme.ink} />
+                        <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]}>{o.label}</Text>
+                        {isActive(o.seconds) && <Icon name="checkmark" size={18} color={theme.ink} />}
+                      </Pressable>
+                    ))}
+                  </>
+                );
+              })()}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* group poll composer */}
+      <PollComposer
+        visible={pollOpen}
+        onClose={() => setPollOpen(false)}
+        onCreate={async (question, options) => {
+          await createPoll(chatId, question, options);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -312,13 +544,18 @@ export default function ConversationScreen({ route, navigation, embedded = false
 const makeStyles = (t) => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   headerWrap: { paddingTop: 18, paddingBottom: 4 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingVertical: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 10 },
   backBtn: { padding: 4 },
   headerInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   dayWrap: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 16, paddingHorizontal: 24 },
-    emptyChat: { alignItems: 'center', justifyContent: 'center', padding: 40 },
+  emptyChat: { alignItems: 'center', justifyContent: 'center', padding: 40 },
   replyBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 8, padding: 10, gap: 12, backgroundColor: 'transparent' },
   replyAccent: { width: 3.5, alignSelf: 'stretch', borderRadius: 2 },
+  editBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderStyle: 'dashed',
+  },
   composerWrap: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 20, paddingBottom: 22, paddingTop: 8, gap: 12 },
   inputBar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, gap: 12, minHeight: 48 },
   input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },
@@ -327,4 +564,16 @@ const makeStyles = (t) => StyleSheet.create({
   lightbox: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
   lightboxImg: { width: '92%', height: '78%' },
   lightboxClose: { position: 'absolute', top: 44, right: 22, padding: 8 },
+  overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
+  timerSheet: {
+    width: '100%', maxWidth: 360, borderWidth: 3, padding: 20,
+    borderTopLeftRadius: 6, borderTopRightRadius: 12,
+    borderBottomRightRadius: 6, borderBottomLeftRadius: 10,
+  },
+  timerOpt: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 11 },
+  searchWrap: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 10 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  searchInput: { flex: 1, ...type.bodyLg, paddingVertical: 6, outlineStyle: 'none' },
+  searchResults: { marginTop: 10, gap: 4 },
+  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 4 },
 });

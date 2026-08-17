@@ -103,6 +103,14 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             subtitle="Messages, Status, Network, Sound"
             onPress={() => navigation.navigate('Notifications')}
           />
+          <Divider theme={theme} />
+          <NavRow
+            theme={theme}
+            icon="star-outline"
+            title="Starred messages"
+            subtitle="Messages you've bookmarked"
+            onPress={() => navigation.navigate('Starred')}
+          />
         </View>
 
         {/* -------- Support -------- */}

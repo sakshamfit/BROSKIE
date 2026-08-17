@@ -186,6 +186,10 @@ function hydrateMessage(m, viewerId) {
     }
   }
 
+  const starred = viewerId
+    ? !!db.prepare('SELECT 1 FROM starred_messages WHERE message_id = ? AND user_id = ?').get(m.id, viewerId)
+    : false;
+
   return {
     id: m.id,
     chatId: m.chat_id,
@@ -196,18 +200,48 @@ function hydrateMessage(m, viewerId) {
     duration: m.duration,
     deleted: !!m.deleted,
     createdAt: m.created_at,
+    expiresAt: m.expires_at || null,
+    edited: !!m.edited,
+    forwarded: !!m.forwarded_from,
+    starred,
+    poll: !m.deleted && m.type === 'poll' ? hydratePoll(m.poll_id, viewerId) : null,
     replyTo,
     status,
     reactions: reactions.map((r) => ({ userId: r.user_id, emoji: r.emoji })),
   };
 }
 
+/** Live poll state (counts + my vote) hydrated per viewer. */
+function hydratePoll(pollId, viewerId) {
+  if (!pollId) return null;
+  const p = db.prepare('SELECT * FROM polls WHERE id = ?').get(pollId);
+  if (!p) return null;
+  let options = [];
+  try { options = JSON.parse(p.options || '[]'); } catch { options = []; }
+  const votes = db.prepare('SELECT user_id, option_index FROM poll_votes WHERE poll_id = ?').all(pollId);
+  const counts = options.map((_, i) => votes.filter((v) => v.option_index === i).length);
+  const creator = getUser(p.created_by);
+  return {
+    id: p.id,
+    question: p.question,
+    options: options.map((text, i) => ({ index: i, text, votes: counts[i] })),
+    totalVotes: votes.length,
+    myVote: viewerId ? (votes.find((v) => v.user_id === viewerId)?.option_index ?? null) : null,
+    createdByName: creator ? creator.name : 'Unknown',
+    createdAt: p.created_at,
+  };
+}
+
+/** Timers users can pick for disappearing messages (seconds). 0 = off. */
+const DISAPPEAR_OPTIONS = [0, 30, 300, 3600, 86400];
+const clampDisappear = (s) => (DISAPPEAR_OPTIONS.includes(Number(s)) ? Number(s) : 0);
+
 function chatSummary(chatId, viewerId) {
   const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
   if (!chat) return null;
   const members = db
     .prepare(
-      `SELECT u.*, cm.role, cm.muted FROM chat_members cm
+      `SELECT u.*, cm.role, cm.muted, cm.pinned_at FROM chat_members cm
        JOIN users u ON u.id = cm.user_id WHERE cm.chat_id = ?`
     )
     .all(chatId);
@@ -242,6 +276,8 @@ function chatSummary(chatId, viewerId) {
     lastSeen: otherPresence.lastSeen,
     muted: me ? !!me.muted : false,
     archived,
+    pinned: me ? !!me.pinned_at : false,
+    disappearSeconds: chat.disappear_seconds || 0,
     role: me ? me.role : 'member',
     members: members.map((m) => ({ ...publicUser(m), role: m.role })),
     lastMessage: last ? hydrateMessage(last, viewerId) : null,
@@ -270,7 +306,11 @@ function userChats(userId) {
        WHERE cm.user_id = ? ORDER BY c.updated_at DESC`
     )
     .all(userId);
-  return rows.map((r) => chatSummary(r.id, userId)).filter(Boolean);
+  // Pinned chats float to the top; within each group keep recency order.
+  return rows
+    .map((r) => chatSummary(r.id, userId))
+    .filter(Boolean)
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 }
 
 /* ------------------------------------------------------------------ */
@@ -556,6 +596,212 @@ app.post('/api/chats/:id/mute', requireAuth, (req, res) => {
   res.json({ chat: chatSummary(req.params.id, req.userId) });
 });
 
+/** Pin / unpin a chat for the current user (pinned chats sort to the top). */
+app.post('/api/chats/:id/pin', requireAuth, (req, res) => {
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(req.params.id, req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Not a member of this chat' });
+  db.prepare('UPDATE chat_members SET pinned_at = ? WHERE chat_id = ? AND user_id = ?').run(
+    req.body.pinned ? now() : null, req.params.id, req.userId
+  );
+  res.json({ chat: chatSummary(req.params.id, req.userId) });
+});
+
+/** Edit a group's name/avatar (admins only). */
+app.patch('/api/chats/:id', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  if (chat.type !== 'group') return res.status(400).json({ error: 'Only group chats can be renamed here' });
+  const me = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
+  if (!me) return res.status(403).json({ error: 'Not a member of this chat' });
+  if (me.role !== 'admin') return res.status(403).json({ error: 'Only group admins can edit this group' });
+
+  const { name, avatar } = req.body || {};
+  if (name !== undefined && !String(name).trim()) return res.status(400).json({ error: 'Group name cannot be empty' });
+  const nextName = name !== undefined ? String(name).trim().slice(0, 60) : chat.name;
+  const nextAvatar = avatar !== undefined ? (avatar || null) : chat.avatar;
+
+  db.prepare('UPDATE chats SET name = ?, avatar = ?, updated_at = ? WHERE id = ?').run(nextName, nextAvatar, now(), chat.id);
+  if (name !== undefined && String(name).trim() !== chat.name) {
+    const editor = getUser(req.userId);
+    insertSystemMessage(chat.id, `${editor.name} changed the group name to "${String(name).trim()}"`);
+  }
+  memberIds(chat.id).forEach((uid) => emitToUser(uid, 'chat:updated', chatSummary(chat.id, uid)));
+  res.json({ chat: chatSummary(chat.id, req.userId) });
+});
+
+/** Set the chat-wide default disappearing-message timer (seconds; 0 = off). */
+app.post('/api/chats/:id/disappear', requireAuth, (req, res) => {
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(req.params.id, req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Not a member of this chat' });
+  const seconds = clampDisappear(req.body.seconds);
+  db.prepare('UPDATE chats SET disappear_seconds = ? WHERE id = ?').run(seconds, req.params.id);
+  res.json({ chat: chatSummary(req.params.id, req.userId) });
+});
+
+/* ---- group admin controls ---- */
+
+/** Promote / demote a group member (admins only). */
+app.post('/api/chats/:id/group/members/:userId/role', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat || chat.type !== 'group') return res.status(404).json({ error: 'Group not found' });
+  const actor = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
+  const target = db.prepare('SELECT * FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.params.userId);
+  if (!actor) return res.status(403).json({ error: 'Not a member of this group' });
+  if (actor.role !== 'admin') return res.status(403).json({ error: 'Only group admins can change roles' });
+  if (!target) return res.status(404).json({ error: 'Not a member of this group' });
+  if (target.user_id === chat.created_by) return res.status(400).json({ error: "The group creator's role cannot be changed" });
+  if (target.user_id === req.userId) return res.status(400).json({ error: "You can't change your own role" });
+
+  const { role } = req.body || {};
+  if (!['admin', 'member'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+
+  db.prepare('UPDATE chat_members SET role = ? WHERE chat_id = ? AND user_id = ?').run(role, chat.id, target.user_id);
+  const targetUser = getUser(target.user_id);
+  insertSystemMessage(chat.id, `${targetUser.name} is now a group ${role === 'admin' ? 'admin' : 'member'}`);
+  memberIds(chat.id).forEach((uid) => emitToUser(uid, 'chat:updated', chatSummary(chat.id, uid)));
+  res.json({ chat: chatSummary(chat.id, req.userId) });
+});
+
+/** Admin removes a member from the group. */
+app.delete('/api/chats/:id/group/members/:userId', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat || chat.type !== 'group') return res.status(404).json({ error: 'Group not found' });
+  const actor = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
+  const target = db.prepare('SELECT * FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.params.userId);
+  if (!actor || actor.role !== 'admin') return res.status(403).json({ error: 'Only group admins can remove members' });
+  if (!target) return res.status(404).json({ error: 'Not a member of this group' });
+  if (target.user_id === req.userId) return res.status(400).json({ error: 'Use “Leave group” to leave' });
+  if (target.user_id === chat.created_by) return res.status(400).json({ error: 'The group creator cannot be removed' });
+  if (target.role === 'admin') {
+    const admins = db.prepare(`SELECT COUNT(*) c FROM chat_members WHERE chat_id = ? AND role = 'admin'`).get(chat.id).c;
+    if (admins <= 1) return res.status(400).json({ error: 'Cannot remove the only admin — demote or remove them last' });
+  }
+
+  db.prepare('DELETE FROM chat_members WHERE chat_id = ? AND user_id = ?').run(chat.id, target.user_id);
+  const targetUser = getUser(target.user_id);
+  insertSystemMessage(chat.id, `${targetUser.name} was removed by ${getUser(req.userId).name}`);
+  emitToUser(target.user_id, 'chat:removed', { chatId: chat.id });
+  memberIds(chat.id).forEach((uid) => emitToUser(uid, 'chat:updated', chatSummary(chat.id, uid)));
+  res.json({ ok: true });
+});
+
+/** Leave a group (last admin must promote someone first). */
+app.post('/api/chats/:id/group/leave', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat || chat.type !== 'group') return res.status(404).json({ error: 'Group not found' });
+  const me = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
+  if (!me) return res.status(400).json({ error: 'Not a member' });
+  if (me.role === 'admin') {
+    const admins = db.prepare(`SELECT COUNT(*) c FROM chat_members WHERE chat_id = ? AND role = 'admin'`).get(chat.id).c;
+    if (admins <= 1) return res.status(400).json({ error: 'You are the only admin — promote someone else first' });
+  }
+
+  db.prepare('DELETE FROM chat_members WHERE chat_id = ? AND user_id = ?').run(chat.id, req.userId);
+  const meUser = getUser(req.userId);
+  insertSystemMessage(chat.id, `${meUser.name} left the group`);
+  emitToUser(req.userId, 'chat:removed', { chatId: chat.id });
+  memberIds(chat.id).forEach((uid) => emitToUser(uid, 'chat:updated', chatSummary(chat.id, uid)));
+  res.json({ ok: true });
+});
+
+/* ---- starred messages ---- */
+
+/** All starred messages across the user's chats, newest first. */
+app.get('/api/starred', requireAuth, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT sm.*, m.chat_id, m.sender_id, m.type, m.body, m.media_url, m.duration, m.created_at, m.deleted
+       FROM starred_messages sm
+       JOIN messages m ON m.id = sm.message_id
+       JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = sm.user_id
+       WHERE sm.user_id = ? ORDER BY sm.at DESC LIMIT 200`
+    )
+    .all(req.userId);
+  res.json({
+    messages: rows.map((r) => ({
+      ...hydrateMessage(db.prepare('SELECT * FROM messages WHERE id = ?').get(r.message_id), req.userId),
+      chatName: chatSummary(r.chat_id, req.userId)?.name,
+      chatId: r.chat_id,
+    })),
+  });
+});
+
+/** Star a message (must be a member of its chat). */
+app.post('/api/messages/:id/star', requireAuth, (req, res) => {
+  const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(req.params.id);
+  if (!m || m.deleted) return res.status(404).json({ error: 'Message not found' });
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(m.chat_id, req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Not a member of this chat' });
+  db.prepare('INSERT OR IGNORE INTO starred_messages (message_id, user_id, at) VALUES (?,?,?)').run(m.id, req.userId, now());
+  res.json({ starred: true });
+});
+
+app.delete('/api/messages/:id/star', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM starred_messages WHERE message_id = ? AND user_id = ?').run(req.params.id, req.userId);
+  res.json({ starred: false });
+});
+
+/** Per-message disappearing timer override (seconds; 0 = never). */
+app.post('/api/messages/:id/disappear', requireAuth, (req, res) => {
+  const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(req.params.id);
+  if (!m || m.deleted) return res.status(404).json({ error: 'Message not found' });
+  if (m.sender_id !== req.userId) return res.status(403).json({ error: 'Only the sender can set a timer on a message' });
+  const seconds = clampDisappear(req.body.seconds);
+  const expiresAt = seconds ? now() + seconds * 1000 : null;
+  db.prepare('UPDATE messages SET expires_at = ? WHERE id = ?').run(expiresAt, m.id);
+  const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(m.id);
+  emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
+  emitToChat(m.chat_id, 'chat:updated', (viewer) => chatSummary(m.chat_id, viewer));
+  res.json({ expiresAt });
+});
+
+/* ---- forwarding ---- */
+
+/** Copy a message into one or more of the user's chats. */
+app.post('/api/messages/forward', requireAuth, (req, res) => {
+  const { messageId, chatIds = [] } = req.body || {};
+  const src = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+  if (!src || src.deleted) return res.status(404).json({ error: 'Message not found' });
+  if (src.type === 'system') return res.status(400).json({ error: 'System messages cannot be forwarded' });
+  if (src.type === 'poll') return res.status(400).json({ error: 'Polls cannot be forwarded — create a new one' });
+  const isSrcMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(src.chat_id, req.userId);
+  if (!isSrcMember) return res.status(403).json({ error: 'Not a member of the source chat' });
+
+  const targets = [...new Set(chatIds.map((x) => String(x)))];
+  let forwarded = 0;
+  targets.forEach((chatId) => {
+    const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
+    if (!chat) return;
+    if (chat.type === 'direct') {
+      const otherId = memberIds(chatId).find((x) => x !== req.userId);
+      if (otherId && blockedEitherWay(req.userId, otherId)) return;
+    }
+    const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, req.userId);
+    if (!isMember) return;
+
+    const msg = {
+      id: nano(),
+      chat_id: chatId,
+      sender_id: req.userId,
+      type: src.type,
+      body: src.body,
+      media_url: src.media_url,
+      duration: src.duration,
+      reply_to: null,
+      forwarded_from: src.id,
+      expires_at: chat.disappear_seconds ? now() + chat.disappear_seconds * 1000 : null,
+      created_at: now(),
+    };
+    persistMessage(msg, chatId);
+    const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id);
+    emitToChat(chatId, 'message:new', (viewer) => ({ message: hydrateMessage(row, viewer) }));
+    emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+    forwarded += 1;
+  });
+
+  res.json({ ok: true, forwarded });
+});
+
 /* ------------------------------------------------------------------ */
 /* messages                                                            */
 /* ------------------------------------------------------------------ */
@@ -575,13 +821,22 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
 app.get('/api/search', requireAuth, (req, res) => {
   const q = String(req.query.q || '').trim();
   if (!q) return res.json({ messages: [] });
-  const rows = db
-    .prepare(
-      `SELECT m.* FROM messages m
+  const chatId = String(req.query.chatId || '');
+  // In-chat search: restrict to one chat (and verify membership).
+  if (chatId) {
+    const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, req.userId);
+    if (!isMember) return res.status(403).json({ error: 'Not a member of this chat' });
+  }
+  const sql = chatId
+    ? `SELECT m.* FROM messages m
+       WHERE m.chat_id = ? AND m.deleted = 0 AND m.body LIKE ?
+       ORDER BY m.created_at DESC LIMIT 100`
+    : `SELECT m.* FROM messages m
        JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
-       WHERE m.deleted = 0 AND m.body LIKE ? ORDER BY m.created_at DESC LIMIT 50`
-    )
-    .all(req.userId, `%${q}%`);
+       WHERE m.deleted = 0 AND m.body LIKE ? ORDER BY m.created_at DESC LIMIT 50`;
+  const rows = chatId
+    ? db.prepare(sql).all(chatId, `%${q}%`)
+    : db.prepare(sql).all(req.userId, `%${q}%`);
   res.json({
     messages: rows.map((m) => ({
       ...hydrateMessage(m, req.userId),
@@ -622,6 +877,38 @@ function insertSystemMessage(chatId, body) {
   ).run(msg);
   db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(msg.created_at, chatId);
   return msg;
+}
+
+/**
+ * Persist a real (non-system) message with all feature columns, bump the
+ * chat's recency timestamp, and hand online members an instant delivered
+ * receipt. `msg` may carry expires_at / forwarded_from / poll_id / edited.
+ */
+function persistMessage(msg, chatId) {
+  db.prepare(
+    `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, duration, reply_to, expires_at, edited, forwarded_from, poll_id, created_at)
+     VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @duration, @reply_to, @expires_at, @edited, @forwarded_from, @poll_id, @created_at)`
+  ).run({
+    ...msg,
+    expires_at: msg.expires_at ?? null,
+    edited: msg.edited ?? 0,
+    forwarded_from: msg.forwarded_from ?? null,
+    poll_id: msg.poll_id ?? null,
+  });
+  db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(msg.created_at, chatId);
+  memberIds(chatId).filter((x) => x !== msg.sender_id && sockets.has(x)).forEach((x) => {
+    db.prepare('INSERT OR IGNORE INTO receipts (message_id, user_id, state, at) VALUES (?,?,?,?)').run(msg.id, x, 'delivered', now());
+  });
+}
+
+/** Hard-delete a message row plus its sidecar rows (reactions/receipts/stars/poll). */
+function hardDeleteMessage(messageId) {
+  const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+  if (m && m.type === 'poll' && m.poll_id) db.prepare('DELETE FROM polls WHERE id = ?').run(m.poll_id); // cascades poll_votes
+  db.prepare('DELETE FROM reactions WHERE message_id = ?').run(messageId);
+  db.prepare('DELETE FROM receipts WHERE message_id = ?').run(messageId);
+  db.prepare('DELETE FROM starred_messages WHERE message_id = ?').run(messageId);
+  db.prepare('DELETE FROM messages WHERE id = ?').run(messageId);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1371,7 +1658,7 @@ io.on('connection', (socket) => {
 
   socket.on('message:send', (data, ack) => {
     try {
-      const { chatId, type = 'text', body = '', mediaUrl = null, duration = 0, replyTo = null, tempId } = data || {};
+      const { chatId, type = 'text', body = '', mediaUrl = null, duration = 0, replyTo = null, tempId, pollId = null, disappearAt = null } = data || {};
       const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
       if (!isMember) return ack?.({ error: 'Not a member' });
 
@@ -1383,26 +1670,100 @@ io.on('connection', (socket) => {
         if (otherId && blockedEitherWay(uid, otherId)) return ack?.({ error: "You can't message this person" });
       }
 
+      // Disappearing messages: per-message override wins, otherwise the
+      // chat's default timer applies. Both are clamped to known presets.
+      let expiresAt = null;
+      if (disappearAt && Number(disappearAt) > now()) expiresAt = Number(disappearAt);
+      else if (chat.disappear_seconds) expiresAt = now() + chat.disappear_seconds * 1000;
+
       const msg = {
         id: nano(), chat_id: chatId, sender_id: uid, type,
         body: String(body).slice(0, 5000), media_url: mediaUrl,
-        duration: Number(duration) || 0, reply_to: replyTo, created_at: now(),
+        duration: Number(duration) || 0, reply_to: replyTo,
+        expires_at: expiresAt, edited: 0, forwarded_from: null, poll_id: pollId,
+        created_at: now(),
       };
-      db.prepare(
-        `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, duration, reply_to, created_at)
-         VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @duration, @reply_to, @created_at)`
-      ).run(msg);
-      db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(msg.created_at, chatId);
-
-      // online members get instant delivered receipt
-      memberIds(chatId).filter((x) => x !== uid && sockets.has(x)).forEach((x) => {
-        db.prepare('INSERT OR IGNORE INTO receipts (message_id, user_id, state, at) VALUES (?,?,?,?)').run(msg.id, x, 'delivered', now());
-      });
+      persistMessage(msg, chatId);
 
       const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id);
       emitToChat(chatId, 'message:new', (viewer) => ({ message: hydrateMessage(row, viewer), tempId: viewer === uid ? tempId : undefined }));
       emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
       ack?.({ message: hydrateMessage(row, uid), tempId });
+    } catch (e) {
+      ack?.({ error: e.message });
+    }
+  });
+
+  socket.on('message:edit', ({ messageId, body }, ack) => {
+    try {
+      const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+      if (!m || m.deleted) return ack?.({ error: 'Message not found' });
+      if (m.sender_id !== uid) return ack?.({ error: "You can only edit your own messages" });
+      if (m.type !== 'text') return ack?.({ error: 'Only text messages can be edited' });
+      const text = String(body || '').trim();
+      if (!text) return ack?.({ error: 'Message cannot be empty' });
+      db.prepare('UPDATE messages SET body = ?, edited = 1 WHERE id = ?').run(text.slice(0, 5000), messageId);
+      const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+      emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
+      emitToChat(m.chat_id, 'chat:updated', (viewer) => chatSummary(m.chat_id, viewer));
+      ack?.({ message: hydrateMessage(fresh, uid) });
+    } catch (e) {
+      ack?.({ error: e.message });
+    }
+  });
+
+  socket.on('poll:create', (data, ack) => {
+    try {
+      const { chatId, question, options = [] } = data || {};
+      const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
+      if (!isMember) return ack?.({ error: 'Not a member' });
+      const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
+      if (!chat || chat.type !== 'group') return ack?.({ error: 'Polls are only available in group chats' });
+      const q = String(question || '').trim();
+      const opts = options.map((o) => String(o).trim()).filter(Boolean);
+      if (!q) return ack?.({ error: 'Write a question for the poll' });
+      if (opts.length < 2) return ack?.({ error: 'Add at least two options' });
+      if (opts.length > 6) return ack?.({ error: 'Maximum 6 options' });
+      if ([...new Set(opts.map((o) => o.toLowerCase()))].length !== opts.length) {
+        return ack?.({ error: 'Options must be different' });
+      }
+
+      const pollId = nano();
+      const t = now();
+      db.prepare('INSERT INTO polls (id, chat_id, created_by, question, options, created_at) VALUES (?,?,?,?,?,?)').run(
+        pollId, chatId, uid, q.slice(0, 240), JSON.stringify(opts.slice(0, 6)), t
+      );
+      const msg = {
+        id: nano(), chat_id: chatId, sender_id: uid, type: 'poll',
+        body: q.slice(0, 240), media_url: null, duration: 0, reply_to: null,
+        expires_at: chat.disappear_seconds ? t + chat.disappear_seconds * 1000 : null,
+        edited: 0, forwarded_from: null, poll_id: pollId, created_at: t,
+      };
+      persistMessage(msg, chatId);
+      const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id);
+      emitToChat(chatId, 'message:new', (viewer) => ({ message: hydrateMessage(row, viewer) }));
+      emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+      ack?.({ message: hydrateMessage(row, uid) });
+    } catch (e) {
+      ack?.({ error: e.message });
+    }
+  });
+
+  socket.on('poll:vote', ({ messageId, pollId, optionIndex }, ack) => {
+    try {
+      const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+      if (!m || m.deleted || m.type !== 'poll' || m.poll_id !== pollId) return ack?.({ error: 'Poll not found' });
+      const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(m.chat_id, uid);
+      if (!isMember) return ack?.({ error: 'Not a member' });
+      const poll = db.prepare('SELECT * FROM polls WHERE id = ?').get(pollId);
+      let opts = [];
+      try { opts = JSON.parse(poll.options || '[]'); } catch { opts = []; }
+      const idx = Number(optionIndex);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= opts.length) return ack?.({ error: 'Invalid option' });
+      db.prepare('INSERT OR REPLACE INTO poll_votes (poll_id, user_id, option_index, at) VALUES (?,?,?,?)').run(pollId, uid, idx, now());
+      const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+      emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
+      ack?.({ message: hydrateMessage(fresh, uid) });
     } catch (e) {
       ack?.({ error: e.message });
     }
@@ -1456,6 +1817,8 @@ io.on('connection', (socket) => {
     const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
     if (!m || m.sender_id !== uid) return;
     db.prepare('UPDATE messages SET deleted = 1 WHERE id = ?').run(messageId);
+    // A poll "deleted for everyone" takes its votes with it.
+    if (m.type === 'poll' && m.poll_id) db.prepare('DELETE FROM polls WHERE id = ?').run(m.poll_id);
     const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
     emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
     emitToChat(m.chat_id, 'chat:updated', (viewer) => chatSummary(m.chat_id, viewer));
@@ -1571,6 +1934,31 @@ io.on('connection', (socket) => {
     }
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* disappearing messages — sweep for expired messages every 15s         */
+/* ------------------------------------------------------------------ */
+
+setInterval(() => {
+  try {
+    const expired = db
+      .prepare('SELECT id, chat_id, poll_id FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?')
+      .all(now());
+    if (!expired.length) return;
+    const byChat = {};
+    expired.forEach(({ id, chat_id, poll_id }) => {
+      if (poll_id) db.prepare('DELETE FROM polls WHERE id = ?').run(poll_id); // cascades poll_votes
+      (byChat[chat_id] ||= []).push(id);
+    });
+    expired.forEach(({ id }) => hardDeleteMessage(id));
+    Object.entries(byChat).forEach(([chatId, ids]) => {
+      emitToChat(chatId, 'message:expired', { chatId, messageIds: ids });
+      emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+    });
+  } catch (e) {
+    console.error('[disappear sweep]', e.message);
+  }
+}, 15000);
 
 /* ------------------------------------------------------------------ */
 /* single-host mode: serve the built web app from this same server      */

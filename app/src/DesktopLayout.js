@@ -24,6 +24,7 @@ import PrivacyScreen from './screens/PrivacyScreen';
 import BlockedUsersScreen from './screens/BlockedUsersScreen';
 import HelpScreen from './screens/HelpScreen';
 import CallsScreen from './screens/CallsScreen';
+import StarredMessagesScreen from './screens/StarredMessagesScreen';
 
 /**
  * Split shell for wide viewports — desktop web AND real tablets/foldables
@@ -58,7 +59,7 @@ export default function SplitLayout() {
   // Network) — NOT a popup — with its own little navigation stack for the
   // Personal Information / Security / Privacy / Notifications / Appearance
   // / Blocked Contacts drill-downs.
-  const SETTINGS_SUBSCREENS = ['PersonalInfo', 'Security', 'Privacy', 'Notifications', 'Appearance', 'BlockedUsers'];
+  const SETTINGS_SUBSCREENS = ['PersonalInfo', 'Security', 'Privacy', 'Notifications', 'Appearance', 'BlockedUsers', 'Starred'];
   const [settingsSub, setSettingsSub] = useState(null);
 
   const settingsNav = {
@@ -67,6 +68,16 @@ export default function SplitLayout() {
       if (SETTINGS_SUBSCREENS.includes(name)) setSettingsSub(name);
     },
     goBack: () => (settingsSub ? setSettingsSub(null) : setTab('chats')),
+    replace: () => {},
+  };
+
+  // Starred lives in Settings; tapping a starred message jumps straight to
+  // the conversation in the main split pane.
+  const starredNav = {
+    navigate: (name, params) => {
+      if (name === 'Conversation') { setSelectedChatId(params.chatId); setTab('chats'); setSettingsSub(null); }
+    },
+    goBack: () => setSettingsSub(null),
     replace: () => {},
   };
 
@@ -206,6 +217,7 @@ export default function SplitLayout() {
             {settingsSub === 'BlockedUsers' && <BlockedUsersScreen navigation={blockedUsersNav} embedded />}
             {settingsSub === 'Notifications' && <NotificationsScreen navigation={settingsNav} embedded />}
             {settingsSub === 'Appearance' && <AppearanceScreen navigation={settingsNav} embedded />}
+            {settingsSub === 'Starred' && <StarredMessagesScreen navigation={starredNav} embedded />}
             {!settingsSub && <SettingsScreen navigation={settingsNav} embedded />}
           </View>
         )}
@@ -215,9 +227,15 @@ export default function SplitLayout() {
         <NewChatScreen navigation={overlayNav} />
       </OverlayPanel>
 
-      <OverlayPanel visible={overlay?.name === 'ChatInfo'} onClose={closeOverlay} width={420}>
+      <OverlayPanel visible={overlay?.name === 'ChatInfo'} onClose={closeOverlay} width={440}>
         {overlay?.name === 'ChatInfo' && (
           <ChatInfoScreen navigation={overlayNav} route={{ params: overlay.params }} />
+        )}
+      </OverlayPanel>
+
+      <OverlayPanel visible={overlay?.name === 'Starred'} onClose={closeOverlay} width={560}>
+        {overlay?.name === 'Starred' && (
+          <StarredMessagesScreen navigation={overlayNav} embedded />
         )}
       </OverlayPanel>
 

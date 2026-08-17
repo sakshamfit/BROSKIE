@@ -58,15 +58,30 @@ optional, for display only), bcrypt hashing, JWT sessions persisted via AsyncSto
 editable name/username/about, auto-login on relaunch.
 
 **Messaging** — 1:1 and group chats, optimistic sending, swipe-free reply threading,
-emoji reactions, delete-for-everyone, image sharing with lightbox, voice-note UI with
+emoji reactions, delete-for-everyone, **edit sent messages**, **forward to one or many
+chats** (with a FORWARDED tag), image sharing with lightbox, voice-note UI with
 waveform, 32-emoji picker, day separators.
 
 **Real-time (Socket.IO)** — instant delivery, typing indicators, online/last-seen
 presence, single ✓ sent → double ✓✓ delivered → blue ✓✓ read, live unread badges,
 receipts that flush when a recipient reconnects.
 
-**Organisation** — chat list sorted by recency, unread counts, global message search,
+**Organisation** — chat list sorted by recency with **pinned chats pinned to the top**,
+unread counts, global message search plus **in-chat search that jumps to the match**,
+**starred messages** (save any message, browse them from Chat info or Settings),
 archive, mute, group info with participant list and admin tags.
+
+**Disappearing messages** — set a chat-wide self-destruct timer (30s / 5m / 1h / 24h)
+from Chat info, or long-press any message for a per-message timer. Expired messages are
+hard-deleted server-side on a 15-second sweep and vanish from every device in real time.
+
+**Group admin powers** — admins can rename the group, promote/demote members to admin,
+and remove members (the creator can't be demoted or removed; the last admin can't leave
+or be removed). Membership changes post system messages and update everyone live.
+
+**Polls** — group chats get a poll composer (question + 2–6 options). Polls render inline
+as their own message with live vote counts and bars; members can vote or change their
+vote, and results update in real time for everyone.
 
 **The Network** — a public worldwide feed. Anyone can post text, an image and a
 tag; posts appear live for every connected user via Socket.IO. Likes toggle with
@@ -139,8 +154,11 @@ whatsapp-clone/
 | → | `message:read` | mark a chat read → emits blue ticks |
 | → | `typing` | broadcast typing state |
 | → | `message:react` / `message:delete` | toggle reaction / delete for everyone |
-| ← | `message:new` / `message:updated` | new message, or status/reaction change |
-| ← | `chat:new` / `chat:updated` | chat list changes |
+| → | `message:edit` | edit one of my own text messages (acked with the update) |
+| → | `poll:create` / `poll:vote` | post a poll message / vote or change my vote |
+| ← | `message:new` / `message:updated` | new message, or status/reaction/edit/poll-count change |
+| ← | `message:expired` | a disappearing message was deleted by its timer (`{chatId, messageIds}`) |
+| ← | `chat:new` / `chat:updated` / `chat:removed` | chat list changes (removed = left/removed from a chat) |
 | ← | `presence` | online / last-seen |
 | → | `call:invite` / `call:accept` / `call:decline` / `call:hangup` | start, accept, decline, or end a 1:1 call |
 | → / ← | `call:offer` / `call:answer` / `call:ice-candidate` | WebRTC SDP + ICE signaling relay (server never inspects payloads) |

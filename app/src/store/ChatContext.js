@@ -59,8 +59,12 @@ export function ChatProvider({ children }) {
     return () => communityListeners.current.delete(fn);
   }, []);
 
+  // Pinned chats float to the top; within each group, recency order.
   const sortChats = (list) =>
-    [...list].sort((a, b) => (b.lastMessage?.createdAt || b.updatedAt) - (a.lastMessage?.createdAt || a.updatedAt));
+    [...list].sort((a, b) =>
+      ((b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)) ||
+      ((b.lastMessage?.createdAt || b.updatedAt) - (a.lastMessage?.createdAt || a.updatedAt))
+    );
 
   const upsertChat = useCallback((chat) => {
     setChats((prev) => {
@@ -105,6 +109,29 @@ export function ChatProvider({ children }) {
         const list = prev[message.chatId];
         if (!list) return prev;
         return { ...prev, [message.chatId]: list.map((m) => (m.id === message.id ? message : m)) };
+      });
+    });
+
+    // Disappearing messages: the server hard-deletes expired rows and tells
+    // everyone which ids vanished from which chat.
+    socket.on('message:expired', ({ chatId, messageIds }) => {
+      setMessages((prev) => {
+        const list = prev[chatId];
+        if (!list) return prev;
+        const ids = new Set(messageIds);
+        const next = list.filter((m) => !ids.has(m.id));
+        return next.length === list.length ? prev : { ...prev, [chatId]: next };
+      });
+    });
+
+    // Left/removed from a chat (group leave, admin removal, community exit).
+    socket.on('chat:removed', ({ chatId }) => {
+      setChats((prev) => prev.filter((c) => c.id !== chatId));
+      setMessages((prev) => {
+        if (!(chatId in prev)) return prev;
+        const next = { ...prev };
+        delete next[chatId];
+        return next;
       });
     });
 
@@ -415,12 +442,42 @@ export function ChatProvider({ children }) {
     socketRef.current?.emit('message:delete', { messageId });
   }, []);
 
+  /** Edit one of my own text messages. Resolves with the updated message. */
+  const editMessage = useCallback((messageId, body) => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('message:edit', { messageId, body }, (res) => {
+        if (res?.error) reject(new Error(res.error)); else resolve(res.message);
+      });
+    });
+  }, []);
+
+  /** Create a poll inside a group chat. Resolves with the poll message. */
+  const createPoll = useCallback((chatId, question, options) => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('poll:create', { chatId, question, options }, (res) => {
+        if (res?.error) reject(new Error(res.error)); else resolve(res.message);
+      });
+    });
+  }, []);
+
+  /** Vote (or change my vote) on a poll. Resolves with the updated message. */
+  const votePoll = useCallback((messageId, pollId, optionIndex) => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('poll:vote', { messageId, pollId, optionIndex }, (res) => {
+        if (res?.error) reject(new Error(res.error)); else resolve(res.message);
+      });
+    });
+  }, []);
+
   return (
     <ChatContext.Provider
       value={{
         chats, messages, typing, connected,
         refreshChats, loadMessages, sendMessage, markRead,
-        setTypingState, react, deleteMessage, upsertChat, onPostEvent, onStatusEvent, onCommunityEvent,
+        setTypingState, react, deleteMessage, editMessage, createPoll, votePoll,
+        upsertChat, onPostEvent, onStatusEvent, onCommunityEvent,
+        // exposed for lightweight local patches (e.g. optimistic star/timer state)
+        setMessages,
         // Calls
         call, localStream, remoteStream, micOn, camOn, callSupported: RTC_SUPPORTED,
         startCall, acceptCall, declineCall, hangUp, toggleMic, toggleCam,

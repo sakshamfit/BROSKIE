@@ -273,5 +273,51 @@ addColumnIfMissing('posts', 'audience', "audience TEXT DEFAULT 'public'");
 // input can't corrupt it or add arbitrary keys.
 addColumnIfMissing('users', 'settings', "settings TEXT DEFAULT '{}'");
 
+/* ---- feature migrations: disappearing messages, edits, forwards, polls ---- */
+// Per-chat default disappearing-message timer (seconds; 0 = off). Applied to
+// new messages unless a per-message override is sent.
+addColumnIfMissing('chats', 'disappear_seconds', 'disappear_seconds INTEGER DEFAULT 0');
+// Per-user pin timestamp on a membership row (pinned chats sort first).
+addColumnIfMissing('chat_members', 'pinned_at', 'pinned_at INTEGER');
+// messages: expires_at (disappearing), edited flag, forwarded provenance,
+// and an optional link to a poll created alongside the message.
+addColumnIfMissing('messages', 'expires_at', 'expires_at INTEGER');
+addColumnIfMissing('messages', 'edited', 'edited INTEGER DEFAULT 0');
+addColumnIfMissing('messages', 'forwarded_from', 'forwarded_from TEXT');
+addColumnIfMissing('messages', 'poll_id', 'poll_id TEXT');
+
+/* ---- starred messages: per-user bookmarking, across all chats ---- */
+db.exec(`
+CREATE TABLE IF NOT EXISTS starred_messages (
+  message_id TEXT NOT NULL,
+  user_id    TEXT NOT NULL,
+  at         INTEGER NOT NULL,
+  PRIMARY KEY (message_id, user_id),
+  FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+/* ---- polls: group-chat polls rendered inside a 'poll' message ---- */
+CREATE TABLE IF NOT EXISTS polls (
+  id         TEXT PRIMARY KEY,
+  chat_id    TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  question   TEXT NOT NULL,
+  options    TEXT NOT NULL,             -- JSON array of strings
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS poll_votes (
+  poll_id      TEXT NOT NULL,
+  user_id      TEXT NOT NULL,
+  option_index INTEGER NOT NULL,
+  at           INTEGER NOT NULL,
+  PRIMARY KEY (poll_id, user_id),
+  FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`);
+
 module.exports = db;
 module.exports.DATA_DIR = DATA_DIR;

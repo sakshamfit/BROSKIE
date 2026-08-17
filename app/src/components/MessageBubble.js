@@ -10,7 +10,21 @@ import VoiceNote from './VoiceNote';
 
 const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
-export default function MessageBubble({ message, isMine, isGroup, senderName, onReply, onReact, onDelete, onImagePress }) {
+/** Disappearing-message presets (seconds) — keep in sync with the server. */
+export const DISAPPEAR_OPTIONS = [
+  { seconds: 30, label: '30s' },
+  { seconds: 300, label: '5m' },
+  { seconds: 3600, label: '1h' },
+  { seconds: 86400, label: '24h' },
+];
+export const disappearLabel = (seconds) =>
+  DISAPPEAR_OPTIONS.find((o) => o.seconds === seconds)?.label || 'Off';
+
+export default function MessageBubble({
+  message, isMine, isGroup, senderName,
+  onReply, onReact, onDelete, onImagePress,
+  onEdit, onForward, onStar, onSetTimer, onVotePoll,
+}) {
   const { theme } = useTheme();
   const [menu, setMenu] = useState(false);
   const s = makeStyles(theme);
@@ -37,6 +51,9 @@ export default function MessageBubble({ message, isMine, isGroup, senderName, on
     ? { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: 0 }
     : { borderTopLeftRadius: radius.md, borderTopRightRadius: radius.lg, borderBottomRightRadius: radius.lg, borderBottomLeftRadius: 0 };
 
+  const canEdit = isMine && !message.deleted && message.type === 'text';
+  const canForward = !message.deleted && message.type !== 'poll';
+
   return (
     <>
       <Pressable onLongPress={() => setMenu(true)} delayLongPress={280} style={[s.wrap, isMine ? s.wrapMine : s.wrapTheirs]}>
@@ -53,6 +70,13 @@ export default function MessageBubble({ message, isMine, isGroup, senderName, on
         >
           {isGroup && !isMine && (
             <Text style={[type.labelXs, { color: theme.graphite, marginBottom: 4 }]}>{senderName.toUpperCase()}</Text>
+          )}
+
+          {message.forwarded && !message.deleted && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+              <Icon name="arrow-redo-outline" size={12} color={subInk} />
+              <Text style={[type.labelXs, { color: subInk, letterSpacing: 0.8 }]}>FORWARDED</Text>
+            </View>
           )}
 
           {message.replyTo && (
@@ -80,6 +104,8 @@ export default function MessageBubble({ message, isMine, isGroup, senderName, on
               <Icon name="ban-outline" size={14} color={subInk} />
               <Text style={[type.bodyMd, { color: subInk, fontStyle: 'italic' }]}>message deleted</Text>
             </View>
+          ) : message.type === 'poll' && message.poll ? (
+            <PollBody messageId={message.id} poll={message.poll} isMine={isMine} ink={ink} onVotePoll={onVotePoll} />
           ) : message.type === 'image' ? (
             <Pressable onPress={() => onImagePress?.(mediaUrl(message.mediaUrl))}>
               <Image source={{ uri: mediaUrl(message.mediaUrl) }} style={[s.image, { borderColor: theme.ink }]} resizeMode="cover" />
@@ -92,6 +118,12 @@ export default function MessageBubble({ message, isMine, isGroup, senderName, on
           )}
 
           <View style={s.meta}>
+            {message.edited && !message.deleted && (
+              <Text style={[type.labelXs, { color: subInk, fontSize: 9, fontStyle: 'italic' }]}>edited</Text>
+            )}
+            {!!message.expiresAt && !message.deleted && (
+              <Icon name="timer-outline" size={11} color={subInk} />
+            )}
             <Text style={[type.labelXs, { color: subInk, fontSize: 9 }]}>{formatTime(message.createdAt)}</Text>
             {isMine && <Ticks status={message.status} size={13} color={message.status === 'read' ? theme.highlighter : subInk} />}
           </View>
@@ -128,6 +160,30 @@ export default function MessageBubble({ message, isMine, isGroup, senderName, on
               <Icon name="arrow-undo-outline" size={18} color={theme.ink} />
               <Text style={[type.bodyMd, { color: theme.text }]}>Reply</Text>
             </Pressable>
+            {canForward && (
+              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onForward(message); setMenu(false); }}>
+                <Icon name="arrow-redo-outline" size={18} color={theme.ink} />
+                <Text style={[type.bodyMd, { color: theme.text }]}>Forward</Text>
+              </Pressable>
+            )}
+            {!message.deleted && message.type !== 'poll' && (
+              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onStar(message); setMenu(false); }}>
+                <Icon name={message.starred ? 'star' : 'star-outline'} size={18} color={message.starred ? theme.highlighter : theme.ink} />
+                <Text style={[type.bodyMd, { color: theme.text }]}>{message.starred ? 'Unstar message' : 'Star message'}</Text>
+              </Pressable>
+            )}
+            {canEdit && (
+              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onEdit(message); setMenu(false); }}>
+                <Icon name="create-outline" size={18} color={theme.ink} />
+                <Text style={[type.bodyMd, { color: theme.text }]}>Edit</Text>
+              </Pressable>
+            )}
+            {!message.deleted && (
+              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onSetTimer(message); setMenu(false); }}>
+                <Icon name="timer-outline" size={18} color={theme.ink} />
+                <Text style={[type.bodyMd, { color: theme.text }]}>Disappear in…</Text>
+              </Pressable>
+            )}
             {isMine && !message.deleted && (
               <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onDelete(message.id); setMenu(false); }}>
                 <Icon name="trash-outline" size={18} color={theme.danger} />
@@ -138,6 +194,56 @@ export default function MessageBubble({ message, isMine, isGroup, senderName, on
         </Pressable>
       </Modal>
     </>
+  );
+}
+
+/** The poll card rendered inside a 'poll' message bubble. */
+function PollBody({ messageId, poll, ink, isMine, onVotePoll }) {
+  const { theme } = useTheme();
+  return (
+    <View style={{ minWidth: 230, maxWidth: 280 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <Icon name="bar-chart-outline" size={14} color={ink} />
+        <Text style={[type.labelXs, { color: ink, letterSpacing: 0.7 }]}>
+          POLL{isMine ? ' · YOU' : ` · ${poll.createdByName.toUpperCase()}`}
+        </Text>
+      </View>
+      <EmojiText style={[type.bodyStrong, { color: ink, marginBottom: 10 }]}>{poll.question}</EmojiText>
+
+      {poll.options.map((opt) => {
+        const mine = poll.myVote === opt.index;
+        const pct = poll.totalVotes ? Math.round((opt.votes / poll.totalVotes) * 100) : 0;
+        return (
+          <Pressable
+            key={opt.index}
+            onPress={() => onVotePoll?.(messageId, poll.id, opt.index)}
+            style={({ pressed }) => [
+              s.pollOption,
+              inkBox(theme, 'thin'),
+              mine ? { backgroundColor: theme.highlighterSoft, borderColor: theme.ink } : null,
+              pressed ? marker(theme, 1) : null,
+            ]}
+          >
+            <View style={s.pollOptionTop}>
+              <EmojiText style={[type.bodyMd, { color: ink, flex: 1 }]} numberOfLines={2}>{opt.text}</EmojiText>
+              <Text style={[type.labelSm, { color: ink }]}>{pct}%</Text>
+            </View>
+            <View style={[s.pollBar, { backgroundColor: theme.bg }]}>
+              <View
+                style={[s.pollBarFill, { width: `${pct}%`, backgroundColor: mine ? theme.ink : theme.graphiteLine }]}
+              />
+            </View>
+            {mine && (
+              <Text style={[type.labelXs, { color: theme.ink, marginTop: 4 }]}>YOUR VOTE ✓</Text>
+            )}
+          </Pressable>
+        );
+      })}
+
+      <Text style={[type.labelXs, { color: ink, opacity: 0.75, marginTop: 8 }]}>
+        {poll.totalVotes} vote{poll.totalVotes === 1 ? '' : 's'} · tap an option to vote
+      </Text>
+    </View>
   );
 }
 
@@ -162,4 +268,9 @@ const makeStyles = (t) => StyleSheet.create({
   quickRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
   quickBtn: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 6, paddingVertical: 12 },
+
+  pollOption: { paddingHorizontal: 10, paddingVertical: 8, marginBottom: 7 },
+  pollOptionTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pollBar: { height: 6, marginTop: 7, borderWidth: 1, borderColor: t.ink, overflow: 'hidden', borderRadius: 2 },
+  pollBarFill: { height: '100%', minWidth: 2 },
 });
