@@ -130,9 +130,9 @@ export default function Navigation() {
   }
 
   const navTheme = {
-    ...(mode === 'dark' ? DarkTheme : DefaultTheme),
+    ...(mode === 'dark' || mode === 'kinetic' ? DarkTheme : DefaultTheme),
     colors: {
-      ...(mode === 'dark' ? DarkTheme : DefaultTheme).colors,
+      ...(mode === 'dark' || mode === 'kinetic' ? DarkTheme : DefaultTheme).colors,
       background: theme.bg,
       card: theme.card,
       text: theme.text,

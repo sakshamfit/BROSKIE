@@ -5,7 +5,7 @@ import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { PaperCard } from '../components/common';
-import { type, inkBox, marker, lightTheme, darkTheme } from '../theme';
+import { type, inkBox, marker, lightTheme, darkTheme, kineticInkTheme } from '../theme';
 
 const SYSTEM_SETTING_NAME = Platform.select({
   ios: 'your iOS Display & Brightness setting',
@@ -51,6 +51,15 @@ export default function AppearanceScreen({ navigation, embedded = false }) {
             outerTheme={theme}
           />
           <ThemePreviewCard
+            label="Kinetic"
+            active={preference === 'kinetic'}
+            onPress={() => setThemePreference('kinetic')}
+            bg={kineticInkTheme.bg}
+            ink={kineticInkTheme.ink}
+            card={kineticInkTheme.primary}
+            outerTheme={theme}
+          />
+          <ThemePreviewCard
             label="System"
             icon="phone-portrait-outline"
             active={preference === 'system'}
@@ -85,8 +94,7 @@ export default function AppearanceScreen({ navigation, embedded = false }) {
         </PaperCard>
 
         <Text style={[type.bodySm, { color: theme.muted, marginTop: 20, lineHeight: 19 }]}>
-          The Graphite &amp; Pulp type scale is fixed across the app to keep the hand-drawn,
-          ink-on-paper feel consistent — only the palette switches between light and dark.
+          Choose Kinetic Ink for the high-contrast cyan-and-red manga-tech palette. Theme preference is saved and applied across every screen.
         </Text>
       </ScrollView>
     </View>
@@ -127,7 +135,7 @@ const makeStyles = (t) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14 },
   scroll: { padding: 20, paddingBottom: 40 },
   scrollWide: { maxWidth: 560, width: '100%', alignSelf: 'center' },
-  themeRow: { flexDirection: 'row', gap: 12 },
+  themeRow: { flexDirection: 'row', gap: 8 },
   themeCard: { flex: 1, padding: 10 },
   swatch: { width: '100%', aspectRatio: 1.1, borderWidth: 2, padding: 8, justifyContent: 'flex-end', overflow: 'hidden' },
   swatchInner: { height: '55%', borderWidth: 1.5, borderRadius: 3 },

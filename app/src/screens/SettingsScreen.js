@@ -78,14 +78,14 @@ export default function SettingsScreen({ navigation, embedded = false }) {
         <SectionHeading theme={theme} label="Preferences" tilt="1deg" />
         <View style={s.group}>
           <View style={[s.row, s.rowStatic, inkBox(theme, 'thin')]}>
-            <Icon name={mode === 'dark' ? 'moon' : 'sunny-outline'} size={19} color={theme.ink} style={{ width: 26 }} />
+            <Icon name={theme.dark ? 'moon' : 'sunny-outline'} size={19} color={theme.ink} style={{ width: 26 }} />
             <View style={{ flex: 1 }}>
               <Text style={[type.bodyLg, { color: theme.text }]}>Dark mode</Text>
               <Text style={[type.labelXs, { color: theme.graphite, marginTop: 3 }]}>
-                {preference === 'system' ? `SYSTEM (${mode.toUpperCase()})` : mode === 'dark' ? 'ON' : 'OFF'}
+                {preference === 'system' ? `SYSTEM (${mode.toUpperCase()})` : theme.dark ? 'ON' : 'OFF'}
               </Text>
             </View>
-            <HandDrawnToggle value={mode === 'dark'} onToggle={toggle} theme={theme} />
+            <HandDrawnToggle value={theme.dark} onToggle={toggle} theme={theme} />
           </View>
           <Divider theme={theme} />
           <NavRow

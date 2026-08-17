@@ -358,6 +358,63 @@ export const darkTheme = {
   tabActiveBg: '#2e2d2d',
 };
 
+
+
+/** KINETIC_INK — a high-contrast cyan/red manga-tech palette. */
+export const kineticInkTheme = {
+  dark: true,
+  name: 'KINETIC INK',
+  typography: 'kinetic',
+
+  bg: '#131313',
+  chatBg: '#131313',
+  card: '#20201f',
+  cardAlt: '#2a2a2a',
+  inputBg: '#0e0e0e',
+
+  ink: '#dbfcff',
+  graphite: '#b9cacb',
+  graphiteLine: '#3b494b',
+
+  primary: '#00f0ff',
+  onPrimary: '#00363a',
+  primaryContainer: '#00f0ff',
+  onPrimaryContainer: '#006970',
+
+  accent: '#00f0ff',
+  onAccent: '#002022',
+  highlighter: '#00f0ff',
+  highlighterSoft: 'rgba(0, 240, 255, 0.36)',
+  highlighterWash: 'rgba(0, 240, 255, 0.18)',
+
+  badge: '#ff525c',
+  onBadge: '#5b000f',
+
+  headerBg: '#131313',
+  headerText: '#e5e2e1',
+  headerSub: '#b9cacb',
+
+  text: '#e5e2e1',
+  subtext: '#b9cacb',
+  muted: '#849495',
+
+  bubbleOut: '#00f0ff',
+  onBubbleOut: '#00363a',
+  bubbleIn: '#20201f',
+  onBubbleIn: '#e5e2e1',
+
+  tick: '#849495',
+  tickRead: '#00f0ff',
+
+  danger: '#ffb4ab',
+  dangerContainer: '#93000a',
+
+  ripple: 'rgba(0, 240, 255, 0.18)',
+  overlay: 'rgba(0,0,0,0.78)',
+  border: '#3b494b',
+  tabActiveBg: '#00f0ff',
+};
+
 /* ------------------------------------------------------------------ */
 /* avatars — pencil-sketched initials, no colour fills                 */
 /* ------------------------------------------------------------------ */

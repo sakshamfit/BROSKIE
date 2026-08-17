@@ -82,7 +82,7 @@ function Root() {
 
   return (
     <>
-      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} backgroundColor={theme.bg} />
+      <StatusBar style={theme.dark ? 'light' : 'dark'} backgroundColor={theme.bg} />
       <OrientationManager />
       {/* Vercel Web Analytics — page views only load the tracking script in a
           real browser (it injects a <script> tag into document.head), so it's

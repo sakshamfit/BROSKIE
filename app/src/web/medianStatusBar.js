@@ -52,7 +52,7 @@ export function applyMedianStatusBar(mode, bg) {
       // Median's convention: 'light' = black icons (for light backgrounds),
       // 'dark' = white icons (for dark backgrounds) — opposite of Expo's
       // StatusBar, so map the resolved theme mode to Median's naming.
-      style: mode === 'dark' ? 'dark' : 'light',
+      style: (mode === 'dark' || mode === 'kinetic') ? 'dark' : 'light',
       color: toARGB(bg),
       overlay: true, // app draws under the status bar; safe-area insets pad content
       blur: false,

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { lightTheme, darkTheme } from '../theme';
+import { lightTheme, darkTheme, kineticInkTheme } from '../theme';
 
 const ThemeContext = createContext(null);
 export const useTheme = () => useContext(ThemeContext);
@@ -9,7 +9,7 @@ export const useTheme = () => useContext(ThemeContext);
 const KEY = 'tomodachi.theme';
 
 /**
- * `preference` is what's persisted: 'light' | 'dark' | 'system'.
+ * `preference` is what's persisted: 'light' | 'dark' | 'kinetic' | 'system'.
  * `mode` is the RESOLVED value ('light' | 'dark') the rest of the app reads,
  * so screens don't need to know about 'system' at all — it's already
  * followed the OS appearance (iOS Settings / Android system theme) by the
@@ -21,7 +21,7 @@ export function ThemeProvider({ children }) {
 
   useEffect(() => {
     AsyncStorage.getItem(KEY).then((v) => {
-      if (v === 'light' || v === 'dark' || v === 'system') setPreference(v);
+      if (v === 'light' || v === 'dark' || v === 'kinetic' || v === 'system') setPreference(v);
     });
   }, []);
 
@@ -35,7 +35,7 @@ export function ThemeProvider({ children }) {
   /** Back-compat: cycles light <-> dark, opting OUT of following the system. */
   const toggle = () => setThemePreference(mode === 'dark' ? 'light' : 'dark');
 
-  const theme = useMemo(() => (mode === 'dark' ? darkTheme : lightTheme), [mode]);
+  const theme = useMemo(() => (mode === 'kinetic' ? kineticInkTheme : mode === 'dark' ? darkTheme : lightTheme), [mode]);
 
   return (
     <ThemeContext.Provider value={{ theme, mode, preference, setThemePreference, toggle }}>
