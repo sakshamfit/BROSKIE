@@ -328,7 +328,7 @@ function userChats(userId) {
 /* auth routes                                                         */
 /* ------------------------------------------------------------------ */
 
-app.get('/api/health', (req, res) => res.json({ ok: true, time: now() }));
+app.get('/api/health', (req, res) => res.json({ ok: true, time: now(), storage: storage.describe() }));
 
 app.get('/api/auth/username-available', (req, res) => {
   const raw = req.query.username;
