@@ -21,6 +21,7 @@
     "expo-font": "~57.0.1",
     "expo-image-picker": "~57.0.10",
     "expo-screen-orientation": "~57.0.1",
+    "expo-splash-screen": "~57.0.6",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -36,7 +37,10 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:ios": "eas build -p ios --profile preview",
+    "build:android": "eas build -p android --profile preview",
+    "submit:ios": "eas submit -p ios --profile production"
   },
   "private": true
 }

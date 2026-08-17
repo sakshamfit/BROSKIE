@@ -49,6 +49,47 @@ The phone can't reach `localhost`. Point it at your machine's LAN IP:
 EXPO_PUBLIC_API_URL=http://192.168.1.42:4000
 ```
 
+### Download the app on iOS / Android
+
+**Option A — Expo Go (free, ~1 minute).** The same codebase runs in the Expo Go
+app on iPhone and Android. Start the dev server, then scan the QR code:
+
+```bash
+cd app
+npx expo start        # scan the QR with Expo Go (App Store / Play Store)
+```
+
+**Option B — Standalone installable app via EAS Build.** Produces a real `.ipa`
+(iOS) / `.apk` (Android) you can download on your phone.
+
+Requirements: an [Expo account](https://expo.dev/signup) and, for iOS only, an
+[Apple Developer Program](https://developer.apple.com/programs/) membership
+(US$99/yr — Apple requires it to sign/install any standalone iOS app).
+Android needs no paid account for a side-loaded APK.
+
+```bash
+cd app
+npx eas-cli login                      # your Expo account
+npx eas-cli build:configure            # one-time project setup
+npx eas-cli build -p ios  --profile preview    # installable .ipa
+npx eas-cli build -p android --profile preview # installable .apk
+```
+
+- The build runs in the cloud (~5–10 min) and prints a **QR code / install link** —
+  open it on your iPhone to download the app. Internal-distribution builds need
+  your device registered first: `npx eas-cli device:create` (or say yes when
+  prompted).
+- **No Apple Developer account?** Use the `simulator` profile
+  (`eas build -p ios --profile simulator`) — no paid account needed, but it only
+  runs in the iOS Simulator on a Mac.
+- **TestFlight / App Store:** `npx eas-cli build -p ios --profile production`,
+  then `npx eas-cli submit -p ios`.
+
+Notes: the iOS/Android native folders are generated automatically during the
+cloud build (this repo uses the managed Expo workflow, so nothing native is
+committed). Calls ring and show history on native, but live WebRTC media is
+web-only for now — see "Notes & limits" below.
+
 ---
 
 ## Features

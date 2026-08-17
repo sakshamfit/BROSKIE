@@ -6,12 +6,6 @@
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#075E54"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ai.arena.tomodachi",
@@ -27,7 +21,6 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#075E54"
       },
-      "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "RECORD_AUDIO",
@@ -48,7 +41,16 @@
       ],
       "expo-font",
       "expo-screen-orientation",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#075E54",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ]
     ]
   }
 }
