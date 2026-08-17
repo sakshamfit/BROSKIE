@@ -160,6 +160,7 @@ entirely and enables multiple server instances).
 | Symptom | Cause |
 |---|---|
 | Build fails: `npm: command not found` | No `package.json` at the repo root, or Root Directory set to `server`. Nixpacks detects the language from the root — keep the root manifest and leave Root Directory empty. |
+| Build fails: `GetEnv.NoBoolean: is not a boolean` | The host injects a `CI` env var Expo can't parse (e.g. an empty value). The build scripts already pin `CI=true` before `expo export` (see `server/package.json` / `vercel.json`), so this only reappears if the build command is overridden in the host UI — keep the repo's own `npm run build`. |
 | "Reconnecting…" in Settings | Backend asleep, or (two-host) wrong `EXPO_PUBLIC_API_URL` |
 | Blank page, 404 on refresh | Web build missing — run `npm run build` so `server/public` exists |
 | "Failed to fetch" on login | Two-host: backend `http://` while site is `https://` (mixed content) |

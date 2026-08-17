@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd app && npm install && npx expo export --platform web",
+  "buildCommand": "cd app && npm install && CI=true npx expo export --platform web",
   "outputDirectory": "app/dist",
   "installCommand": "echo 'deps installed in buildCommand'",
   "framework": null,
