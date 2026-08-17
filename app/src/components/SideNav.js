@@ -25,6 +25,7 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
     { key: 'chats', label: 'Chats', icon: 'chatbubbles' },
     { key: 'status', label: 'See', icon: 'eye' },
     { key: 'network', label: 'Network', icon: 'people' },
+    { key: 'calls', label: 'Calls', icon: 'call' },
     { key: 'settings', label: 'Settings', icon: 'settings' },
   ];
 

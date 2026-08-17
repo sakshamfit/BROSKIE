@@ -23,6 +23,7 @@ import NotificationsScreen from './screens/NotificationsScreen';
 import PrivacyScreen from './screens/PrivacyScreen';
 import BlockedUsersScreen from './screens/BlockedUsersScreen';
 import HelpScreen from './screens/HelpScreen';
+import CallsScreen from './screens/CallsScreen';
 
 /**
  * Split shell for wide viewports — desktop web AND real tablets/foldables
@@ -186,6 +187,12 @@ export default function SplitLayout() {
             <NetworkScreen
               onOpenChat={(chatId) => { setTab('chats'); setSelectedChatId(chatId); }}
             />
+          </View>
+        )}
+
+        {tab === 'calls' && (
+          <View style={[s.fullPane, s.centeredPane]}>
+            <CallsScreen embedded />
           </View>
         )}
 

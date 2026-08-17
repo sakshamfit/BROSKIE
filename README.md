@@ -85,9 +85,19 @@ Bricolage Grotesque headlines / Karla body / JetBrains Mono labels.
 
 **Icons & emoji — 100% SVG** — every icon is a true vector (`react-native-svg`) rendered
 from official Ionicons path data via `<Icon>`. Every emoji is a full-colour Twemoji vector
+(1445 of them — smileys, people, nature, food, travel, activities, objects, symbols)
 rendered via `<Emoji>` / `<EmojiText>`, which auto-swaps emoji inside any string (message
-bodies, group names, statuses, previews). No icon fonts and no system emoji glyphs
-anywhere, so rendering is identical on iOS, Android and web.
+bodies, group names, statuses, previews) — the picker itself is tabbed by category with
+a name search ("fire" finds 🔥). No icon fonts and no system emoji glyphs anywhere, so
+rendering is identical on iOS, Android and web instead of falling back to inconsistent
+platform glyphs for anything outside a small hand-picked set.
+
+**Calls** — real 1:1 voice and video calling over WebRTC, signalled through the existing
+Socket.IO connection (ringing, accept/decline/busy/missed, mute, hang up), with call
+history persisted server-side and a dedicated Calls tab to call someone back. On web this
+is a genuine peer-to-peer audio/video connection; native iOS/Android media capture needs
+`react-native-webrtc` + a custom dev build (see Notes & limits below) so the ringing/
+history/signaling works everywhere but live audio/video is web-only for now.
 
 **Polish** — full light/dark theme, deterministic colour avatars with initials,
 pull-to-refresh, empty states, connection indicator.
@@ -132,6 +142,9 @@ whatsapp-clone/
 | ← | `message:new` / `message:updated` | new message, or status/reaction change |
 | ← | `chat:new` / `chat:updated` | chat list changes |
 | ← | `presence` | online / last-seen |
+| → | `call:invite` / `call:accept` / `call:decline` / `call:hangup` | start, accept, decline, or end a 1:1 call |
+| → / ← | `call:offer` / `call:answer` / `call:ice-candidate` | WebRTC SDP + ICE signaling relay (server never inspects payloads) |
+| ← | `call:incoming` / `call:accepted` / `call:ended` | ring the callee, notify the caller, notify both sides a call ended |
 
 ### Message status derivation
 A message is `delivered` once every other member has a delivered receipt, and `read`
@@ -143,7 +156,12 @@ once every other member has a read receipt — so it works identically for group
 
 - Voice notes record duration and render a playable waveform bubble; capturing real
   audio bytes needs `expo-audio` recording permissions on a device build.
-- Calls tab is a placeholder — real calling needs WebRTC.
+- Calls are real WebRTC on web (genuine peer-to-peer audio/video via the browser's
+  native RTCPeerConnection). On native iOS/Android, actual camera/mic capture needs
+  `react-native-webrtc`, which requires a custom dev build outside the managed/Expo Go
+  workflow this app runs under — ringing, accept/decline, and call history all still
+  work for real on native, the app just shows a clear message instead of connecting
+  media if a native device tries to start/answer a call.
 - "End-to-end encrypted" is a UI label, not real E2E crypto.
 - SQLite + local disk uploads are fine for demo/dev; swap for Postgres + S3 in production.
 - Change `JWT_SECRET` (env var) before deploying anywhere real.

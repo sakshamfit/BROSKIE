@@ -9,7 +9,7 @@ import { useAuth } from './store/AuthContext';
 import { useTheme } from './store/ThemeContext';
 import { useChat } from './store/ChatContext';
 import useResponsive from './hooks/useResponsive';
-import { Loading, EmptyState, CountBead } from './components/common';
+import { Loading, CountBead } from './components/common';
 import { type, marker, stroke } from './theme';
 import SplitLayout from './DesktopLayout';
 
@@ -28,6 +28,7 @@ import NotificationsScreen from './screens/NotificationsScreen';
 import PrivacyScreen from './screens/PrivacyScreen';
 import BlockedUsersScreen from './screens/BlockedUsersScreen';
 import HelpScreen from './screens/HelpScreen';
+import CallsScreen from './screens/CallsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -44,6 +45,7 @@ function HomeTabs({ navigation }) {
     { key: 'chats', label: 'Chats', icon: 'chatbubble', badge: unread },
     { key: 'status', label: 'See', icon: 'eye' },
     { key: 'network', label: 'Network', icon: 'people' },
+    { key: 'calls', label: 'Calls', icon: 'call' },
     { key: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
@@ -58,7 +60,7 @@ function HomeTabs({ navigation }) {
           />
         )}
         {tab === 'status' && <StatusScreen navigation={navigation} />}
-        {tab === 'calls' && <CallsPlaceholder />}
+        {tab === 'calls' && <CallsScreen navigation={navigation} />}
       </SafeAreaView>
 
       {/* SafeAreaView only pads the notch/home-indicator; the bar itself owns its own padding
@@ -107,22 +109,6 @@ function HomeTabs({ navigation }) {
           })}
         </View>
       </SafeAreaView>
-    </View>
-  );
-}
-
-function CallsPlaceholder() {
-  const { theme } = useTheme();
-  return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, minHeight: 84, justifyContent: 'center' }}>
-        <Text style={[type.headlineLg, { color: theme.text }]}>Calls</Text>
-      </View>
-      <EmptyState
-        icon="call-outline"
-        title="No recent calls"
-        subtitle="Voice and video calling would need WebRTC — the signalling layer is ready on the server."
-      />
     </View>
   );
 }

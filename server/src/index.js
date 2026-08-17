@@ -590,6 +590,30 @@ app.get('/api/search', requireAuth, (req, res) => {
   });
 });
 
+/* ------------------------------------------------------------------ */
+/* calls — history + REST helpers (live signaling is over Socket.IO)   */
+/* ------------------------------------------------------------------ */
+
+app.get('/api/calls', requireAuth, (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 100);
+  const rows = db
+    .prepare(
+      `SELECT * FROM calls WHERE caller_id = ? OR callee_id = ?
+       ORDER BY started_at DESC LIMIT ?`
+    )
+    .all(req.userId, req.userId, limit);
+  res.json({ calls: rows.map((r) => hydrateCall(r, req.userId)) });
+});
+
+app.delete('/api/calls/:id', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM calls WHERE id = ?').get(req.params.id);
+  if (!row || (row.caller_id !== req.userId && row.callee_id !== req.userId)) {
+    return res.status(404).json({ error: 'Call not found' });
+  }
+  db.prepare('DELETE FROM calls WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 function insertSystemMessage(chatId, body) {
   const msg = { id: nano(), chat_id: chatId, sender_id: 'system', type: 'system', body, media_url: null, duration: 0, reply_to: null, created_at: now() };
   db.prepare(
@@ -769,6 +793,26 @@ function hydratePost(row, viewerId) {
     comments,
     liked,
     mine: row.user_id === viewerId,
+  };
+}
+
+function hydrateCall(row, viewerId) {
+  if (!row) return null;
+  const otherId = row.caller_id === viewerId ? row.callee_id : row.caller_id;
+  const other = getUser(otherId);
+  const duration = row.answered_at && row.ended_at ? Math.max(0, row.ended_at - row.answered_at) : 0;
+  return {
+    id: row.id,
+    chatId: row.chat_id,
+    type: row.type,
+    status: row.status,
+    direction: row.caller_id === viewerId ? 'outgoing' : 'incoming',
+    with: other ? publicUser(other) : { id: otherId, name: 'Unknown', avatar: null, username: null },
+    startedAt: row.started_at,
+    answeredAt: row.answered_at,
+    endedAt: row.ended_at,
+    endedReason: row.ended_reason,
+    durationMs: duration,
   };
 }
 
@@ -1280,6 +1324,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' }, maxHttpBufferSize: 3e7 });
 
 const sockets = new Map(); // userId -> Set<socketId>
+const activeCalls = new Map(); // userId -> callId, for busy-detection and cleanup on disconnect
 
 function emitToUser(userId, event, payload) {
   const set = sockets.get(userId);
@@ -1416,6 +1461,100 @@ io.on('connection', (socket) => {
     emitToChat(m.chat_id, 'chat:updated', (viewer) => chatSummary(m.chat_id, viewer));
   });
 
+  /* ------------------------------------------------------------------ */
+  /* calls — real 1:1 WebRTC voice/video, signalled peer-to-peer here    */
+  /* ------------------------------------------------------------------ */
+
+  // Track at most one active call per user so we can reject/clean up
+  // properly (busy signal, stale calls on disconnect) without a DB lookup
+  // on every signaling message.
+  const activeCallId = () => activeCalls.get(uid);
+
+  function endCall(callId, reason, endedByUid) {
+    const call = db.prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+    if (!call || call.status === 'ended' || call.status === 'missed' || call.status === 'declined') return;
+    const t = now();
+    const status = reason === 'declined' ? 'declined' : reason === 'missed' ? 'missed' : reason === 'busy' ? 'busy' : 'ended';
+    db.prepare('UPDATE calls SET status = ?, ended_at = ?, ended_reason = ? WHERE id = ?').run(status, t, reason, callId);
+    [call.caller_id, call.callee_id].forEach((id) => activeCalls.delete(id));
+    const fresh = db.prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+    [call.caller_id, call.callee_id].forEach((id) => emitToUser(id, 'call:ended', hydrateCall(fresh, id)));
+  }
+
+  // Caller starts a call. Blocked-either-way and busy checks mirror the
+  // same enforcement as direct messaging (see message:send above).
+  socket.on('call:invite', ({ chatId, calleeId, type: callType = 'audio' }, ack) => {
+    try {
+      if (!calleeId || !getUser(calleeId)) return ack?.({ error: 'Unknown user' });
+      if (blockedEitherWay(uid, calleeId)) return ack?.({ error: "You can't call this person" });
+      if (activeCallId()) return ack?.({ error: 'You are already on a call' });
+      if (activeCalls.get(calleeId)) {
+        const id = nano();
+        const t = now();
+        db.prepare(
+          `INSERT INTO calls (id, chat_id, caller_id, callee_id, type, status, started_at, ended_at, ended_reason)
+           VALUES (?,?,?,?,?,?,?,?,?)`
+        ).run(id, chatId, uid, calleeId, callType, 'busy', t, t, 'busy');
+        return ack?.({ error: `${getUser(calleeId).name} is on another call`, busy: true });
+      }
+
+      const id = nano();
+      const t = now();
+      db.prepare(
+        `INSERT INTO calls (id, chat_id, caller_id, callee_id, type, status, started_at) VALUES (?,?,?,?,?,?,?)`
+      ).run(id, chatId, uid, calleeId, callType, 'ringing', t);
+      activeCalls.set(uid, id);
+      activeCalls.set(calleeId, id);
+
+      const call = db.prepare('SELECT * FROM calls WHERE id = ?').get(id);
+      const caller = getUser(uid);
+      emitToUser(calleeId, 'call:incoming', { ...hydrateCall(call, calleeId), caller: publicUser(caller) });
+      ack?.({ call: hydrateCall(call, uid) });
+
+      // Auto-miss after 45s of no answer, same as most messengers.
+      setTimeout(() => {
+        const c = db.prepare('SELECT * FROM calls WHERE id = ?').get(id);
+        if (c && c.status === 'ringing') endCall(id, 'missed');
+      }, 45000);
+    } catch (e) {
+      ack?.({ error: e.message });
+    }
+  });
+
+  socket.on('call:accept', ({ callId }, ack) => {
+    const call = db.prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+    if (!call || call.callee_id !== uid) return ack?.({ error: 'Call not found' });
+    if (call.status !== 'ringing') return ack?.({ error: 'Call is no longer ringing' });
+    db.prepare('UPDATE calls SET status = ?, answered_at = ? WHERE id = ?').run('ongoing', now(), callId);
+    const fresh = db.prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+    emitToUser(call.caller_id, 'call:accepted', hydrateCall(fresh, call.caller_id));
+    ack?.({ call: hydrateCall(fresh, uid) });
+  });
+
+  socket.on('call:decline', ({ callId }) => {
+    const call = db.prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+    if (!call || call.callee_id !== uid) return;
+    endCall(callId, 'declined');
+  });
+
+  socket.on('call:hangup', ({ callId }) => {
+    const call = db.prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+    if (!call || (call.caller_id !== uid && call.callee_id !== uid)) return;
+    endCall(callId, 'hangup');
+  });
+
+  // WebRTC SDP offer/answer + ICE candidate relay — the server never
+  // inspects the payload, it's purely a signaling relay between the two
+  // participants; the actual audio/video is peer-to-peer once connected.
+  ['call:offer', 'call:answer', 'call:ice-candidate'].forEach((ev) => {
+    socket.on(ev, ({ callId, ...payload }) => {
+      const call = db.prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+      if (!call) return;
+      const otherId = call.caller_id === uid ? call.callee_id : call.caller_id;
+      if (otherId !== uid) emitToUser(otherId, ev, { callId, ...payload });
+    });
+  });
+
   socket.on('disconnect', () => {
     const set = sockets.get(uid);
     if (set) {
@@ -1424,6 +1563,10 @@ io.on('connection', (socket) => {
         sockets.delete(uid);
         db.prepare('UPDATE users SET is_online = 0, last_seen = ? WHERE id = ?').run(now(), uid);
         io.emit('presence', { userId: uid, isOnline: false, lastSeen: now() });
+        // Hang up any in-progress call for a user whose last tab just closed —
+        // otherwise the other side rings/talks into a call that's already gone.
+        const callId = activeCalls.get(uid);
+        if (callId) endCall(callId, 'hangup');
       }
     }
   });

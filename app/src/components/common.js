@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, Pressable, ActivityIndicator, Platform } from 'react-native';
 import Icon from '../icons/Icon';
-import Emoji from '../icons/Emoji';
 import {
   colorFor, initials, AVATAR_INK, radius, type, tokens, stroke,
   inkBox, sketchBox, sketchAvatarFrame, pencilBox, inkUnderline, dashedRule, marker, pressedInk,
@@ -381,25 +380,6 @@ export function IconButton({ name, onPress, size = 22, color, style }) {
   );
 }
 
-export const EMOJIS = [
-  '😀','😂','🥰','😍','😎','🤔','😢','😭','😡','👍','👎','🙏','👏','🔥','💯','🎉',
-  '❤️','💔','✨','⭐','🌙','☀️','🍕','☕','🏃','💪','🚀','📱','💻','🎵','⚽','🏔️',
-];
-
-export function EmojiPicker({ visible, onSelect }) {
-  const { theme } = useTheme();
-  if (!visible) return null;
-  return (
-    <View style={[styles.emojiWrap, { backgroundColor: theme.card, marginHorizontal: 16, marginBottom: 8 }, inkBox(theme, 'ink')]}>
-      {EMOJIS.map((e) => (
-        <Pressable key={e} onPress={() => onSelect(e)} style={styles.emojiBtn}>
-          <Emoji char={e} size={26} />
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* time helpers                                                        */
 /* ------------------------------------------------------------------ */
@@ -458,6 +438,4 @@ const styles = StyleSheet.create({
   btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, paddingVertical: 13, paddingHorizontal: 20 },
   field: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 2, minHeight: 46 },
   chip: { paddingHorizontal: 8, paddingVertical: 3 },
-  emojiWrap: { flexDirection: 'row', flexWrap: 'wrap', paddingVertical: 10, paddingHorizontal: 8, maxHeight: 226 },
-  emojiBtn: { width: '12.5%', alignItems: 'center', paddingVertical: 6 },
 });

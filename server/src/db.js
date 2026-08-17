@@ -236,6 +236,24 @@ CREATE TABLE IF NOT EXISTS blocked_users (
   FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+/* ---- Calls: real WebRTC voice/video calling (1:1), signalled over Socket.IO ---- */
+CREATE TABLE IF NOT EXISTS calls (
+  id           TEXT PRIMARY KEY,
+  chat_id      TEXT NOT NULL,
+  caller_id    TEXT NOT NULL,
+  callee_id    TEXT NOT NULL,
+  type         TEXT NOT NULL DEFAULT 'audio',   -- audio | video
+  status       TEXT NOT NULL DEFAULT 'ringing', -- ringing | ongoing | ended | missed | declined | busy | failed
+  started_at   INTEGER NOT NULL,
+  answered_at  INTEGER,
+  ended_at     INTEGER,
+  ended_reason TEXT,                             -- hangup | declined | missed | busy | failed
+  FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+  FOREIGN KEY (caller_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (callee_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_calls_participants ON calls(caller_id, callee_id, started_at);
 `);
 
 /* ---- lightweight migrations for columns added after initial release ---- */

@@ -12,15 +12,16 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import {
-  Avatar, EmojiPicker, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor,
+  Avatar, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor,
 } from '../components/common';
+import EmojiPicker from '../components/EmojiPicker';
 import MessageBubble from '../components/MessageBubble';
 import { api, mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 
 export default function ConversationScreen({ route, navigation, embedded = false }) {
   const { chatId } = route.params;
-  const { chats, messages, typing, loadMessages, sendMessage, markRead, setTypingState, react, deleteMessage } = useChat();
+  const { chats, messages, typing, loadMessages, sendMessage, markRead, setTypingState, react, deleteMessage, startCall, call } = useChat();
   const { user } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -144,8 +145,24 @@ export default function ConversationScreen({ route, navigation, embedded = false
               </Text>
             </View>
           </Pressable>
-          <InkIconButton name="videocam" size={36} iconSize={17} />
-          <InkIconButton name="call" size={36} iconSize={15} />
+          {chat.type === 'direct' && (
+            <>
+              <InkIconButton
+                name="videocam"
+                size={36}
+                iconSize={17}
+                disabled={!!call}
+                onPress={() => startCall(chatId, chat.otherUserId, 'video')}
+              />
+              <InkIconButton
+                name="call"
+                size={36}
+                iconSize={15}
+                disabled={!!call}
+                onPress={() => startCall(chatId, chat.otherUserId, 'audio')}
+              />
+            </>
+          )}
         </View>
         <Rule style={{ marginHorizontal: 20, marginTop: 10, marginBottom: 0 }} />
       </View>

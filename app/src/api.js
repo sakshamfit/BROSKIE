@@ -130,6 +130,10 @@ export const api = {
     request(`/api/communities/${id}/members/${userId}`, { method: 'PATCH', body: { role } }),
   removeCommunityMember: (id, userId) => request(`/api/communities/${id}/members/${userId}`, { method: 'DELETE' }),
 
+  // Calls — history; the live call itself is signalled over the socket (see ChatContext)
+  calls: (limit) => request(`/api/calls${limit ? `?limit=${limit}` : ''}`),
+  deleteCall: (id) => request(`/api/calls/${id}`, { method: 'DELETE' }),
+
   async uploadFile(uri, name = 'upload.jpg', type = 'image/jpeg') {
     const form = new FormData();
     if (Platform.OS === 'web') {
