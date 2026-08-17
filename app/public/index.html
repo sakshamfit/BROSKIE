@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!--
+      Real-app viewport rules:
+      - maximum-scale=1 + user-scalable=no  → no pinch zoom, no iOS input auto-zoom
+      - viewport-fit=cover                   → iPhone notch/Dynamic Island safe area
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <!-- Mobile browser chrome (URL bar / status bar) matches the paper bg;
+         kept in sync with dark mode at runtime by App.js -->
+    <meta name="theme-color" content="#fdf8f8" />
+    <title>%WEB_TITLE%</title>
+    <style id="expo-reset">
+      /* Full-height app shell — the page is never white behind the UI */
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        /* Warm pulp paper — matches lightTheme.bg; dark mode syncs at runtime */
+        background-color: #fdf8f8;
+        /* No rubber-band / pull-to-refresh flash of background when scrolling */
+        overscroll-behavior: none;
+        overflow-x: hidden;
+      }
+      body {
+        overflow: hidden;
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+        /* Pan/scroll allowed, but double-tap zoom is disabled */
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        width: 100%;
+        flex: 1;
+      }
+      /* Mobile browsers: use the *dynamic* viewport height so the address bar
+         collapsing/expanding never leaves a strip of background below the app. */
+      @supports (height: 100dvh) {
+        html,
+        body,
+        #root {
+          height: 100dvh;
+        }
+      }
+      /* Ink-style text selection */
+      ::selection {
+        background: #ffe24d;
+        color: #1c1b1b;
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  </body>
+</html>

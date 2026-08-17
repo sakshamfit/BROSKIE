@@ -51,7 +51,12 @@ export default function useResponsive() {
       isIOS: Platform.OS === 'ios',
       isAndroid: Platform.OS === 'android',
       breakpoint,
-      isSplitCapable: breakpoint === 'expanded' || breakpoint === 'large',
+      // Split (sidebar + inbox + detail) only when there's room in BOTH
+      // dimensions. Without the height gate, a phone in landscape
+      // (e.g. 844×390) or a short desktop window would get a cramped
+      // 3-pane squeeze — a real messenger keeps the single-column phone
+      // layout there instead. shortSide ≥ 600 is the sw600dp tablet rule.
+      isSplitCapable: (breakpoint === 'expanded' || breakpoint === 'large') && shortSide >= 600,
       insets,
       fontScale,
       // Clamp fontScale so aggressive OS accessibility settings don't break

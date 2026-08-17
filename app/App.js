@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -54,6 +54,26 @@ function PhoneFrame({ children }) {
 
 function Root() {
   const { theme, mode } = useTheme();
+
+  // On web, keep the page shell (html/body/#root backgrounds + the mobile
+  // browser-chrome "theme-color") in lockstep with the app theme, so there
+  // is never a white page showing through behind or beside the UI — including
+  // during resizes, overscroll, and in dark mode.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const paint = (el) => { if (el) el.style.backgroundColor = theme.bg; };
+    paint(document.documentElement);
+    paint(document.body);
+    paint(document.getElementById('root'));
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'theme-color';
+      document.head.appendChild(meta);
+    }
+    meta.content = theme.bg;
+  }, [theme.bg]);
+
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} backgroundColor={theme.bg} />
