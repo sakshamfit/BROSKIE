@@ -15,6 +15,16 @@
     <!-- Mobile browser chrome (URL bar / status bar) matches the paper bg;
          kept in sync with dark mode at runtime by App.js -->
     <meta name="theme-color" content="#fdf8f8" />
+    <!-- PWA: installable, standalone (no browser chrome), app-like launch -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- iOS: add-to-home-screen standalone; status bar text stays readable
+         (black on the paper bg) while the app draws under it via
+         viewport-fit=cover + safe-area insets. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="友達" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>%WEB_TITLE%</title>
     <style id="expo-reset">
       /* Full-height app shell — the page is never white behind the UI */

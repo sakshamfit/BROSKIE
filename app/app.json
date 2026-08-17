@@ -29,7 +29,18 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "name": "友達",
+      "shortName": "友達",
+      "description": "友達 — a realtime ink-and-paper messenger.",
+      "lang": "en",
+      "scope": "/",
+      "startUrl": "/",
+      "display": "standalone",
+      "orientation": "any",
+      "themeColor": "#fdf8f8",
+      "backgroundColor": "#fdf8f8",
+      "barStyle": "default"
     },
     "plugins": [
       "expo-audio",

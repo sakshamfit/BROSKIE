@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "友達",
+  "short_name": "友達",
+  "description": "友達 — a realtime ink-and-paper messenger.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fdf8f8",
+  "theme_color": "#fdf8f8",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
