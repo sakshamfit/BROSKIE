@@ -15,6 +15,8 @@ Everything here is generated in the **"Graphite & Pulp"** brand style
 | `splash-ios-1290x2796.png` | iPhone 15 Pro Max (6.7″) launch image. |
 | `splash-ipad-2048x2732.png` | iPad portrait launch image. |
 | `generate_assets.py` | Regenerates everything (`python3 generate_assets.py` — needs Pillow). |
+| `splash-animated.json` | **Lottie splash animation** with your logo embedded (base64 image layer). Upload this to Median App Studio → **Splash Screen → Lottie** if you want an animated launch. The original animation (white bg → blue circle wipe → reveal) is kept; only the small vector logo was replaced with your black wordmark, sized ~200px wide, centered just above the "life_on" text. |
+| `preview-frame160.png` | What the animated splash looks like at the end of the wipe (frame 160), for reference. |
 
 > **iOS splash tip:** Apple wants launch screens via a *storyboard*, which
 > Median auto-generates from the app icon. If you'd rather use the full-screen
