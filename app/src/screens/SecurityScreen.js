@@ -49,7 +49,7 @@ export default function SecurityScreen({ navigation, embedded = false }) {
 
   const signOutEverywhere = async () => {
     const ok = await confirm('Log out of this session?', { title: 'Log out', confirmLabel: 'Log out', destructive: true });
-    if (ok) logout();
+    if (ok) await logout();
   };
 
   return (

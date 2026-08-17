@@ -434,12 +434,10 @@ app.patch('/api/me', requireAuth, (req, res) => {
     }
   }
 
-  // Profile photo can be ADDED or REPLACED, but never REMOVED — once a user
-  // has set one, there is no "clear avatar" operation. A falsy value here
-  // (null/''/undefined) is treated as "no change" rather than "delete the
-  // photo", enforced server-side so this holds regardless of what the
-  // client sends, not just because the UI has no remove button.
-  const nextAvatar = avatar ? String(avatar).trim() || u.avatar : u.avatar;
+  // Undefined means the client is not changing the avatar; null is the
+  // deliberate, supported removal operation. Empty strings are ignored to
+  // prevent an accidental picker/upload failure from clearing the photo.
+  const nextAvatar = avatar === null ? null : avatar !== undefined ? (String(avatar).trim() || u.avatar) : u.avatar;
 
   db.prepare('UPDATE users SET name = ?, about = ?, avatar = ?, username = ?, phone = ? WHERE id = ?').run(
     name ?? u.name,

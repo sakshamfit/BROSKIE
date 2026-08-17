@@ -49,10 +49,16 @@ export function AuthProvider({ children }) {
   }, [persist]);
 
   const logout = useCallback(async () => {
-    await AsyncStorage.removeItem(TOKEN_KEY);
-    setToken(null);
-    setTok(null);
-    setUser(null);
+    // Always clear in-memory credentials even if device storage is unavailable.
+    // Without finally, a storage error left the UI authenticated and made Log out
+    // appear to do nothing.
+    try {
+      await AsyncStorage.removeItem(TOKEN_KEY);
+    } finally {
+      setToken(null);
+      setTok(null);
+      setUser(null);
+    }
   }, []);
 
   const updateProfile = useCallback(async (patch) => {

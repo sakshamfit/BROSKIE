@@ -30,7 +30,7 @@ export default function SettingsScreen({ navigation, embedded = false }) {
 
   const handleLogout = async () => {
     const ok = await confirm('Log out of 友達?', { title: 'Log out', confirmLabel: 'Log out', destructive: true });
-    if (ok) logout();
+    if (ok) await logout();
   };
 
   return (
@@ -148,17 +148,26 @@ export default function SettingsScreen({ navigation, embedded = false }) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Profile photo can only be ADDED or REPLACED here — there is deliberately
- * no "remove photo" affordance. `ImagePicker.launchImageLibraryAsync`
- * either returns a picked image or is cancelled (never an empty/cleared
- * result), so there's no client-side path to clear it either way; the
- * server additionally refuses to accept an empty/null avatar value on
- * PATCH /api/me as a second layer of enforcement.
+ * Profile photo can be added, replaced, or removed. The server receives an
+ * explicit null only for removal; a cancelled picker never clears a photo.
  */
 function ProfileHero({ user, theme, joinYear, connected }) {
   const { updateProfile } = useAuth();
   const [uploading, setUploading] = useState(false);
   const s = makeStyles(theme);
+
+  const removeAvatar = async () => {
+    const ok = await confirm('Remove your profile photo?', { title: 'Remove photo', confirmLabel: 'Remove', destructive: true });
+    if (!ok) return;
+    try {
+      setUploading(true);
+      await updateProfile({ avatar: null });
+    } catch (e) {
+      console.warn('avatar removal failed', e.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const pickAvatar = async () => {
     try {
@@ -179,6 +188,7 @@ function ProfileHero({ user, theme, joinYear, connected }) {
 
   return (
     <View style={s.hero}>
+      <View style={s.avatarArea}>
       <Pressable onPress={pickAvatar} style={s.avatarWrap} disabled={uploading}>
         <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={112} shape="sketch" weight="bold" />
         <View style={[s.editBadge, inkBox(theme, 'ink'), { backgroundColor: theme.card }]}>
@@ -189,6 +199,12 @@ function ProfileHero({ user, theme, joinYear, connected }) {
           )}
         </View>
       </Pressable>
+      {!!user?.avatar && !uploading && (
+        <Pressable onPress={removeAvatar} hitSlop={8} style={s.removeAvatar}>
+          <Text style={[type.labelXs, { color: theme.danger }]}>REMOVE PHOTO</Text>
+        </Pressable>
+      )}
+      </View>
 
       <View style={s.heroBody}>
         <EmojiText style={[type.headlineLg, { fontSize: 30, color: theme.text }]}>{user?.name}</EmojiText>
@@ -276,7 +292,9 @@ const makeStyles = (t) => StyleSheet.create({
   scrollWide: { maxWidth: 640, width: '100%', alignSelf: 'center' },
 
   hero: { flexDirection: 'row', alignItems: 'center', gap: 20, marginBottom: 8 },
+  avatarArea: { alignItems: 'center', gap: 8 },
   avatarWrap: { position: 'relative' },
+  removeAvatar: { paddingVertical: 3 },
   avatarFrame: { padding: 4, borderRadius: 999 },
   editBadge: {
     position: 'absolute', right: -2, bottom: -2, width: 30, height: 30, borderRadius: 999,
