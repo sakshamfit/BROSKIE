@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "友達",
+    "name": "\u53cb\u9054",
     "slug": "tomodachi",
     "version": "1.0.0",
     "orientation": "default",
@@ -10,8 +10,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "ai.arena.tomodachi",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "友達 uses the microphone to record voice messages.",
-        "NSPhotoLibraryUsageDescription": "友達 needs photo access so you can share images in chats.",
+        "NSMicrophoneUsageDescription": "\u53cb\u9054 uses the microphone to record voice messages.",
+        "NSPhotoLibraryUsageDescription": "\u53cb\u9054 needs photo access so you can share images in chats.",
         "UIRequiresFullScreen": false
       }
     },
@@ -30,9 +30,9 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro",
-      "name": "友達",
-      "shortName": "友達",
-      "description": "友達 — a realtime ink-and-paper messenger.",
+      "name": "\u53cb\u9054",
+      "shortName": "\u53cb\u9054",
+      "description": "\u53cb\u9054 \u2014 a realtime ink-and-paper messenger.",
       "lang": "en",
       "scope": "/",
       "startUrl": "/",
@@ -47,7 +47,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow 友達 to access your photos to share them in chats."
+          "photosPermission": "Allow \u53cb\u9054 to access your photos to share them in chats."
         }
       ],
       "expo-font",
@@ -62,6 +62,19 @@
           "resizeMode": "contain"
         }
       ]
-    ]
+    ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/cfaadedd-ce58-4cec-b88f-261178485cda",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "extra": {
+      "eas": {
+        "projectId": "cfaadedd-ce58-4cec-b88f-261178485cda"
+      }
+    }
   }
 }
