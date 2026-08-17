@@ -10,6 +10,9 @@ import { confirm } from '../hooks/confirm';
 import { PaperCard, InkField, InkButton, Rule } from '../components/common';
 import { type, inkBox } from '../theme';
 
+const PASSWORD_HINT = 'Use 8+ characters with uppercase, lowercase, a number, and a special character.';
+const isStrongPassword = (value) => value.length >= 8 && /[A-Z]/.test(value) && /[a-z]/.test(value) && /[0-9]/.test(value) && /[^A-Za-z0-9\s]/.test(value);
+
 /** "Security & Privacy" — change password + a read-only session summary. */
 export default function SecurityScreen({ navigation, embedded = false }) {
   const { theme } = useTheme();
@@ -30,7 +33,7 @@ export default function SecurityScreen({ navigation, embedded = false }) {
     setError('');
     setSuccess(false);
     if (!current || !next) return setError('Fill in both password fields.');
-    if (next.length < 4) return setError('New password must be at least 4 characters.');
+    if (!isStrongPassword(next)) return setError(PASSWORD_HINT);
     if (next !== confirm) return setError('New passwords do not match.');
     setBusy(true);
     try {
@@ -77,7 +80,7 @@ export default function SecurityScreen({ navigation, embedded = false }) {
             label="New password"
             value={next}
             onChangeText={(v) => { setNext(v); setError(''); }}
-            placeholder="At least 4 characters"
+            placeholder="8+ chars · Aa1!"
           />
           <Field
             theme={theme}

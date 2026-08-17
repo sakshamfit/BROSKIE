@@ -34,6 +34,9 @@ const VOID = {
 
 const USERNAME_RE = /^[a-z0-9](?:[a-z0-9._]{1,22})[a-z0-9]$/;
 
+const PASSWORD_HINT = 'Use 8+ characters with uppercase, lowercase, a number, and a special character.';
+const isStrongPassword = (value) => value.length >= 8 && /[A-Z]/.test(value) && /[a-z]/.test(value) && /[0-9]/.test(value) && /[^A-Za-z0-9\s]/.test(value);
+
 export default function AuthScreen() {
   const { login, register } = useAuth();
   const insets = useSafeAreaInsets();
@@ -79,6 +82,7 @@ export default function AuthScreen() {
       return setError('Operator ID must be 3–24 chars: letters, numbers, "." or "_".');
     }
     if (mode === 'register' && !name.trim()) return setError('Please enter your name.');
+    if (mode === 'register' && !isStrongPassword(password)) return setError(PASSWORD_HINT);
     setBusy(true);
     try {
       if (mode === 'login') await login(u, password);
@@ -218,6 +222,8 @@ export default function AuthScreen() {
                   onBlur={() => setFocus(null)}
                   secureTextEntry
                 />
+
+                {mode === 'register' && <Text style={s.passwordHint}>{PASSWORD_HINT}</Text>}
 
                 <View style={s.optionsRow}>
                   <Pressable onPress={() => setRemember((v) => !v)} style={s.rememberRow}>
@@ -497,6 +503,7 @@ const s = StyleSheet.create({
   fieldHint: { fontFamily: 'SpaceMono_400Regular', fontSize: 11, color: VOID.secondaryContainer, marginTop: -14, marginBottom: 18 },
   fieldHintMuted: { fontFamily: 'SpaceMono_400Regular', fontSize: 11, color: '#7d7d7d', marginTop: -14, marginBottom: 18 },
 
+  passwordHint: { color: VOID.onSurfaceVariant, fontFamily: 'Hanken_400Regular', fontSize: 12, lineHeight: 17, marginTop: -6 },
   optionsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 8 },
   rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   checkbox: { width: 20, height: 20, borderWidth: 2, borderColor: VOID.onTertiaryFixed, alignItems: 'center', justifyContent: 'center' },

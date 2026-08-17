@@ -16,6 +16,17 @@ const jamendo = require('./jamendo');
 const nano = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
 const now = () => Date.now();
 
+
+// Production password policy: long enough to resist trivial guessing and
+// diverse enough that a short numeric or dictionary password cannot pass.
+const PASSWORD_RULE = 'Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.';
+function passwordError(value) {
+  const password = String(value || '');
+  if (password.length < 8) return PASSWORD_RULE;
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9\s]/.test(password)) return PASSWORD_RULE;
+  return null;
+}
+
 const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '25mb' }));
@@ -330,7 +341,8 @@ app.get('/api/auth/username-available', (req, res) => {
 app.post('/api/auth/register', (req, res) => {
   const { username, phone, name, password } = req.body || {};
   if (!name || !password) return res.status(400).json({ error: 'name and password are required' });
-  if (String(password).length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
+  const passwordValidationError = passwordError(password);
+  if (passwordValidationError) return res.status(400).json({ error: passwordValidationError });
 
   const usernameErr = validateUsername(username);
   if (usernameErr) return res.status(400).json({ error: usernameErr });
@@ -447,9 +459,8 @@ app.post('/api/me/password', requireAuth, (req, res) => {
   if (!currentPassword || !newPassword) {
     return res.status(400).json({ error: 'Current and new password are required' });
   }
-  if (String(newPassword).length < 4) {
-    return res.status(400).json({ error: 'New password must be at least 4 characters' });
-  }
+  const passwordValidationError = passwordError(newPassword);
+  if (passwordValidationError) return res.status(400).json({ error: passwordValidationError });
   const u = getUser(req.userId);
   if (!bcrypt.compareSync(String(currentPassword), u.password_hash)) {
     return res.status(401).json({ error: 'Current password is incorrect' });
