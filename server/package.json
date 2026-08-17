@@ -10,9 +10,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
-    "seed": "node src/seed.js",
     "build": "cd ../app && npm install && CI=true npx expo export --platform web --output-dir ../server/public",
-    "postinstall": "echo 'run npm run build to bundle the web app into ./public'"
+    "postinstall": "echo 'run npm run build to bundle the web app into ./public'",
+    "backup": "node src/backup.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",

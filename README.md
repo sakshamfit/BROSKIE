@@ -32,13 +32,16 @@ account to message with.
 log in as two different accounts, and message between them. Typing indicators, delivery
 and blue ticks all update live.
 
-### Local test data (optional, dev-only)
+### Data safety — no data loss on updates
 
-If you want throwaway sample users/chats/posts while developing locally,
-`cd server && node src/seed.js --yes-wipe-real-data` will create them.
-The flag is required on purpose — this script **wipes all existing
-users/chats/posts first**, so never run it against a database you care
-about (and never run it in production).
+- The database is backed up **automatically every 6 hours** and **right before
+  every clean shutdown** (which includes redeploys on Railway/Render). Backups
+  are kept in `<DATA_DIR>/backups` (20 by default, override with `BACKUP_KEEP`).
+- Point `DATA_DIR` at a **persistent volume** (Railway Volume / Render Disk) and
+  the DB **and** its backups survive every redeploy — see `DEPLOY.md`.
+- Manual backup anytime: `npm run backup`.
+- There is deliberately **no seed/fake-data script** in this repo — the database
+  contains only real accounts that sign up.
 
 ### Running on a physical device
 
@@ -174,7 +177,7 @@ whatsapp-clone/
 │   │   ├── db.js         SQLite schema (users, chats, members,
 │   │   │                 messages, receipts, reactions, statuses)
 │   │   ├── auth.js       JWT sign/verify + middleware
-│   │   └── seed.js       demo data
+│   │   └── backup.js     automatic safety backups
 │   └── uploads/          uploaded images (served at /uploads)
 └── app/
     ├── App.js            providers + web phone frame
@@ -225,6 +228,7 @@ once every other member has a read receipt — so it works identically for group
   workflow this app runs under — ringing, accept/decline, and call history all still
   work for real on native, the app just shows a clear message instead of connecting
   media if a native device tries to start/answer a call.
-- "End-to-end encrypted" is a UI label, not real E2E crypto.
+- Messages are not end-to-end encrypted — they travel over HTTPS to the server,
+  which stores and relays them (the UI no longer claims otherwise).
 - SQLite + local disk uploads are fine for demo/dev; swap for Postgres + S3 in production.
 - Change `JWT_SECRET` (env var) before deploying anywhere real.

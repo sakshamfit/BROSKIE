@@ -63,10 +63,18 @@ and the server serves it automatically when that folder exists.
 
 ### Create your first account
 No demo users are seeded — the database starts empty. Open the deployed
-app and use **Sign Up** to create a real account. (`node src/seed.js
---yes-wipe-real-data` still exists for local dev sample data only — the
-flag is required on purpose because it **wipes all existing users/chats
-first**; never run it against a real/production database.)
+app and use **Sign Up** to create a real account. There is no fake-data
+script in the repo, and none is planned: the database contains only real
+accounts.
+
+### Data safety (automatic backups)
+
+The server backs up the database **every 6 hours** and **on every clean
+shutdown** (redeploys send SIGTERM, which triggers a final backup before
+exit). Backups go to `<DATA_DIR>/backups` (keep 20; configure via
+`BACKUP_KEEP`), and you can trigger one manually with `npm run backup`.
+Attach a persistent volume (below) so the database **and** its backups
+survive redeploys.
 
 ### Run single-host mode locally
 ```bash
@@ -171,9 +179,9 @@ entirely and enables multiple server instances).
 ## Before real users
 
 - Set a strong `JWT_SECRET` (never ship the dev fallback)
-- The database starts empty (no seeded demo accounts) — real users sign up
-  with their own username/password
-- Attach a persistent volume (see above), or migrate SQLite → Postgres
+- The database starts empty — real users sign up with their own username/password
+- Attach a persistent volume (see above) so the DB + automatic backups survive
+  redeploys, or migrate SQLite → Postgres
 - Move uploads to object storage — **see `SUPABASE.md`** (3-minute setup)
 - Restrict CORS to your own domain
 - **Vercel Web Analytics**: if you deploy the frontend on Vercel, page-view

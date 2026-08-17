@@ -27,13 +27,15 @@ Copy the URL — it'll look like `https://your-app.up.railway.app`
 
 ## Step 4 — Create your account
 
-There's no demo data seeded anymore — the app runs entirely on real
-accounts. Open the deployed app and use **Sign Up** to create your own
-account with a username and password; anyone else who wants an account
-signs up the same way. (If you specifically want throwaway test data for
-local development only, `cd server && node src/seed.js --yes-wipe-real-data`
-still exists — the flag is required on purpose since it wipes every
-existing user/chat first. Never run it against a production database.)
+There's no demo data — the app runs entirely on real accounts. Open the
+deployed app and use **Sign Up** to create your own account with a
+username and password; anyone else who wants an account signs up the same
+way. (No seed/fake-data script exists in the repo.)
+
+**Data safety:** the server automatically backs up the database every 6
+hours and on every shutdown (including redeploys). Attach a persistent
+volume so the database and its backups survive redeploys — see `DEPLOY.md`
+→ "Never lose data on deploy".
 
 ## Step 5 — Point Vercel Frontend to Railway
 

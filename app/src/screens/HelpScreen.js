@@ -73,12 +73,12 @@ const TOPICS = [
 ];
 
 const FAQ = [
-  { q: 'Is my data private?', a: '友達 is a demo/portfolio app: messages, statuses and posts are stored on the server so features like search and read receipts work, but this isn\u2019t a production-grade encrypted service \u2014 don\u2019t treat it like one for sensitive information.' },
+  { q: 'Is my data private?', a: '友達 stores your account, messages, statuses and posts on the server so features like search and read receipts work. Data is not end-to-end encrypted in transit between clients \u2014 it travels over HTTPS to the server, which stores it and relays it to recipients. Treat it accordingly: it\u2019s a real working messenger, not a zero-knowledge service.' },
   { q: 'Why did a status/post disappear?', a: 'Status updates always expire after 24 hours by design. A post or status can also vanish from your feed if its author changed its visibility to Friends/Selected and you\u2019re no longer eligible to see it, or if you\u2019ve blocked \u2014 or been blocked by \u2014 that person.' },
   { q: 'Can I recover a deleted message or post?', a: 'No \u2014 deletions are permanent. A deleted chat message shows "message deleted" to other participants but the content is gone server-side.' },
   { q: 'Why can\u2019t I see someone\u2019s online status?', a: 'They\u2019ve likely set their Last Seen privacy to "My contacts" or "Nobody" in Settings \u2192 Privacy. Note that this is mutual for last-seen and fully mutual for read receipts \u2014 hiding yours also hides theirs from you.' },
-  { q: 'How do voice/video calls work?', a: 'The Calls tab is a placeholder for now \u2014 the realtime signalling layer exists on the server, but WebRTC calling itself isn\u2019t wired up yet.' },
-  { q: 'I forgot my password.', a: 'There\u2019s no self-serve password reset yet in this build \u2014 if you\u2019re testing with a demo account, the seeded password for every demo user is 1234.' },
+  { q: 'How do voice/video calls work?', a: '1:1 calls are real WebRTC on desktop web browsers (audio and video, signalled through the server). On the iOS/Android app, ringing, accept/decline and call history work, but live media capture needs a custom dev build with react-native-webrtc \u2014 so on phones the call connects over the network only when both sides are on a browser.' },
+  { q: 'I forgot my password.', a: 'There\u2019s no self-serve password reset yet in this build. If you forget your password, contact whoever operates your server \u2014 an admin can reset it for you.' },
 ];
 
 export default function HelpScreen({ navigation, embedded = false }) {
@@ -178,7 +178,7 @@ export default function HelpScreen({ navigation, embedded = false }) {
         <View style={{ marginTop: 26, alignItems: 'center' }}>
           <TapeChip label="友達 · GRAPHITE & PULP" />
           <Text style={[type.labelXs, { color: theme.muted, marginTop: 10, textAlign: 'center' }]}>
-            Not affiliated with WhatsApp. Built as a demo/portfolio project.
+            Not affiliated with WhatsApp.
           </Text>
         </View>
       </ScrollView>

@@ -362,8 +362,8 @@ export default function ConversationScreen({ route, navigation, embedded = false
           <View style={s.emptyChat}>
             <View style={{ alignItems: 'center', gap: 10 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-                <Emoji char="🔒" size={15} />
-                <Text style={[type.bodySm, { color: theme.muted }]}>Messages are end-to-end encrypted.</Text>
+                <Emoji char="✒️" size={15} />
+                <Text style={[type.bodySm, { color: theme.muted }]}>This is the beginning of your conversation.</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
                 <Text style={[type.bodySm, { color: theme.muted }]}>Say hello</Text>

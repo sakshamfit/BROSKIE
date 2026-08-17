@@ -1961,6 +1961,32 @@ setInterval(() => {
 }, 15000);
 
 /* ------------------------------------------------------------------ */
+/* automatic safety backups — no data loss on updates/redeploys         */
+/* ------------------------------------------------------------------ */
+
+const { backupNow, BACKUP_DIR } = require('./backup');
+console.log(`[backup] automatic backups enabled → ${BACKUP_DIR} (every 6h + on shutdown)`);
+
+// Every 6 hours.
+setInterval(() => {
+  backupNow().catch((e) => console.error('[backup]', e.message));
+}, 6 * 3600 * 1000);
+
+// On graceful shutdown (SIGTERM = redeploy/stop, SIGINT = Ctrl+C): take a
+// final backup before exiting so the latest state is always on disk.
+let shuttingDown = false;
+function shutdownWithBackup(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[shutdown] ${signal} received — backing up before exit…`);
+  backupNow()
+    .catch((e) => console.error('[backup]', e.message))
+    .finally(() => process.exit(0));
+}
+process.on('SIGTERM', () => shutdownWithBackup('SIGTERM'));
+process.on('SIGINT', () => shutdownWithBackup('SIGINT'));
+
+/* ------------------------------------------------------------------ */
 /* single-host mode: serve the built web app from this same server      */
 /* ------------------------------------------------------------------ */
 
