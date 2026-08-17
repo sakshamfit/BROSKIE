@@ -25,7 +25,7 @@ export default function ConversationScreen({ route, navigation, embedded = false
   const { chatId } = route.params;
   const {
     chats, messages, typing, loadMessages, sendMessage, markRead, setTypingState,
-    react, deleteMessage, editMessage, createPoll, votePoll, startCall, call,
+    react, deleteMessage, editMessage, createPoll, votePoll, startCall, call, setMessages,
   } = useChat();
   const { user } = useAuth();
   const { theme } = useTheme();
@@ -337,7 +337,9 @@ export default function ConversationScreen({ route, navigation, embedded = false
           item._type === 'day' ? (
             <View style={s.dayWrap}>
               <View style={[dashedRule(theme), { flex: 1 }]} />
-              <Text style={[type.labelXs, { color: theme.muted }]}>{item.label}</Text>
+              <View style={[s.tapeStrip, { backgroundColor: theme.cardAlt, borderColor: theme.graphiteLine }]}>
+                <Text style={[type.labelXs, { color: theme.graphite }]}>{item.label.toUpperCase()}</Text>
+              </View>
               <View style={[dashedRule(theme), { flex: 1 }]} />
             </View>
           ) : (
@@ -548,6 +550,12 @@ const makeStyles = (t) => StyleSheet.create({
   backBtn: { padding: 4 },
   headerInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   dayWrap: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 16, paddingHorizontal: 24 },
+  // Masking-tape date label: an intentionally slightly uneven paper strip.
+  tapeStrip: {
+    borderWidth: 1, borderStyle: 'dashed', paddingHorizontal: 10, paddingVertical: 5,
+    borderTopLeftRadius: 5, borderTopRightRadius: 3, borderBottomRightRadius: 6, borderBottomLeftRadius: 4,
+    transform: [{ rotate: '-1deg' }],
+  },
   emptyChat: { alignItems: 'center', justifyContent: 'center', padding: 40 },
   replyBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 8, padding: 10, gap: 12, backgroundColor: 'transparent' },
   replyAccent: { width: 3.5, alignSelf: 'stretch', borderRadius: 2 },
@@ -556,8 +564,9 @@ const makeStyles = (t) => StyleSheet.create({
     marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 8,
     borderWidth: 1, borderStyle: 'dashed',
   },
-  composerWrap: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 20, paddingBottom: 22, paddingTop: 8, gap: 12 },
-  inputBar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, gap: 12, minHeight: 48 },
+  // The raised, irregular composer gives the bottom of the conversation a torn-paper feel.
+  composerWrap: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 20, paddingBottom: 22, paddingTop: 12, gap: 12, borderTopWidth: 1, borderTopColor: t.graphiteLine, borderStyle: 'dashed' },
+  inputBar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 12, minHeight: 48, borderTopLeftRadius: 5, borderTopRightRadius: 3, borderBottomRightRadius: 6, borderBottomLeftRadius: 4 },
   input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },
   sendBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   recDot: { width: 9, height: 9, borderRadius: radius.full },

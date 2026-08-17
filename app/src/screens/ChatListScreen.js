@@ -85,8 +85,15 @@ export default function ChatListScreen({ navigation }) {
           onPress={() => navigation.navigate('Conversation', { chatId: item.id })}
           onLongPress={() => setSheetChat(item)}
           delayLongPress={280}
-          style={({ pressed }) => [s.row, pressed ? marker(theme, 1) : null]}
+          style={({ pressed }) => [
+            s.row,
+            hasUnread ? s.rowUnread : s.rowRead,
+            { borderColor: hasUnread ? theme.ink : theme.graphiteLine },
+            pressed ? marker(theme, 1) : null,
+          ]}
         >
+          {hasUnread && <View style={[s.unreadMark, { backgroundColor: theme.ink, borderColor: theme.bg }]} />}
+          <View style={[s.avatarFrame, { borderColor: theme.ink }]}>
           <Avatar
             uri={item.avatar}
             name={item.name}
@@ -97,6 +104,7 @@ export default function ChatListScreen({ navigation }) {
             weight={hasUnread ? 'ink' : 'thin'}
             size={56}
           />
+          </View>
 
           <View style={s.rowBody}>
             <View style={s.rowTop}>
@@ -137,9 +145,7 @@ export default function ChatListScreen({ navigation }) {
             </View>
           </View>
         </Pressable>
-        {index < visible.length - 1 && (
-          <SketchDivider tilt={TILTS[index % TILTS.length]} style={{ marginVertical: 10, marginHorizontal: 8 }} />
-        )}
+
       </>
     );
   };
@@ -164,7 +170,12 @@ export default function ChatListScreen({ navigation }) {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View>
-            {/* sketch-bordered search box */}
+            <View style={[s.recentCard, { backgroundColor: theme.card, borderColor: theme.ink }]}>
+              <Text style={s.recentTitle}>RECENT CHATS</Text>
+              <View style={[s.inkLine, { backgroundColor: theme.ink }]} />
+              <View style={[s.inkLineFine, { backgroundColor: theme.ink }]} />
+            </View>
+            {/* searchable, but visually kept as a hand-inked panel */}
             <View style={s.searchBox}>
               <TextInput
                 value={query}
@@ -332,17 +343,32 @@ const makeStyles = (t) => StyleSheet.create({
 
   listContent: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 120 },
 
+  // Manga-inspired paper panel. These are visual-only treatments: chat records and handlers stay unchanged.
+  recentCard: {
+    borderWidth: 3, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 16,
+    borderTopLeftRadius: 4, borderTopRightRadius: 7, borderBottomRightRadius: 3, borderBottomLeftRadius: 6,
+    transform: [{ rotate: '-0.5deg' }],
+  },
+  recentTitle: { ...type.headlineMd, color: t.text, letterSpacing: 0.7 },
+  inkLine: { height: 2, width: '100%', marginTop: 8 },
+  inkLineFine: { height: 1, width: '94%', marginTop: 3, opacity: 0.5 },
   searchBox: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 20, minHeight: 52, marginBottom: 6,
-    borderWidth: 2, borderColor: t.ink,
-    // stadium, but each corner a touch different so it reads hand-drawn
-    borderTopLeftRadius: 26, borderTopRightRadius: 24,
-    borderBottomRightRadius: 26, borderBottomLeftRadius: 22,
+    paddingHorizontal: 16, minHeight: 48, marginBottom: 16,
+    borderWidth: 2, borderStyle: 'dashed', borderColor: t.graphiteLine,
+    borderTopLeftRadius: 4, borderTopRightRadius: 7, borderBottomRightRadius: 3, borderBottomLeftRadius: 6,
   },
   searchInput: { flex: 1, ...type.bodyLg, color: t.text, paddingVertical: 12, outlineStyle: 'none' },
 
-  row: { flexDirection: 'row', paddingHorizontal: 8, paddingVertical: 12, alignItems: 'center', gap: 16 },
+  row: {
+    flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 12, alignItems: 'center', gap: 14,
+    borderWidth: 2, backgroundColor: t.card, marginBottom: 14,
+    borderTopLeftRadius: 4, borderTopRightRadius: 7, borderBottomRightRadius: 3, borderBottomLeftRadius: 6,
+  },
+  rowUnread: { borderWidth: 3, transform: [{ rotate: '-0.35deg' }] },
+  rowRead: { borderStyle: 'dashed', transform: [{ rotate: '0.2deg' }] },
+  avatarFrame: { padding: 3, borderWidth: 2, borderTopLeftRadius: 3, borderTopRightRadius: 6, borderBottomRightRadius: 4, borderBottomLeftRadius: 2 },
+  unreadMark: { position: 'absolute', width: 13, height: 13, left: -7, top: '50%', marginTop: -6, transform: [{ rotate: '45deg' }], borderWidth: 2, zIndex: 2 },
   rowBody: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 },
   name: { ...type.headlineSm, color: t.text, flexShrink: 1 },
@@ -352,8 +378,8 @@ const makeStyles = (t) => StyleSheet.create({
   preview: { ...type.bodyMd, color: t.subtext, flex: 1 },
 
   fab: {
-    position: 'absolute', right: 24, bottom: 26, width: 54, height: 54,
-    alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', right: 24, bottom: 26, width: 58, height: 58,
+    alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '3deg' }],
   },
   archiveRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 8, paddingVertical: 14, marginBottom: 6 },
   resultsWrap: { paddingTop: 16 },
