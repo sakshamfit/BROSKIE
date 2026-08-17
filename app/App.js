@@ -37,6 +37,7 @@ import Navigation from './src/Navigation';
 import { Loading } from './src/components/common';
 import OrientationManager from './src/components/OrientationManager';
 import CallOverlay from './src/components/CallOverlay';
+import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 
 /** On web, expand to full browser — no phone frame.
  *  We still wrap in a flex View because React Navigation's container needs
@@ -58,7 +59,9 @@ function Root() {
   // On web, keep the page shell (html/body/#root backgrounds + the mobile
   // browser-chrome "theme-color") in lockstep with the app theme, so there
   // is never a white page showing through behind or beside the UI — including
-  // during resizes, overscroll, and in dark mode.
+  // during resizes, overscroll, and in dark mode. Also drive the Median
+  // browser's native status bar (edge-to-edge overlay, theme-matched color
+  // and icon style) so the app syncs with the system chrome there too.
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
     const paint = (el) => { if (el) el.style.backgroundColor = theme.bg; };
@@ -72,7 +75,10 @@ function Root() {
       document.head.appendChild(meta);
     }
     meta.content = theme.bg;
-  }, [theme.bg]);
+
+    setupMedianBridge();
+    setMedianTheme(mode, theme.bg);
+  }, [theme.bg, mode]);
 
   return (
     <>

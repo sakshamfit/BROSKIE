@@ -156,7 +156,11 @@ is a genuine peer-to-peer audio/video connection; native iOS/Android media captu
 history/signaling works everywhere but live audio/video is web-only for now.
 
 **Polish** — full light/dark theme, deterministic colour avatars with initials,
-pull-to-refresh, empty states, connection indicator.
+pull-to-refresh, empty states, connection indicator. The web app is a proper
+installable PWA (add-to-home-screen, standalone, no browser chrome) and syncs with
+the system chrome: paper-coloured `theme-color`, safe-area padding for notches/home
+indicators, and on the Median Android browser it drives the native status bar
+(edge-to-edge overlay + theme-matched icons) via the Median JS bridge.
 
 ---
 
