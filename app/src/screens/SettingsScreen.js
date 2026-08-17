@@ -29,9 +29,10 @@ export default function SettingsScreen({ navigation, embedded = false }) {
   const joinYear = user?.createdAt ? new Date(user.createdAt).getFullYear() : null;
 
   const handleLogout = async () => {
-    // End the session immediately. The profile-photo removal action still
-    // uses a confirmation; logout is intentionally one reliable tap.
-    await logout();
+    const ok = await confirm('Are you sure you want to log out?', {
+      title: 'Log out', confirmLabel: 'Log out', destructive: true,
+    });
+    if (ok) await logout();
   };
 
   return (
