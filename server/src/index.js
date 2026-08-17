@@ -89,6 +89,11 @@ function getSettings(u) {
 }
 
 function areContacts(idA, idB) {
+  const [userA, userB] = [idA, idB].sort();
+  const colleagues = !!db
+    .prepare('SELECT 1 FROM colleague_connections WHERE user_a = ? AND user_b = ?')
+    .get(userA, userB);
+  if (colleagues) return true;
   return !!db
     .prepare(
       `SELECT 1 FROM chat_members a JOIN chat_members b ON a.chat_id = b.chat_id
@@ -155,6 +160,109 @@ function validateUsername(raw) {
 const getUser = (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 const getUserByUsername = (username) =>
   db.prepare('SELECT * FROM users WHERE username = ?').get(normalizeUsername(username));
+
+const AFFILIATION_TYPES = ['institution', 'organization', 'workplace'];
+
+function normalizeAffiliationName(raw) {
+  return String(raw || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function affiliationsForUser(userId) {
+  return db
+    .prepare(
+      `SELECT a.id, a.name, a.type, ua.title, ua.joined_at,
+              (SELECT COUNT(*) FROM user_affiliations members WHERE members.affiliation_id = a.id) member_count
+       FROM user_affiliations ua
+       JOIN affiliations a ON a.id = ua.affiliation_id
+       WHERE ua.user_id = ?
+       ORDER BY ua.joined_at DESC, a.name COLLATE NOCASE`
+    )
+    .all(userId)
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      title: a.title || '',
+      joinedAt: a.joined_at,
+      memberCount: a.member_count,
+      joined: true,
+    }));
+}
+
+function accountUser(u) {
+  return u ? { ...publicUser(u), settings: getSettings(u), affiliations: affiliationsForUser(u.id) } : null;
+}
+
+function sharedAffiliations(userId, otherId) {
+  return db
+    .prepare(
+      `SELECT a.id, a.name, a.type, theirs.title
+       FROM user_affiliations mine
+       JOIN user_affiliations theirs ON theirs.affiliation_id = mine.affiliation_id
+       JOIN affiliations a ON a.id = mine.affiliation_id
+       WHERE mine.user_id = ? AND theirs.user_id = ?
+       ORDER BY a.name COLLATE NOCASE`
+    )
+    .all(userId, otherId)
+    .map((a) => ({ id: a.id, name: a.name, type: a.type, title: a.title || '' }));
+}
+
+function colleaguePair(idA, idB) {
+  return idA < idB ? [idA, idB] : [idB, idA];
+}
+
+function colleagueRelationship(viewerId, otherId) {
+  const [userA, userB] = colleaguePair(viewerId, otherId);
+  if (db.prepare('SELECT 1 FROM colleague_connections WHERE user_a = ? AND user_b = ?').get(userA, userB)) {
+    return { status: 'connected', requestId: null };
+  }
+  const pending = db
+    .prepare(
+      `SELECT id, sender_id, receiver_id FROM colleague_requests
+       WHERE status = 'pending' AND ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+       ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(viewerId, otherId, otherId, viewerId);
+  if (!pending) return { status: 'none', requestId: null };
+  return {
+    status: pending.sender_id === viewerId ? 'outgoing' : 'incoming',
+    requestId: pending.id,
+  };
+}
+
+function hydrateColleague(u, viewerId) {
+  if (!u) return null;
+  return {
+    ...publicUser(u),
+    ...presenceFor(u, viewerId),
+    sharedAffiliations: sharedAffiliations(viewerId, u.id),
+    relationship: colleagueRelationship(viewerId, u.id),
+  };
+}
+
+function hydrateAffiliation(row, viewerId) {
+  if (!row) return null;
+  const membership = db
+    .prepare('SELECT title, joined_at FROM user_affiliations WHERE user_id = ? AND affiliation_id = ?')
+    .get(viewerId, row.id);
+  const count = db.prepare('SELECT COUNT(*) c FROM user_affiliations WHERE affiliation_id = ?').get(row.id).c;
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    memberCount: count,
+    joined: !!membership,
+    title: membership?.title || '',
+    joinedAt: membership?.joined_at || null,
+  };
+}
+
+function affiliationMemberIds(affiliationId) {
+  return db
+    .prepare('SELECT user_id FROM user_affiliations WHERE affiliation_id = ?')
+    .all(affiliationId)
+    .map((r) => r.user_id);
+}
 
 function memberIds(chatId) {
   return db.prepare('SELECT user_id FROM chat_members WHERE chat_id = ?').all(chatId).map((r) => r.user_id);
@@ -297,16 +405,24 @@ function chatSummary(chatId, viewerId) {
   };
 }
 
-/** Everyone who shares a chat (direct or group) with this user — the "contacts" audience. */
+/** Everyone who shares a chat or has accepted a colleague connection — the "contacts" audience. */
 function contactIds(userId) {
-  const rows = db
+  const chatRows = db
     .prepare(
       `SELECT DISTINCT cm2.user_id FROM chat_members cm1
        JOIN chat_members cm2 ON cm2.chat_id = cm1.chat_id AND cm2.user_id != cm1.user_id
        WHERE cm1.user_id = ?`
     )
-    .all(userId);
-  return rows.map((r) => r.user_id);
+    .all(userId)
+    .map((r) => r.user_id);
+  const colleagueRows = db
+    .prepare(
+      `SELECT CASE WHEN user_a = ? THEN user_b ELSE user_a END user_id
+       FROM colleague_connections WHERE user_a = ? OR user_b = ?`
+    )
+    .all(userId, userId, userId)
+    .map((r) => r.user_id);
+  return [...new Set([...chatRows, ...colleagueRows])];
 }
 
 function userChats(userId) {
@@ -377,7 +493,7 @@ app.post('/api/auth/register', (req, res) => {
      VALUES (@id, @username, @phone, @name, @about, @avatar, @password_hash, @last_seen, @is_online, @created_at)`
   ).run(user);
 
-  res.json({ token: sign(user), user: { ...publicUser(user), settings: getSettings(user) } });
+  res.json({ token: sign(user), user: accountUser(user) });
 });
 
 app.post('/api/auth/login', (req, res) => {
@@ -385,12 +501,12 @@ app.post('/api/auth/login', (req, res) => {
   const user = getUserByUsername(username);
   if (!user || !bcrypt.compareSync(String(password || ''), user.password_hash))
     return res.status(401).json({ error: 'Invalid username or password' });
-  res.json({ token: sign(user), user: { ...publicUser(user), settings: getSettings(user) } });
+  res.json({ token: sign(user), user: accountUser(user) });
 });
 
 app.get('/api/me', requireAuth, (req, res) => {
   const u = getUser(req.userId);
-  res.json({ user: { ...publicUser(u), settings: getSettings(u) } });
+  res.json({ user: accountUser(u) });
 });
 
 app.patch('/api/me/settings', requireAuth, (req, res) => {
@@ -447,9 +563,10 @@ app.patch('/api/me', requireAuth, (req, res) => {
     nextPhone,
     req.userId
   );
-  const updated = publicUser(getUser(req.userId));
+  const updatedRow = getUser(req.userId);
+  const updated = publicUser(updatedRow);
   io.emit('user:updated', updated);
-  res.json({ user: updated });
+  res.json({ user: accountUser(updatedRow) });
 });
 
 app.post('/api/me/password', requireAuth, (req, res) => {
@@ -487,6 +604,243 @@ app.get('/api/users', requireAuth, (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* affiliations + colleagues                                          */
+/* ------------------------------------------------------------------ */
+
+/** Discover registered colleges/institutions, organizations and workplaces. */
+app.get('/api/affiliations', requireAuth, (req, res) => {
+  const q = normalizeAffiliationName(req.query.q || '');
+  const typeFilter = String(req.query.type || '');
+  const mine = req.query.mine === '1' || req.query.mine === 'true';
+  if (typeFilter && !AFFILIATION_TYPES.includes(typeFilter)) {
+    return res.status(400).json({ error: 'Invalid affiliation type' });
+  }
+
+  const params = [];
+  let sql = 'SELECT DISTINCT a.* FROM affiliations a';
+  if (mine) {
+    sql += ' JOIN user_affiliations mine ON mine.affiliation_id = a.id AND mine.user_id = ?';
+    params.push(req.userId);
+  }
+  const where = [];
+  if (typeFilter) { where.push('a.type = ?'); params.push(typeFilter); }
+  if (q) { where.push('a.normalized_name LIKE ?'); params.push(`%${q}%`); }
+  if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
+  sql += ' ORDER BY a.name COLLATE NOCASE LIMIT 100';
+
+  const rows = db.prepare(sql).all(...params);
+  res.json({ affiliations: rows.map((row) => hydrateAffiliation(row, req.userId)) });
+});
+
+/** Create a place if needed and immediately add it to the current profile. */
+app.post('/api/affiliations', requireAuth, (req, res) => {
+  const { name, type = 'institution', title = '' } = req.body || {};
+  const cleanName = String(name || '').trim().replace(/\s+/g, ' ');
+  const normalizedName = normalizeAffiliationName(cleanName);
+  if (cleanName.length < 2 || cleanName.length > 100) {
+    return res.status(400).json({ error: 'Name must be between 2 and 100 characters' });
+  }
+  if (!AFFILIATION_TYPES.includes(type)) return res.status(400).json({ error: 'Invalid affiliation type' });
+  if (String(title || '').trim().length > 80) return res.status(400).json({ error: 'Course or role is too long' });
+
+  let row = db.prepare('SELECT * FROM affiliations WHERE type = ? AND normalized_name = ?').get(type, normalizedName);
+  if (!row) {
+    const id = nano();
+    db.prepare(
+      'INSERT INTO affiliations (id, name, normalized_name, type, created_by, created_at) VALUES (?,?,?,?,?,?)'
+    ).run(id, cleanName, normalizedName, type, req.userId, now());
+    row = db.prepare('SELECT * FROM affiliations WHERE id = ?').get(id);
+  }
+
+  const t = now();
+  db.prepare(
+    `INSERT INTO user_affiliations (user_id, affiliation_id, title, joined_at) VALUES (?,?,?,?)
+     ON CONFLICT(user_id, affiliation_id) DO UPDATE SET title = excluded.title`
+  ).run(req.userId, row.id, String(title || '').trim(), t);
+
+  const payload = { affiliation: hydrateAffiliation(row, req.userId), user: publicUser(getUser(req.userId)) };
+  affiliationMemberIds(row.id).forEach((uid) => emitToUser(uid, 'affiliation:updated', payload));
+  res.json({ affiliation: payload.affiliation, affiliations: affiliationsForUser(req.userId) });
+});
+
+/** Join an existing place, optionally recording a course, department or role. */
+app.post('/api/affiliations/:id/join', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM affiliations WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Place not found' });
+  const title = String(req.body?.title || '').trim();
+  if (title.length > 80) return res.status(400).json({ error: 'Course or role is too long' });
+  const t = now();
+  db.prepare(
+    `INSERT INTO user_affiliations (user_id, affiliation_id, title, joined_at) VALUES (?,?,?,?)
+     ON CONFLICT(user_id, affiliation_id) DO UPDATE SET title = excluded.title`
+  ).run(req.userId, row.id, title, t);
+  const payload = { affiliation: hydrateAffiliation(row, req.userId), user: publicUser(getUser(req.userId)) };
+  affiliationMemberIds(row.id).forEach((uid) => emitToUser(uid, 'affiliation:updated', payload));
+  res.json({ affiliation: payload.affiliation, affiliations: affiliationsForUser(req.userId) });
+});
+
+app.delete('/api/affiliations/:id/leave', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM affiliations WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Place not found' });
+  const result = db.prepare('DELETE FROM user_affiliations WHERE user_id = ? AND affiliation_id = ?').run(req.userId, row.id);
+  if (!result.changes) return res.status(400).json({ error: 'This place is not on your profile' });
+  const remainingMembers = affiliationMemberIds(row.id);
+  remainingMembers.forEach((uid) => emitToUser(uid, 'affiliation:updated', { affiliationId: row.id, leftUserId: req.userId }));
+  res.json({ ok: true, affiliations: affiliationsForUser(req.userId) });
+});
+
+/** People who share a registered place, plus already-accepted colleague connections. */
+app.get('/api/colleagues', requireAuth, (req, res) => {
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const typeFilter = String(req.query.type || '');
+  const affiliationId = String(req.query.affiliationId || '');
+  if (typeFilter && !AFFILIATION_TYPES.includes(typeFilter)) {
+    return res.status(400).json({ error: 'Invalid affiliation type' });
+  }
+
+  const params = [req.userId, req.userId, req.userId];
+  let sql = `
+    SELECT DISTINCT u.*
+    FROM user_affiliations mine
+    JOIN user_affiliations theirs ON theirs.affiliation_id = mine.affiliation_id AND theirs.user_id != mine.user_id
+    JOIN users u ON u.id = theirs.user_id
+    JOIN affiliations a ON a.id = mine.affiliation_id
+    WHERE mine.user_id = ?
+      AND NOT EXISTS (
+        SELECT 1 FROM blocked_users b
+        WHERE (b.blocker_id = ? AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = ?)
+      )`;
+  if (typeFilter) { sql += ' AND a.type = ?'; params.push(typeFilter); }
+  if (affiliationId) { sql += ' AND a.id = ?'; params.push(affiliationId); }
+  sql += ' ORDER BY u.name COLLATE NOCASE';
+
+  let users = db.prepare(sql).all(...params);
+
+  // Accepted colleagues remain in the section even if one person later
+  // removes the shared place from their profile. Type/place filters still
+  // show only people who currently share that selected context.
+  if (!typeFilter && !affiliationId) {
+    const connected = db
+      .prepare(
+        `SELECT u.* FROM colleague_connections c
+         JOIN users u ON u.id = CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END
+         WHERE (c.user_a = ? OR c.user_b = ?)
+           AND NOT EXISTS (
+             SELECT 1 FROM blocked_users b
+             WHERE (b.blocker_id = ? AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = ?)
+           )`
+      )
+      .all(req.userId, req.userId, req.userId, req.userId, req.userId);
+    const byId = new Map(users.map((u) => [u.id, u]));
+    connected.forEach((u) => byId.set(u.id, u));
+    users = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  if (q) {
+    users = users.filter((u) => {
+      const shared = sharedAffiliations(req.userId, u.id);
+      return u.name.toLowerCase().includes(q) ||
+        (u.username && u.username.toLowerCase().includes(q)) ||
+        (u.about && u.about.toLowerCase().includes(q)) ||
+        shared.some((a) => a.name.toLowerCase().includes(q) || a.title.toLowerCase().includes(q));
+    });
+  }
+  res.json({ colleagues: users.map((u) => hydrateColleague(u, req.userId)) });
+});
+
+app.get('/api/colleagues/requests', requireAuth, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT r.id request_id, r.created_at requested_at, u.*
+       FROM colleague_requests r JOIN users u ON u.id = r.sender_id
+       WHERE r.receiver_id = ? AND r.status = 'pending'
+         AND NOT EXISTS (
+           SELECT 1 FROM blocked_users b
+           WHERE (b.blocker_id = ? AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = ?)
+         )
+       ORDER BY r.created_at DESC`
+    )
+    .all(req.userId, req.userId, req.userId);
+  res.json({
+    requests: rows.map((row) => ({
+      id: row.request_id,
+      requestedAt: row.requested_at,
+      user: hydrateColleague(row, req.userId),
+    })),
+  });
+});
+
+app.post('/api/colleagues/:userId/request', requireAuth, (req, res) => {
+  const targetId = req.params.userId;
+  const target = getUser(targetId);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (targetId === req.userId) return res.status(400).json({ error: "You can't connect with yourself" });
+  if (blockedEitherWay(req.userId, targetId)) return res.status(403).json({ error: 'Connection unavailable' });
+  if (!sharedAffiliations(req.userId, targetId).length) {
+    return res.status(403).json({ error: 'You need a shared institution, organization or workplace to connect' });
+  }
+
+  const relationship = colleagueRelationship(req.userId, targetId);
+  if (relationship.status === 'connected') return res.status(409).json({ error: 'Already connected' });
+  if (relationship.status === 'outgoing') return res.json({ status: 'outgoing', requestId: relationship.requestId });
+  if (relationship.status === 'incoming') {
+    return res.status(409).json({ error: 'This person already sent you a request — accept it instead' });
+  }
+
+  const request = { id: nano(), senderId: req.userId, receiverId: targetId, createdAt: now() };
+  db.prepare(
+    `INSERT INTO colleague_requests (id, sender_id, receiver_id, status, created_at)
+     VALUES (?,?,?,?,?)`
+  ).run(request.id, request.senderId, request.receiverId, 'pending', request.createdAt);
+  emitToUser(targetId, 'colleague:updated', { type: 'request', requestId: request.id, user: publicUser(getUser(req.userId)) });
+  res.json({ status: 'outgoing', requestId: request.id });
+});
+
+app.post('/api/colleagues/requests/:id/respond', requireAuth, (req, res) => {
+  const action = String(req.body?.action || '');
+  if (!['accept', 'decline'].includes(action)) return res.status(400).json({ error: 'Action must be accept or decline' });
+  const request = db.prepare('SELECT * FROM colleague_requests WHERE id = ? AND status = ?').get(req.params.id, 'pending');
+  if (!request) return res.status(404).json({ error: 'Pending request not found' });
+  if (request.receiver_id !== req.userId) return res.status(403).json({ error: 'This request is not yours' });
+  if (blockedEitherWay(request.sender_id, request.receiver_id)) return res.status(403).json({ error: 'Connection unavailable' });
+
+  const t = now();
+  if (action === 'accept') {
+    const [userA, userB] = colleaguePair(request.sender_id, request.receiver_id);
+    db.transaction(() => {
+      db.prepare('UPDATE colleague_requests SET status = ?, responded_at = ? WHERE id = ?').run('accepted', t, request.id);
+      db.prepare('INSERT OR IGNORE INTO colleague_connections (user_a, user_b, created_at) VALUES (?,?,?)').run(userA, userB, t);
+    })();
+  } else {
+    db.prepare('UPDATE colleague_requests SET status = ?, responded_at = ? WHERE id = ?').run('declined', t, request.id);
+  }
+
+  const event = { type: action, requestId: request.id, userId: req.userId };
+  emitToUser(request.sender_id, 'colleague:updated', event);
+  emitToUser(request.receiver_id, 'colleague:updated', event);
+  res.json({ status: action === 'accept' ? 'connected' : 'declined' });
+});
+
+/** Cancel an outgoing request. */
+app.delete('/api/colleagues/requests/:id', requireAuth, (req, res) => {
+  const request = db.prepare('SELECT * FROM colleague_requests WHERE id = ? AND status = ?').get(req.params.id, 'pending');
+  if (!request) return res.status(404).json({ error: 'Pending request not found' });
+  if (request.sender_id !== req.userId) return res.status(403).json({ error: 'This request is not yours' });
+  db.prepare('UPDATE colleague_requests SET status = ?, responded_at = ? WHERE id = ?').run('cancelled', now(), request.id);
+  emitToUser(request.receiver_id, 'colleague:updated', { type: 'cancelled', requestId: request.id });
+  res.json({ ok: true });
+});
+
+/** Remove an accepted colleague connection without deleting chats or messages. */
+app.delete('/api/colleagues/:userId', requireAuth, (req, res) => {
+  const [userA, userB] = colleaguePair(req.userId, req.params.userId);
+  const result = db.prepare('DELETE FROM colleague_connections WHERE user_a = ? AND user_b = ?').run(userA, userB);
+  if (!result.changes) return res.status(404).json({ error: 'Connection not found' });
+  emitToUser(req.params.userId, 'colleague:updated', { type: 'removed', userId: req.userId });
+  res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ */
 /* blocking — real enforcement, not cosmetic                          */
 /* ------------------------------------------------------------------ */
 
@@ -505,6 +859,15 @@ app.post('/api/blocked/:userId', requireAuth, (req, res) => {
   if (!target) return res.status(404).json({ error: 'User not found' });
   if (target.id === req.userId) return res.status(400).json({ error: "You can't block yourself" });
   db.prepare('INSERT OR IGNORE INTO blocked_users (blocker_id, blocked_id, created_at) VALUES (?,?,?)').run(req.userId, target.id, now());
+  // Blocking also severs the colleague relationship and closes any pending
+  // request in either direction. Existing chat history is left intact.
+  const [userA, userB] = colleaguePair(req.userId, target.id);
+  db.prepare('DELETE FROM colleague_connections WHERE user_a = ? AND user_b = ?').run(userA, userB);
+  db.prepare(
+    `UPDATE colleague_requests SET status = 'cancelled', responded_at = ?
+     WHERE status = 'pending' AND ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))`
+  ).run(now(), req.userId, target.id, target.id, req.userId);
+  emitToUser(target.id, 'colleague:updated', { type: 'blocked', userId: req.userId });
   res.json({ ok: true });
 });
 

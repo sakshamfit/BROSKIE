@@ -29,6 +29,7 @@ export function ChatProvider({ children }) {
   const postListeners = useRef(new Set());
   const statusListeners = useRef(new Set());
   const communityListeners = useRef(new Set());
+  const colleagueListeners = useRef(new Set());
 
   /* ---------------- calls (WebRTC, signalled over the same socket) ---------------- */
   // call: null | { id, chatId, type, direction:'incoming'|'outgoing', status:'ringing'|'connecting'|'ongoing'|'ended', with, startedAt, endedReason }
@@ -57,6 +58,12 @@ export function ChatProvider({ children }) {
   const onCommunityEvent = useCallback((fn) => {
     communityListeners.current.add(fn);
     return () => communityListeners.current.delete(fn);
+  }, []);
+
+  /** Subscribe to colleague / affiliation changes. Returns an unsubscribe fn. */
+  const onColleagueEvent = useCallback((fn) => {
+    colleagueListeners.current.add(fn);
+    return () => colleagueListeners.current.delete(fn);
   }, []);
 
   // Pinned chats float to the top; within each group, recency order.
@@ -154,6 +161,12 @@ export function ChatProvider({ children }) {
      'community:declined', 'community:added', 'community:removed', 'community:left'].forEach((ev) => {
       socket.on(ev, (payload) => {
         communityListeners.current.forEach((fn) => fn(ev, payload));
+      });
+    });
+
+    ['colleague:updated', 'affiliation:updated'].forEach((ev) => {
+      socket.on(ev, (payload) => {
+        colleagueListeners.current.forEach((fn) => fn(ev, payload));
       });
     });
 
@@ -475,7 +488,7 @@ export function ChatProvider({ children }) {
         chats, messages, typing, connected,
         refreshChats, loadMessages, sendMessage, markRead,
         setTypingState, react, deleteMessage, editMessage, createPoll, votePoll,
-        upsertChat, onPostEvent, onStatusEvent, onCommunityEvent,
+        upsertChat, onPostEvent, onStatusEvent, onCommunityEvent, onColleagueEvent,
         // exposed for lightweight local patches (e.g. optimistic star/timer state)
         setMessages,
         // Calls

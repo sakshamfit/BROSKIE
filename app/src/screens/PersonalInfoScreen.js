@@ -2,15 +2,18 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
+import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
-import { PaperCard, InkField, InkButton, handleFor } from '../components/common';
+import { confirm } from '../hooks/confirm';
+import AffiliationPicker, { affiliationType } from '../components/AffiliationPicker';
+import { PaperCard, InkField, InkButton, TapeChip } from '../components/common';
 import { type, inkBox, marker } from '../theme';
 
 /** "Personal Information" — Name, Username, About, Phone. */
 export default function PersonalInfoScreen({ navigation, embedded = false }) {
-  const { user, updateProfile } = useAuth();
+  const { user, refreshUser, updateProfile } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const { isTablet } = useResponsive();
@@ -20,6 +23,8 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [affiliationPicker, setAffiliationPicker] = useState(false);
+  const [removingAffiliation, setRemovingAffiliation] = useState(null);
 
   const openEdit = (field) => {
     setError('');
@@ -43,6 +48,22 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
       setError(e.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const removeAffiliation = async (item) => {
+    const ok = await confirm(`Remove ${item.name} from your profile?`, {
+      title: 'Remove place', confirmLabel: 'Remove', destructive: true,
+    });
+    if (!ok) return;
+    setRemovingAffiliation(item.id);
+    try {
+      await api.leaveAffiliation(item.id);
+      await refreshUser();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setRemovingAffiliation(null);
     }
   };
 
@@ -86,7 +107,58 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
             onPress={() => openEdit('phone')}
           />
         </View>
+
+        <View style={{ marginTop: 26, marginBottom: 10 }}>
+          <Text style={[type.labelXs, { color: theme.muted }]}>COLLEGE, ORGANIZATION & WORK</Text>
+          <Text style={[type.bodySm, { color: theme.subtext, marginTop: 5 }]}>Add a place to discover and connect with colleagues there.</Text>
+          {!!error && !editing && <Text style={[type.bodySm, { color: theme.danger, marginTop: 6 }]}>{error}</Text>}
+        </View>
+
+        <View style={{ gap: 10 }}>
+          {(user?.affiliations || []).map((item) => {
+            const meta = affiliationType(item.type);
+            return (
+              <View key={item.id} style={[s.affiliationRow, inkBox(theme, 'thin')]}>
+                <View style={s.affiliationIcon}>
+                  <Icon name={meta.icon} size={20} color={theme.ink} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[type.bodyStrong, { color: theme.text }]} numberOfLines={2}>{item.name}</Text>
+                  <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]} numberOfLines={1}>
+                    {meta.short.toUpperCase()}{item.title ? ` · ${item.title.toUpperCase()}` : ''}
+                  </Text>
+                </View>
+                <TapeChip label={`${item.memberCount || 1} ${(item.memberCount || 1) === 1 ? 'MEMBER' : 'MEMBERS'}`} />
+                <Pressable onPress={() => removeAffiliation(item)} disabled={!!removingAffiliation} hitSlop={8} style={{ padding: 5 }}>
+                  {removingAffiliation === item.id
+                    ? <ActivityIndicator size="small" color={theme.ink} />
+                    : <Icon name="close" size={17} color={theme.muted} />}
+                </Pressable>
+              </View>
+            );
+          })}
+
+          <Pressable
+            onPress={() => setAffiliationPicker(true)}
+            style={({ pressed }) => [s.addAffiliation, inkBox(theme, 'ink'), pressed && marker(theme, 1)]}
+          >
+            <View style={[s.addIcon, { backgroundColor: theme.ink }]}>
+              <Icon name="add" size={18} color={theme.onPrimary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[type.bodyStrong, { color: theme.text }]}>Add college or workplace</Text>
+              <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]}>INSTITUTION · ORGANIZATION · WORKPLACE</Text>
+            </View>
+            <Icon name="chevron-forward-outline" size={17} color={theme.muted} />
+          </Pressable>
+        </View>
       </ScrollView>
+
+      <AffiliationPicker
+        visible={affiliationPicker}
+        onClose={() => setAffiliationPicker(false)}
+        onChanged={() => setError('')}
+      />
 
       <Modal visible={!!editing} transparent animationType="fade" onRequestClose={() => setEditing(null)}>
         <View style={[s.overlay, { backgroundColor: theme.overlay }]}>
@@ -133,6 +205,10 @@ const makeStyles = (t) => StyleSheet.create({
   scroll: { padding: 20, paddingBottom: 40 },
   scrollWide: { maxWidth: 560, width: '100%', alignSelf: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 14, paddingVertical: 13 },
+  affiliationRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 13, paddingVertical: 12 },
+  affiliationIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  addAffiliation: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 13, paddingVertical: 13 },
+  addIcon: { width: 34, height: 34, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
   dialog: { width: '100%', maxWidth: 360 },
   dialogInputWrap: { paddingHorizontal: 2, minHeight: 48, justifyContent: 'center' },

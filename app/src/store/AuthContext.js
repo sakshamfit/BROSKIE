@@ -63,6 +63,12 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const { user: fresh } = await api.me();
+    setUser(fresh);
+    return fresh;
+  }, []);
+
   const updateProfile = useCallback(async (patch) => {
     const { user } = await api.updateMe(patch);
     setUser((prev) => ({ ...prev, ...user }));
@@ -76,7 +82,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, booting, login, register, logout, updateProfile, updateSettings }}>
+    <AuthContext.Provider value={{ user, token, booting, login, register, logout, refreshUser, updateProfile, updateSettings }}>
       {children}
     </AuthContext.Provider>
   );

@@ -78,6 +78,31 @@ export const api = {
   changePassword: (payload) => request('/api/me/password', { method: 'POST', body: payload }),
   users: (q = '') => request(`/api/users?q=${encodeURIComponent(q)}`),
 
+  // Colleagues — shared colleges/institutions, organizations and workplaces
+  affiliations: ({ q, type, mine } = {}) => {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (type) params.set('type', type);
+    if (mine) params.set('mine', '1');
+    return request(`/api/affiliations?${params.toString()}`);
+  },
+  createAffiliation: (payload) => request('/api/affiliations', { method: 'POST', body: payload }),
+  joinAffiliation: (id, title = '') => request(`/api/affiliations/${id}/join`, { method: 'POST', body: { title } }),
+  leaveAffiliation: (id) => request(`/api/affiliations/${id}/leave`, { method: 'DELETE' }),
+  colleagues: ({ q, type, affiliationId } = {}) => {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (type) params.set('type', type);
+    if (affiliationId) params.set('affiliationId', affiliationId);
+    return request(`/api/colleagues?${params.toString()}`);
+  },
+  colleagueRequests: () => request('/api/colleagues/requests'),
+  requestColleague: (userId) => request(`/api/colleagues/${userId}/request`, { method: 'POST', body: {} }),
+  respondColleagueRequest: (requestId, action) =>
+    request(`/api/colleagues/requests/${requestId}/respond`, { method: 'POST', body: { action } }),
+  cancelColleagueRequest: (requestId) => request(`/api/colleagues/requests/${requestId}`, { method: 'DELETE' }),
+  removeColleague: (userId) => request(`/api/colleagues/${userId}`, { method: 'DELETE' }),
+
   // Blocking — real, server-enforced
   blockedUsers: () => request('/api/blocked'),
   blockUser: (userId) => request(`/api/blocked/${userId}`, { method: 'POST', body: {} }),

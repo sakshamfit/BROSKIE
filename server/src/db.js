@@ -227,6 +227,59 @@ CREATE TABLE IF NOT EXISTS community_requests (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+/* ---- Colleagues: discover people through shared places ---- */
+CREATE TABLE IF NOT EXISTS affiliations (
+  id              TEXT PRIMARY KEY,
+  name            TEXT NOT NULL,
+  normalized_name TEXT NOT NULL,
+  type            TEXT NOT NULL,                 -- institution | organization | workplace
+  created_by      TEXT NOT NULL,
+  created_at      INTEGER NOT NULL,
+  UNIQUE (type, normalized_name),
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_affiliations_type_name ON affiliations(type, normalized_name);
+
+CREATE TABLE IF NOT EXISTS user_affiliations (
+  user_id       TEXT NOT NULL,
+  affiliation_id TEXT NOT NULL,
+  title         TEXT DEFAULT '',                 -- course, department, role, etc.
+  joined_at     INTEGER NOT NULL,
+  PRIMARY KEY (user_id, affiliation_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (affiliation_id) REFERENCES affiliations(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_user_affiliations_affiliation ON user_affiliations(affiliation_id, joined_at);
+
+CREATE TABLE IF NOT EXISTS colleague_requests (
+  id           TEXT PRIMARY KEY,
+  sender_id    TEXT NOT NULL,
+  receiver_id  TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'pending',  -- pending | accepted | declined | cancelled
+  created_at   INTEGER NOT NULL,
+  responded_at INTEGER,
+  FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_colleague_requests_receiver ON colleague_requests(receiver_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_colleague_requests_sender ON colleague_requests(sender_id, status, created_at);
+/* One pending request per unordered pair, so crossing requests cannot duplicate. */
+CREATE UNIQUE INDEX IF NOT EXISTS idx_colleague_pending_pair
+ON colleague_requests (
+  CASE WHEN sender_id < receiver_id THEN sender_id ELSE receiver_id END,
+  CASE WHEN sender_id < receiver_id THEN receiver_id ELSE sender_id END
+) WHERE status = 'pending';
+
+CREATE TABLE IF NOT EXISTS colleague_connections (
+  user_a     TEXT NOT NULL,
+  user_b     TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_a, user_b),
+  CHECK (user_a < user_b),
+  FOREIGN KEY (user_a) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_b) REFERENCES users(id) ON DELETE CASCADE
+);
+
 /* ---- Blocking: real, server-enforced (not cosmetic) ---- */
 CREATE TABLE IF NOT EXISTS blocked_users (
   blocker_id TEXT NOT NULL,

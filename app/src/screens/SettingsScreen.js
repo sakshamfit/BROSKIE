@@ -55,7 +55,7 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             theme={theme}
             icon="person-outline"
             title="Personal Information"
-            subtitle="Name, Username, Phone"
+            subtitle="Name, Username, Phone, College & Work"
             onPress={() => navigation.navigate('PersonalInfo')}
           />
           <Divider theme={theme} />

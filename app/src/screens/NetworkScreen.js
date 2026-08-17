@@ -15,6 +15,7 @@ import { AUDIENCE } from '../components/AudiencePicker';
 import SongCard from '../components/SongCard';
 import NewPostScreen from './NewPostScreen';
 import CommunitiesScreen from './CommunitiesScreen';
+import ColleaguesScreen from './ColleaguesScreen';
 import { type, inkBox, marker, dashedRule, stroke, radius } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
@@ -27,7 +28,7 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
   const { onPostEvent } = useChat();
   const { theme } = useTheme();
   const { isTablet } = useResponsive();
-  const [section, setSection] = useState('feed'); // feed | communities
+  const [section, setSection] = useState('feed'); // feed | communities | colleagues
 
   const [posts, setPosts] = useState([]);
   const [tags, setTags] = useState([]);
@@ -211,6 +212,10 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         <Icon name="people-outline" size={14} color={section === 'communities' ? theme.onPrimary : theme.text} />
         <Text style={[type.labelSm, { color: section === 'communities' ? theme.onPrimary : theme.text }]}>COMMUNITIES</Text>
       </Pressable>
+      <Pressable onPress={() => setSection('colleagues')} style={[s.sectionBtn, section === 'colleagues' && s.sectionActive, { borderColor: theme.ink }]}>
+        <Icon name="school-outline" size={14} color={section === 'colleagues' ? theme.onPrimary : theme.text} />
+        <Text style={[type.labelSm, { color: section === 'colleagues' ? theme.onPrimary : theme.text }]}>COLLEAGUES</Text>
+      </Pressable>
     </View>
   );
 
@@ -251,6 +256,21 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
           {SectionToggle}
         </View>
         <CommunitiesScreen onOpenChat={onOpenChat} />
+      </View>
+    );
+  }
+
+  if (section === 'colleagues') {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.bg }}>
+        <View style={[s.communitiesHeaderWrap, isTablet && s.listWide]}>
+          <Text style={s.pageTitle}>The Network</Text>
+          <Text style={[type.labelXs, { color: theme.muted, marginBottom: 14 }]}>
+            FIND YOUR PEOPLE THROUGH THE PLACES YOU SHARE
+          </Text>
+          {SectionToggle}
+        </View>
+        <ColleaguesScreen onOpenChat={onOpenChat} />
       </View>
     );
   }
@@ -443,8 +463,8 @@ const makeStyles = (t) => StyleSheet.create({
   tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
 
   communitiesHeaderWrap: { paddingTop: 22, paddingHorizontal: 20 },
-  sectionRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
-  sectionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 16 },
+  sectionRow: { flexDirection: 'row', gap: 7, marginBottom: 4 },
+  sectionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 8 },
   sectionActive: { backgroundColor: t.ink },
 
   note: { padding: 18, marginBottom: 22, borderWidth: 1, borderColor: t.graphiteLine,

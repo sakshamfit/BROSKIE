@@ -154,7 +154,21 @@ Uploaded images currently use the active storage backend:
 
 ---
 
-## 6. Theme and UI status
+## 6. Colleagues and affiliations
+
+The Network now includes a **Colleagues** section. Users can:
+
+- add a college/institution, organization, or workplace from Personal Information;
+- search and directly join an existing registered place;
+- discover people who share one of their places;
+- send, accept, decline, or cancel colleague requests; and
+- open a direct chat after a request is accepted.
+
+Affiliations, requests, and accepted connections are stored in SQLite and update connected clients through Socket.IO. A colleague request is only allowed when both users share a registered place. Blocking a user also removes the colleague connection and cancels pending requests.
+
+---
+
+## 7. Theme and UI status
 
 The app supports the following appearance choices:
 
@@ -169,7 +183,7 @@ The chat list and conversation interface use a manga/paper visual style, includi
 
 ---
 
-## 7. Current deployment checks
+## 8. Current deployment checks
 
 ### Check backend health
 
@@ -213,7 +227,7 @@ The mount path should be `/data`, and the directory should contain `tomodachi.db
 
 ---
 
-## 8. Safe deployment checklist
+## 9. Safe deployment checklist
 
 Before pushing/deploying changes:
 
@@ -239,7 +253,7 @@ Before pushing/deploying changes:
 
 ---
 
-## 9. Security rules
+## 10. Security rules
 
 Never share or commit:
 
@@ -256,7 +270,7 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 
 ---
 
-## 10. Planned work
+## 11. Planned work
 
 ### High priority
 
@@ -277,7 +291,7 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 
 ---
 
-## 11. Recent notable changes
+## 12. Recent notable changes
 
 | Commit | Change |
 |---|---|

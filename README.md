@@ -132,6 +132,11 @@ tag; posts appear live for every connected user via Socket.IO. Likes toggle with
 optimistic UI, threaded comments in a bottom sheet, tag filtering, trending tags,
 cursor pagination, and authors can delete their own posts.
 
+**Colleagues** — place-based discovery inside The Network. Add a college/institution,
+organization, or workplace to your profile, join an existing registered place, search
+its members, and send connection requests. Accepted colleagues become contacts and can
+open a direct chat immediately. Requests and newly joined members update in real time.
+
 **Status / stories** — post coloured text statuses, 24-hour auto-expiry, viewed/unviewed
 rings, tap-through story viewer with progress bars.
 
