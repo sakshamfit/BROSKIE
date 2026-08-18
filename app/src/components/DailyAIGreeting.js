@@ -304,7 +304,7 @@ export default function DailyAIGreeting() {
             <AIGreeterModel
               talking={talking}
               gesture={gesture}
-              horizontalOffset={isTablet ? -0.72 : 0}
+              horizontalOffset={isTablet ? -0.28 : 0}
               style={s.model}
             />
           </ModelBoundary>
@@ -326,18 +326,18 @@ export default function DailyAIGreeting() {
         </View>
 
         <ScrollView contentContainerStyle={[s.content, isTablet && s.contentWide]}>
-          <View style={[s.briefing, isTablet && s.briefingWide, { backgroundColor: theme.card }]}>
-            <Text style={[type.headlineLg, { color: theme.text }]}>{period}, {firstName}.</Text>
+          <View style={[s.briefing, isTablet && s.briefingWide]}>
+            <Text style={[type.headlineMd, { color: theme.text, opacity: 0.84 }]}>{period}, {firstName}.</Text>
             <View style={[s.underline, { backgroundColor: theme.ink }]} />
-            <Text style={[type.bodyLg, { color: theme.text, marginTop: 18 }]}>{weatherSentence}</Text>
-            <Text style={[type.bodyMd, { color: theme.subtext, marginTop: 12 }]}>{notices}</Text>
+            <Text style={[type.bodyMd, { color: theme.text, marginTop: 13, opacity: 0.76 }]}>{weatherSentence}</Text>
+            <Text style={[type.bodySm, { color: theme.subtext, marginTop: 9, opacity: 0.76 }]}>{notices}</Text>
 
             <View style={s.weatherRow}>
               <View style={[s.weatherBadge, inkBox(theme, 'thin')]}>
                 <Icon name={weather ? 'sunny-outline' : 'compass-outline'} size={22} color={theme.ink} />
                 <View>
                   <Text style={[type.labelXs, { color: theme.muted }]}>OUTSIDE</Text>
-                  <Text style={[type.headlineSm, { color: theme.text, marginTop: 2 }]}>
+                  <Text style={[type.bodyStrong, { color: theme.text, marginTop: 2 }]}>
                     {loading ? 'Reading the sky…' : weather ? `${Math.round(weather.temperature)}°C · ${weather.condition}` : 'Weather unavailable'}
                   </Text>
                 </View>
@@ -348,9 +348,13 @@ export default function DailyAIGreeting() {
             <Text style={[type.labelXs, { color: theme.muted, marginBottom: 10 }]}>YOUR SIGNALS</Text>
             <View style={s.signalGrid}>
               {cards.map((card) => (
-                <PaperCard key={card.label} style={s.signalCard} weight="pencil">
+                <PaperCard
+                  key={card.label}
+                  style={[s.signalCard, { backgroundColor: theme.dark ? 'rgba(28,27,27,0.58)' : 'rgba(253,248,248,0.62)' }]}
+                  weight="pencil"
+                >
                   <Icon name={card.icon} size={17} color={theme.ink} />
-                  <Text style={[type.headlineSm, { color: theme.text, marginTop: 7 }]}>{card.value}</Text>
+                  <Text style={[type.bodyStrong, { color: theme.text, marginTop: 6 }]}>{card.value}</Text>
                   <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]}>{card.label}</Text>
                 </PaperCard>
               ))}
@@ -359,8 +363,8 @@ export default function DailyAIGreeting() {
             <View style={s.finalCard}>
               <Icon name="sparkles-outline" size={22} color={theme.ink} />
               <View style={{ flex: 1 }}>
-                <Text style={[type.headlineSm, { color: theme.text }]}>Let’s find the +ones.</Text>
-                <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>Opening your network after this line.</Text>
+                <Text style={[type.bodyStrong, { color: theme.text }]}>Let’s find the +ones.</Text>
+                <Text style={[type.labelXs, { color: theme.subtext, marginTop: 3 }]}>OPENING YOUR NETWORK AFTER THIS LINE</Text>
               </View>
             </View>
           </View>
@@ -374,11 +378,11 @@ const makeStyles = (t) => StyleSheet.create({
   root: { flex: 1, overflow: 'hidden' },
   fullModel: {
     position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
-    zIndex: 0, pointerEvents: 'none',
+    zIndex: 2, pointerEvents: 'none',
   },
   model: { width: '100%', height: '100%' },
   topBar: {
-    zIndex: 3, flexDirection: 'row', alignItems: 'center', gap: 9,
+    zIndex: 4, flexDirection: 'row', alignItems: 'center', gap: 9,
     paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14,
     borderBottomWidth: stroke.ink, borderBottomColor: t.ink,
     backgroundColor: t.bg,
@@ -389,22 +393,20 @@ const makeStyles = (t) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 7,
   },
   liveDot: { width: 10, height: 10, borderRadius: 99, borderWidth: 1 },
-  content: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 345, paddingBottom: 34 },
-  contentWide: { paddingTop: 80, paddingHorizontal: '4%' },
+  content: { zIndex: 1, flexGrow: 1, paddingHorizontal: 14, paddingTop: 315, paddingBottom: 28 },
+  contentWide: { paddingTop: 96, paddingHorizontal: '4%' },
   briefing: {
-    padding: 18, minWidth: 0,
-    borderTopWidth: 2, borderTopColor: t.ink,
+    padding: 14, minWidth: 0, opacity: 0.9,
   },
   briefingWide: {
-    width: '47%', alignSelf: 'flex-end', padding: 24,
-    borderLeftWidth: 1, borderLeftColor: t.graphiteLine,
+    width: '41%', alignSelf: 'flex-end', padding: 18,
   },
-  underline: { height: 5, width: 230, maxWidth: '80%', marginTop: 7, borderRadius: 5, transform: [{ rotate: '-1deg' }] },
-  weatherRow: { flexDirection: 'row', marginTop: 18 },
-  weatherBadge: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, backgroundColor: t.card },
-  signalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  signalCard: { width: '48%', padding: 11 },
-  finalCard: { flexDirection: 'row', alignItems: 'center', gap: 13, paddingTop: 18, marginTop: 10 },
+  underline: { height: 3, width: 165, maxWidth: '70%', marginTop: 6, borderRadius: 5, transform: [{ rotate: '-1deg' }], opacity: 0.7 },
+  weatherRow: { flexDirection: 'row', marginTop: 14 },
+  weatherBadge: { flexDirection: 'row', alignItems: 'center', gap: 9, padding: 9, backgroundColor: 'transparent' },
+  signalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  signalCard: { width: '48%', padding: 9, opacity: 0.76 },
+  finalCard: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 14, marginTop: 7, opacity: 0.78 },
 });
 
 const styles = StyleSheet.create({

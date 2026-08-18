@@ -50,6 +50,7 @@ The latest uploaded Avaturn file contains one 16.2-second generic clip named `Ac
 - Greets by time of day and first name.
 - Announces unread messages, message requests, colleague requests, and community requests.
 - Automatically speaks exactly once with a preferred feminine English voice.
+- Renders the character as a close-up foreground layer with no enclosing model card; compact briefing text stays behind and to the side.
 - Splits the briefing into greeting, weather, notifications and finale segments.
 - Synchronises skeleton gestures to those segments: wave, present the weather, count notifications and open-arm finale.
 - Closes itself after the final spoken line; there is no replay/speaker control.

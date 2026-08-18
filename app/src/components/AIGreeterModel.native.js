@@ -118,7 +118,7 @@ function Character({ talking, gesture, horizontalOffset }) {
     }
 
     root.current.position.x = horizontalOffset;
-    root.current.position.y = -0.28 + Math.sin(time * 1.45) * 0.032;
+    root.current.position.y = -0.4 + Math.sin(time * 1.45) * 0.028;
     root.current.rotation.y = Math.sin(time * 0.55) * 0.045;
     const pulse = talking ? 1 + Math.sin(time * 9) * 0.008 : 1;
     root.current.scale.setScalar(pulse);
@@ -137,7 +137,7 @@ export default function AIGreeterModel({ talking = false, gesture = 'idle', hori
   return (
     <View style={[{ flex: 1, minHeight: 260 }, style]}>
       <Canvas
-        camera={{ position: [0, 0.18, 3.25], fov: 34 }}
+        camera={{ position: [0, 0.2, 2.9], fov: 33 }}
         gl={{ alpha: true, antialias: true }}
         onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
       >
