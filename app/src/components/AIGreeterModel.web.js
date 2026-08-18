@@ -38,9 +38,7 @@ function Character({ talking, gesture, horizontalOffset }) {
     });
     return bones;
   }, [model]);
-  const hasRealAnimation = useMemo(() => animations.some((clip) =>
-    clip.duration > 0.2 && clip.tracks.some((track) => (track.times?.length || 0) > 1)
-  ), [animations]);
+  const usingClip = useRef(false);
   const mixer = useMemo(() => new THREE.AnimationMixer(model), [model]);
 
   useEffect(() => {
@@ -50,10 +48,11 @@ function Character({ talking, gesture, horizontalOffset }) {
     const talk = find(/talk|speak|voice|mouth/i);
     mixer.stopAllAction();
     let chosen;
-    if (talking) chosen = talk || idle;
-    else if (!waved.current && wave) { chosen = wave; waved.current = true; }
+    if (gesture === 'wave' && !waved.current && wave) { chosen = wave; waved.current = true; }
+    else if (talking) chosen = talk || idle;
     else chosen = idle;
     const action = chosen ? mixer.clipAction(chosen, model) : null;
+    usingClip.current = !!action;
     if (action) {
       action.reset().fadeIn(0.18);
       if (!talking && chosen === wave) {
@@ -65,15 +64,20 @@ function Character({ talking, gesture, horizontalOffset }) {
     return () => {
       action?.fadeOut?.(0.15);
       mixer.stopAllAction();
+      usingClip.current = false;
     };
-  }, [animations, mixer, model, talking]);
+  }, [animations, gesture, mixer, model, talking]);
 
   useFrame((state, delta) => {
     mixer.update(delta);
     if (!root.current) return;
     const time = state.clock.getElapsedTime();
 
-    if (!hasRealAnimation) {
+    // The uploaded Avaturn model currently exposes one generic clip named
+    // Action.004. Generic clips cannot be mapped to speech semantics, so the
+    // skeleton controller takes over unless a recognised Wave/Talk/Idle clip
+    // is available for the current phase.
+    if (!usingClip.current) {
       const pose = { ...BASE_POSE };
       if (gesture === 'wave') {
         pose.RightArm = [-1.02, 0, 0.08];
