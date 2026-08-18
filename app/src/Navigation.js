@@ -19,6 +19,7 @@ import ConversationScreen from './screens/ConversationScreen';
 import NewChatScreen from './screens/NewChatScreen';
 import StatusScreen from './screens/StatusScreen';
 import NetworkScreen from './screens/NetworkScreen';
+import ColleaguesScreen from './screens/ColleaguesScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ChatInfoScreen from './screens/ChatInfoScreen';
 import PersonalInfoScreen from './screens/PersonalInfoScreen';
@@ -42,11 +43,13 @@ function HomeTabs({ navigation }) {
   const unread = chats.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
   const s = makeStyles(theme);
 
+  // Colleagues is a first-class tab instead of being hidden only inside
+  // Network. Calls remain available from Settings and individual chats.
   const TABS = [
     { key: 'chats', label: 'Chats', icon: 'chatbubble', badge: unread },
     { key: 'status', label: 'See', icon: 'eye' },
     { key: 'network', label: 'Network', icon: 'people' },
-    { key: 'calls', label: 'Calls', icon: 'call' },
+    { key: 'colleagues', label: 'Colleagues', icon: 'school-outline', outlineOnly: true },
     { key: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
@@ -60,8 +63,12 @@ function HomeTabs({ navigation }) {
             onOpenChat={(chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); }}
           />
         )}
+        {tab === 'colleagues' && (
+          <ColleaguesScreen
+            onOpenChat={(chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); }}
+          />
+        )}
         {tab === 'status' && <StatusScreen navigation={navigation} />}
-        {tab === 'calls' && <CallsScreen navigation={navigation} />}
       </SafeAreaView>
 
       {/* SafeAreaView only pads the notch/home-indicator; the bar itself owns its own padding
@@ -92,7 +99,7 @@ function HomeTabs({ navigation }) {
               >
                 <View>
                   <Icon
-                    name={active ? t.icon : `${t.icon}-outline`}
+                    name={t.outlineOnly ? t.icon : active ? t.icon : `${t.icon}-outline`}
                     size={20}
                     color={active ? theme.ink : theme.muted}
                   />
@@ -102,7 +109,12 @@ function HomeTabs({ navigation }) {
                     </View>
                   )}
                 </View>
-                <Text style={[type.labelXs, { color: active ? theme.ink : theme.muted }]}>
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.72}
+                  style={[type.labelXs, s.tabLabel, { color: active ? theme.ink : theme.muted }]}
+                >
                   {t.label.toUpperCase()}
                 </Text>
               </Pressable>
@@ -162,6 +174,7 @@ export default function Navigation() {
             <Stack.Screen name="NewChat" component={NewChatScreen} />
             <Stack.Screen name="ChatInfo" component={ChatInfoScreen} />
             <Stack.Screen name="Starred" component={StarredMessagesScreen} />
+            <Stack.Screen name="Calls" component={CallsScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
             <Stack.Screen name="Security" component={SecurityScreen} />
@@ -183,9 +196,10 @@ const makeStyles = (t) => StyleSheet.create({
     paddingTop: 10, paddingHorizontal: 12,
   },
   tabItem: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 5,
-    paddingVertical: 8, marginHorizontal: 5, minHeight: 44, borderRadius: 999,
+    flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', gap: 5,
+    paddingVertical: 8, marginHorizontal: 2, minHeight: 44, borderRadius: 999,
   },
+  tabLabel: { maxWidth: '100%', textAlign: 'center', fontSize: 8.5, letterSpacing: 0.15 },
   tabActive: { borderWidth: 1, borderRadius: 999 },
   tabBadge: { position: 'absolute', right: -11, top: -7 },
 });

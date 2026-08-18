@@ -25,6 +25,7 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
     { key: 'chats', label: 'Chats', icon: 'chatbubbles' },
     { key: 'status', label: 'See', icon: 'eye' },
     { key: 'network', label: 'Network', icon: 'people' },
+    { key: 'colleagues', label: 'Colleagues', icon: 'school-outline', outlineOnly: true },
     { key: 'calls', label: 'Calls', icon: 'call' },
     { key: 'settings', label: 'Settings', icon: 'settings' },
   ];
@@ -75,7 +76,11 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
                 (pressed || hovered) && !isActive ? marker(theme, 1) : null,
               ]}
             >
-              <Icon name={isActive ? item.icon : `${item.icon}-outline`} size={19} color={isActive ? theme.ink : theme.graphite} />
+              <Icon
+                name={item.outlineOnly ? item.icon : isActive ? item.icon : `${item.icon}-outline`}
+                size={19}
+                color={isActive ? theme.ink : theme.graphite}
+              />
               {!railOnly && (
                 <Text
                   style={[

@@ -53,7 +53,7 @@ const TOPICS = [
       { h: 'Posting', p: 'Tap the pencil FAB on the Network tab to write a post — attach a photo, a song, or a #tag, and choose Public / Friends / Selected people, exactly like Status.' },
       { h: 'Liking & commenting', p: 'Tap the heart to like a post, or the speech bubble to open comments. Tap any #tag chip (yours or someone else\u2019s) to filter the feed to just that tag.' },
       { h: 'Communities', p: 'Switch to the COMMUNITIES tab at the top of Network to create or join purpose-based groups \u2014 Club Night, House Party, Chai Chat, Trip Planning, Running Group, Game Night, Study Group, or something custom.' },
-      { h: 'Finding colleagues', p: 'Switch to COLLEAGUES, then add or join your college, institution, organization, or workplace. People who register the same place appear as colleague cards. Send a connection request; once they accept, tap Message to start a direct chat.' },
+      { h: 'Finding colleagues', p: 'Open the COLLEAGUES tab, then add or join your college, institution, organization, or workplace. People who register the same place appear as colleague cards. Send a connection request; once they accept, tap Message to start a direct chat.' },
       { h: 'Who can join a community', p: 'When you create one, pick: Open (anyone joins instantly), Ask to join (an admin must approve each request), or Invite only (not self-joinable \u2014 an admin adds people directly). Every community gets its own real group chat automatically, so members can talk right away.' },
       { h: 'Running a community', p: 'As an admin, open a community\u2019s detail page to approve/decline pending requests, promote or remove members, edit its details, or disband it entirely.' },
     ],

@@ -156,7 +156,7 @@ Uploaded images currently use the active storage backend:
 
 ## 6. Colleagues and affiliations
 
-The Network now includes a **Colleagues** section. Users can:
+The app now exposes **Colleagues** as a first-class bottom tab on phones and a dedicated sidebar destination on tablets/web (it is also reachable from Network). Users can:
 
 - add a college/institution, organization, or workplace from Personal Information;
 - search and directly join an existing registered place;

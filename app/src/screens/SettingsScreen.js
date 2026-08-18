@@ -105,6 +105,18 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             subtitle="Messages, Status, Network, Sound"
             onPress={() => navigation.navigate('Notifications')}
           />
+          {!embedded && (
+            <>
+              <Divider theme={theme} />
+              <NavRow
+                theme={theme}
+                icon="call-outline"
+                title="Calls"
+                subtitle="Recent voice and video call history"
+                onPress={() => navigation.navigate('Calls')}
+              />
+            </>
+          )}
           <Divider theme={theme} />
           <NavRow
             theme={theme}

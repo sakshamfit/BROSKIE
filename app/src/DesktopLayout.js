@@ -15,6 +15,7 @@ import NewChatScreen from './screens/NewChatScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ChatInfoScreen from './screens/ChatInfoScreen';
 import NetworkScreen from './screens/NetworkScreen';
+import ColleaguesScreen from './screens/ColleaguesScreen';
 import StatusScreen from './screens/StatusScreen';
 import PersonalInfoScreen from './screens/PersonalInfoScreen';
 import SecurityScreen from './screens/SecurityScreen';
@@ -196,6 +197,14 @@ export default function SplitLayout() {
         {tab === 'network' && (
           <View style={[s.fullPane, s.centeredPane]}>
             <NetworkScreen
+              onOpenChat={(chatId) => { setTab('chats'); setSelectedChatId(chatId); }}
+            />
+          </View>
+        )}
+
+        {tab === 'colleagues' && (
+          <View style={[s.fullPane, s.centeredPane]}>
+            <ColleaguesScreen
               onOpenChat={(chatId) => { setTab('chats'); setSelectedChatId(chatId); }}
             />
           </View>
