@@ -33,7 +33,7 @@ The character controller searches animation names case-insensitively:
 
 Examples: `Idle`, `Wave_Hand`, and `Talking` work automatically. If clips use different names, rename them in Blender before export or add their keywords to `AIGreeterModel.web.js` and `AIGreeterModel.native.js`.
 
-The currently uploaded Avaturn file contains only a one-frame pose animation, so +one now creates the visible body/head/hand gestures procedurally from its skeleton. True mouth movement or facial emotion additionally requires facial morph targets/blendshapes in the exported GLB; the current file contains none.
+The latest uploaded Avaturn file contains one 16.2-second generic clip named `Action.004`. Because that name does not identify greeting, weather, notification or talking semantics, +one deliberately drives the Head, Spine, Arm, ForeArm and Hand bones procedurally for those phases instead of leaving the model in its T-pose. True mouth movement or facial emotion additionally requires facial morph targets/blendshapes in the exported GLB; the current file contains none.
 
 ## Export recommendations
 
