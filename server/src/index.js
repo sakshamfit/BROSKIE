@@ -96,8 +96,13 @@ function areContacts(idA, idB) {
   if (colleagues) return true;
   return !!db
     .prepare(
-      `SELECT 1 FROM chat_members a JOIN chat_members b ON a.chat_id = b.chat_id
-       WHERE a.user_id = ? AND b.user_id = ? LIMIT 1`
+      `SELECT 1 FROM chat_members a
+       JOIN chat_members b ON a.chat_id = b.chat_id
+       JOIN chats c ON c.id = a.chat_id
+       LEFT JOIN chat_requests cr ON cr.chat_id = c.id
+       WHERE a.user_id = ? AND b.user_id = ?
+         AND (c.type != 'direct' OR cr.chat_id IS NULL OR cr.status = 'accepted')
+       LIMIT 1`
     )
     .get(idA, idB);
 }
@@ -268,6 +273,22 @@ function memberIds(chatId) {
   return db.prepare('SELECT user_id FROM chat_members WHERE chat_id = ?').all(chatId).map((r) => r.user_id);
 }
 
+function pendingChatRequest(chatId) {
+  return db.prepare("SELECT * FROM chat_requests WHERE chat_id = ? AND status = 'pending'").get(chatId);
+}
+
+function hydrateChatRequest(row, viewerId) {
+  if (!row) return null;
+  const requester = getUser(row.sender_id);
+  return {
+    id: row.chat_id,
+    chatId: row.chat_id,
+    requestedAt: row.created_at,
+    requester: publicUser(requester),
+    chat: chatSummary(row.chat_id, viewerId),
+  };
+}
+
 function hydrateMessage(m, viewerId) {
   if (!m) return null;
   const reactions = db.prepare('SELECT user_id, emoji FROM reactions WHERE message_id = ?').all(m.id);
@@ -382,6 +403,9 @@ function chatSummary(chatId, viewerId) {
 
   const archived = (chat.archived_by || '').split(',').filter(Boolean).includes(viewerId);
   const otherPresence = other ? presenceFor(other, viewerId) : { isOnline: false, lastSeen: 0 };
+  const request = chat.type === 'direct'
+    ? db.prepare('SELECT * FROM chat_requests WHERE chat_id = ?').get(chatId)
+    : null;
 
   return {
     id: chat.id,
@@ -401,6 +425,10 @@ function chatSummary(chatId, viewerId) {
     members: members.map((m) => ({ ...publicUser(m), role: m.role })),
     lastMessage: last ? hydrateMessage(last, viewerId) : null,
     unread,
+    requestStatus: request?.status || null,
+    requestDirection: request
+      ? request.sender_id === viewerId ? 'outgoing' : request.receiver_id === viewerId ? 'incoming' : null
+      : null,
     updatedAt: chat.updated_at,
   };
 }
@@ -411,7 +439,10 @@ function contactIds(userId) {
     .prepare(
       `SELECT DISTINCT cm2.user_id FROM chat_members cm1
        JOIN chat_members cm2 ON cm2.chat_id = cm1.chat_id AND cm2.user_id != cm1.user_id
-       WHERE cm1.user_id = ?`
+       JOIN chats c ON c.id = cm1.chat_id
+       LEFT JOIN chat_requests cr ON cr.chat_id = c.id
+       WHERE cm1.user_id = ?
+         AND (c.type != 'direct' OR cr.chat_id IS NULL OR cr.status = 'accepted')`
     )
     .all(userId)
     .map((r) => r.user_id);
@@ -430,9 +461,12 @@ function userChats(userId) {
     .prepare(
       `SELECT c.id FROM chats c
        JOIN chat_members cm ON cm.chat_id = c.id
-       WHERE cm.user_id = ? ORDER BY c.updated_at DESC`
+       LEFT JOIN chat_requests cr ON cr.chat_id = c.id
+       WHERE cm.user_id = ?
+         AND NOT (cr.status = 'pending' AND cr.receiver_id = ?)
+       ORDER BY c.updated_at DESC`
     )
-    .all(userId);
+    .all(userId, userId);
   // Pinned chats float to the top; within each group keep recency order.
   return rows
     .map((r) => chatSummary(r.id, userId))
@@ -867,6 +901,15 @@ app.post('/api/blocked/:userId', requireAuth, (req, res) => {
     `UPDATE colleague_requests SET status = 'cancelled', responded_at = ?
      WHERE status = 'pending' AND ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))`
   ).run(now(), req.userId, target.id, target.id, req.userId);
+  const pendingChats = db.prepare(
+    `SELECT chat_id FROM chat_requests WHERE status = 'pending'
+     AND ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))`
+  ).all(req.userId, target.id, target.id, req.userId);
+  pendingChats.forEach(({ chat_id }) => {
+    db.prepare('DELETE FROM chats WHERE id = ?').run(chat_id);
+    emitToUser(target.id, 'chat:removed', { chatId: chat_id, action: 'block' });
+    emitToUser(req.userId, 'chat:request:resolved', { chatId: chat_id, action: 'block' });
+  });
   emitToUser(target.id, 'colleague:updated', { type: 'blocked', userId: req.userId });
   res.json({ ok: true });
 });
@@ -917,8 +960,21 @@ app.post('/api/chats/direct', requireAuth, (req, res) => {
     )
     .get(req.userId, userId);
 
-  if (existing) return res.json({ chat: chatSummary(existing.id, req.userId) });
+  if (existing) {
+    const pending = pendingChatRequest(existing.id);
+    // Starting the existing conversation from the receiver side is an
+    // intentional reply, so treat it as accepting the message request.
+    if (pending && pending.receiver_id === req.userId) {
+      db.prepare("UPDATE chat_requests SET status = 'accepted', responded_at = ? WHERE chat_id = ?").run(now(), existing.id);
+      emitToUser(pending.sender_id, 'chat:request:resolved', { chatId: existing.id, action: 'accept', chat: chatSummary(existing.id, pending.sender_id) });
+      emitToUser(pending.receiver_id, 'chat:new', chatSummary(existing.id, pending.receiver_id));
+    }
+    return res.json({ chat: chatSummary(existing.id, req.userId) });
+  }
 
+  // Capture contact state before adding shared chat_members; otherwise the
+  // new direct chat itself would incorrectly make a stranger a contact.
+  const knownContact = areContacts(req.userId, userId);
   const id = nano();
   const t = now();
   db.prepare('INSERT INTO chats (id, type, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(
@@ -928,8 +984,71 @@ app.post('/api/chats/direct', requireAuth, (req, res) => {
   addMember.run(id, req.userId, 'member', t);
   addMember.run(id, userId, 'member', t);
 
-  [req.userId, userId].forEach((uid) => emitToUser(uid, 'chat:new', chatSummary(id, uid)));
+  if (knownContact) {
+    [req.userId, userId].forEach((uid) => emitToUser(uid, 'chat:new', chatSummary(id, uid)));
+  } else {
+    db.prepare(
+      `INSERT INTO chat_requests (chat_id, sender_id, receiver_id, status, created_at)
+       VALUES (?,?,?,?,?)`
+    ).run(id, req.userId, userId, 'pending', t);
+    // The receiver is notified only after the first real message is sent, so
+    // merely opening the composer never creates an empty inbox request.
+    emitToUser(req.userId, 'chat:new', chatSummary(id, req.userId));
+  }
   res.json({ chat: chatSummary(id, req.userId) });
+});
+
+/** WhatsApp-style inbox for first messages from people outside contacts. */
+app.get('/api/chat-requests', requireAuth, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT cr.* FROM chat_requests cr
+       WHERE cr.receiver_id = ? AND cr.status = 'pending'
+         AND EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = cr.chat_id)
+       ORDER BY cr.created_at DESC`
+    )
+    .all(req.userId);
+  res.json({ requests: rows.map((row) => hydrateChatRequest(row, req.userId)).filter(Boolean) });
+});
+
+app.post('/api/chat-requests/:chatId/respond', requireAuth, (req, res) => {
+  const request = pendingChatRequest(req.params.chatId);
+  if (!request) return res.status(404).json({ error: 'Message request not found' });
+  if (request.receiver_id !== req.userId) return res.status(403).json({ error: 'This request is not yours' });
+  const action = String(req.body?.action || '');
+  if (!['accept', 'delete', 'block'].includes(action)) {
+    return res.status(400).json({ error: 'Action must be accept, delete or block' });
+  }
+
+  if (action === 'accept') {
+    db.prepare("UPDATE chat_requests SET status = 'accepted', responded_at = ? WHERE chat_id = ?").run(now(), request.chat_id);
+    const receiverChat = chatSummary(request.chat_id, request.receiver_id);
+    emitToUser(request.receiver_id, 'chat:new', receiverChat);
+    emitToUser(request.sender_id, 'chat:request:resolved', {
+      chatId: request.chat_id, action: 'accept', chat: chatSummary(request.chat_id, request.sender_id),
+    });
+    return res.json({ status: 'accepted', chat: receiverChat });
+  }
+
+  if (action === 'block') {
+    db.prepare('INSERT OR IGNORE INTO blocked_users (blocker_id, blocked_id, created_at) VALUES (?,?,?)')
+      .run(req.userId, request.sender_id, now());
+    const [userA, userB] = colleaguePair(req.userId, request.sender_id);
+    db.prepare('DELETE FROM colleague_connections WHERE user_a = ? AND user_b = ?').run(userA, userB);
+    db.prepare(
+      `UPDATE colleague_requests SET status = 'cancelled', responded_at = ?
+       WHERE status = 'pending' AND ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))`
+    ).run(now(), req.userId, request.sender_id, request.sender_id, req.userId);
+  }
+
+  // Deleting or blocking tears up the unaccepted conversation, including its
+  // messages, via SQLite cascades. Accepted/existing conversations are never
+  // affected by this endpoint.
+  db.prepare('DELETE FROM chats WHERE id = ?').run(request.chat_id);
+  const payload = { chatId: request.chat_id, action };
+  emitToUser(request.sender_id, 'chat:removed', payload);
+  emitToUser(request.receiver_id, 'chat:request:resolved', payload);
+  res.json({ status: action === 'block' ? 'blocked' : 'deleted' });
 });
 
 app.post('/api/chats/group', requireAuth, (req, res) => {
@@ -1181,6 +1300,10 @@ app.post('/api/messages/forward', requireAuth, (req, res) => {
 app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
   const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(req.params.id, req.userId);
   if (!isMember) return res.status(403).json({ error: 'Not a member of this chat' });
+  const request = pendingChatRequest(req.params.id);
+  if (request && request.receiver_id === req.userId) {
+    return res.status(403).json({ error: 'Accept this message request before opening the chat' });
+  }
 
   const limit = Math.min(Number(req.query.limit) || 100, 300);
   const rows = db
@@ -1198,6 +1321,10 @@ app.get('/api/search', requireAuth, (req, res) => {
   if (chatId) {
     const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, req.userId);
     if (!isMember) return res.status(403).json({ error: 'Not a member of this chat' });
+    const request = pendingChatRequest(chatId);
+    if (request && request.receiver_id === req.userId) {
+      return res.status(403).json({ error: 'Accept this message request before searching it' });
+    }
   }
   const sql = chatId
     ? `SELECT m.* FROM messages m
@@ -1205,10 +1332,13 @@ app.get('/api/search', requireAuth, (req, res) => {
        ORDER BY m.created_at DESC LIMIT 100`
     : `SELECT m.* FROM messages m
        JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
-       WHERE m.deleted = 0 AND m.body LIKE ? ORDER BY m.created_at DESC LIMIT 50`;
+       LEFT JOIN chat_requests cr ON cr.chat_id = m.chat_id
+       WHERE m.deleted = 0 AND m.body LIKE ?
+         AND NOT (cr.status = 'pending' AND cr.receiver_id = ?)
+       ORDER BY m.created_at DESC LIMIT 50`;
   const rows = chatId
     ? db.prepare(sql).all(chatId, `%${q}%`)
-    : db.prepare(sql).all(req.userId, `%${q}%`);
+    : db.prepare(sql).all(req.userId, `%${q}%`, req.userId);
   res.json({
     messages: rows.map((m) => ({
       ...hydrateMessage(m, req.userId),
@@ -2041,6 +2171,10 @@ io.on('connection', (socket) => {
         const otherId = memberIds(chatId).find((x) => x !== uid);
         if (otherId && blockedEitherWay(uid, otherId)) return ack?.({ error: "You can't message this person" });
       }
+      const request = pendingChatRequest(chatId);
+      if (request && request.receiver_id === uid) {
+        return ack?.({ error: 'Accept this message request before replying' });
+      }
 
       // Disappearing messages: per-message override wins, otherwise the
       // chat's default timer applies. Both are clamped to known presets.
@@ -2059,7 +2193,14 @@ io.on('connection', (socket) => {
 
       const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id);
       emitToChat(chatId, 'message:new', (viewer) => ({ message: hydrateMessage(row, viewer), tempId: viewer === uid ? tempId : undefined }));
-      emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+      if (request) {
+        // Keep the receiver's main inbox clean; update the Requests panel
+        // instead while the sender still sees normal optimistic chat updates.
+        emitToUser(request.sender_id, 'chat:updated', chatSummary(chatId, request.sender_id));
+        emitToUser(request.receiver_id, 'chat:request', hydrateChatRequest(request, request.receiver_id));
+      } else {
+        emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+      }
       ack?.({ message: hydrateMessage(row, uid), tempId });
     } catch (e) {
       ack?.({ error: e.message });

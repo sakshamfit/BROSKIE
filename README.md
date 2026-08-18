@@ -104,7 +104,9 @@ editable name/username/about, auto-login on relaunch.
 **Messaging** — 1:1 and group chats, optimistic sending, swipe-free reply threading,
 emoji reactions, delete-for-everyone, **edit sent messages**, **forward to one or many
 chats** (with a FORWARDED tag), image sharing with lightbox, voice-note UI with
-waveform, 32-emoji picker, day separators.
+waveform, 32-emoji picker, day separators. First messages from people outside accepted
+contacts stay in a WhatsApp-style **Message requests** inbox until accepted, deleted,
+or blocked.
 
 **Real-time (Socket.IO)** — instant delivery, typing indicators, online/last-seen
 presence, single ✓ sent → double ✓✓ delivered → blue ✓✓ read, live unread badges,
@@ -144,7 +146,8 @@ rings, tap-through story viewer with progress bars.
 shadows, no blur, no elevation tints — depth comes from stroke weight (hairline
 graphite → 2px ink → 3px bold) and physical overlap. Underline-only inputs,
 dashed hand-drawn rules, masking-tape chips, X-mark checkboxes, and a
-highlighter-yellow accent used sparingly for focus and active states.
+highlighter-yellow accent used sparingly for focus and active states. A subtle animated
+24px drafting grid now runs across the whole app, with light entrance and scroll motion.
 Bricolage Grotesque headlines / Karla body / JetBrains Mono labels.
 
 **Icons & emoji — 100% SVG** — every icon is a true vector (`react-native-svg`) rendered

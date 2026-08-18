@@ -30,6 +30,7 @@ export function ChatProvider({ children }) {
   const statusListeners = useRef(new Set());
   const communityListeners = useRef(new Set());
   const colleagueListeners = useRef(new Set());
+  const chatRequestListeners = useRef(new Set());
 
   /* ---------------- calls (WebRTC, signalled over the same socket) ---------------- */
   // call: null | { id, chatId, type, direction:'incoming'|'outgoing', status:'ringing'|'connecting'|'ongoing'|'ended', with, startedAt, endedReason }
@@ -64,6 +65,12 @@ export function ChatProvider({ children }) {
   const onColleagueEvent = useCallback((fn) => {
     colleagueListeners.current.add(fn);
     return () => colleagueListeners.current.delete(fn);
+  }, []);
+
+  /** Subscribe to incoming message-request changes. */
+  const onChatRequestEvent = useCallback((fn) => {
+    chatRequestListeners.current.add(fn);
+    return () => chatRequestListeners.current.delete(fn);
   }, []);
 
   // Pinned chats float to the top; within each group, recency order.
@@ -144,6 +151,14 @@ export function ChatProvider({ children }) {
 
     socket.on('chat:updated', upsertChat);
     socket.on('chat:new', upsertChat);
+
+    socket.on('chat:request', (payload) => {
+      chatRequestListeners.current.forEach((fn) => fn('chat:request', payload));
+    });
+    socket.on('chat:request:resolved', (payload) => {
+      if (payload?.action === 'accept' && payload?.chat) upsertChat(payload.chat);
+      chatRequestListeners.current.forEach((fn) => fn('chat:request:resolved', payload));
+    });
 
     // The Network — re-broadcast post events to any subscribed screen
     ['post:new', 'post:deleted', 'post:likes', 'post:comments'].forEach((ev) => {
@@ -488,7 +503,7 @@ export function ChatProvider({ children }) {
         chats, messages, typing, connected,
         refreshChats, loadMessages, sendMessage, markRead,
         setTypingState, react, deleteMessage, editMessage, createPoll, votePoll,
-        upsertChat, onPostEvent, onStatusEvent, onCommunityEvent, onColleagueEvent,
+        upsertChat, onPostEvent, onStatusEvent, onCommunityEvent, onColleagueEvent, onChatRequestEvent,
         // exposed for lightweight local patches (e.g. optimistic star/timer state)
         setMessages,
         // Calls

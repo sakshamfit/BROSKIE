@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Animated, Easing } from 'react-native';
+import Svg, { Defs, Pattern, Path, Rect } from 'react-native-svg';
 import { useFonts } from 'expo-font';
 import {
   BricolageGrotesque_600SemiBold,
@@ -53,6 +54,49 @@ function PhoneFrame({ children }) {
   );
 }
 
+/**
+ * A faint, slowly drifting 24px drafting grid over every screen. The pattern
+ * is intentionally subtle and pointer-events are disabled, so the app keeps
+ * full contrast and touch performance while the paper feels gently alive.
+ */
+function LivingGrid() {
+  const { theme } = useTheme();
+  const drift = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(drift, {
+        toValue: 1, duration: 16000, easing: Easing.linear, useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [drift]);
+
+  const offset = drift.interpolate({ inputRange: [0, 1], outputRange: [0, 24] });
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.gridOverlay,
+        {
+          opacity: theme.dark ? 0.16 : 0.2,
+          transform: [{ translateX: offset }, { translateY: offset }],
+        },
+      ]}
+    >
+      <Svg width="100%" height="100%">
+        <Defs>
+          <Pattern id="app-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <Path d="M 24 0 L 0 0 0 24" fill="none" stroke={theme.graphiteLine} strokeWidth="1" />
+          </Pattern>
+        </Defs>
+        <Rect width="100%" height="100%" fill="url(#app-grid)" />
+      </Svg>
+    </Animated.View>
+  );
+}
+
 function Root() {
   const { theme, mode } = useTheme();
 
@@ -90,7 +134,10 @@ function Root() {
           Vercel (the /_vercel/insights/script.js request just 404s quietly). */}
       {Platform.OS === 'web' && <Analytics />}
       <PhoneFrame>
-        <Navigation />
+        <View style={styles.appCanvas}>
+          <Navigation />
+          <LivingGrid />
+        </View>
       </PhoneFrame>
       <CallOverlay />
     </>
@@ -139,4 +186,9 @@ export default function App() {
 const styles = StyleSheet.create({
   webRoot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   fullBleed: { flex: 1, width: '100%', height: '100%' },
+  appCanvas: { flex: 1, width: '100%', height: '100%' },
+  gridOverlay: {
+    position: 'absolute', top: -24, right: -24, bottom: -24, left: -24,
+    zIndex: 9999,
+  },
 });

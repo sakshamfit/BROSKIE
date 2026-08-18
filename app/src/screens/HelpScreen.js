@@ -26,6 +26,7 @@ const TOPICS = [
     summary: '1:1 and group messaging, photos, voice notes, reactions',
     body: [
       { h: 'Starting a conversation', p: 'Tap the pencil (bottom-right FAB) on the Chats tab, then pick a person to message directly, or tap the group icon in the top-right to start a group with multiple people.' },
+      { h: 'Message requests', p: 'A first message from someone outside your accepted contacts appears under REQUESTS at the top-right of Chats instead of entering your main inbox. Preview it, then Accept & chat, Delete, or Block the sender.' },
       { h: 'Sending things', p: 'Type a message and hit send, or use the camera/photo icon to attach an image. Hold the mic button to record a voice note — release to send, or slide away to cancel.' },
       { h: 'Replies & reactions', p: 'Swipe or long-press a message to reply to it, react with an emoji, or delete your own message. Long-press a chat in the list to archive or unarchive it.' },
       { h: 'Read receipts & typing', p: 'A single check means sent, two greyed checks mean delivered, and two highlighted checks mean read. You\u2019ll see "typing…" live while the other person is composing a reply. Turn off read receipts in Settings \u2192 Privacy if you\u2019d rather not send or see them.' },

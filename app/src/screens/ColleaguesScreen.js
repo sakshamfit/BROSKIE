@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, Pressable, StyleSheet, TextInput, ScrollView,
-  ActivityIndicator, RefreshControl, Platform,
+  ActivityIndicator, RefreshControl, Platform, Animated,
 } from 'react-native';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
@@ -38,6 +38,7 @@ export default function ColleaguesScreen({ onOpenChat }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const scrollY = useRef(new Animated.Value(0)).current;
   const s = makeStyles(theme);
 
   const load = useCallback(async ({ quiet = false } = {}) => {
@@ -129,18 +130,28 @@ export default function ColleaguesScreen({ onOpenChat }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <ScrollView
+      <Animated.ScrollView
         contentContainerStyle={[s.content, isTablet && s.contentWide]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.ink} />}
         keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
       >
-        <View style={s.hero}>
+        <Animated.View
+          style={[
+            s.hero,
+            {
+              opacity: scrollY.interpolate({ inputRange: [0, 120], outputRange: [1, 0.82], extrapolate: 'clamp' }),
+              transform: [{ translateY: scrollY.interpolate({ inputRange: [0, 160], outputRange: [0, 14], extrapolate: 'clamp' }) }],
+            },
+          ]}
+        >
           <Text style={s.title}>Find Colleagues</Text>
           <View style={[s.brush, { backgroundColor: theme.ink }]} />
           <Text style={[type.bodyLg, { color: theme.subtext, marginTop: 14, maxWidth: 620 }]}>
             Discover people from your college, institution, organization or workplace — then send a connection request.
           </Text>
-        </View>
+        </Animated.View>
 
         <InkField style={s.search} focused={!!query}>
           <Icon name="search" size={19} color={theme.muted} />
@@ -340,7 +351,7 @@ export default function ColleaguesScreen({ onOpenChat }) {
           <Icon name="add-circle-outline" size={19} color={theme.ink} />
           <Text style={[type.labelSm, { color: theme.ink }]}>REGISTER OR ADD ANOTHER PLACE</Text>
         </Pressable>
-      </ScrollView>
+      </Animated.ScrollView>
 
       <AffiliationPicker
         visible={pickerOpen}

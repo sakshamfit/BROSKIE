@@ -1,15 +1,16 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Platform, Modal,
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
+import MessageRequestsPanel from '../components/MessageRequestsPanel';
 import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import {
-  Avatar, Ticks, EmptyState, formatChatTime, SketchDivider, InkIconButton, Rule, PaperCard, MotionIn,
+  Avatar, Ticks, EmptyState, CountBead, formatChatTime, SketchDivider, InkIconButton, Rule, PaperCard, MotionIn,
 } from '../components/common';
 import { type, inkBox, marker, stroke } from '../theme';
 import { api } from '../api';
@@ -18,7 +19,7 @@ import { api } from '../api';
 const TILTS = [-0.5, 0.8, -0.3, 0.6, -0.7, 0.4];
 
 export default function ChatListScreen({ navigation }) {
-  const { chats, refreshChats, typing, markRead } = useChat();
+  const { chats, refreshChats, typing, markRead, onChatRequestEvent } = useChat();
   const { user } = useAuth();
   const { theme } = useTheme();
   const [query, setQuery] = useState('');
@@ -27,13 +28,30 @@ export default function ChatListScreen({ navigation }) {
   const [showArchived, setShowArchived] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [sheetChat, setSheetChat] = useState(null); // long-press action sheet
+  const [requests, setRequests] = useState([]);
+  const [requestsOpen, setRequestsOpen] = useState(false);
 
   const s = makeStyles(theme);
 
+  const loadRequests = useCallback(async () => {
+    try {
+      const result = await api.chatRequests();
+      setRequests(result.requests || []);
+    } catch {
+      // Keep Chats usable even if an older backend is still redeploying.
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRequests();
+    if (!onChatRequestEvent) return undefined;
+    return onChatRequestEvent(() => loadRequests());
+  }, [loadRequests, onChatRequestEvent]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await refreshChats(); } finally { setRefreshing(false); }
-  }, [refreshChats]);
+    try { await Promise.all([refreshChats(), loadRequests()]); } finally { setRefreshing(false); }
+  }, [refreshChats, loadRequests]);
 
   const runSearch = useCallback(async (q) => {
     setQuery(q);
@@ -80,7 +98,7 @@ export default function ChatListScreen({ navigation }) {
     }
 
     return (
-      <>
+      <MotionIn delay={Math.min(index, 8) * 28} distance={10}>
         <Pressable
           onPress={() => navigation.navigate('Conversation', { chatId: item.id })}
           onLongPress={() => setSheetChat(item)}
@@ -111,6 +129,9 @@ export default function ChatListScreen({ navigation }) {
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginRight: 10 }}>
                 {item.pinned && <Icon name="pin" size={13} color={theme.ink} />}
                 <EmojiText style={s.name} numberOfLines={1}>{item.name}</EmojiText>
+                {item.requestStatus === 'pending' && item.requestDirection === 'outgoing' && (
+                  <Text style={[type.labelXs, s.requestSent]}>REQUEST SENT</Text>
+                )}
               </View>
               <Text style={[s.time, hasUnread && { color: theme.ink }]}>
                 {formatChatTime(lm?.createdAt || item.updatedAt)}
@@ -145,8 +166,7 @@ export default function ChatListScreen({ navigation }) {
             </View>
           </View>
         </Pressable>
-
-      </>
+      </MotionIn>
     );
   };
 
@@ -156,8 +176,14 @@ export default function ChatListScreen({ navigation }) {
       <View style={[s.header, { borderBottomWidth: stroke.ink, borderBottomColor: theme.ink }]}>
         <InkIconButton name="ellipsis-vertical" onPress={() => navigation.navigate('Settings')} size={38} iconSize={18} />
         <Text style={s.wordmark}>+one</Text>
-        <Pressable onPress={() => navigation.navigate('Settings')}>
-          <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={38} />
+        <Pressable
+          onPress={() => setRequestsOpen(true)}
+          hitSlop={6}
+          style={({ pressed }) => [s.requestsButton, inkBox(theme, requests.length ? 'ink' : 'thin'), pressed && marker(theme, 1)]}
+        >
+          <Icon name="mail-unread-outline" size={17} color={theme.ink} />
+          <Text style={[type.labelXs, { color: theme.ink }]}>REQUESTS</Text>
+          {requests.length > 0 && <CountBead label={requests.length > 9 ? '9+' : String(requests.length)} small />}
         </Pressable>
       </View>
 
@@ -252,6 +278,14 @@ export default function ChatListScreen({ navigation }) {
         <Icon name="create-outline" size={21} color={theme.onPrimary} />
       </Pressable>
 
+      <MessageRequestsPanel
+        visible={requestsOpen}
+        onClose={() => setRequestsOpen(false)}
+        requests={requests}
+        navigation={navigation}
+        onChanged={(chatId) => setRequests((prev) => prev.filter((item) => item.chatId !== chatId))}
+      />
+
       {/* long-press action sheet */}
       <Modal visible={!!sheetChat} transparent animationType="fade" onRequestClose={() => setSheetChat(null)}>
         <Pressable style={[s.overlay, { backgroundColor: theme.overlay }]} onPress={() => setSheetChat(null)}>
@@ -342,6 +376,10 @@ const makeStyles = (t) => StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14,
   },
   wordmark: { ...type.headlineMd, color: t.text, fontStyle: 'italic', letterSpacing: -0.5 },
+  requestsButton: {
+    minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 8, paddingVertical: 7, backgroundColor: t.card,
+  },
 
   listContent: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 120 },
 
@@ -375,6 +413,7 @@ const makeStyles = (t) => StyleSheet.create({
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 },
   name: { ...type.headlineSm, color: t.text, flexShrink: 1 },
   time: { ...type.labelXs, color: t.muted },
+  requestSent: { color: t.ink, backgroundColor: t.highlighterSoft, paddingHorizontal: 5, paddingVertical: 2 },
   rowBottom: { flexDirection: 'row', alignItems: 'center' },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 },
   preview: { ...type.bodyMd, color: t.subtext, flex: 1 },

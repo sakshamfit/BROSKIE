@@ -75,6 +75,22 @@ CREATE TABLE IF NOT EXISTS chats (
   updated_at  INTEGER NOT NULL
 );
 
+/* Incoming direct messages from people outside accepted contacts live here
+   until the receiver accepts, deletes, or blocks the request. Existing direct
+   chats have no row and remain accepted for backward compatibility. */
+CREATE TABLE IF NOT EXISTS chat_requests (
+  chat_id      TEXT PRIMARY KEY,
+  sender_id    TEXT NOT NULL,
+  receiver_id  TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'pending', -- pending | accepted
+  created_at   INTEGER NOT NULL,
+  responded_at INTEGER,
+  FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+  FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_chat_requests_receiver ON chat_requests(receiver_id, status, created_at);
+
 CREATE TABLE IF NOT EXISTS chat_members (
   chat_id   TEXT NOT NULL,
   user_id   TEXT NOT NULL,

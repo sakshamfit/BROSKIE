@@ -109,6 +109,9 @@ export const api = {
   unblockUser: (userId) => request(`/api/blocked/${userId}`, { method: 'DELETE' }),
 
   chats: () => request('/api/chats'),
+  chatRequests: () => request('/api/chat-requests'),
+  respondChatRequest: (chatId, action) =>
+    request(`/api/chat-requests/${chatId}/respond`, { method: 'POST', body: { action } }),
   directChat: (userId) => request('/api/chats/direct', { method: 'POST', body: { userId } }),
   groupChat: (payload) => request('/api/chats/group', { method: 'POST', body: payload }),
   updateChat: (chatId, payload) => request(`/api/chats/${chatId}`, { method: 'PATCH', body: payload }),
