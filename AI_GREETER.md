@@ -25,9 +25,9 @@ git push origin main
 
 The GLB animation is the source of truth. The renderer does not map bones, apply a base pose, retarget tracks, or generate procedural gestures.
 
-The current Avaturn file contains one 16.2-second clip named `Action.004`. Web and native both select that sole clip, play it through `THREE.AnimationMixer`, loop it continuously, and update the mixer on every rendered frame. Speech runs independently and never changes skeleton transforms.
+The current Avaturn file contains one 44.77-second clip named `Animation`. Web and native both select that sole clip, play it through `THREE.AnimationMixer`, loop it continuously, and update the mixer on every rendered frame. Speech runs independently and never changes skeleton transforms.
 
-If a future GLB contains multiple clips, the renderer prefers `Action.004` when present and otherwise plays the first exported clip. Prepare the desired default animation order inside the GLB before replacing the asset.
+If a future GLB contains multiple clips, the renderer prefers `Action.004` when present for backward compatibility and otherwise plays the first exported clip. Prepare the desired default animation order inside the GLB before replacing the asset.
 
 ## Export recommendations
 
@@ -44,7 +44,7 @@ If a future GLB contains multiple clips, the renderer prefers `Action.004` when 
 - Greets by time of day and first name.
 - Announces unread messages, message requests, colleague requests, and community requests.
 - Automatically speaks exactly once with a preferred feminine English voice.
-- Renders the character as a close-up foreground layer with no enclosing model card; compact briefing text stays behind and to the side.
+- Renders the character as the centred hero in a dedicated full-screen stage, with safe-area-aware greeting text above and a compact translucent speech surface in front near the bottom.
 - Splits the spoken briefing into greeting, weather, notifications and finale segments.
 - Plays the original exported GLB animation continuously and independently from speech.
 - Closes itself after the final spoken line; there is no replay/speaker control.

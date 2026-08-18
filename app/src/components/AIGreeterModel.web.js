@@ -46,7 +46,7 @@ function Character({ horizontalOffset }) {
   useFrame((_, delta) => mixer.update(delta));
 
   return (
-    <group position={[horizontalOffset, -0.4, 0]}>
+    <group position={[horizontalOffset, -0.15, 0]}>
       <group scale={normalized.scale} position={normalized.position}>
         <primitive object={scene} />
       </group>
@@ -57,7 +57,7 @@ function Character({ horizontalOffset }) {
 export default function AIGreeterModel({ horizontalOffset = 0, style }) {
   return (
     <View style={[{ flex: 1, minHeight: 260 }, style]}>
-      <Canvas camera={{ position: [0, 0.2, 2.9], fov: 33 }} gl={{ alpha: true, antialias: true }}>
+      <Canvas camera={{ position: [0, 0.12, 5.8], fov: 33 }} gl={{ alpha: true, antialias: true }}>
         <ambientLight intensity={2.1} />
         <directionalLight position={[3, 4, 5]} intensity={2.5} />
         <directionalLight position={[-3, 1, 2]} intensity={0.8} />

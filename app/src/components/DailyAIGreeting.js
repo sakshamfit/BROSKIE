@@ -1,19 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, Modal, ScrollView, Platform,
+  View, Text, Pressable, StyleSheet, Modal, Platform, Animated, Easing,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, RadialGradient, Stop, Rect, Ellipse } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import { setAudioModeAsync } from 'expo-audio';
 import Icon from '../icons/Icon';
+import Emoji from '../icons/Emoji';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { api } from '../api';
 import AIGreeterModel from './AIGreeterModel';
-import { Avatar, PaperCard, Rule, TapeChip } from './common';
-import { type, inkBox, marker, stroke } from '../theme';
+import { Avatar } from './common';
+import { type } from '../theme';
 
 const EMPTY_SUMMARY = {
   unreadMessages: 0, unreadChats: 0, messageRequests: 0,
@@ -43,6 +46,56 @@ function notificationSentence(summary) {
   if (!parts.length) return "You're all caught up. There are no new notifications.";
   if (parts.length === 1) return `You have ${parts[0]}.`;
   return `You have ${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}.`;
+}
+
+function GreeterBackdrop() {
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Svg width="100%" height="100%">
+        <Defs>
+          <RadialGradient id="companion-glow" cx="50%" cy="42%" rx="58%" ry="48%">
+            <Stop offset="0%" stopColor="#5f5f5b" stopOpacity="0.36" />
+            <Stop offset="44%" stopColor="#2a2a29" stopOpacity="0.24" />
+            <Stop offset="100%" stopColor="#101010" stopOpacity="0" />
+          </RadialGradient>
+          <RadialGradient id="ground-glow" cx="50%" cy="50%" rx="50%" ry="50%">
+            <Stop offset="0%" stopColor="#000000" stopOpacity="0.48" />
+            <Stop offset="100%" stopColor="#000000" stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill="#131313" />
+        <Rect width="100%" height="100%" fill="url(#companion-glow)" />
+        <Ellipse cx="50%" cy="86%" rx="24%" ry="3.8%" fill="url(#ground-glow)" />
+      </Svg>
+    </View>
+  );
+}
+
+function SpeakingIndicator({ visible }) {
+  const dots = useRef([new Animated.Value(0.28), new Animated.Value(0.28), new Animated.Value(0.28)]).current;
+  useEffect(() => {
+    if (!visible) {
+      dots.forEach((dot) => dot.setValue(0.28));
+      return undefined;
+    }
+    const loops = dots.map((dot, index) => Animated.loop(Animated.sequence([
+      Animated.delay(index * 130),
+      Animated.timing(dot, { toValue: 1, duration: 280, easing: Easing.out(Easing.quad), useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(dot, { toValue: 0.28, duration: 360, easing: Easing.inOut(Easing.quad), useNativeDriver: Platform.OS !== 'web' }),
+      Animated.delay((2 - index) * 130),
+    ])));
+    loops.forEach((loop) => loop.start());
+    return () => loops.forEach((loop) => loop.stop());
+  }, [dots, visible]);
+  if (!visible) return null;
+  return (
+    <View style={styles.speakingRow}>
+      <View style={styles.dotRow}>
+        {dots.map((opacity, index) => <Animated.View key={index} style={[styles.speakingDot, { opacity }]} />)}
+      </View>
+      <Text style={styles.speakingLabel}>AI IS SPEAKING</Text>
+    </View>
+  );
 }
 
 async function preferredFemaleVoice() {
@@ -80,7 +133,8 @@ class ModelBoundary extends React.Component {
 export default function DailyAIGreeting() {
   const { user } = useAuth();
   const { theme } = useTheme();
-  const { isTablet } = useResponsive();
+  const { width, height, isTablet } = useResponsive();
+  const insets = useSafeAreaInsets();
   const [visible, setVisible] = useState(false);
   const [weather, setWeather] = useState(null);
   const [weatherState, setWeatherState] = useState('loading');
@@ -89,10 +143,10 @@ export default function DailyAIGreeting() {
   // loading and cancel its own scheduled utterance on the next render.
   const [loading, setLoading] = useState(true);
   const [talking, setTalking] = useState(false);
+  const [spokenLine, setSpokenLine] = useState('Preparing your daily signal…');
   const started = useRef(false);
   const sequenceId = useRef(0);
   const timers = useRef(new Set());
-  const s = makeStyles(theme);
 
   const now = new Date();
   const period = periodFor(now.getHours());
@@ -104,6 +158,7 @@ export default function DailyAIGreeting() {
     let active = true;
     const key = `+one.ai-greeting.${user.id}.${dayKey}`;
     started.current = false;
+    setSpokenLine('Preparing your daily signal…');
     AsyncStorage.getItem(key).then((seen) => {
       if (!active || seen) return;
       // Mark immediately so reconnects/re-renders cannot stack the same daily modal.
@@ -216,6 +271,7 @@ export default function DailyAIGreeting() {
       }
 
       const segment = speechSegments[index];
+      setSpokenLine(segment);
       setTalking(true);
       let finished = false;
       let safetyTimer;
@@ -280,128 +336,123 @@ export default function DailyAIGreeting() {
     };
   }, [visible, loading, speechSegments]);
 
-  const cards = useMemo(() => [
-    { icon: 'chatbubbles-outline', value: summary.unreadMessages, label: 'UNREAD MESSAGES' },
-    { icon: 'mail-unread-outline', value: summary.messageRequests, label: 'MESSAGE REQUESTS' },
-    { icon: 'person-add-outline', value: summary.colleagueRequests, label: 'COLLEAGUE REQUESTS' },
-    { icon: 'people-outline', value: summary.communityRequests, label: 'COMMUNITY REQUESTS' },
-  ], [summary]);
-
   if (!user || !visible) return null;
+
+  const stageTop = Math.max(insets.top + 112, height * 0.15);
+  const stageBottom = Math.max(insets.bottom + 78, height * 0.09);
+  const compactWeather = weather
+    ? `${Math.round(weather.temperature)}°C · ${weather.condition}`
+    : loading ? 'Reading local weather…' : 'Weather unavailable';
+  const signalLabel = summary.total
+    ? `${summary.total} new signal${summary.total === 1 ? '' : 's'}`
+    : 'All caught up';
 
   return (
     <Modal visible animationType="fade" onRequestClose={close}>
-      <View style={[s.root, { backgroundColor: theme.bg }]}>
-        {/* Character owns the full canvas. The briefing floats over the page;
-            there is deliberately no card/bracket around the model. */}
-        <View style={s.fullModel}>
+      <View style={styles.root}>
+        <GreeterBackdrop />
+
+        {/* Original GLB animation stays isolated in its own stage. */}
+        <View style={[styles.characterLayer, { top: stageTop, bottom: stageBottom }]}>
           <ModelBoundary theme={theme}>
-            <AIGreeterModel
-              horizontalOffset={isTablet ? -0.28 : 0}
-              style={s.model}
-            />
+            <AIGreeterModel horizontalOffset={0} style={styles.model} />
           </ModelBoundary>
         </View>
 
-        <View style={s.topBar}>
-          <View style={{ flex: 1 }}>
-            <TapeChip label={`${period.toUpperCase()} PROTOCOL`} tone="accent" />
-            <Text style={[type.labelXs, { color: theme.muted, marginTop: 7 }]}>+ONE DAILY SIGNAL · {dayKey}</Text>
-          </View>
-          <Pressable accessibilityLabel="Skip greeting" onPress={close} hitSlop={7} style={({ pressed }) => [s.iconButton, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}>
-            <Icon name="close" size={19} color={theme.ink} />
+        {/* Foreground greeting layer — always above, never across face/arms. */}
+        <View style={[styles.headerLayer, { paddingTop: Math.max(insets.top, 14) }]}>
+          <Text style={styles.brand}>+ONE</Text>
+          <Pressable accessibilityLabel="Skip greeting" onPress={close} hitSlop={8} style={[styles.closeButton, { top: Math.max(insets.top, 14) }]}>
+            <Icon name="close" size={19} color="#f4f0ef" />
           </Pressable>
-        </View>
-
-        <View style={s.modelStatus}>
-          <View style={[s.liveDot, { backgroundColor: talking ? theme.highlighter : theme.graphiteLine, borderColor: theme.ink }]} />
-          <Text style={[type.labelXs, { color: theme.muted }]}>ORIGINAL ANIMATION · LIVE</Text>
-        </View>
-
-        <ScrollView contentContainerStyle={[s.content, isTablet && s.contentWide]}>
-          <View style={[s.briefing, isTablet && s.briefingWide]}>
-            <Text style={[type.headlineMd, { color: theme.text, opacity: 0.84 }]}>{period}, {firstName}.</Text>
-            <View style={[s.underline, { backgroundColor: theme.ink }]} />
-            <Text style={[type.bodyMd, { color: theme.text, marginTop: 13, opacity: 0.76 }]}>{weatherSentence}</Text>
-            <Text style={[type.bodySm, { color: theme.subtext, marginTop: 9, opacity: 0.76 }]}>{notices}</Text>
-
-            <View style={s.weatherRow}>
-              <View style={[s.weatherBadge, inkBox(theme, 'thin')]}>
-                <Icon name={weather ? 'sunny-outline' : 'compass-outline'} size={22} color={theme.ink} />
-                <View>
-                  <Text style={[type.labelXs, { color: theme.muted }]}>OUTSIDE</Text>
-                  <Text style={[type.bodyStrong, { color: theme.text, marginTop: 2 }]}>
-                    {loading ? 'Reading the sky…' : weather ? `${Math.round(weather.temperature)}°C · ${weather.condition}` : 'Weather unavailable'}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <Rule style={{ marginVertical: 18 }} />
-            <Text style={[type.labelXs, { color: theme.muted, marginBottom: 10 }]}>YOUR SIGNALS</Text>
-            <View style={s.signalGrid}>
-              {cards.map((card) => (
-                <PaperCard
-                  key={card.label}
-                  style={[s.signalCard, { backgroundColor: theme.dark ? 'rgba(28,27,27,0.58)' : 'rgba(253,248,248,0.62)' }]}
-                  weight="pencil"
-                >
-                  <Icon name={card.icon} size={17} color={theme.ink} />
-                  <Text style={[type.bodyStrong, { color: theme.text, marginTop: 6 }]}>{card.value}</Text>
-                  <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]}>{card.label}</Text>
-                </PaperCard>
-              ))}
-            </View>
-
-            <View style={s.finalCard}>
-              <Icon name="sparkles-outline" size={22} color={theme.ink} />
-              <View style={{ flex: 1 }}>
-                <Text style={[type.bodyStrong, { color: theme.text }]}>Let’s find the +ones.</Text>
-                <Text style={[type.labelXs, { color: theme.subtext, marginTop: 3 }]}>OPENING YOUR NETWORK AFTER THIS LINE</Text>
-              </View>
-            </View>
+          <Text style={[styles.greeting, isTablet && styles.greetingWide]}>{period},</Text>
+          <View style={styles.nameRow}>
+            <Text style={[styles.name, isTablet && styles.nameWide]}>{firstName}</Text>
+            <Emoji char="👋" size={isTablet ? 25 : 21} />
           </View>
-        </ScrollView>
+        </View>
+
+        {/* Compact glass-style speech surface near the bottom. */}
+        <View style={[styles.speechLayer, { paddingBottom: Math.max(insets.bottom + 14, 20) }]}>
+          <View style={[styles.speechCard, { width: Math.min(width - 28, 580) }]}>
+            <Text style={styles.speechText}>{spokenLine}</Text>
+            <View style={styles.metaRow}>
+              <View style={styles.metaItem}>
+                <Icon name={weather ? 'sunny-outline' : 'compass-outline'} size={14} color="#c8c6c5" />
+                <Text style={styles.metaText}>{compactWeather}</Text>
+              </View>
+              <View style={styles.metaDivider} />
+              <View style={styles.metaItem}>
+                <Icon name="notifications-outline" size={14} color="#c8c6c5" />
+                <Text style={styles.metaText}>{signalLabel}</Text>
+              </View>
+            </View>
+            <SpeakingIndicator visible={talking} />
+          </View>
+        </View>
       </View>
     </Modal>
   );
 }
 
-const makeStyles = (t) => StyleSheet.create({
-  root: { flex: 1, overflow: 'hidden' },
-  fullModel: {
-    position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
-    zIndex: 2, pointerEvents: 'none',
+const styles = StyleSheet.create({
+  root: { flex: 1, overflow: 'hidden', backgroundColor: '#131313' },
+  characterLayer: {
+    position: 'absolute', left: 0, right: 0, zIndex: 1,
+    pointerEvents: 'none',
   },
   model: { width: '100%', height: '100%' },
-  topBar: {
-    zIndex: 4, flexDirection: 'row', alignItems: 'center', gap: 9,
-    paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14,
-    borderBottomWidth: stroke.ink, borderBottomColor: t.ink,
-    backgroundColor: t.bg,
+  headerLayer: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+    alignItems: 'center', paddingHorizontal: 24,
   },
-  iconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  modelStatus: {
-    position: 'absolute', zIndex: 3, left: 22, top: 92,
-    flexDirection: 'row', alignItems: 'center', gap: 7,
+  brand: {
+    ...type.labelSm, color: '#a8a5a4', letterSpacing: 3.2,
+    marginTop: 4,
   },
-  liveDot: { width: 10, height: 10, borderRadius: 99, borderWidth: 1 },
-  content: { zIndex: 1, flexGrow: 1, paddingHorizontal: 14, paddingTop: 315, paddingBottom: 28 },
-  contentWide: { paddingTop: 96, paddingHorizontal: '4%' },
-  briefing: {
-    padding: 14, minWidth: 0, opacity: 0.9,
+  closeButton: {
+    position: 'absolute', right: 18, top: 14,
+    width: 38, height: 38, borderRadius: 19,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(244,240,239,0.08)',
+    borderWidth: 1, borderColor: 'rgba(244,240,239,0.16)',
   },
-  briefingWide: {
-    width: '41%', alignSelf: 'flex-end', padding: 18,
+  greeting: {
+    ...type.headlineMd, color: '#f4f0ef', fontSize: 24,
+    lineHeight: 28, marginTop: 17,
   },
-  underline: { height: 3, width: 165, maxWidth: '70%', marginTop: 6, borderRadius: 5, transform: [{ rotate: '-1deg' }], opacity: 0.7 },
-  weatherRow: { flexDirection: 'row', marginTop: 14 },
-  weatherBadge: { flexDirection: 'row', alignItems: 'center', gap: 9, padding: 9, backgroundColor: 'transparent' },
-  signalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  signalCard: { width: '48%', padding: 9, opacity: 0.76 },
-  finalCard: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 14, marginTop: 7, opacity: 0.78 },
-});
-
-const styles = StyleSheet.create({
+  greetingWide: { fontSize: 28, lineHeight: 32 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 1 },
+  name: {
+    ...type.headlineLg, color: '#ffffff', fontSize: 31,
+    lineHeight: 35, letterSpacing: -0.7,
+  },
+  nameWide: { fontSize: 38, lineHeight: 42 },
+  speechLayer: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
+    alignItems: 'center', paddingHorizontal: 14,
+  },
+  speechCard: {
+    borderRadius: 18, paddingHorizontal: 18, paddingVertical: 15,
+    backgroundColor: 'rgba(31,31,30,0.88)',
+    borderWidth: 1, borderColor: 'rgba(244,240,239,0.15)',
+    shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 }, elevation: 7,
+  },
+  speechText: {
+    ...type.bodyMd, color: '#f4f0ef', fontSize: 15,
+    lineHeight: 21, textAlign: 'center',
+  },
+  metaRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    flexWrap: 'wrap', gap: 9, marginTop: 10,
+  },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  metaText: { ...type.labelXs, color: '#a8a5a4', fontSize: 9 },
+  metaDivider: { width: 1, height: 13, backgroundColor: 'rgba(244,240,239,0.16)' },
+  speakingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 11 },
+  dotRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  speakingDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#f4f0ef' },
+  speakingLabel: { ...type.labelXs, color: '#c8c6c5', letterSpacing: 1.1 },
   modelFallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });
