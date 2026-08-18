@@ -177,7 +177,7 @@ Existing direct chats remain accepted for backward compatibility.
 
 ## 7. Theme and UI status
 
-The public app name is **+one**, version **1.1.0**. The supplied black-and-white
+The public app name is **+one**, version **1.2.0**. The supplied black-and-white
 brush logo is used for the Android/iOS launcher icon, adaptive and monochrome
 Android icons, native splash, browser favicon, PWA icons, and Median assets.
 The Android package, iOS bundle identifier, Expo project ID, session keys,
@@ -194,6 +194,10 @@ The app supports the following appearance choices:
 **Kinetic Ink** is a high-contrast dark manga-tech theme with cyan action accents and red notification/critical accents.
 
 The chat list and conversation interface use a manga/paper visual style, including hand-inked card outlines, tape-style date labels, unread markers, and a paper-panel composer. Signed-in screens use an organic pencil-fibre paper grain with faint graphite smudges—no digital grid—while login/signup retain their original dark manga halftone and speed lines.
+
+### Daily AI greeting
+
+Version 1.2 adds a once-per-day animated and spoken greeting after authentication. It uses foreground device location only to request current conditions from Open-Meteo and combines that with server-provided unread/message-request/colleague/community counts. The replaceable model is `app/assets/ai-greeter.glb`; animation and export requirements are documented in `AI_GREETER.md`. This version requires a fresh native build because it adds Expo Location, Speech, and GL modules.
 
 ---
 
@@ -289,7 +293,7 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 ### High priority
 
 - [ ] Confirm Supabase Storage is active in Railway logs.
-- [ ] Build/distribute the new +one 1.1.0 Android APK (launcher name/icon changes require a fresh binary).
+- [ ] Build/distribute the new +one 1.2.0 Android APK (AI location, speech and GL modules require a fresh binary).
 - [ ] Test registration, login, logout, profile photo add/remove, and real-time messages on a second physical device.
 - [ ] Verify data remains after a Railway redeploy.
 

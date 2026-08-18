@@ -38,6 +38,7 @@ import Navigation from './src/Navigation';
 import { Loading } from './src/components/common';
 import OrientationManager from './src/components/OrientationManager';
 import CallOverlay from './src/components/CallOverlay';
+import DailyAIGreeting from './src/components/DailyAIGreeting';
 import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 
 // Changed whenever a web release needs to retire stale PWA/browser caches.
@@ -145,6 +146,7 @@ function Root() {
           {user && <PaperGrain />}
         </View>
       </PhoneFrame>
+      <DailyAIGreeting />
       <CallOverlay />
     </>
   );

@@ -73,6 +73,7 @@ export const api = {
   login: (payload) => request('/api/auth/login', { method: 'POST', body: payload }),
   usernameAvailable: (username) => request(`/api/auth/username-available?username=${encodeURIComponent(username)}`),
   me: () => request('/api/me'),
+  greetingSummary: () => request('/api/greeting-summary'),
   updateMe: (payload) => request('/api/me', { method: 'PATCH', body: payload }),
   updateSettings: (payload) => request('/api/me/settings', { method: 'PATCH', body: payload }),
   changePassword: (payload) => request('/api/me/password', { method: 'POST', body: payload }),

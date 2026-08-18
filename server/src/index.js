@@ -543,6 +543,36 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({ user: accountUser(u) });
 });
 
+/** Compact daily briefing used by the animated AI greeting. */
+app.get('/api/greeting-summary', requireAuth, (req, res) => {
+  const chats = userChats(req.userId);
+  const unreadMessages = chats.reduce((sum, chat) => sum + (chat.unread || 0), 0);
+  const unreadChats = chats.filter((chat) => (chat.unread || 0) > 0).length;
+  const messageRequests = db.prepare(
+    `SELECT COUNT(*) c FROM chat_requests cr
+     WHERE cr.receiver_id = ? AND cr.status = 'pending'
+       AND EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = cr.chat_id)`
+  ).get(req.userId).c;
+  const colleagueRequests = db.prepare(
+    "SELECT COUNT(*) c FROM colleague_requests WHERE receiver_id = ? AND status = 'pending'"
+  ).get(req.userId).c;
+  const communityRequests = db.prepare(
+    `SELECT COUNT(*) c FROM community_requests r
+     JOIN community_members me ON me.community_id = r.community_id
+     WHERE me.user_id = ? AND me.role = 'admin'`
+  ).get(req.userId).c;
+  res.json({
+    summary: {
+      unreadMessages,
+      unreadChats,
+      messageRequests,
+      colleagueRequests,
+      communityRequests,
+      total: unreadMessages + messageRequests + colleagueRequests + communityRequests,
+    },
+  });
+});
+
 app.patch('/api/me/settings', requireAuth, (req, res) => {
   const u = getUser(req.userId);
   const current = getSettings(u);

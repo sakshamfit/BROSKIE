@@ -2,14 +2,14 @@
   "expo": {
     "name": "+one",
     "slug": "tomodachi",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ai.arena.tomodachi",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "+one uses the microphone to record voice messages.",
         "NSPhotoLibraryUsageDescription": "+one needs photo access so you can share images in chats.",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "ai.arena.tomodachi",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png",
@@ -47,6 +47,12 @@
     },
     "plugins": [
       "expo-audio",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "+one uses your location once a day to include local weather in the AI greeting."
+        }
+      ],
       [
         "expo-image-picker",
         {
