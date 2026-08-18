@@ -21,19 +21,13 @@ git commit -m "Replace AI greeter character"
 git push origin main
 ```
 
-## Animation clip names
+## Animation playback
 
-The character controller searches animation names case-insensitively:
+The GLB animation is the source of truth. The renderer does not map bones, apply a base pose, retarget tracks, or generate procedural gestures.
 
-| Behaviour | Recognised words in animation clip name |
-|---|---|
-| Idle | `idle`, `breath`, `loop` |
-| Greeting wave | `wave`, `greet`, `hello` |
-| Speaking | `talk`, `speak`, `voice`, `mouth` |
+The current Avaturn file contains one 16.2-second clip named `Action.004`. Web and native both select that sole clip, play it through `THREE.AnimationMixer`, loop it continuously, and update the mixer on every rendered frame. Speech runs independently and never changes skeleton transforms.
 
-Examples: `Idle`, `Wave_Hand`, and `Talking` work automatically. If clips use different names, rename them in Blender before export or add their keywords to `AIGreeterModel.web.js` and `AIGreeterModel.native.js`.
-
-The latest uploaded Avaturn file contains one 16.2-second generic clip named `Action.004`. Because that name does not identify greeting, weather, notification or talking semantics, +one deliberately drives the Head, Spine, Arm, ForeArm and Hand bones procedurally for those phases instead of leaving the model in its T-pose. Bone discovery normalizes Avaturn, Mixamo and Blender variants such as `mixamorig:LeftArm`, `Left_Arm`, `upperarm_l`, `forearm_r` and `hand_l`, while retaining every matched bone's original bind quaternion. True mouth movement or facial emotion additionally requires facial morph targets/blendshapes in the exported GLB; the current file contains none.
+If a future GLB contains multiple clips, the renderer prefers `Action.004` when present and otherwise plays the first exported clip. Prepare the desired default animation order inside the GLB before replacing the asset.
 
 ## Export recommendations
 
@@ -51,10 +45,10 @@ The latest uploaded Avaturn file contains one 16.2-second generic clip named `Ac
 - Announces unread messages, message requests, colleague requests, and community requests.
 - Automatically speaks exactly once with a preferred feminine English voice.
 - Renders the character as a close-up foreground layer with no enclosing model card; compact briefing text stays behind and to the side.
-- Splits the briefing into greeting, weather, notifications and finale segments.
-- Synchronises skeleton gestures to those segments: wave, present the weather, count notifications and open-arm finale.
+- Splits the spoken briefing into greeting, weather, notifications and finale segments.
+- Plays the original exported GLB animation continuously and independently from speech.
 - Closes itself after the final spoken line; there is no replay/speaker control.
-- Plays matching named GLB clips when real multi-frame clips exist; otherwise it procedurally drives Avaturn-compatible Head, Spine, Arm, ForeArm and Hand bones.
+- Never rewrites the bind pose or manually rotates skeleton bones.
 - If the replacement model cannot load, the greeting remains usable and shows a safe 2D placeholder.
 
 Because version 1.2 adds native location, speech, and GL support, build a fresh APK once after pulling this feature. Later GLB-only changes can be published through the normal preview update channel.

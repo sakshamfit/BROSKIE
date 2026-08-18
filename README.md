@@ -140,9 +140,9 @@ its members, and send connection requests. Accepted colleagues become contacts a
 open a direct chat immediately. Requests and newly joined members update in real time.
 
 **Daily AI greeting** — once per day after sign-in, a GLB character automatically speaks
-with a preferred feminine voice and performs skeleton gestures matched to greeting,
-weather, notification and finale segments. It uses the user's first name, real
-location-based Open-Meteo weather, temperature and request counts, then closes itself
+with a preferred feminine voice while its original embedded animation plays continuously
+through Three.js without bone manipulation or retargeting. It uses the user's first name,
+real location-based Open-Meteo weather, temperature and request counts, then closes itself
 after “Let’s find the +ones.” See `AI_GREETER.md` for model/animation details.
 
 **Status / stories** — post coloured text statuses, 24-hour auto-expiry, viewed/unviewed

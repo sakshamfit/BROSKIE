@@ -89,7 +89,6 @@ export default function DailyAIGreeting() {
   // loading and cancel its own scheduled utterance on the next render.
   const [loading, setLoading] = useState(true);
   const [talking, setTalking] = useState(false);
-  const [gesture, setGesture] = useState('wave');
   const started = useRef(false);
   const sequenceId = useRef(0);
   const timers = useRef(new Set());
@@ -105,7 +104,6 @@ export default function DailyAIGreeting() {
     let active = true;
     const key = `+one.ai-greeting.${user.id}.${dayKey}`;
     started.current = false;
-    setGesture('wave');
     AsyncStorage.getItem(key).then((seen) => {
       if (!active || seen) return;
       // Mark immediately so reconnects/re-renders cannot stack the same daily modal.
@@ -168,10 +166,10 @@ export default function DailyAIGreeting() {
       : 'I could not read the local weather right now.';
   const notices = notificationSentence(summary);
   const speechSegments = useMemo(() => [
-    { text: `${period}, ${firstName}.`, gesture: 'wave' },
-    { text: weatherSentence, gesture: 'weather' },
-    { text: notices, gesture: 'notify' },
-    { text: "Let's find the plus ones.", gesture: 'final' },
+    `${period}, ${firstName}.`,
+    weatherSentence,
+    notices,
+    "Let's find the plus ones.",
   ], [period, firstName, weatherSentence, notices]);
 
   const schedule = (fn, delay) => {
@@ -189,7 +187,6 @@ export default function DailyAIGreeting() {
     timers.current.clear();
     Speech.stop();
     setTalking(false);
-    setGesture('idle');
     setVisible(false);
   };
 
@@ -214,13 +211,11 @@ export default function DailyAIGreeting() {
       if (run !== sequenceId.current) return;
       if (index >= speechSegments.length) {
         setTalking(false);
-        setGesture('final');
         schedule(close, 850);
         return;
       }
 
       const segment = speechSegments[index];
-      setGesture(segment.gesture);
       setTalking(true);
       let finished = false;
       let safetyTimer;
@@ -240,11 +235,11 @@ export default function DailyAIGreeting() {
       safetyTimer = schedule(() => {
         Speech.stop();
         complete();
-      }, Math.max(2400, segment.text.length * 78));
+      }, Math.max(2400, segment.length * 78));
 
       try {
         if (Platform.OS === 'web' && typeof window !== 'undefined' && window.speechSynthesis) {
-          const utterance = new window.SpeechSynthesisUtterance(segment.text);
+          const utterance = new window.SpeechSynthesisUtterance(segment);
           const browserVoices = window.speechSynthesis.getVoices?.() || [];
           const selected = browserVoices.find((item) => item.voiceURI === voice?.identifier);
           if (selected) utterance.voice = selected;
@@ -256,7 +251,7 @@ export default function DailyAIGreeting() {
           utterance.onerror = complete;
           window.speechSynthesis.speak(utterance);
         } else {
-          Speech.speak(segment.text, {
+          Speech.speak(segment, {
             voice: voice?.identifier,
             language: voice?.language || 'en-IN',
             rate: 0.9,
@@ -302,8 +297,6 @@ export default function DailyAIGreeting() {
         <View style={s.fullModel}>
           <ModelBoundary theme={theme}>
             <AIGreeterModel
-              talking={talking}
-              gesture={gesture}
               horizontalOffset={isTablet ? -0.28 : 0}
               style={s.model}
             />
@@ -322,7 +315,7 @@ export default function DailyAIGreeting() {
 
         <View style={s.modelStatus}>
           <View style={[s.liveDot, { backgroundColor: talking ? theme.highlighter : theme.graphiteLine, borderColor: theme.ink }]} />
-          <Text style={[type.labelXs, { color: theme.muted }]}>{gesture.toUpperCase()}</Text>
+          <Text style={[type.labelXs, { color: theme.muted }]}>ORIGINAL ANIMATION · LIVE</Text>
         </View>
 
         <ScrollView contentContainerStyle={[s.content, isTablet && s.contentWide]}>

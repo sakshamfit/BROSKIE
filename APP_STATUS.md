@@ -197,7 +197,7 @@ The chat list and conversation interface use a manga/paper visual style, includi
 
 ### Daily AI greeting
 
-Version 1.2 adds a once-per-day animated and spoken greeting after authentication. It uses foreground device location only to request current conditions from Open-Meteo and combines that with server-provided unread/message-request/colleague/community counts. A preferred feminine voice speaks the briefing once, procedural or embedded skeleton gestures follow each sentence, and the overlay closes automatically after the finale. The replaceable model is `app/assets/ai-greeter.glb`; animation and export requirements are documented in `AI_GREETER.md`. This version requires a fresh native build because it adds Expo Location, Speech, and GL modules.
+Version 1.2 adds a once-per-day animated and spoken greeting after authentication. It uses foreground device location only to request current conditions from Open-Meteo and combines that with server-provided unread/message-request/colleague/community counts. A preferred feminine voice speaks the briefing once while the original animation embedded in `app/assets/ai-greeter.glb` loops independently through Three.js; the app does not retarget or modify the model skeleton. The overlay closes automatically after the finale. Animation and export requirements are documented in `AI_GREETER.md`. This version requires a fresh native build because it adds Expo Location, Speech, and GL modules.
 
 ---
 
