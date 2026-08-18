@@ -1,8 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, StyleSheet, Platform, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import Svg, { Circle, Defs, Pattern, Path, Rect } from 'react-native-svg';
 import { useFonts } from 'expo-font';
 import {
@@ -31,7 +31,7 @@ import { HankenGrotesk_400Regular } from '@expo-google-fonts/hanken-grotesk';
 import { Caveat_600SemiBold, Caveat_700Bold } from '@expo-google-fonts/caveat';
 import { Analytics } from '@vercel/analytics/react';
 
-import { AuthProvider } from './src/store/AuthContext';
+import { AuthProvider, useAuth } from './src/store/AuthContext';
 import { ChatProvider } from './src/store/ChatContext';
 import { ThemeProvider, useTheme } from './src/store/ThemeContext';
 import Navigation from './src/Navigation';
@@ -41,7 +41,7 @@ import CallOverlay from './src/components/CallOverlay';
 import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 
 // Changed whenever a web release needs to retire stale PWA/browser caches.
-const WEB_BUILD = '2026-08-18-chat-open-v3';
+const WEB_BUILD = '2026-08-18-paper-grain-v4';
 
 /** On web, expand to full browser — no phone frame.
  *  We still wrap in a flex View because React Navigation's container needs
@@ -58,54 +58,36 @@ function PhoneFrame({ children }) {
 }
 
 /**
- * A slowly drifting dotted drafting matrix over every screen. Fine points
- * and sparse registration crosses replace the previous boxed graph lines,
- * keeping the paper tactile without drawing through the interface.
+ * Organic paper grain for the signed-in app only. Irregular graphite fibres,
+ * pores and faint edge smudges feel like pencil on warm stock without a
+ * digital grid. Auth keeps its original manga halftone/speed-line backdrop.
  */
-function LivingGrid() {
+function PaperGrain() {
   const { theme } = useTheme();
-  const drift = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(drift, {
-        toValue: 1, duration: 16000, easing: Easing.linear, useNativeDriver: Platform.OS !== 'web',
-      })
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [drift]);
-
-  const offset = drift.interpolate({ inputRange: [0, 1], outputRange: [0, 24] });
   return (
-    <Animated.View
-      style={[
-        styles.gridOverlay,
-        {
-          pointerEvents: 'none',
-          opacity: theme.dark ? 0.34 : 0.3,
-          transform: [{ translateX: offset }, { translateY: offset }],
-        },
-      ]}
-    >
+    <View style={[styles.paperOverlay, { pointerEvents: 'none', opacity: theme.dark ? 0.16 : 0.1 }]}>
       <Svg width="100%" height="100%">
         <Defs>
-          <Pattern id="app-dot-matrix" width="24" height="24" patternUnits="userSpaceOnUse">
-            <Circle cx="2" cy="2" r="0.9" fill={theme.graphiteLine} />
-          </Pattern>
-          <Pattern id="app-register-marks" width="96" height="96" patternUnits="userSpaceOnUse">
-            <Path d="M48 43 L48 53 M43 48 L53 48" fill="none" stroke={theme.graphite} strokeWidth="0.75" />
+          <Pattern id="paper-fibres" width="260" height="214" patternUnits="userSpaceOnUse">
+            <Path d="M11 19 l14 -1 M54 12 l6 1 M96 37 l19 -2 M166 21 l9 1 M221 44 l13 -1 M31 91 l8 -2 M79 68 l15 1 M136 112 l18 -1 M198 84 l7 2 M238 126 l11 -2 M47 173 l17 -1 M112 195 l9 -2 M181 164 l13 1 M229 201 l8 -1" fill="none" stroke={theme.graphiteLine} strokeWidth="0.65" strokeLinecap="round" />
+            <Path d="M23 52 l5 -1 M72 139 l9 -1 M149 55 l6 1 M205 151 l10 -1 M249 70 l4 1 M15 204 l7 -1" fill="none" stroke={theme.graphite} strokeWidth="0.42" strokeLinecap="round" />
+            <Circle cx="38" cy="31" r="0.6" fill={theme.graphite} />
+            <Circle cx="87" cy="102" r="0.48" fill={theme.graphiteLine} />
+            <Circle cx="157" cy="78" r="0.55" fill={theme.graphite} />
+            <Circle cx="216" cy="183" r="0.45" fill={theme.graphiteLine} />
+            <Circle cx="129" cy="151" r="0.5" fill={theme.graphite} />
           </Pattern>
         </Defs>
-        <Rect width="100%" height="100%" fill="url(#app-dot-matrix)" />
-        <Rect width="100%" height="100%" fill="url(#app-register-marks)" />
+        <Rect width="100%" height="100%" fill="url(#paper-fibres)" />
+        <Path d="M-40 782 C180 765 390 790 610 772 S980 770 1260 785" fill="none" stroke={theme.graphiteLine} strokeWidth="0.8" opacity="0.12" />
       </Svg>
-    </Animated.View>
+    </View>
   );
 }
 
 function Root() {
   const { theme, mode } = useTheme();
+  const { user } = useAuth();
 
   // On web, keep the page shell (html/body/#root backgrounds + the mobile
   // browser-chrome "theme-color") in lockstep with the app theme, so there
@@ -160,7 +142,7 @@ function Root() {
       <PhoneFrame>
         <View style={styles.appCanvas}>
           <Navigation />
-          <LivingGrid />
+          {user && <PaperGrain />}
         </View>
       </PhoneFrame>
       <CallOverlay />
@@ -211,8 +193,8 @@ const styles = StyleSheet.create({
   webRoot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   fullBleed: { flex: 1, width: '100%', height: '100%' },
   appCanvas: { flex: 1, width: '100%', height: '100%' },
-  gridOverlay: {
-    position: 'absolute', top: -24, right: -24, bottom: -24, left: -24,
+  paperOverlay: {
+    position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
     zIndex: 9999,
   },
 });

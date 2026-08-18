@@ -193,7 +193,7 @@ The app supports the following appearance choices:
 
 **Kinetic Ink** is a high-contrast dark manga-tech theme with cyan action accents and red notification/critical accents.
 
-The chat list and conversation interface use a manga/paper visual style, including hand-inked card outlines, tape-style date labels, unread markers, and a paper-panel composer. Every screen has a faint animated drafting-grid overlay, and virtualized chat rows plus the Colleagues hero use restrained entrance/scroll motion.
+The chat list and conversation interface use a manga/paper visual style, including hand-inked card outlines, tape-style date labels, unread markers, and a paper-panel composer. Signed-in screens use an organic pencil-fibre paper grain with faint graphite smudges—no digital grid—while login/signup retain their original dark manga halftone and speed lines.
 
 ---
 

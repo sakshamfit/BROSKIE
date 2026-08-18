@@ -146,8 +146,9 @@ rings, tap-through story viewer with progress bars.
 shadows, no blur, no elevation tints — depth comes from stroke weight (hairline
 graphite → 2px ink → 3px bold) and physical overlap. Underline-only inputs,
 dashed hand-drawn rules, masking-tape chips, X-mark checkboxes, and a
-highlighter-yellow accent used sparingly for focus and active states. A subtle animated
-24px drafting grid now runs across the whole app, with light entrance and scroll motion.
+highlighter-yellow accent used sparingly for focus and active states. Signed-in screens
+carry an irregular pencil-fibre grain and faint graphite smudges on warm paper, while the
+original manga halftone/speed-line background remains exclusive to login and signup.
 Bricolage Grotesque headlines / Karla body / JetBrains Mono labels.
 
 **Icons & emoji — 100% SVG** — every icon is a true vector (`react-native-svg`) rendered
