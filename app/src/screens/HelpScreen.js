@@ -30,7 +30,7 @@ const TOPICS = [
       { h: 'Sending things', p: 'Type a message and hit send, or use the camera/photo icon to attach an image. Tap the mic to begin a real voice recording, tap the checkmark to upload and send it, or tap Cancel to discard it.' },
       { h: 'Replies & reactions', p: 'Swipe or long-press a message to reply to it, react with an emoji, or delete your own message. Long-press a chat in the list to archive or unarchive it.' },
       { h: 'Read receipts & typing', p: 'A single check means sent, two greyed checks mean delivered, and two highlighted checks mean read. You\u2019ll see "typing…" live while the other person is composing a reply. Turn off read receipts in Settings \u2192 Privacy if you\u2019d rather not send or see them.' },
-      { h: 'Muting & archiving', p: 'Open a chat\u2019s info (tap its name/avatar at the top) to mute notifications for just that conversation, or archive it out of your main list without deleting it.' },
+      { h: 'Chat list actions', p: 'Long-press a chat to open the blurred actions panel. You can pin, mute, archive, mark read, or Delete chat. Delete chat clears that history only for you; other members keep it, and a later message restores the thread with only new history.' },
       { h: 'Blocking someone', p: 'From that same chat info screen, tap Block. A blocked contact can\u2019t message you and neither of you will see each other\u2019s Status or Network posts anymore — manage the full list from Settings \u2192 Privacy \u2192 Blocked Contacts.' },
     ],
   },

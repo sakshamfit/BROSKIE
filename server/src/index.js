@@ -381,25 +381,26 @@ function chatSummary(chatId, viewerId) {
   if (!chat) return null;
   const members = db
     .prepare(
-      `SELECT u.*, cm.role, cm.muted, cm.pinned_at FROM chat_members cm
+      `SELECT u.*, cm.role, cm.muted, cm.pinned_at, cm.cleared_at FROM chat_members cm
        JOIN users u ON u.id = cm.user_id WHERE cm.chat_id = ?`
     )
     .all(chatId);
 
   const me = members.find((m) => m.id === viewerId);
   const other = chat.type === 'direct' ? members.find((m) => m.id !== viewerId) : null;
+  const clearedAt = me?.cleared_at || 0;
 
   const last = db
-    .prepare('SELECT * FROM messages WHERE chat_id = ? ORDER BY created_at DESC LIMIT 1')
-    .get(chatId);
+    .prepare('SELECT * FROM messages WHERE chat_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT 1')
+    .get(chatId, clearedAt);
 
   const unread = db
     .prepare(
       `SELECT COUNT(*) c FROM messages m
-       WHERE m.chat_id = ? AND m.sender_id != ?
+       WHERE m.chat_id = ? AND m.sender_id != ? AND m.created_at > ?
          AND NOT EXISTS (SELECT 1 FROM receipts r WHERE r.message_id = m.id AND r.user_id = ? AND r.state='read')`
     )
-    .get(chatId, viewerId, viewerId).c;
+    .get(chatId, viewerId, clearedAt, viewerId).c;
 
   const archived = (chat.archived_by || '').split(',').filter(Boolean).includes(viewerId);
   const otherPresence = other ? presenceFor(other, viewerId) : { isOnline: false, lastSeen: 0 };
@@ -464,6 +465,10 @@ function userChats(userId) {
        LEFT JOIN chat_requests cr ON cr.chat_id = c.id
        WHERE cm.user_id = ?
          AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
+         AND (cm.cleared_at IS NULL OR EXISTS (
+           SELECT 1 FROM messages visible_message
+           WHERE visible_message.chat_id = c.id AND visible_message.created_at > cm.cleared_at
+         ))
        ORDER BY c.updated_at DESC`
     )
     .all(userId, userId);
@@ -1283,6 +1288,30 @@ app.post('/api/chats/group', requireAuth, (req, res) => {
   res.json({ chat: chatSummary(id, req.userId) });
 });
 
+/** Delete a chat for the current user without destroying it for others. */
+app.delete('/api/chats/:id', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  const membership = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?')
+    .get(chat.id, req.userId);
+  if (!membership) return res.status(403).json({ error: 'Not a member of this chat' });
+
+  const clearedAt = now();
+  db.prepare('UPDATE chat_members SET cleared_at = ?, pinned_at = NULL WHERE chat_id = ? AND user_id = ?')
+    .run(clearedAt, chat.id, req.userId);
+  db.prepare(
+    `DELETE FROM starred_messages WHERE user_id = ?
+     AND message_id IN (SELECT id FROM messages WHERE chat_id = ?)`
+  ).run(req.userId, chat.id);
+
+  const archived = new Set((chat.archived_by || '').split(',').filter(Boolean));
+  archived.delete(req.userId);
+  db.prepare('UPDATE chats SET archived_by = ? WHERE id = ?').run([...archived].join(','), chat.id);
+
+  emitToUser(req.userId, 'chat:removed', { chatId: chat.id, clearedAt });
+  res.json({ ok: true, chatId: chat.id, clearedAt });
+});
+
 app.post('/api/chats/:id/archive', requireAuth, (req, res) => {
   const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
   if (!chat) return res.status(404).json({ error: 'Chat not found' });
@@ -1510,8 +1539,8 @@ app.post('/api/messages/forward', requireAuth, (req, res) => {
 /* ------------------------------------------------------------------ */
 
 app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
-  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(req.params.id, req.userId);
-  if (!isMember) return res.status(403).json({ error: 'Not a member of this chat' });
+  const membership = db.prepare('SELECT cleared_at FROM chat_members WHERE chat_id = ? AND user_id = ?').get(req.params.id, req.userId);
+  if (!membership) return res.status(403).json({ error: 'Not a member of this chat' });
   const request = pendingChatRequest(req.params.id);
   if (request && request.receiver_id === req.userId) {
     return res.status(403).json({ error: 'Accept this message request before opening the chat' });
@@ -1519,8 +1548,8 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
 
   const limit = Math.min(Number(req.query.limit) || 100, 300);
   const rows = db
-    .prepare('SELECT * FROM messages WHERE chat_id = ? ORDER BY created_at DESC LIMIT ?')
-    .all(req.params.id, limit)
+    .prepare('SELECT * FROM messages WHERE chat_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT ?')
+    .all(req.params.id, membership.cleared_at || 0, limit)
     .reverse();
   res.json({ messages: rows.map((m) => hydrateMessage(m, req.userId)) });
 });
@@ -1529,10 +1558,12 @@ app.get('/api/search', requireAuth, (req, res) => {
   const q = String(req.query.q || '').trim();
   if (!q) return res.json({ messages: [] });
   const chatId = String(req.query.chatId || '');
+  let clearedAt = 0;
   // In-chat search: restrict to one chat (and verify membership).
   if (chatId) {
-    const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, req.userId);
-    if (!isMember) return res.status(403).json({ error: 'Not a member of this chat' });
+    const membership = db.prepare('SELECT cleared_at FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, req.userId);
+    if (!membership) return res.status(403).json({ error: 'Not a member of this chat' });
+    clearedAt = membership.cleared_at || 0;
     const request = pendingChatRequest(chatId);
     if (request && request.receiver_id === req.userId) {
       return res.status(403).json({ error: 'Accept this message request before searching it' });
@@ -1540,16 +1571,17 @@ app.get('/api/search', requireAuth, (req, res) => {
   }
   const sql = chatId
     ? `SELECT m.* FROM messages m
-       WHERE m.chat_id = ? AND m.deleted = 0 AND m.body LIKE ?
+       WHERE m.chat_id = ? AND m.created_at > ? AND m.deleted = 0 AND m.body LIKE ?
        ORDER BY m.created_at DESC LIMIT 100`
     : `SELECT m.* FROM messages m
        JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
        LEFT JOIN chat_requests cr ON cr.chat_id = m.chat_id
        WHERE m.deleted = 0 AND m.body LIKE ?
+         AND m.created_at > COALESCE(cm.cleared_at, 0)
          AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
        ORDER BY m.created_at DESC LIMIT 50`;
   const rows = chatId
-    ? db.prepare(sql).all(chatId, `%${q}%`)
+    ? db.prepare(sql).all(chatId, clearedAt, `%${q}%`)
     : db.prepare(sql).all(req.userId, `%${q}%`, req.userId);
   res.json({
     messages: rows.map((m) => ({

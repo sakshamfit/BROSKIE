@@ -353,8 +353,11 @@ addColumnIfMissing('users', 'settings', "settings TEXT DEFAULT '{}'");
 // Per-chat default disappearing-message timer (seconds; 0 = off). Applied to
 // new messages unless a per-message override is sent.
 addColumnIfMissing('chats', 'disappear_seconds', 'disappear_seconds INTEGER DEFAULT 0');
-// Per-user pin timestamp on a membership row (pinned chats sort first).
+// Per-user chat-list state lives on membership rows.
 addColumnIfMissing('chat_members', 'pinned_at', 'pinned_at INTEGER');
+// Messages at or before this timestamp are hidden for that user after
+// "Delete chat"; a later incoming/outgoing message makes the chat reappear.
+addColumnIfMissing('chat_members', 'cleared_at', 'cleared_at INTEGER');
 // messages: expires_at (disappearing), edited flag, forwarded provenance,
 // and an optional link to a poll created alongside the message.
 addColumnIfMissing('messages', 'expires_at', 'expires_at INTEGER');

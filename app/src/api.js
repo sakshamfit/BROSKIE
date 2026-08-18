@@ -111,6 +111,7 @@ export const api = {
   unblockUser: (userId) => request(`/api/blocked/${userId}`, { method: 'DELETE' }),
 
   chats: () => request('/api/chats'),
+  deleteChat: (chatId) => request(`/api/chats/${chatId}`, { method: 'DELETE' }),
   chatRequests: () => request('/api/chat-requests'),
   respondChatRequest: (chatId, action) =>
     request(`/api/chat-requests/${chatId}/respond`, { method: 'POST', body: { action } }),

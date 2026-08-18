@@ -47,6 +47,7 @@ If a future GLB contains multiple clips, the renderer prefers `Action.004` when 
 - Renders the character as the centred hero in a dedicated full-screen stage, with safe-area-aware greeting text above and a compact translucent speech surface in front near the bottom.
 - Splits the spoken briefing into greeting, weather, notifications and finale segments.
 - Plays the original exported GLB animation continuously and independently from speech.
+- On native, resolves Metro's bundled asset with `expo-asset`, reads the downloaded GLB bytes with `expo-file-system`, and parses them directly so Android never falls back to the placeholder because of a numeric `require()` URI.
 - Closes itself after the final spoken line; there is no replay/speaker control.
 - Never rewrites the bind pose or manually rotates skeleton bones.
 - If the replacement model cannot load, the greeting remains usable and shows a safe 2D placeholder.

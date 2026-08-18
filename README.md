@@ -105,9 +105,10 @@ One ID deletion with safe cleanup/transfer of shared resources.
 **Messaging** — 1:1 and group chats, optimistic sending, swipe-free reply threading,
 emoji reactions, delete-for-everyone, **edit sent messages**, **forward to one or many
 chats** (with a FORWARDED tag), image sharing with lightbox, voice-note UI with
-waveform, 32-emoji picker, day separators. First messages from people outside accepted
-contacts stay in a WhatsApp-style **Message requests** inbox until accepted, deleted,
-or blocked.
+waveform, 32-emoji picker, day separators, and per-user **Delete chat** that clears
+history only for the person deleting it and restores the thread when a new message arrives.
+First messages from people outside accepted contacts stay in a WhatsApp-style **Message
+requests** inbox until accepted, deleted, or blocked.
 
 **Real-time (Socket.IO)** — instant delivery, typing indicators, online/last-seen
 presence, single ✓ sent → double ✓✓ delivered → blue ✓✓ read, live unread badges,

@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Platform, Modal,
+  View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Platform, Modal, Alert,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import Svg, { Polyline } from 'react-native-svg';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
@@ -14,6 +15,7 @@ import {
 } from '../components/common';
 import { type, inkBox, marker, stroke } from '../theme';
 import { api } from '../api';
+import { confirm } from '../hooks/confirm';
 
 /* each divider leans a slightly different way, like a hand-ruled line */
 const TILTS = [-0.5, 0.8, -0.3, 0.6, -0.7, 0.4];
@@ -28,6 +30,7 @@ export default function ChatListScreen({ navigation }) {
   const [showArchived, setShowArchived] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [sheetChat, setSheetChat] = useState(null); // long-press action sheet
+  const [sheetBusy, setSheetBusy] = useState(false);
   const [requests, setRequests] = useState([]);
   const [requestsOpen, setRequestsOpen] = useState(false);
 
@@ -75,6 +78,23 @@ export default function ChatListScreen({ navigation }) {
   const toggleArchive = async (chat) => { await api.archive(chat.id, !chat.archived); refreshChats(); };
   const togglePin = async (chat) => { await api.pin(chat.id, !chat.pinned); refreshChats(); };
   const toggleMute = async (chat) => { await api.mute(chat.id, !chat.muted); refreshChats(); };
+  const deleteChat = async (chat) => {
+    const ok = await confirm(
+      `Delete ${chat.type === 'group' ? `“${chat.name}”` : `your chat with ${chat.name}`} from your inbox? Its current history will be cleared for you, but not for other members.`,
+      { title: 'Delete chat', confirmLabel: 'Delete chat', destructive: true }
+    );
+    if (!ok) return;
+    setSheetBusy(true);
+    try {
+      await api.deleteChat(chat.id);
+      setSheetChat(null);
+      await refreshChats();
+    } catch (error) {
+      Alert.alert('Could not delete chat', error.message || 'Please try again.');
+    } finally {
+      setSheetBusy(false);
+    }
+  };
 
   const renderChat = ({ item, index }) => {
     const typers = Object.values(typing[item.id] || {});
@@ -287,9 +307,16 @@ export default function ChatListScreen({ navigation }) {
       />
 
       {/* long-press action sheet */}
-      <Modal visible={!!sheetChat} transparent animationType="fade" onRequestClose={() => setSheetChat(null)}>
-        <Pressable style={[s.overlay, { backgroundColor: theme.overlay }]} onPress={() => setSheetChat(null)}>
-          <PaperCard weight="ink" style={s.sheet}>
+      <Modal visible={!!sheetChat} transparent animationType="fade" onRequestClose={() => !sheetBusy && setSheetChat(null)}>
+        <View style={[s.overlay, { backgroundColor: theme.dark ? 'rgba(0,0,0,0.28)' : 'rgba(28,27,27,0.18)' }]}>
+          <BlurView
+            intensity={Platform.OS === 'android' ? 52 : 65}
+            tint={theme.dark ? 'dark' : 'light'}
+            experimentalBlurMethod="dimezisBlurView"
+            style={StyleSheet.absoluteFill}
+          />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => !sheetBusy && setSheetChat(null)} />
+          <PaperCard weight="ink" style={[s.sheet, { backgroundColor: theme.dark ? 'rgba(31,30,30,0.96)' : 'rgba(253,248,248,0.96)' }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6 }}>
               <Avatar
                 uri={sheetChat?.avatar} name={sheetChat?.name}
@@ -329,19 +356,32 @@ export default function ChatListScreen({ navigation }) {
                 onPress={() => { const c = sheetChat; setSheetChat(null); markRead(c.id); }}
               />
             )}
+            <Rule style={{ marginVertical: 5 }} />
+            <SheetRow
+              icon="trash-outline"
+              label={sheetBusy ? 'Deleting…' : 'Delete chat'}
+              danger
+              disabled={sheetBusy}
+              onPress={() => deleteChat(sheetChat)}
+            />
           </PaperCard>
-        </Pressable>
+        </View>
       </Modal>
     </View>
   );
 }
 
-function SheetRow({ icon, label, onPress }) {
+function SheetRow({ icon, label, onPress, danger = false, disabled = false }) {
   const { theme } = useTheme();
+  const color = danger ? theme.danger : theme.ink;
   return (
-    <Pressable style={({ pressed }) => [s2.row, pressed ? marker(theme, 1) : null]} onPress={onPress}>
-      <Icon name={icon} size={18} color={theme.ink} />
-      <Text style={[type.bodyMd, { color: theme.text }]}>{label}</Text>
+    <Pressable
+      style={({ pressed }) => [s2.row, pressed ? marker(theme, 1) : null, disabled && { opacity: 0.45 }]}
+      onPress={onPress}
+      disabled={disabled}
+    >
+      <Icon name={icon} size={18} color={color} />
+      <Text style={[type.bodyMd, { color }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -426,5 +466,5 @@ const makeStyles = (t) => StyleSheet.create({
   resultsWrap: { paddingTop: 16 },
   resultRow: { flexDirection: 'row', gap: 12, alignItems: 'center', paddingVertical: 10 },
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
-  sheet: { width: '100%', maxWidth: 340, padding: 16 },
+  sheet: { position: 'relative', zIndex: 2, width: '100%', maxWidth: 360, padding: 16 },
 });
