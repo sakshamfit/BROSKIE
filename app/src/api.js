@@ -74,6 +74,7 @@ export const api = {
   usernameAvailable: (username) => request(`/api/auth/username-available?username=${encodeURIComponent(username)}`),
   me: () => request('/api/me'),
   greetingSummary: () => request('/api/greeting-summary'),
+  deleteAccount: (password) => request('/api/me', { method: 'DELETE', body: { password } }),
   updateMe: (payload) => request('/api/me', { method: 'PATCH', body: payload }),
   updateSettings: (payload) => request('/api/me/settings', { method: 'PATCH', body: payload }),
   changePassword: (payload) => request('/api/me/password', { method: 'POST', body: payload }),

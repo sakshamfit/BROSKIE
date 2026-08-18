@@ -136,6 +136,7 @@ Existing users with older passwords can still sign in. They must meet the strong
 - Login fields use plain language: **Enter name**, **Username**, and **Password**.
 - Logging out asks for confirmation.
 - Confirming logout clears the active in-memory session immediately, even if browser/device storage fails.
+- Settings includes a permanent **Delete One ID** danger-zone action. The server verifies the current password, deletes personal content/direct chats, cleans relationship records, and safely transfers shared groups, communities and institutions before removing the user.
 
 ---
 
@@ -193,7 +194,7 @@ The app supports the following appearance choices:
 
 **Kinetic Ink** is a high-contrast dark manga-tech theme with cyan action accents and red notification/critical accents.
 
-The chat list and conversation interface use a manga/paper visual style, including hand-inked card outlines, tape-style date labels, unread markers, and a paper-panel composer. Signed-in screens use an organic pencil-fibre paper grain with faint graphite smudges—no digital grid—while login/signup retain their original dark manga halftone and speed lines.
+The chat list and conversation interface use a manga/paper visual style, including hand-inked card outlines, tape-style date labels, unread markers, and a paper-panel composer. Every signed-in screen uses a lightly uneven sketch-graph background with pencil fibres and graphite smudges. Login/signup are explicitly excluded and retain their original dark manga halftone and speed lines.
 
 ### Daily AI greeting
 

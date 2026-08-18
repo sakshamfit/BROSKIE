@@ -99,7 +99,8 @@ web-only for now — see "Notes & limits" below.
 
 **Accounts & profile** — register/login with a unique username + password (phone is
 optional, for display only), bcrypt hashing, JWT sessions persisted via AsyncStorage,
-editable name/username/about, auto-login on relaunch.
+editable name/username/about, auto-login on relaunch, and password-confirmed permanent
+One ID deletion with safe cleanup/transfer of shared resources.
 
 **Messaging** — 1:1 and group chats, optimistic sending, swipe-free reply threading,
 emoji reactions, delete-for-everyone, **edit sent messages**, **forward to one or many
@@ -153,8 +154,9 @@ shadows, no blur, no elevation tints — depth comes from stroke weight (hairlin
 graphite → 2px ink → 3px bold) and physical overlap. Underline-only inputs,
 dashed hand-drawn rules, masking-tape chips, X-mark checkboxes, and a
 highlighter-yellow accent used sparingly for focus and active states. Signed-in screens
-carry an irregular pencil-fibre grain and faint graphite smudges on warm paper, while the
-original manga halftone/speed-line background remains exclusive to login and signup.
+use a lightly uneven hand-sketched graph with pencil fibres and graphite smudges on warm
+paper. Login and signup keep their original manga halftone/speed-line background without
+the graph overlay.
 Bricolage Grotesque headlines / Karla body / JetBrains Mono labels.
 
 **Icons & emoji — 100% SVG** — every icon is a true vector (`react-native-svg`) rendered

@@ -59,16 +59,22 @@ function PhoneFrame({ children }) {
 }
 
 /**
- * Organic paper grain for the signed-in app only. Irregular graphite fibres,
- * pores and faint edge smudges feel like pencil on warm stock without a
- * digital grid. Auth keeps its original manga halftone/speed-line backdrop.
+ * Hand-sketched graph paper for signed-in screens only. Slightly uneven
+ * pencil lines sit under organic fibres and smudges; Auth keeps its original
+ * manga halftone/speed-line backdrop with no graph overlay.
  */
-function PaperGrain() {
+function SketchGraphPaper() {
   const { theme } = useTheme();
   return (
-    <View style={[styles.paperOverlay, { pointerEvents: 'none', opacity: theme.dark ? 0.16 : 0.1 }]}>
+    <View style={[styles.paperOverlay, { pointerEvents: 'none', opacity: theme.dark ? 0.18 : 0.16 }]}>
       <Svg width="100%" height="100%">
         <Defs>
+          <Pattern id="sketch-grid-minor" width="28" height="28" patternUnits="userSpaceOnUse">
+            <Path d="M0 0.7 C7 0.1 19 1.1 28 0.55 M0.65 0 C0.15 8 1.05 20 0.55 28" fill="none" stroke={theme.graphiteLine} strokeWidth="0.55" strokeLinecap="round" />
+          </Pattern>
+          <Pattern id="sketch-grid-major" width="112" height="112" patternUnits="userSpaceOnUse">
+            <Path d="M0 1 C31 0.15 78 1.5 112 0.7 M1 0 C0.15 34 1.45 79 0.65 112" fill="none" stroke={theme.graphite} strokeWidth="0.75" strokeLinecap="round" />
+          </Pattern>
           <Pattern id="paper-fibres" width="260" height="214" patternUnits="userSpaceOnUse">
             <Path d="M11 19 l14 -1 M54 12 l6 1 M96 37 l19 -2 M166 21 l9 1 M221 44 l13 -1 M31 91 l8 -2 M79 68 l15 1 M136 112 l18 -1 M198 84 l7 2 M238 126 l11 -2 M47 173 l17 -1 M112 195 l9 -2 M181 164 l13 1 M229 201 l8 -1" fill="none" stroke={theme.graphiteLine} strokeWidth="0.65" strokeLinecap="round" />
             <Path d="M23 52 l5 -1 M72 139 l9 -1 M149 55 l6 1 M205 151 l10 -1 M249 70 l4 1 M15 204 l7 -1" fill="none" stroke={theme.graphite} strokeWidth="0.42" strokeLinecap="round" />
@@ -79,6 +85,8 @@ function PaperGrain() {
             <Circle cx="129" cy="151" r="0.5" fill={theme.graphite} />
           </Pattern>
         </Defs>
+        <Rect width="100%" height="100%" fill="url(#sketch-grid-minor)" opacity="0.72" />
+        <Rect width="100%" height="100%" fill="url(#sketch-grid-major)" opacity="0.48" />
         <Rect width="100%" height="100%" fill="url(#paper-fibres)" />
         <Path d="M-40 782 C180 765 390 790 610 772 S980 770 1260 785" fill="none" stroke={theme.graphiteLine} strokeWidth="0.8" opacity="0.12" />
       </Svg>
@@ -143,7 +151,7 @@ function Root() {
       <PhoneFrame>
         <View style={styles.appCanvas}>
           <Navigation />
-          {user && <PaperGrain />}
+          {user && <SketchGraphPaper />}
         </View>
       </PhoneFrame>
       <DailyAIGreeting />

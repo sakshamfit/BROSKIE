@@ -463,7 +463,7 @@ function userChats(userId) {
        JOIN chat_members cm ON cm.chat_id = c.id
        LEFT JOIN chat_requests cr ON cr.chat_id = c.id
        WHERE cm.user_id = ?
-         AND NOT (cr.status = 'pending' AND cr.receiver_id = ?)
+         AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
        ORDER BY c.updated_at DESC`
     )
     .all(userId, userId);
@@ -472,6 +472,153 @@ function userChats(userId) {
     .map((r) => chatSummary(r.id, userId))
     .filter(Boolean)
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+}
+
+/**
+ * Permanently remove one account while preserving healthy shared groups,
+ * communities and institutions. Owned shared resources transfer to their
+ * oldest remaining member; empty resources are removed.
+ */
+function deleteAccountData(userId) {
+  const user = getUser(userId);
+  const directChats = db.prepare(
+    `SELECT c.id FROM chats c JOIN chat_members cm ON cm.chat_id = c.id
+     WHERE cm.user_id = ? AND c.type = 'direct'`
+  ).all(userId).map((row) => row.id);
+  const directPeers = [...new Set(directChats.flatMap((chatId) => memberIds(chatId)).filter((id) => id !== userId))];
+  const groupChats = db.prepare(
+    `SELECT c.id, c.created_by FROM chats c JOIN chat_members cm ON cm.chat_id = c.id
+     WHERE cm.user_id = ? AND c.type = 'group'`
+  ).all(userId);
+  const ownedPostIds = db.prepare('SELECT id FROM posts WHERE user_id = ?').all(userId).map((row) => row.id);
+
+  const transaction = db.transaction(() => {
+    const survivingGroups = [];
+
+    // Transfer or remove institutions created by this account so the users
+    // table's RESTRICT foreign key can never block intentional deletion.
+    db.prepare('SELECT id FROM affiliations WHERE created_by = ?').all(userId).forEach(({ id }) => {
+      const successor = db.prepare(
+        `SELECT user_id FROM user_affiliations WHERE affiliation_id = ? AND user_id != ?
+         ORDER BY joined_at ASC LIMIT 1`
+      ).get(id, userId);
+      if (successor) db.prepare('UPDATE affiliations SET created_by = ? WHERE id = ?').run(successor.user_id, id);
+      else db.prepare('DELETE FROM affiliations WHERE id = ?').run(id);
+    });
+
+    // Preserve shared communities by handing ownership/admin to a remaining
+    // member. A community with no one left is removed with its group chat.
+    db.prepare(
+      `SELECT c.*, cm.role member_role FROM communities c
+       JOIN community_members cm ON cm.community_id = c.id WHERE cm.user_id = ?`
+    ).all(userId).forEach((community) => {
+      const successor = db.prepare(
+        `SELECT user_id FROM community_members WHERE community_id = ? AND user_id != ?
+         ORDER BY role = 'admin' DESC, joined_at ASC LIMIT 1`
+      ).get(community.id, userId);
+      if (!successor) {
+        db.prepare('DELETE FROM communities WHERE id = ?').run(community.id);
+        if (community.chat_id) db.prepare('DELETE FROM chats WHERE id = ?').run(community.chat_id);
+        return;
+      }
+      const otherAdmin = db.prepare(
+        `SELECT 1 FROM community_members WHERE community_id = ? AND user_id != ? AND role = 'admin' LIMIT 1`
+      ).get(community.id, userId);
+      if (community.created_by === userId) {
+        db.prepare('UPDATE communities SET created_by = ?, updated_at = ? WHERE id = ?')
+          .run(successor.user_id, now(), community.id);
+      }
+      if (community.member_role === 'admin' && !otherAdmin) {
+        db.prepare('UPDATE community_members SET role = ? WHERE community_id = ? AND user_id = ?')
+          .run('admin', community.id, successor.user_id);
+      }
+    });
+
+    // Keep ordinary group chats alive, transfer ownership/admin where needed,
+    // and remove the departing membership. One-person groups are discarded.
+    groupChats.forEach((group) => {
+      const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(group.id);
+      if (!chat) return; // may have been removed with an empty community
+      const successor = db.prepare(
+        `SELECT user_id FROM chat_members WHERE chat_id = ? AND user_id != ?
+         ORDER BY role = 'admin' DESC, joined_at ASC LIMIT 1`
+      ).get(group.id, userId);
+      if (!successor) {
+        db.prepare('DELETE FROM chats WHERE id = ?').run(group.id);
+        return;
+      }
+      const myMembership = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?')
+        .get(group.id, userId);
+      const otherAdmin = db.prepare(
+        `SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id != ? AND role = 'admin' LIMIT 1`
+      ).get(group.id, userId);
+      if (chat.created_by === userId) {
+        db.prepare('UPDATE chats SET created_by = ? WHERE id = ?').run(successor.user_id, group.id);
+      }
+      if (myMembership?.role === 'admin' && !otherAdmin) {
+        db.prepare('UPDATE chat_members SET role = ? WHERE chat_id = ? AND user_id = ?')
+          .run('admin', group.id, successor.user_id);
+      }
+      db.prepare('DELETE FROM chat_members WHERE chat_id = ? AND user_id = ?').run(group.id, userId);
+      survivingGroups.push(group.id);
+    });
+
+    // Direct conversations belong to the account pair and are removed.
+    directChats.forEach((chatId) => db.prepare('DELETE FROM chats WHERE id = ?').run(chatId));
+
+    // Clean non-FK message/user edges before deleting authored group messages.
+    db.prepare('DELETE FROM reactions WHERE user_id = ? OR message_id IN (SELECT id FROM messages WHERE sender_id = ?)')
+      .run(userId, userId);
+    db.prepare('DELETE FROM receipts WHERE user_id = ? OR message_id IN (SELECT id FROM messages WHERE sender_id = ?)')
+      .run(userId, userId);
+    db.prepare('DELETE FROM starred_messages WHERE user_id = ? OR message_id IN (SELECT id FROM messages WHERE sender_id = ?)')
+      .run(userId, userId);
+    db.prepare('DELETE FROM poll_votes WHERE user_id = ? OR poll_id IN (SELECT id FROM polls WHERE created_by = ?)')
+      .run(userId, userId);
+    db.prepare('DELETE FROM polls WHERE created_by = ?').run(userId);
+    db.prepare('DELETE FROM messages WHERE sender_id = ?').run(userId);
+
+    // Clean social edges that do not all have user foreign keys.
+    db.prepare(
+      `DELETE FROM status_views WHERE user_id = ? OR status_id IN (SELECT id FROM statuses WHERE user_id = ?)`
+    ).run(userId, userId);
+    db.prepare(
+      `DELETE FROM status_recipients WHERE user_id = ? OR status_id IN (SELECT id FROM statuses WHERE user_id = ?)`
+    ).run(userId, userId);
+    db.prepare(
+      `DELETE FROM post_likes WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)`
+    ).run(userId, userId);
+    db.prepare(
+      `DELETE FROM post_comments WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)`
+    ).run(userId, userId);
+    db.prepare(
+      `DELETE FROM post_recipients WHERE user_id = ? OR post_id IN (SELECT id FROM posts WHERE user_id = ?)`
+    ).run(userId, userId);
+    db.prepare('DELETE FROM statuses WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM posts WHERE user_id = ?').run(userId);
+
+    // Remove this id from per-chat CSV archive state.
+    db.prepare("SELECT id, archived_by FROM chats WHERE archived_by != ''").all().forEach((chat) => {
+      const next = (chat.archived_by || '').split(',').filter(Boolean).filter((id) => id !== userId).join(',');
+      if (next !== chat.archived_by) db.prepare('UPDATE chats SET archived_by = ? WHERE id = ?').run(next, chat.id);
+    });
+
+    survivingGroups.forEach((chatId) => {
+      if (db.prepare('SELECT 1 FROM chats WHERE id = ?').get(chatId)) {
+        insertSystemMessage(chatId, `${user.name} deleted their One ID`);
+      }
+    });
+
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    return survivingGroups;
+  });
+
+  return {
+    directChats,
+    directPeers,
+    groupChats: transaction(),
+    postIds: ownedPostIds,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -571,6 +718,41 @@ app.get('/api/greeting-summary', requireAuth, (req, res) => {
       total: unreadMessages + messageRequests + colleagueRequests + communityRequests,
     },
   });
+});
+
+/** Permanently delete the authenticated One ID after password confirmation. */
+app.delete('/api/me', requireAuth, (req, res) => {
+  const password = String(req.body?.password || '');
+  if (!password) return res.status(400).json({ error: 'Password is required to delete your One ID' });
+  const user = getUser(req.userId);
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    return res.status(401).json({ error: 'Incorrect password' });
+  }
+
+  try {
+    const result = deleteAccountData(req.userId);
+    result.directPeers.forEach((userId) => result.directChats.forEach((chatId) =>
+      emitToUser(userId, 'chat:removed', { chatId, accountDeleted: true })
+    ));
+    result.groupChats.forEach((chatId) => memberIds(chatId).forEach((userId) =>
+      emitToUser(userId, 'chat:updated', chatSummary(chatId, userId))
+    ));
+    result.postIds.forEach((id) => io.emit('post:deleted', { id }));
+    io.emit('user:deleted', { id: req.userId });
+    emitToUser(req.userId, 'account:deleted', { ok: true });
+    res.json({ ok: true });
+
+    // End every socket session for this account after the HTTP response has
+    // reached the deleting device.
+    setTimeout(() => {
+      const ids = sockets.get(req.userId);
+      ids?.forEach((socketId) => io.sockets.sockets.get(socketId)?.disconnect(true));
+      sockets.delete(req.userId);
+    }, 80);
+  } catch (error) {
+    console.error('[account delete]', error);
+    res.status(500).json({ error: 'Could not delete your One ID' });
+  }
 });
 
 app.patch('/api/me/settings', requireAuth, (req, res) => {
@@ -1364,7 +1546,7 @@ app.get('/api/search', requireAuth, (req, res) => {
        JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
        LEFT JOIN chat_requests cr ON cr.chat_id = m.chat_id
        WHERE m.deleted = 0 AND m.body LIKE ?
-         AND NOT (cr.status = 'pending' AND cr.receiver_id = ?)
+         AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
        ORDER BY m.created_at DESC LIMIT 50`;
   const rows = chatId
     ? db.prepare(sql).all(chatId, `%${q}%`)

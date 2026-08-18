@@ -67,6 +67,7 @@ const TOPICS = [
     body: [
       { h: 'Profile photo & info', p: 'Tap your avatar at the top of Settings to change your photo. Personal Information lets you edit your name, unique @username, about text, and phone number, and add the colleges, organizations, or workplaces used for colleague discovery.' },
       { h: 'Security', p: 'Change your password from Settings \u2192 Security & Privacy \u2192 Change Password. This app currently uses a single long-lived session per login (no multi-device session list yet).' },
+      { h: 'Deleting your One ID', p: 'Settings \u2192 Danger Zone \u2192 Delete One ID permanently removes the account after the current password is verified. Shared groups, communities and institutions transfer safely to remaining members.' },
       { h: 'Notifications', p: 'Settings \u2192 Notifications lets you control, independently: chat messages (and whether previews show the actual text), Status updates, Network posts, and community activity like join requests \u2014 plus a sound on/off switch.' },
       { h: 'Privacy', p: 'Settings \u2192 Privacy controls who can see your last-seen/online dot (Everyone, My contacts, or Nobody), whether you send & see read receipts, and your full list of blocked contacts.' },
       { h: 'Appearance', p: 'Choose Light, Dark, or System (follows your device\u2019s OS theme automatically) \u2014 with a live preview of the exact colors and type scale before you pick.' },
