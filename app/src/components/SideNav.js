@@ -49,6 +49,8 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
       </View>
 
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="New chat"
         onPress={onNewChat}
         hitSlop={4}
         style={({ pressed }) => [
@@ -68,6 +70,8 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
           return (
             <Pressable
               key={item.key}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
               onPress={() => (item.key === 'settings' ? onSettings?.() : onNavigate?.(item.key))}
               hitSlop={4}
               style={({ pressed, hovered }) => [
@@ -98,11 +102,11 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
       </View>
 
       <View style={[s.footer, railOnly && s.footerRail, { borderTopColor: theme.graphiteLine }]}>
-        <Pressable onPress={onHelp} hitSlop={4} style={({ pressed }) => [s.footerRow, railOnly && s.footerRowRail, pressed ? { opacity: 0.6 } : null]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Help" onPress={onHelp} hitSlop={4} style={({ pressed }) => [s.footerRow, railOnly && s.footerRowRail, pressed ? { opacity: 0.6 } : null]}>
           <Icon name="help-circle-outline" size={18} color={theme.graphite} />
           {!railOnly && <Text style={[type.bodyMd, { color: theme.graphite }]}>Help</Text>}
         </Pressable>
-        <Pressable onPress={onLogout} hitSlop={4} style={({ pressed }) => [s.footerRow, railOnly && s.footerRowRail, pressed ? { opacity: 0.6 } : null]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Logout" onPress={onLogout} hitSlop={4} style={({ pressed }) => [s.footerRow, railOnly && s.footerRowRail, pressed ? { opacity: 0.6 } : null]}>
           <Icon name="log-out-outline" size={18} color={theme.graphite} />
           {!railOnly && <Text style={[type.bodyMd, { color: theme.graphite }]}>Logout</Text>}
         </Pressable>

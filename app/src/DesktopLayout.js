@@ -39,7 +39,7 @@ export default function SplitLayout() {
   const { theme } = useTheme();
   const { logout } = useAuth();
   const { chats } = useChat();
-  const { breakpoint, insets, isWeb } = useResponsive();
+  const { insets, isWeb } = useResponsive();
   const [tab, setTab] = useState('chats');
   const [selectedChatId, setSelectedChatId] = useState(null);
   const [overlay, setOverlay] = useState(null); // { name, params }
@@ -48,10 +48,8 @@ export default function SplitLayout() {
   // (status bar / notch / home indicator); web ignores this (insets are 0).
   const s = makeStyles(theme, insets, isWeb);
 
-  // Narrower "expanded" tablets get an icon-only rail to leave more room
-  // for the list + detail panes; "large" (wide desktop / big tablets in
-  // landscape) gets the full labeled sidebar.
-  const railOnly = breakpoint === 'expanded';
+  // Navigation stays icon-only at every desktop/tablet width: the destination
+  // names remain available to screen readers via accessibility labels.
 
   const openOverlay = (name, params) => setOverlay({ name, params });
   const closeOverlay = () => setOverlay(null);
@@ -160,7 +158,7 @@ export default function SplitLayout() {
     <View style={[s.root, { backgroundColor: theme.bg }]}>
       <SideNav
         active={tab}
-        railOnly={railOnly}
+        railOnly={true}
         onNavigate={(key) => { setSettingsSub(null); setTab(key); }}
         onNewChat={() => openOverlay('NewChat')}
         onSettings={() => { setSettingsSub(null); setTab('settings'); }}
@@ -278,8 +276,11 @@ function OverlayPanel({ visible, onClose, width = 480, children }) {
   if (!visible) return null;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={[styles.overlayBackdrop, { backgroundColor: theme.overlay }]} onPress={onClose}>
-        <Pressable
+      <View style={[styles.overlayBackdrop, { backgroundColor: theme.overlay }]}>
+        {/* Do not place a full-screen Pressable behind/around this panel.
+            React Native Web promoted it above descendants and swallowed every
+            contact-row click. Panels close through their own back/close UI. */}
+        <View
           style={[
             styles.overlayPanel,
             inkBox(theme, 'bold'),
@@ -287,8 +288,8 @@ function OverlayPanel({ visible, onClose, width = 480, children }) {
           ]}
         >
           <View style={{ flex: 1 }}>{children}</View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -309,7 +310,7 @@ const makeStyles = (t, insets, isWeb) => StyleSheet.create({
 
 const styles = StyleSheet.create({
   overlayBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  overlayPanel: { maxHeight: '88%', minHeight: 320, overflow: 'hidden' },
+  overlayPanel: { position: 'relative', zIndex: 1, maxHeight: '88%', minHeight: 320, overflow: 'hidden' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   emptyBadge: { width: 84, height: 84, alignItems: 'center', justifyContent: 'center' },
 });

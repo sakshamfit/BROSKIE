@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, Platform } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,7 +10,7 @@ import { useTheme } from './store/ThemeContext';
 import { useChat } from './store/ChatContext';
 import useResponsive from './hooks/useResponsive';
 import { Loading, CountBead } from './components/common';
-import { type, marker, stroke } from './theme';
+import { marker, stroke } from './theme';
 import SplitLayout from './DesktopLayout';
 
 import AuthScreen from './screens/AuthScreen';
@@ -88,6 +88,8 @@ function HomeTabs({ navigation }) {
             return (
               <Pressable
                 key={t.key}
+                accessibilityRole="button"
+                accessibilityLabel={t.label}
                 onPress={() => (t.key === 'settings' ? navigation.navigate('Settings') : setTab(t.key))}
                 hitSlop={6}
                 android_ripple={{ color: theme.ripple, borderless: false, radius: 42 }}
@@ -100,7 +102,7 @@ function HomeTabs({ navigation }) {
                 <View>
                   <Icon
                     name={t.outlineOnly ? t.icon : active ? t.icon : `${t.icon}-outline`}
-                    size={20}
+                    size={23}
                     color={active ? theme.ink : theme.muted}
                   />
                   {!!t.badge && t.badge > 0 && (
@@ -109,14 +111,7 @@ function HomeTabs({ navigation }) {
                     </View>
                   )}
                 </View>
-                <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.72}
-                  style={[type.labelXs, s.tabLabel, { color: active ? theme.ink : theme.muted }]}
-                >
-                  {t.label.toUpperCase()}
-                </Text>
+
               </Pressable>
             );
           })}
@@ -192,14 +187,13 @@ export default function Navigation() {
 
 const makeStyles = (t) => StyleSheet.create({
   tabBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingTop: 10, paddingHorizontal: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
+    paddingTop: 8, paddingHorizontal: 14,
   },
   tabItem: {
-    flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', gap: 5,
-    paddingVertical: 8, marginHorizontal: 2, minHeight: 44, borderRadius: 999,
+    flex: 1, minWidth: 0, maxWidth: 58, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 10, marginHorizontal: 3, minHeight: 46, borderRadius: 999,
   },
-  tabLabel: { maxWidth: '100%', textAlign: 'center', fontSize: 8.5, letterSpacing: 0.15 },
   tabActive: { borderWidth: 1, borderRadius: 999 },
   tabBadge: { position: 'absolute', right: -11, top: -7 },
 });
