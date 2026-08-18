@@ -17,7 +17,7 @@ const BASE_POSE = {
   Head: [0, 0, 0], Spine1: [0, 0, 0], Spine2: [0, 0, 0],
 };
 
-function Character({ talking, gesture }) {
+function Character({ talking, gesture, horizontalOffset }) {
   const root = useRef();
   const waved = useRef(false);
   const { scene, animations = [] } = useLoader(GLTFLoader, MODEL);
@@ -118,8 +118,9 @@ function Character({ talking, gesture }) {
       });
     }
 
-    root.current.position.y = Math.sin(time * 1.45) * 0.038;
-    root.current.rotation.y = Math.sin(time * 0.55) * 0.055;
+    root.current.position.x = horizontalOffset;
+    root.current.position.y = -0.28 + Math.sin(time * 1.45) * 0.032;
+    root.current.rotation.y = Math.sin(time * 0.55) * 0.045;
     const pulse = talking ? 1 + Math.sin(time * 9) * 0.008 : 1;
     root.current.scale.setScalar(pulse);
   });
@@ -133,11 +134,11 @@ function Character({ talking, gesture }) {
   );
 }
 
-export default function AIGreeterModel({ talking = false, gesture = 'idle', style }) {
+export default function AIGreeterModel({ talking = false, gesture = 'idle', horizontalOffset = 0, style }) {
   return (
     <View style={[{ flex: 1, minHeight: 260 }, style]}>
       <Canvas
-        camera={{ position: [0, 0.15, 4.1], fov: 34 }}
+        camera={{ position: [0, 0.18, 3.25], fov: 34 }}
         gl={{ alpha: true, antialias: true }}
         onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
       >
@@ -145,7 +146,7 @@ export default function AIGreeterModel({ talking = false, gesture = 'idle', styl
         <directionalLight position={[3, 4, 5]} intensity={2.5} />
         <directionalLight position={[-3, 1, 2]} intensity={0.8} />
         <Suspense fallback={null}>
-          <Character talking={talking} gesture={gesture} />
+          <Character talking={talking} gesture={gesture} horizontalOffset={horizontalOffset} />
         </Suspense>
       </Canvas>
     </View>

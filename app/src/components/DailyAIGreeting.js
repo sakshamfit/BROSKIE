@@ -297,6 +297,19 @@ export default function DailyAIGreeting() {
   return (
     <Modal visible animationType="fade" onRequestClose={close}>
       <View style={[s.root, { backgroundColor: theme.bg }]}>
+        {/* Character owns the full canvas. The briefing floats over the page;
+            there is deliberately no card/bracket around the model. */}
+        <View style={s.fullModel}>
+          <ModelBoundary theme={theme}>
+            <AIGreeterModel
+              talking={talking}
+              gesture={gesture}
+              horizontalOffset={isTablet ? -0.72 : 0}
+              style={s.model}
+            />
+          </ModelBoundary>
+        </View>
+
         <View style={s.topBar}>
           <View style={{ flex: 1 }}>
             <TapeChip label={`${period.toUpperCase()} PROTOCOL`} tone="accent" />
@@ -307,59 +320,50 @@ export default function DailyAIGreeting() {
           </Pressable>
         </View>
 
+        <View style={s.modelStatus}>
+          <View style={[s.liveDot, { backgroundColor: talking ? theme.highlighter : theme.graphiteLine, borderColor: theme.ink }]} />
+          <Text style={[type.labelXs, { color: theme.muted }]}>{gesture.toUpperCase()}</Text>
+        </View>
+
         <ScrollView contentContainerStyle={[s.content, isTablet && s.contentWide]}>
-          <View style={[s.hero, isTablet && s.heroWide]}>
-            <View style={[s.modelCard, isTablet && s.modelWide, inkBox(theme, 'ink')]}> 
-              <View style={[s.tape, { backgroundColor: theme.cardAlt }]} />
-              <ModelBoundary theme={theme}>
-                <AIGreeterModel talking={talking} gesture={gesture} style={s.model} />
-              </ModelBoundary>
-              <View style={s.modelStatus}>
-                <View style={[s.liveDot, { backgroundColor: talking ? theme.highlighter : theme.graphiteLine, borderColor: theme.ink }]} />
-                <Text style={[type.labelXs, { color: theme.muted }]}>{gesture.toUpperCase()}</Text>
-              </View>
-            </View>
+          <View style={[s.briefing, isTablet && s.briefingWide, { backgroundColor: theme.card }]}>
+            <Text style={[type.headlineLg, { color: theme.text }]}>{period}, {firstName}.</Text>
+            <View style={[s.underline, { backgroundColor: theme.ink }]} />
+            <Text style={[type.bodyLg, { color: theme.text, marginTop: 18 }]}>{weatherSentence}</Text>
+            <Text style={[type.bodyMd, { color: theme.subtext, marginTop: 12 }]}>{notices}</Text>
 
-            <View style={s.briefing}>
-              <Text style={[type.headlineLg, { color: theme.text }]}>{period}, {firstName}.</Text>
-              <View style={[s.underline, { backgroundColor: theme.ink }]} />
-              <Text style={[type.bodyLg, { color: theme.text, marginTop: 18 }]}>{weatherSentence}</Text>
-              <Text style={[type.bodyMd, { color: theme.subtext, marginTop: 12 }]}>{notices}</Text>
-
-              <View style={s.weatherRow}>
-                <View style={[s.weatherBadge, inkBox(theme, 'thin')]}>
-                  <Icon name={weather ? 'sunny-outline' : 'compass-outline'} size={22} color={theme.ink} />
-                  <View>
-                    <Text style={[type.labelXs, { color: theme.muted }]}>OUTSIDE</Text>
-                    <Text style={[type.headlineSm, { color: theme.text, marginTop: 2 }]}>
-                      {loading ? 'Reading the sky…' : weather ? `${Math.round(weather.temperature)}°C · ${weather.condition}` : 'Weather unavailable'}
-                    </Text>
-                  </View>
+            <View style={s.weatherRow}>
+              <View style={[s.weatherBadge, inkBox(theme, 'thin')]}>
+                <Icon name={weather ? 'sunny-outline' : 'compass-outline'} size={22} color={theme.ink} />
+                <View>
+                  <Text style={[type.labelXs, { color: theme.muted }]}>OUTSIDE</Text>
+                  <Text style={[type.headlineSm, { color: theme.text, marginTop: 2 }]}>
+                    {loading ? 'Reading the sky…' : weather ? `${Math.round(weather.temperature)}°C · ${weather.condition}` : 'Weather unavailable'}
+                  </Text>
                 </View>
               </View>
             </View>
-          </View>
 
-          <Rule style={{ marginVertical: 22 }} />
-          <Text style={[type.labelXs, { color: theme.muted, marginBottom: 10 }]}>YOUR SIGNALS</Text>
-          <View style={[s.signalGrid, isTablet && s.signalGridWide]}>
-            {cards.map((card) => (
-              <PaperCard key={card.label} style={[s.signalCard, isTablet && s.signalCardWide]} weight="pencil">
-                <Icon name={card.icon} size={19} color={theme.ink} />
-                <Text style={[type.headlineMd, { color: theme.text, marginTop: 10 }]}>{card.value}</Text>
-                <Text style={[type.labelXs, { color: theme.muted, marginTop: 4 }]}>{card.label}</Text>
-              </PaperCard>
-            ))}
-          </View>
-
-          <Pressable onPress={close} style={({ pressed }) => [s.finalCard, inkBox(theme, 'bold'), pressed && marker(theme, 2)]}>
-            <Icon name="sparkles-outline" size={22} color={theme.ink} />
-            <View style={{ flex: 1 }}>
-              <Text style={[type.headlineSm, { color: theme.text }]}>Let’s find the +ones.</Text>
-              <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>Your network is ready when you are.</Text>
+            <Rule style={{ marginVertical: 18 }} />
+            <Text style={[type.labelXs, { color: theme.muted, marginBottom: 10 }]}>YOUR SIGNALS</Text>
+            <View style={s.signalGrid}>
+              {cards.map((card) => (
+                <PaperCard key={card.label} style={s.signalCard} weight="pencil">
+                  <Icon name={card.icon} size={17} color={theme.ink} />
+                  <Text style={[type.headlineSm, { color: theme.text, marginTop: 7 }]}>{card.value}</Text>
+                  <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]}>{card.label}</Text>
+                </PaperCard>
+              ))}
             </View>
-            <Icon name="arrow-forward" size={20} color={theme.ink} />
-          </Pressable>
+
+            <View style={s.finalCard}>
+              <Icon name="sparkles-outline" size={22} color={theme.ink} />
+              <View style={{ flex: 1 }}>
+                <Text style={[type.headlineSm, { color: theme.text }]}>Let’s find the +ones.</Text>
+                <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>Opening your network after this line.</Text>
+              </View>
+            </View>
+          </View>
         </ScrollView>
       </View>
     </Modal>
@@ -367,32 +371,40 @@ export default function DailyAIGreeting() {
 }
 
 const makeStyles = (t) => StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, overflow: 'hidden' },
+  fullModel: {
+    position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
+    zIndex: 0, pointerEvents: 'none',
+  },
+  model: { width: '100%', height: '100%' },
   topBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14,
+    zIndex: 3, flexDirection: 'row', alignItems: 'center', gap: 9,
+    paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14,
     borderBottomWidth: stroke.ink, borderBottomColor: t.ink,
+    backgroundColor: t.bg,
   },
   iconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 20, paddingBottom: 54 },
-  contentWide: { maxWidth: 980, width: '100%', alignSelf: 'center', paddingTop: 34 },
-  hero: { gap: 22 },
-  heroWide: { flexDirection: 'row', alignItems: 'center' },
-  modelCard: { height: 310, position: 'relative', backgroundColor: t.card, overflow: 'hidden' },
-  modelWide: { width: '44%', height: 390 },
-  model: { width: '100%', height: '100%' },
-  tape: { position: 'absolute', top: -7, left: '42%', width: 56, height: 17, transform: [{ rotate: '-4deg' }], zIndex: 2 },
-  modelStatus: { position: 'absolute', left: 14, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  modelStatus: {
+    position: 'absolute', zIndex: 3, left: 22, top: 92,
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+  },
   liveDot: { width: 10, height: 10, borderRadius: 99, borderWidth: 1 },
-  modelFallback: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  briefing: { flex: 1, minWidth: 0 },
+  content: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 345, paddingBottom: 34 },
+  contentWide: { paddingTop: 80, paddingHorizontal: '4%' },
+  briefing: {
+    padding: 18, minWidth: 0,
+    borderTopWidth: 2, borderTopColor: t.ink,
+  },
+  briefingWide: {
+    width: '47%', alignSelf: 'flex-end', padding: 24,
+    borderLeftWidth: 1, borderLeftColor: t.graphiteLine,
+  },
   underline: { height: 5, width: 230, maxWidth: '80%', marginTop: 7, borderRadius: 5, transform: [{ rotate: '-1deg' }] },
-  weatherRow: { flexDirection: 'row', marginTop: 20 },
-  weatherBadge: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, backgroundColor: t.card },
-  signalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  signalGridWide: { flexWrap: 'nowrap' },
-  signalCard: { width: '48%', padding: 13 },
-  signalCardWide: { width: 'auto', flex: 1, minWidth: 0 },
-  finalCard: { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 16, marginTop: 22, backgroundColor: t.card },
+  weatherRow: { flexDirection: 'row', marginTop: 18 },
+  weatherBadge: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, backgroundColor: t.card },
+  signalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  signalCard: { width: '48%', padding: 11 },
+  finalCard: { flexDirection: 'row', alignItems: 'center', gap: 13, paddingTop: 18, marginTop: 10 },
 });
 
 const styles = StyleSheet.create({
