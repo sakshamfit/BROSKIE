@@ -33,6 +33,8 @@ The character controller searches animation names case-insensitively:
 
 Examples: `Idle`, `Wave_Hand`, and `Talking` work automatically. If clips use different names, rename them in Blender before export or add their keywords to `AIGreeterModel.web.js` and `AIGreeterModel.native.js`.
 
+The currently uploaded Avaturn file contains only a one-frame pose animation, so +one now creates the visible body/head/hand gestures procedurally from its skeleton. True mouth movement or facial emotion additionally requires facial morph targets/blendshapes in the exported GLB; the current file contains none.
+
 ## Export recommendations
 
 - One self-contained binary `.glb` with embedded textures.
@@ -47,9 +49,11 @@ Examples: `Idle`, `Wave_Hand`, and `Talking` work automatically. If clips use di
 - Requests foreground device location and reads current weather from Open-Meteo.
 - Greets by time of day and first name.
 - Announces unread messages, message requests, colleague requests, and community requests.
-- Automatically speaks with `expo-speech`; the speaker button replays it.
-- Plays Wave/Greet on opening, Talk/Speak while speaking, and Idle otherwise.
-- Falls back to gentle bob/turn motion when the GLB has no animation clips.
+- Automatically speaks exactly once with a preferred feminine English voice.
+- Splits the briefing into greeting, weather, notifications and finale segments.
+- Synchronises skeleton gestures to those segments: wave, present the weather, count notifications and open-arm finale.
+- Closes itself after the final spoken line; there is no replay/speaker control.
+- Plays matching named GLB clips when real multi-frame clips exist; otherwise it procedurally drives Avaturn-compatible Head, Spine, Arm, ForeArm and Hand bones.
 - If the replacement model cannot load, the greeting remains usable and shows a safe 2D placeholder.
 
 Because version 1.2 adds native location, speech, and GL support, build a fresh APK once after pulling this feature. Later GLB-only changes can be published through the normal preview update channel.

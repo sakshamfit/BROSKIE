@@ -139,11 +139,11 @@ organization, or workplace to your profile, join an existing registered place, s
 its members, and send connection requests. Accepted colleagues become contacts and can
 open a direct chat immediately. Requests and newly joined members update in real time.
 
-**Daily AI greeting** — once per day after sign-in, an animated GLB character waves and
-speaks a time-aware briefing with the user's first name, real device-local Open-Meteo
-weather, temperature, unread messages and request counts, ending with “Let’s find the
-+ones.” Replace `app/assets/ai-greeter.glb` with a custom animated character; see
-`AI_GREETER.md` for the exact clip naming and replacement workflow.
+**Daily AI greeting** — once per day after sign-in, a GLB character automatically speaks
+with a preferred feminine voice and performs skeleton gestures matched to greeting,
+weather, notification and finale segments. It uses the user's first name, real
+location-based Open-Meteo weather, temperature and request counts, then closes itself
+after “Let’s find the +ones.” See `AI_GREETER.md` for model/animation details.
 
 **Status / stories** — post coloured text statuses, 24-hour auto-expiry, viewed/unviewed
 rings, tap-through story viewer with progress bars.

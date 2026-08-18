@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, Modal, ScrollView,
+  View, Text, Pressable, StyleSheet, Modal, ScrollView, Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
@@ -44,6 +44,22 @@ function notificationSentence(summary) {
   return `You have ${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}.`;
 }
 
+async function preferredFemaleVoice() {
+  try {
+    const voices = await Speech.getAvailableVoicesAsync();
+    const english = voices.filter((voice) => /^en([-_]|$)/i.test(voice.language || ''));
+    const femaleHint = /(female|samantha|victoria|karen|moira|tessa|ava|aria|jenny|zira|susan|sangeeta|veena|en[-_]in[-_]x[-_](ena|end|ene)|en[-_]us[-_]x[-_](sfg|tpf|iob))/i;
+    const maleHint = /(male|daniel|fred|rishi|en[-_]in[-_]x[-_]enc)/i;
+    return english.find((voice) => femaleHint.test(`${voice.name || ''} ${voice.identifier || ''}`))
+      || english.find((voice) => !maleHint.test(`${voice.name || ''} ${voice.identifier || ''}`))
+      || english[0]
+      || voices[0]
+      || null;
+  } catch {
+    return null;
+  }
+}
+
 class ModelBoundary extends React.Component {
   constructor(props) { super(props); this.state = { failed: false }; }
   static getDerivedStateFromError() { return { failed: true }; }
@@ -68,9 +84,14 @@ export default function DailyAIGreeting() {
   const [weather, setWeather] = useState(null);
   const [weatherState, setWeatherState] = useState('loading');
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
-  const [loading, setLoading] = useState(false);
+  // Start true so the auto-speech effect cannot race ahead of weather/summary
+  // loading and cancel its own scheduled utterance on the next render.
+  const [loading, setLoading] = useState(true);
   const [talking, setTalking] = useState(false);
-  const spoken = useRef(false);
+  const [gesture, setGesture] = useState('wave');
+  const started = useRef(false);
+  const sequenceId = useRef(0);
+  const timers = useRef(new Set());
   const s = makeStyles(theme);
 
   const now = new Date();
@@ -82,14 +103,27 @@ export default function DailyAIGreeting() {
     if (!user?.id) return undefined;
     let active = true;
     const key = `+one.ai-greeting.${user.id}.${dayKey}`;
-    spoken.current = false;
+    started.current = false;
+    setGesture('wave');
     AsyncStorage.getItem(key).then((seen) => {
       if (!active || seen) return;
       // Mark immediately so reconnects/re-renders cannot stack the same daily modal.
       AsyncStorage.setItem(key, 'shown').catch(() => {});
+      setLoading(true);
       setVisible(true);
-    }).catch(() => { if (active) setVisible(true); });
-    return () => { active = false; Speech.stop(); };
+    }).catch(() => {
+      if (active) {
+        setLoading(true);
+        setVisible(true);
+      }
+    });
+    return () => {
+      active = false;
+      sequenceId.current += 1;
+      timers.current.forEach(clearTimeout);
+      timers.current.clear();
+      Speech.stop();
+    };
   }, [user?.id, dayKey]);
 
   useEffect(() => {
@@ -132,33 +166,116 @@ export default function DailyAIGreeting() {
       ? 'Location is off, so I will skip the weather for today.'
       : 'I could not read the local weather right now.';
   const notices = notificationSentence(summary);
-  const speechText = `${period}, ${firstName}. ${weatherSentence} ${notices} Let's find the plus ones.`;
+  const speechSegments = useMemo(() => [
+    { text: `${period}, ${firstName}.`, gesture: 'wave' },
+    { text: weatherSentence, gesture: 'weather' },
+    { text: notices, gesture: 'notify' },
+    { text: "Let's find the plus ones.", gesture: 'final' },
+  ], [period, firstName, weatherSentence, notices]);
 
-  const speak = () => {
+  const schedule = (fn, delay) => {
+    const timer = setTimeout(() => {
+      timers.current.delete(timer);
+      fn();
+    }, delay);
+    timers.current.add(timer);
+    return timer;
+  };
+
+  const close = () => {
+    sequenceId.current += 1;
+    timers.current.forEach(clearTimeout);
+    timers.current.clear();
     Speech.stop();
-    setTalking(true);
-    Speech.speak(speechText, {
-      language: 'en-US', rate: 0.92, pitch: 1.02,
-      onStart: () => setTalking(true),
-      onDone: () => setTalking(false),
-      onStopped: () => setTalking(false),
-      onError: () => setTalking(false),
-    });
+    setTalking(false);
+    setGesture('idle');
+    setVisible(false);
+  };
+
+  const speakAutomatically = async () => {
+    const run = ++sequenceId.current;
+    Speech.stop();
+    const voice = await Promise.race([
+      preferredFemaleVoice(),
+      new Promise((resolve) => setTimeout(() => resolve(null), 900)),
+    ]);
+    if (run !== sequenceId.current) return;
+    let index = 0;
+
+    const next = () => {
+      if (run !== sequenceId.current) return;
+      if (index >= speechSegments.length) {
+        setTalking(false);
+        setGesture('final');
+        schedule(close, 850);
+        return;
+      }
+
+      const segment = speechSegments[index];
+      setGesture(segment.gesture);
+      setTalking(true);
+      let finished = false;
+      let safetyTimer;
+      const complete = () => {
+        if (finished || run !== sequenceId.current) return;
+        finished = true;
+        if (safetyTimer) {
+          clearTimeout(safetyTimer);
+          timers.current.delete(safetyTimer);
+        }
+        index += 1;
+        schedule(next, 130);
+      };
+
+      // Some web/device voices fail to fire onDone. Continue and close the
+      // greeting automatically instead of leaving a frozen overlay.
+      safetyTimer = schedule(() => {
+        Speech.stop();
+        complete();
+      }, Math.max(2400, segment.text.length * 78));
+
+      try {
+        if (Platform.OS === 'web' && typeof window !== 'undefined' && window.speechSynthesis) {
+          const utterance = new window.SpeechSynthesisUtterance(segment.text);
+          const browserVoices = window.speechSynthesis.getVoices?.() || [];
+          const selected = browserVoices.find((item) => item.voiceURI === voice?.identifier);
+          if (selected) utterance.voice = selected;
+          utterance.lang = voice?.language || 'en-IN';
+          utterance.rate = 0.9;
+          utterance.pitch = 1.12;
+          utterance.onstart = () => { if (run === sequenceId.current) setTalking(true); };
+          utterance.onend = complete;
+          utterance.onerror = complete;
+          window.speechSynthesis.speak(utterance);
+        } else {
+          Speech.speak(segment.text, {
+            voice: voice?.identifier,
+            language: voice?.language || 'en-IN',
+            rate: 0.9,
+            pitch: 1.16,
+            onStart: () => { if (run === sequenceId.current) setTalking(true); },
+            onDone: complete,
+            onStopped: complete,
+            onError: complete,
+          });
+        }
+      } catch {
+        complete();
+      }
+    };
+
+    next();
   };
 
   useEffect(() => {
-    if (!visible || loading || spoken.current) return;
-    spoken.current = true;
-    // A short beat lets the wave animation begin before the voice.
-    const timer = setTimeout(speak, 520);
-    return () => clearTimeout(timer);
-  }, [visible, loading, speechText]);
-
-  const close = () => {
-    Speech.stop();
-    setTalking(false);
-    setVisible(false);
-  };
+    if (!visible || loading || started.current) return undefined;
+    started.current = true;
+    const timer = schedule(speakAutomatically, 480);
+    return () => {
+      clearTimeout(timer);
+      timers.current.delete(timer);
+    };
+  }, [visible, loading, speechSegments]);
 
   const cards = useMemo(() => [
     { icon: 'chatbubbles-outline', value: summary.unreadMessages, label: 'UNREAD MESSAGES' },
@@ -177,10 +294,7 @@ export default function DailyAIGreeting() {
             <TapeChip label={`${period.toUpperCase()} PROTOCOL`} tone="accent" />
             <Text style={[type.labelXs, { color: theme.muted, marginTop: 7 }]}>+ONE DAILY SIGNAL · {dayKey}</Text>
           </View>
-          <Pressable onPress={speak} hitSlop={7} style={({ pressed }) => [s.iconButton, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}>
-            <Icon name="volume-high-outline" size={19} color={theme.ink} />
-          </Pressable>
-          <Pressable onPress={close} hitSlop={7} style={({ pressed }) => [s.iconButton, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}>
+          <Pressable accessibilityLabel="Skip greeting" onPress={close} hitSlop={7} style={({ pressed }) => [s.iconButton, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}>
             <Icon name="close" size={19} color={theme.ink} />
           </Pressable>
         </View>
@@ -190,11 +304,11 @@ export default function DailyAIGreeting() {
             <View style={[s.modelCard, isTablet && s.modelWide, inkBox(theme, 'ink')]}> 
               <View style={[s.tape, { backgroundColor: theme.cardAlt }]} />
               <ModelBoundary theme={theme}>
-                <AIGreeterModel talking={talking} style={s.model} />
+                <AIGreeterModel talking={talking} gesture={gesture} style={s.model} />
               </ModelBoundary>
               <View style={s.modelStatus}>
                 <View style={[s.liveDot, { backgroundColor: talking ? theme.highlighter : theme.graphiteLine, borderColor: theme.ink }]} />
-                <Text style={[type.labelXs, { color: theme.muted }]}>{talking ? 'SPEAKING' : 'LISTENING'}</Text>
+                <Text style={[type.labelXs, { color: theme.muted }]}>{gesture.toUpperCase()}</Text>
               </View>
             </View>
 
