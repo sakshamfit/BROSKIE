@@ -108,6 +108,25 @@ Only if you want the Vercel CDN. `vercel.json` is already in the repo.
    ```
    then set `CORS_ORIGIN=https://your-app.vercel.app` on Railway.
 
+### Cloudflare Workers static web deployment
+
+`wrangler.jsonc` deploys the Expo web export as Worker static assets and uses
+SPA fallback routing. In **Workers Builds**, keep the repository root at `/`
+and use this deploy command:
+
+```bash
+npx wrangler deploy
+```
+
+Do not point Wrangler directly at the source tree. Its custom build command
+installs `app/`, exports to `app/dist`, and inlines the production Railway API
+URL before uploading those files. You can reproduce the complete build and
+asset detection locally without publishing:
+
+```bash
+npx wrangler deploy --dry-run
+```
+
 ---
 
 ## How the app finds the API

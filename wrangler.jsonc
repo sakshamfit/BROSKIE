@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "broskie",
+  "compatibility_date": "2026-08-18",
+  "build": {
+    "command": "cd app && npm ci && EXPO_PUBLIC_API_URL=https://broskie-h.up.railway.app CI=true npx expo export --platform web --output-dir dist"
+  },
+  "assets": {
+    "directory": "./app/dist",
+    "not_found_handling": "single-page-application"
+  }
+}

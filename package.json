@@ -11,6 +11,8 @@
     "start": "cd server && npm start",
     "dev:server": "cd server && npm run dev",
     "dev:app": "cd app && npx expo start",
+    "build:cloudflare": "cd app && npm ci && EXPO_PUBLIC_API_URL=https://broskie-h.up.railway.app CI=true npx expo export --platform web --output-dir dist",
+    "deploy:cloudflare": "npx wrangler deploy",
     "backup": "cd server && npm run backup"
   },
   "workspaces": [],
