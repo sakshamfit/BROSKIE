@@ -5,6 +5,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
+import { setAudioModeAsync } from 'expo-audio';
 import Icon from '../icons/Icon';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
@@ -195,6 +196,13 @@ export default function DailyAIGreeting() {
   const speakAutomatically = async () => {
     const run = ++sequenceId.current;
     Speech.stop();
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      interruptionMode: 'duckOthers',
+      allowsRecording: false,
+      shouldPlayInBackground: false,
+      shouldRouteThroughEarpiece: false,
+    }).catch(() => {});
     const voice = await Promise.race([
       preferredFemaleVoice(),
       new Promise((resolve) => setTimeout(() => resolve(null), 900)),
