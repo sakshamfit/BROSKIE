@@ -1,21 +1,12 @@
-import React, { Suspense, useEffect, useMemo, useRef } from 'react';
+import React, { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { View } from 'react-native';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { BASE_POSE, applyRigPose, discoverGreeterRig } from './AIGreeterRig';
 
 const MODEL = require('../../assets/ai-greeter.glb');
-
-const BASE_POSE = {
-  LeftShoulder: [0, 0, 0], RightShoulder: [0, 0, 0],
-  // Avaturn upper-arm bones point along local +Y. Local X rotation lowers
-  // them from the exported T-pose into a natural resting position.
-  LeftArm: [1.08, 0, 0], RightArm: [1.08, 0, 0],
-  LeftForeArm: [0, 0, 0], RightForeArm: [0, 0, 0],
-  LeftHand: [0, 0, 0], RightHand: [0, 0, 0],
-  Head: [0, 0, 0], Spine1: [0, 0, 0], Spine2: [0, 0, 0],
-};
 
 function Character({ talking, gesture, horizontalOffset }) {
   const root = useRef();
@@ -29,16 +20,27 @@ function Character({ talking, gesture, horizontalOffset }) {
     const scale = 2.55 / Math.max(size.x || 1, size.y || 1, size.z || 1);
     return { scale, position: [-center.x * scale, -center.y * scale - 0.05, -center.z * scale] };
   }, [model]);
-  const rig = useMemo(() => {
-    const bones = {};
-    model.traverse((object) => {
-      if (object.isBone && BASE_POSE[object.name]) {
-        bones[object.name] = { bone: object, base: object.quaternion.clone() };
-      }
-    });
-    return bones;
-  }, [model]);
+  const rigInfo = useMemo(() => discoverGreeterRig(model), [model]);
+  const rig = rigInfo.rig;
   const usingClip = useRef(false);
+
+  // Set a natural pose before the first rendered frame so no naming variant
+  // can flash or remain in the exported T-pose.
+  useLayoutEffect(() => {
+    applyRigPose(rig, BASE_POSE, 1);
+  }, [rig]);
+
+  useEffect(() => {
+    const mapped = Object.fromEntries(Object.entries(rig).map(([role, entry]) => [role, entry.sourceName]));
+    const missing = Object.keys(BASE_POSE).filter((role) => !rig[role]);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.info('[AI Greeter] animations:', animations.map((clip) => ({ name: clip.name, duration: clip.duration })));
+      console.info('[AI Greeter] bone map:', mapped);
+    }
+    if (missing.length) {
+      console.warn('[AI Greeter] missing semantic bones:', missing, 'available:', rigInfo.allBoneNames);
+    }
+  }, [animations, rig, rigInfo.allBoneNames]);
   const mixer = useMemo(() => new THREE.AnimationMixer(model), [model]);
 
   useEffect(() => {
@@ -49,8 +51,8 @@ function Character({ talking, gesture, horizontalOffset }) {
     mixer.stopAllAction();
     let chosen;
     if (gesture === 'wave' && !waved.current && wave) { chosen = wave; waved.current = true; }
-    else if (talking) chosen = talk || idle;
-    else chosen = idle;
+    else if (talking && talk) chosen = talk;
+    else if (gesture === 'idle') chosen = idle;
     const action = chosen ? mixer.clipAction(chosen, model) : null;
     usingClip.current = !!action;
     if (action) {
@@ -112,14 +114,7 @@ function Character({ talking, gesture, horizontalOffset }) {
         ];
         pose.Spine2 = [Math.sin(time * 4.2) * 0.018, pose.Spine2?.[1] || 0, pose.Spine2?.[2] || 0];
       }
-      const blend = Math.min(1, delta * 7.5);
-      Object.entries(pose).forEach(([name, rotation]) => {
-        const entry = rig[name];
-        if (!entry) return;
-        const deltaRotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(...rotation));
-        const target = entry.base.clone().multiply(deltaRotation);
-        entry.bone.quaternion.slerp(target, blend);
-      });
+      applyRigPose(rig, pose, Math.min(1, delta * 7.5));
     }
 
     root.current.position.x = horizontalOffset;
