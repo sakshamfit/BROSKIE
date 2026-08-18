@@ -40,9 +40,9 @@ const TOPICS = [
     title: 'See (Status)',
     summary: '24-hour updates, discover feed, songs & photos',
     body: [
-      { h: 'Posting a status', p: 'Tap the + on your own avatar at the top of See to share text, a photo, or an attached song. It disappears automatically after 24 hours, like a story.' },
-      { h: 'Who can see it', p: 'Every status has a visibility choice: Public (everyone on +one), Friends (only people you already chat with), or Selected people (you hand-pick exactly who). This is enforced by the server, not just hidden in the app.' },
-      { h: 'Viewing others\u2019', p: 'Tap the story ring at the top to view someone\u2019s update full-screen, or browse the "Trending" feed below for a masonry grid of recent public statuses from everyone.' },
+      { h: 'Posting a status', p: 'Use the camera or pencil button in See. Photo updates open a frame and crop editor first, then show the exact posting preview with an editable caption. Text updates have switchable backgrounds. Every update disappears after 24 hours.' },
+      { h: 'Who can see it', p: 'Before sending, tap the privacy pill to choose Public, My friends, My friends except…, or Only share with…. Inclusion and exclusion lists are enforced by the server, not just hidden in the app.' },
+      { h: 'Viewing others\u2019', p: 'Recent and viewed updates appear in separate lists. Tap a person to open the full-screen viewer; tap the left or right side to move through updates, or let them advance automatically.' },
     ],
   },
   {

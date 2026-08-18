@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput, RefreshControl,
-  ActivityIndicator, Image, FlatList,
+  ActivityIndicator, Image, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -10,228 +10,290 @@ import { api, mediaUrl } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
-import useResponsive from '../hooks/useResponsive';
-import { Avatar, formatChatTime } from '../components/common';
+import { Avatar, formatChatTime, rippleFor } from '../components/common';
 import AudiencePicker, { AUDIENCE } from '../components/AudiencePicker';
+import PhotoCropPicker from '../components/PhotoCropPicker';
 import SongCard from '../components/SongCard';
 import SongPicker from '../components/SongPicker';
-import { radius, type, inkBox, marker, dashedRule, stroke, tokens } from '../theme';
-import * as ImagePicker from 'expo-image-picker';
+import { radius, type, inkBox, marker, stroke } from '../theme';
 
-// paper-and-ink status backgrounds
-const BG_COLORS = ['#FFE24D', '#1c1b1b', '#e2e3de', '#fdf8f8', '#c8c6c5', '#5d5f5b'];
-const TILTS = [-1.2, 0.9, -0.6, 1.4, -0.9, 0.6, -1.4, 1.1];
+const BG_COLORS = ['#FFE24D', '#fdf8f8', '#e2e3de', '#5d5f5b', '#1c1b1b', '#39444c'];
+
+// WhatsApp-style status privacy, with +one's public option retained. The
+// existing status_recipients table stores inclusions for "selected" and
+// exclusions for "contacts_except".
+const STATUS_AUDIENCES = [
+  { ...AUDIENCE.public, label: 'Public', sub: 'Everyone on +one can see this update' },
+  { ...AUDIENCE.contacts, label: 'My friends', sub: 'Only people you already chat with' },
+  { ...AUDIENCE.contacts_except, label: 'My friends except…', sub: 'Hide this update from the friends you choose' },
+  { ...AUDIENCE.selected, label: 'Only share with…', sub: 'A private update for only the people you choose' },
+];
+
+const privacyMeta = (key) => STATUS_AUDIENCES.find((option) => option.key === key) || STATUS_AUDIENCES[0];
+
+function foregroundFor(status) {
+  if (!status || status.type === 'image') return '#ffffff';
+  return ['#1c1b1b', '#5d5f5b', '#39444c'].includes(status.bg) ? '#ffffff' : '#1c1b1b';
+}
 
 export default function StatusScreen() {
   const { user } = useAuth();
   const { theme } = useTheme();
   const { onStatusEvent } = useChat();
-  const { width } = useResponsive();
   const insets = useSafeAreaInsets();
   const [data, setData] = useState({ mine: null, others: [] });
-  const [composer, setComposer] = useState(false);
+  const [composerMode, setComposerMode] = useState(null); // choose | text | photo
   const [viewer, setViewer] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-
   const s = makeStyles(theme);
-  const columns = width >= 900 ? 3 : width >= 640 ? 2 : 1;
 
   const load = useCallback(async () => {
     try { setData(await api.statuses()); } catch {} finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  // live: someone posted a status we're allowed to see
   useEffect(() => {
-    if (!onStatusEvent) return;
+    if (!onStatusEvent) return undefined;
     return onStatusEvent(() => load());
   }, [onStatusEvent, load]);
 
-  const openViewer = async (group) => {
-    setViewer({ group, index: 0 });
-    if (group.items[0]) { await api.viewStatus(group.items[0].id); }
+  const openViewer = async (group, index = 0) => {
+    if (!group?.items?.length) return;
+    const safeIndex = Math.max(0, Math.min(index, group.items.length - 1));
+    setViewer({ group, index: safeIndex });
+    try { await api.viewStatus(group.items[safeIndex].id); } catch {}
   };
 
-  const nextStatus = async () => {
+  const closeViewer = () => {
+    setViewer(null);
+    load();
+  };
+
+  const moveStatus = async (direction) => {
     if (!viewer) return;
-    const next = viewer.index + 1;
-    if (next >= viewer.group.items.length) { setViewer(null); load(); return; }
+    const next = viewer.index + direction;
+    if (next >= viewer.group.items.length) { closeViewer(); return; }
+    if (next < 0) return;
     setViewer({ ...viewer, index: next });
-    await api.viewStatus(viewer.group.items[next].id);
+    try { await api.viewStatus(viewer.group.items[next].id); } catch {}
   };
 
   const current = viewer?.group.items[viewer.index];
+  useEffect(() => {
+    if (!current) return undefined;
+    const timer = setTimeout(() => moveStatus(1), current.type === 'image' ? 6500 : 5500);
+    return () => clearTimeout(timer);
+    // The current id is the timer boundary; moveStatus intentionally uses the
+    // viewer snapshot associated with that id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id]);
 
-  // Flatten every visible status into a feed of "Trending" cards, newest first —
-  // this is the mockup's masonry grid, built from real status content.
-  const feed = useMemo(() => {
-    const groups = [...(data.mine ? [data.mine] : []), ...data.others];
-    const items = [];
-    groups.forEach((g) => g.items.forEach((it) => items.push({ ...it, author: g.user })));
-    return items.sort((a, b) => b.createdAt - a.createdAt);
-  }, [data]);
+  const recent = data.others.filter((group) => !group.allViewed);
+  const viewed = data.others.filter((group) => group.allViewed);
+  const myLatest = data.mine?.items?.[data.mine.items.length - 1];
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <View style={[s.header, { borderBottomColor: theme.ink }]}>
+        <View>
+          <Text style={s.title}>Status</Text>
+          <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>Updates disappear after 24 hours</Text>
+        </View>
+        <Pressable
+          onPress={() => setComposerMode('choose')}
+          hitSlop={8}
+          style={({ pressed }) => [s.headerAdd, { borderColor: theme.ink }, pressed && marker(theme, 1)]}
+        >
+          <Icon name="add" size={20} color={theme.ink} />
+        </Pressable>
+      </View>
+
       {loading ? (
         <ActivityIndicator style={{ marginTop: 60 }} color={theme.ink} />
       ) : (
         <ScrollView
           contentContainerStyle={s.scroll}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={theme.ink} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }}
+              tintColor={theme.ink}
+            />
+          }
         >
-          <View style={s.headerRow}>
-            <View>
-              <Text style={s.pageTitle}>Discover</Text>
-              <Text style={[type.bodyMd, { color: theme.subtext, marginTop: 6, maxWidth: 420 }]}>
-                Share a page publicly, with friends, or just the people you pick — text, a photo, or a song.
-              </Text>
-            </View>
-          </View>
-
-          {/* ---------------- Fresh Ink: story rail ---------------- */}
-          <View style={s.storiesSection}>
-            <View style={s.sectionTitleRow}>
-              <Text style={s.sectionTitle}>Fresh Ink</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.storiesRow}>
-              <Pressable
-                onPress={() => (data.mine ? openViewer(data.mine) : setComposer(true))}
-                style={s.storyItem}
-              >
-                <View style={[s.storyRing, s.storyAdd, { borderColor: theme.graphiteLine }]}>
-                  <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={64} />
-                  <Pressable onPress={() => setComposer(true)} style={[s.plusBadge, { backgroundColor: theme.highlighter, borderColor: theme.ink }]}>
-                    <Icon name="add" size={13} color={theme.ink} />
-                  </Pressable>
+          <View style={[s.myStatus, { backgroundColor: theme.card, borderColor: theme.graphiteLine }]}>
+            <Pressable
+              onPress={() => (data.mine ? openViewer(data.mine) : setComposerMode('choose'))}
+              style={({ pressed }) => [s.myStatusMain, pressed && { opacity: 0.72 }]}
+            >
+              <View style={s.myAvatarWrap}>
+                <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={58} />
+                <View style={[s.plusBadge, { backgroundColor: '#050505', borderColor: theme.bg }]}>
+                  <Icon name="add" size={14} color="#ffffff" />
                 </View>
-                <Text style={[type.labelXs, { color: theme.text, marginTop: 6 }]} numberOfLines={1}>Your page</Text>
-              </Pressable>
-
-              {data.mine && (
-                <Pressable onPress={() => openViewer(data.mine)} style={s.storyItem}>
-                  <View style={[s.storyRing, { borderColor: theme.ink, borderWidth: 3 }]}>
-                    <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={64} />
-                  </View>
-                  <Text style={[type.labelXs, { color: theme.text, fontWeight: '700', marginTop: 6 }]} numberOfLines={1}>
-                    {data.mine.items.length} update{data.mine.items.length > 1 ? 's' : ''}
-                  </Text>
-                </Pressable>
-              )}
-
-              {data.others.map((g) => (
-                <Pressable key={g.user.id} onPress={() => openViewer(g)} style={s.storyItem}>
-                  <View style={[s.storyRing, { borderColor: g.allViewed ? theme.graphiteLine : theme.ink, borderWidth: g.allViewed ? 2 : 3 }]}>
-                    <Avatar uri={g.user.avatar} name={g.user.name} id={g.user.id} size={64} />
-                  </View>
-                  <Text style={[type.labelXs, { color: g.allViewed ? theme.secondary : theme.text, fontWeight: g.allViewed ? '400' : '700', marginTop: 6 }]} numberOfLines={1}>
-                    @{g.user.name.split(' ')[0].toLowerCase()}
-                  </Text>
-                </Pressable>
-              ))}
-
-              {!data.others.length && !data.mine && (
-                <Text style={[type.bodySm, { color: theme.muted, paddingVertical: 20, paddingHorizontal: 4 }]}>
-                  No pages yet — be the first to sketch one.
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[type.headlineSm, { color: theme.text }]}>My status</Text>
+                <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]} numberOfLines={1}>
+                  {myLatest
+                    ? `${data.mine.items.length} update${data.mine.items.length === 1 ? '' : 's'} · ${formatChatTime(myLatest.createdAt)}`
+                    : 'Tap to add a status update'}
                 </Text>
-              )}
-            </ScrollView>
+              </View>
+            </Pressable>
+            <View style={s.myQuickActions}>
+              <Pressable
+                accessibilityLabel="Create text status"
+                onPress={() => setComposerMode('text')}
+                style={({ pressed }) => [s.quickButton, { backgroundColor: theme.cardAlt, borderColor: theme.graphiteLine }, pressed && marker(theme, 1)]}
+              >
+                <Icon name="create-outline" size={18} color={theme.ink} />
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Create photo status"
+                onPress={() => setComposerMode('photo')}
+                style={({ pressed }) => [s.quickButton, { backgroundColor: '#050505', borderColor: '#000000' }, pressed && { backgroundColor: '#242321' }]}
+              >
+                <Icon name="camera-outline" size={18} color="#ffffff" />
+              </Pressable>
+            </View>
           </View>
 
-          {/* ---------------- Trending: masonry-ish feed ---------------- */}
-          {feed.length > 0 && (
-            <>
-              <View style={s.dividerWrap}>
-                <View style={[dashedRule(theme), { flex: 1 }]} />
-                <Text style={[type.labelXs, { color: theme.secondary, marginHorizontal: 12 }]}>TRENDING</Text>
-                <View style={[dashedRule(theme), { flex: 1 }]} />
-              </View>
+          {recent.length > 0 && (
+            <StatusSection
+              title="Recent updates"
+              groups={recent}
+              onPress={openViewer}
+              theme={theme}
+            />
+          )}
 
-              <View style={[s.grid, { gap: 20 }]}>
-                {feed.map((item, i) => (
-                  <View key={item.id} style={{ width: columns === 1 ? '100%' : `${100 / columns}%` }}>
-                    <View style={{ paddingHorizontal: 10 }}>
-                      <TrendingCard
-                        item={item}
-                        theme={theme}
-                        tilt={TILTS[i % TILTS.length]}
-                        onPress={() => {
-                          const g = item.author.id === user.id ? data.mine : data.others.find((x) => x.user.id === item.author.id);
-                          if (!g) return;
-                          const idx = g.items.findIndex((x) => x.id === item.id);
-                          setViewer({ group: g, index: Math.max(idx, 0) });
-                          api.viewStatus(item.id);
-                        }}
-                      />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </>
+          {viewed.length > 0 && (
+            <StatusSection
+              title="Viewed updates"
+              groups={viewed}
+              onPress={openViewer}
+              theme={theme}
+              viewed
+            />
+          )}
+
+          {!data.others.length && (
+            <View style={s.empty}>
+              <Icon name="eye-outline" size={30} color={theme.muted} />
+              <Text style={[type.headlineSm, { color: theme.text, marginTop: 12 }]}>No recent updates</Text>
+              <Text style={[type.bodySm, { color: theme.subtext, textAlign: 'center', marginTop: 5 }]}>When people share a status, it will appear here.</Text>
+            </View>
           )}
         </ScrollView>
       )}
 
-      <Pressable
-        onPress={() => setComposer(true)}
-        style={({ pressed }) => [s.fab, inkBox(theme, 'bold'), { backgroundColor: pressed ? theme.highlighter : theme.ink }]}
-      >
-        <Icon name="create-outline" size={21} color={theme.onPrimary} />
-      </Pressable>
+      <View style={s.fabStack} pointerEvents="box-none">
+        <Pressable
+          accessibilityLabel="Create text status"
+          onPress={() => setComposerMode('text')}
+          style={({ pressed }) => [
+            s.fabSmall,
+            { backgroundColor: theme.cardAlt, borderColor: theme.ink },
+            pressed && marker(theme, 1),
+          ]}
+        >
+          <Icon name="create-outline" size={19} color={theme.ink} />
+        </Pressable>
+        <Pressable
+          accessibilityLabel="Create photo status"
+          onPress={() => setComposerMode('photo')}
+          android_ripple={rippleFor(theme, { borderless: false, radius: 30 })}
+          style={({ pressed }) => [s.fab, { backgroundColor: pressed && Platform.OS !== 'android' ? '#242321' : '#050505' }]}
+        >
+          <Icon name="camera-outline" size={22} color="#ffffff" />
+        </Pressable>
+      </View>
 
-      <Composer visible={composer} onClose={() => setComposer(false)} onPosted={load} />
+      <StatusComposer
+        visible={!!composerMode}
+        initialMode={composerMode || 'choose'}
+        onClose={() => setComposerMode(null)}
+        onPosted={load}
+      />
 
-      {/* viewer */}
-      <Modal visible={!!viewer} animationType="fade" onRequestClose={() => { setViewer(null); load(); }}>
+      <Modal visible={!!viewer} animationType="fade" onRequestClose={closeViewer}>
         {current && (
-          <View style={[s.viewer, { backgroundColor: current.type === 'image' ? '#111' : current.bg, paddingTop: 48 + insets.top, paddingBottom: insets.bottom }]}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={nextStatus} />
+          <View
+            style={[
+              s.viewer,
+              {
+                backgroundColor: current.type === 'image' ? '#090909' : current.bg,
+                paddingTop: Math.max(insets.top, 14) + 14,
+                paddingBottom: Math.max(insets.bottom, 16),
+              },
+            ]}
+          >
+            <View style={s.tapZones}>
+              <Pressable style={{ flex: 0.34 }} onPress={() => moveStatus(-1)} />
+              <Pressable style={{ flex: 0.66 }} onPress={() => moveStatus(1)} />
+            </View>
+
             <View style={s.progressRow} pointerEvents="none">
-              {viewer.group.items.map((_, i) => (
-                <View key={i} style={[s.progressBar, { backgroundColor: i <= viewer.index ? (current.type === 'image' ? '#fff' : tokens.onSurface) : 'rgba(120,120,120,0.35)' }]} />
+              {viewer.group.items.map((_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    s.progressBar,
+                    { backgroundColor: index <= viewer.index ? foregroundFor(current) : 'rgba(160,160,160,0.42)' },
+                  ]}
+                />
               ))}
             </View>
-            <View style={s.viewerHeader} pointerEvents="box-none">
-              <Avatar uri={viewer.group.user.avatar} name={viewer.group.user.name} id={viewer.group.user.id} size={42} />
+
+            <View style={s.viewerHeader}>
+              <Avatar uri={viewer.group.user.avatar} name={viewer.group.user.name} id={viewer.group.user.id} size={40} />
               <View style={{ flex: 1 }}>
-                <EmojiText style={[type.headlineSm, { color: current.type === 'image' ? '#fff' : tokens.onSurface }]}>
-                  {viewer.group.user.id === user.id ? 'My page' : viewer.group.user.name}
+                <EmojiText style={[type.bodyStrong, { color: foregroundFor(current) }]} numberOfLines={1}>
+                  {viewer.group.user.id === user.id ? 'My status' : viewer.group.user.name}
                 </EmojiText>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Icon name={AUDIENCE[current.audience]?.icon || 'earth-outline'} size={11} color={current.type === 'image' ? 'rgba(255,255,255,0.7)' : 'rgba(28,27,27,0.55)'} />
-                  <Text style={[type.labelXs, { color: current.type === 'image' ? 'rgba(255,255,255,0.7)' : 'rgba(28,27,27,0.55)' }]}>
-                    {formatChatTime(current.createdAt)} · {AUDIENCE[current.audience]?.label || 'Public'}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                  <Icon name={privacyMeta(current.audience).icon} size={11} color={foregroundFor(current)} style={{ opacity: 0.68 }} />
+                  <Text style={[type.labelXs, { color: foregroundFor(current), opacity: 0.68 }]}>
+                    {formatChatTime(current.createdAt)} · {privacyMeta(current.audience).label}
                   </Text>
                 </View>
               </View>
-              <Pressable onPress={() => { setViewer(null); load(); }} hitSlop={10} style={{ padding: 4 }}>
-                <Icon name="close" size={23} color={current.type === 'image' ? '#fff' : tokens.onSurface} />
+              <Pressable onPress={closeViewer} hitSlop={10} style={{ padding: 5 }}>
+                <Icon name="close" size={23} color={foregroundFor(current)} />
               </Pressable>
             </View>
 
-            <View style={s.viewerBody} pointerEvents="box-none">
+            <View style={s.viewerBody} pointerEvents="none">
               {current.type === 'image' ? (
-                <Image source={{ uri: mediaUrl(current.mediaUrl) }} style={s.viewerImage} resizeMode="contain" />
+                <View
+                  style={[
+                    s.viewerImageFrame,
+                    {
+                      aspectRatio: current.mediaAspect || 9 / 16,
+                      width: (current.mediaAspect || 9 / 16) < 0.7 ? '72%' : '100%',
+                    },
+                  ]}
+                >
+                  <Image source={{ uri: mediaUrl(current.mediaUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                </View>
               ) : (
-                <EmojiText style={[s.viewerText, { color: tokens.onSurface }]}>{current.body}</EmojiText>
+                <EmojiText style={[s.viewerText, { color: foregroundFor(current) }]}>{current.body}</EmojiText>
               )}
+
               {!!current.song && (
-                <View style={s.viewerSong} pointerEvents="box-none">
-                  <SongCard song={current.song} tint={current.type === 'image' ? '#fff' : tokens.onSurface} />
+                <View style={s.viewerSong}>
+                  <SongCard song={current.song} tint={foregroundFor(current)} />
                 </View>
               )}
+
               {current.type === 'image' && !!current.body && (
-                <Text style={[type.bodyMd, { color: '#fff', textAlign: 'center', marginTop: 14, paddingHorizontal: 20 }]}>
-                  {current.body}
-                </Text>
+                <View style={s.viewerCaption}>
+                  <EmojiText style={[type.bodyMd, { color: '#ffffff', textAlign: 'center' }]}>{current.body}</EmojiText>
+                </View>
               )}
             </View>
-
-            <Text style={[type.labelXs, { color: current.type === 'image' ? 'rgba(255,255,255,0.5)' : 'rgba(28,27,27,0.4)', textAlign: 'center', paddingBottom: 34 }]}>
-              Tap anywhere to continue
-            </Text>
           </View>
         )}
       </Modal>
@@ -239,280 +301,438 @@ export default function StatusScreen() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* trending card — polaroid/tape/torn-paper treatments from the mockup */
-/* ------------------------------------------------------------------ */
+function StatusSection({ title, groups, onPress, theme, viewed = false }) {
+  return (
+    <View style={{ marginTop: 24 }}>
+      <Text style={[type.labelSm, { color: theme.subtext, marginBottom: 8, paddingHorizontal: 4 }]}>{title.toUpperCase()}</Text>
+      <View style={{ gap: 3 }}>
+        {groups.map((group) => (
+          <StatusRow key={group.user.id} group={group} onPress={() => onPress(group)} theme={theme} viewed={viewed} />
+        ))}
+      </View>
+    </View>
+  );
+}
 
-function TrendingCard({ item, theme, tilt, onPress }) {
-  const s = makeStyles(theme);
-  const audienceMeta = AUDIENCE[item.audience] || AUDIENCE.public;
-
+function StatusRow({ group, onPress, theme, viewed }) {
+  const latest = group.items[group.items.length - 1];
+  const ringColor = viewed ? theme.graphiteLine : theme.ink;
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
-        s.card,
-        inkBox(theme, item.type === 'image' ? 'bold' : 'thin'),
-        { backgroundColor: item.type === 'text' && item.bg && item.bg !== '#fdf8f8' ? item.bg : theme.card },
-        { transform: [{ rotate: `${tilt}deg` }, { translateY: pressed ? -2 : 0 }] },
+        stylesStatic.statusRow,
+        { backgroundColor: pressed ? theme.cardAlt : theme.card, borderBottomColor: theme.graphiteLine },
       ]}
     >
-      <View style={[s.tape, { backgroundColor: theme.cardAlt, borderColor: theme.graphiteLine }]} />
-
-      <View style={s.cardHead}>
-        <Avatar uri={item.author.avatar} name={item.author.name} id={item.author.id} size={30} />
-        <View style={{ flex: 1 }}>
-          <Text style={[type.labelSm, { color: cardFg(item, theme) }]} numberOfLines={1}>@{item.author.name.split(' ')[0].toLowerCase()}</Text>
-          <Text style={[type.labelXs, { color: cardFg(item, theme), opacity: 0.6, marginTop: 2 }]}>{formatChatTime(item.createdAt)}</Text>
-        </View>
-        <Icon name={audienceMeta.icon} size={13} color={cardFg(item, theme)} style={{ opacity: 0.7 }} />
+      <View style={[stylesStatic.statusRing, { borderColor: ringColor, borderWidth: viewed ? 2 : 3 }]}>
+        <Avatar uri={group.user.avatar} name={group.user.name} id={group.user.id} size={52} />
       </View>
-
-      {item.type === 'image' && (
-        <View style={[s.cardImageWrap, inkBox(theme, 'thin')]}>
-          <Image source={{ uri: mediaUrl(item.mediaUrl) }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-        </View>
-      )}
-
-      {!!item.body && (
-        <EmojiText
-          style={[
-            item.type === 'text' ? type.bodyLg : type.bodyMd,
-            { color: cardFg(item, theme), marginTop: item.type === 'image' ? 10 : 4, fontStyle: item.type === 'text' ? 'italic' : 'normal' },
-          ]}
-          numberOfLines={item.type === 'text' ? 6 : 3}
-        >
-          {item.body}
-        </EmojiText>
-      )}
-
-      {!!item.song && (
-        <View style={{ marginTop: 10 }}>
-          <SongCard song={item.song} compact tint={cardFg(item, theme)} />
-        </View>
-      )}
+      <View style={{ flex: 1 }}>
+        <EmojiText style={[type.bodyStrong, { color: theme.text }]} numberOfLines={1}>{group.user.name}</EmojiText>
+        <Text style={[type.bodySm, { color: theme.subtext, marginTop: 2 }]}>
+          {formatChatTime(latest.createdAt)} · {group.items.length} update{group.items.length === 1 ? '' : 's'}
+        </Text>
+      </View>
+      <Icon name={privacyMeta(latest.audience).icon} size={16} color={theme.muted} />
     </Pressable>
   );
 }
 
-function cardFg(item, theme) {
-  if (item.type === 'text' && (item.bg === '#1c1b1b' || item.bg === '#5d5f5b')) return '#fdf8f8';
-  return theme.text;
-}
-
-/* ------------------------------------------------------------------ */
-/* composer                                                            */
-/* ------------------------------------------------------------------ */
-
-function Composer({ visible, onClose, onPosted }) {
+function StatusComposer({ visible, initialMode, onClose, onPosted }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const s = makeStyles(theme);
+  const [mode, setMode] = useState('choose');
   const [body, setBody] = useState('');
   const [bg, setBg] = useState(BG_COLORS[0]);
   const [image, setImage] = useState(null);
+  const [cropPicker, setCropPicker] = useState(false);
   const [song, setSong] = useState(null);
   const [songPicker, setSongPicker] = useState(false);
-  const [audience, setAudience] = useState('public');
+  const [audience, setAudience] = useState('contacts');
   const [recipientIds, setRecipientIds] = useState([]);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState('');
 
-  const reset = () => {
-    setBody(''); setBg(BG_COLORS[0]); setImage(null); setSong(null);
-    setAudience('public'); setRecipientIds([]); setError('');
+  const reset = useCallback(() => {
+    setMode('choose');
+    setBody('');
+    setBg(BG_COLORS[0]);
+    setImage(null);
+    setCropPicker(false);
+    setSong(null);
+    setSongPicker(false);
+    setAudience('contacts');
+    setRecipientIds([]);
+    setPrivacyOpen(false);
+    setError('');
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    const nextMode = ['choose', 'text', 'photo'].includes(initialMode) ? initialMode : 'choose';
+    setMode(nextMode);
+    if (nextMode === 'photo' && !image) {
+      const timer = setTimeout(() => setCropPicker(true), 180);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [visible, initialMode]); // image deliberately excluded: only auto-open once
+
+  const close = () => {
+    if (posting) return;
+    reset();
+    onClose?.();
   };
 
-  const pickImage = async () => {
-    try {
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.75 });
-      if (res.canceled || !res.assets?.length) return;
-      setImage(res.assets[0]);
-    } catch (e) { setError(e.message); }
+  const startPhoto = () => {
+    setMode('photo');
+    setError('');
+    setCropPicker(true);
   };
 
-  const post = async () => {
-    if (!body.trim() && !image && !song) { setError('Write something, or attach a photo or a song.'); return; }
-    if (audience === 'selected' && !recipientIds.length) { setError('Pick at least one person.'); return; }
+  const cycleBackground = () => {
+    const index = BG_COLORS.indexOf(bg);
+    setBg(BG_COLORS[(index + 1) % BG_COLORS.length]);
+  };
+
+  const submit = async () => {
+    if (!body.trim() && !image && !song) {
+      setError(mode === 'photo' ? 'Choose a photo first.' : 'Write something or attach a song.');
+      return;
+    }
+    if (audience === 'selected' && !recipientIds.length) {
+      setError('Choose at least one person for this private status.');
+      setPrivacyOpen(true);
+      return;
+    }
+
     setPosting(true);
     setError('');
     try {
-      let mediaUrlOut = null;
-      let type = 'text';
+      let uploadedUrl = null;
       if (image) {
-        const up = await api.uploadFile(image.uri, image.fileName || 'status.jpg', image.mimeType || 'image/jpeg');
-        mediaUrlOut = up.url;
-        type = 'image';
+        const upload = await api.uploadFile(
+          image.uri,
+          image.fileName || 'status.jpg',
+          image.mimeType || 'image/jpeg'
+        );
+        uploadedUrl = upload.url;
       }
       await api.postStatus({
-        type, body: body.trim(), mediaUrl: mediaUrlOut, bg,
-        song, audience, recipientIds: audience === 'selected' ? recipientIds : [],
+        type: image ? 'image' : 'text',
+        body: body.trim(),
+        mediaUrl: uploadedUrl,
+        mediaAspect: image?.displayAspect || null,
+        bg,
+        song,
+        audience,
+        recipientIds: audience === 'selected' || audience === 'contacts_except' ? recipientIds : [],
       });
       reset();
-      onClose();
+      onClose?.();
       onPosted?.();
     } catch (e) {
-      setError(e.message);
+      setError(e.message || 'Could not share this status.');
     } finally {
       setPosting(false);
     }
   };
 
+  const composerStatus = { type: mode === 'photo' ? 'image' : 'text', bg };
+  const foreground = mode === 'choose' ? theme.ink : foregroundFor(composerStatus);
+  const composerBg = mode === 'choose' ? theme.bg : mode === 'photo' ? '#090909' : bg;
+  const meta = privacyMeta(audience);
+
   return (
     <>
-      <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-        <View style={[s.composerScreen, { backgroundColor: theme.bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-          <ScrollView contentContainerStyle={s.composerScroll} keyboardShouldPersistTaps="handled">
-            <View style={s.composerTopBar}>
-              <Pressable onPress={onClose} hitSlop={8} style={{ padding: 6 }}>
-                <Icon name="close" size={24} color={theme.ink} />
-              </Pressable>
-              <Text style={[type.headlineSm, { color: theme.text }]}>New page</Text>
-              <View style={{ width: 36 }} />
+      <Modal visible={visible} animationType="slide" onRequestClose={close}>
+        <KeyboardAvoidingView
+          style={[s.composer, { backgroundColor: composerBg, paddingTop: insets.top, paddingBottom: insets.bottom }]}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={s.composerTopBar}>
+            <Pressable onPress={close} hitSlop={9} style={s.composerIconButton}>
+              <Icon name="close" size={24} color={foreground} />
+            </Pressable>
+            <Text style={[type.bodyStrong, { color: foreground }]}>New status</Text>
+            <View style={s.composerTools}>
+              {mode === 'text' && (
+                <Pressable onPress={cycleBackground} hitSlop={8} style={s.composerIconButton}>
+                  <Icon name="color-palette-outline" size={22} color={foreground} />
+                </Pressable>
+              )}
+              {mode === 'photo' && (
+                <Pressable onPress={() => setCropPicker(true)} hitSlop={8} style={s.composerIconButton}>
+                  <Icon name="image-outline" size={22} color="#ffffff" />
+                </Pressable>
+              )}
+              {mode !== 'choose' && (
+                <Pressable onPress={() => setSongPicker(true)} hitSlop={8} style={s.composerIconButton}>
+                  <Icon name="musical-notes-outline" size={21} color={foreground} />
+                </Pressable>
+              )}
             </View>
+          </View>
 
-            <View style={[s.previewCard, { backgroundColor: image ? theme.card : bg }, inkBox(theme, 'ink')]}>
+          {mode === 'choose' && (
+            <View style={s.chooseStage}>
+              <Text style={[type.headlineLg, { color: theme.text, textAlign: 'center' }]}>Share an update</Text>
+              <Text style={[type.bodyMd, { color: theme.subtext, textAlign: 'center', marginTop: 8, marginBottom: 28 }]}>
+                Preview it, crop it and choose exactly who can see it before posting.
+              </Text>
+              <Pressable
+                onPress={startPhoto}
+                style={({ pressed }) => [s.chooseCard, { backgroundColor: '#050505', borderColor: '#000000' }, pressed && { backgroundColor: '#242321' }]}
+              >
+                <View style={[s.chooseIcon, { backgroundColor: '#ffffff' }]}>
+                  <Icon name="camera-outline" size={24} color="#050505" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[type.headlineSm, { color: '#ffffff' }]}>Photo status</Text>
+                  <Text style={[type.bodySm, { color: '#c7c3c1', marginTop: 3 }]}>Choose a frame, crop and preview</Text>
+                </View>
+                <Icon name="chevron-forward-outline" size={20} color="#ffffff" />
+              </Pressable>
+              <Pressable
+                onPress={() => setMode('text')}
+                style={({ pressed }) => [s.chooseCard, { backgroundColor: theme.card, borderColor: theme.ink }, pressed && marker(theme, 1)]}
+              >
+                <View style={[s.chooseIcon, { backgroundColor: theme.highlighter }]}>
+                  <Icon name="create-outline" size={22} color="#1c1b1b" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[type.headlineSm, { color: theme.text }]}>Text status</Text>
+                  <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>Write on a colour background</Text>
+                </View>
+                <Icon name="chevron-forward-outline" size={20} color={theme.ink} />
+              </Pressable>
+            </View>
+          )}
+
+          {mode === 'photo' && (
+            <View style={s.photoStage}>
               {image ? (
                 <>
-                  <Image source={{ uri: image.uri }} style={s.previewImage} resizeMode="cover" />
-                  <Pressable onPress={() => setImage(null)} style={[s.previewImageX, { backgroundColor: theme.ink }]}>
-                    <Icon name="close" size={14} color={theme.onPrimary} />
-                  </Pressable>
+                  <View
+                    style={[
+                      s.composerImageFrame,
+                      {
+                        aspectRatio: image.displayAspect || 9 / 16,
+                        width: (image.displayAspect || 9 / 16) < 0.7 ? '72%' : '100%',
+                      },
+                    ]}
+                  >
+                    <Image source={{ uri: image.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    <Pressable onPress={() => setCropPicker(true)} style={s.editCropButton}>
+                      <Icon name="create-outline" size={14} color="#ffffff" />
+                      <Text style={[type.labelXs, { color: '#ffffff' }]}>EDIT CROP</Text>
+                    </Pressable>
+                  </View>
+                  <View style={s.captionBar}>
+                    <TextInput
+                      value={body}
+                      onChangeText={(text) => { setBody(text); setError(''); }}
+                      placeholder="Add a caption…"
+                      placeholderTextColor="rgba(255,255,255,0.58)"
+                      style={s.captionInput}
+                      multiline
+                      maxLength={700}
+                    />
+                  </View>
                 </>
-              ) : null}
-              <TextInput
-                style={[s.previewInput, { color: bg === '#1c1b1b' && !image ? '#fdf8f8' : image ? theme.text : tokens.onSurface }]}
-                placeholder="Type a status…"
-                placeholderTextColor={image ? theme.muted : (bg === '#1c1b1b' ? 'rgba(253,248,248,0.45)' : 'rgba(28,27,27,0.4)')}
-                value={body}
-                onChangeText={setBody}
-                multiline
-                textAlign="center"
-              />
+              ) : (
+                <Pressable onPress={() => setCropPicker(true)} style={s.emptyPhoto}>
+                  <Icon name="image-outline" size={42} color="rgba(255,255,255,0.72)" />
+                  <Text style={[type.headlineSm, { color: '#ffffff', marginTop: 15 }]}>Choose and crop a photo</Text>
+                  <Text style={[type.bodySm, { color: 'rgba(255,255,255,0.58)', marginTop: 5, textAlign: 'center' }]}>Original, square, portrait, wide or story frame</Text>
+                </Pressable>
+              )}
               {!!song && (
-                <View style={s.previewSong}>
-                  <SongCard song={song} tint={bg === '#1c1b1b' && !image ? '#fdf8f8' : tokens.onSurface} />
-                  <Pressable onPress={() => setSong(null)} hitSlop={8} style={{ padding: 6 }}>
-                    <Icon name="close" size={16} color={theme.muted} />
+                <View style={s.composerSongDark}>
+                  <SongCard song={song} tint="#ffffff" />
+                  <Pressable onPress={() => setSong(null)} hitSlop={8} style={{ padding: 5 }}>
+                    <Icon name="close" size={16} color="#ffffff" />
                   </Pressable>
                 </View>
               )}
             </View>
+          )}
 
-            {!image && (
-              <View style={s.colorRow}>
-                {BG_COLORS.map((c) => (
-                  <Pressable
-                    key={c}
-                    onPress={() => setBg(c)}
-                    style={[s.swatch, { backgroundColor: c, borderColor: tokens.onSurface }, bg === c && s.swatchActive]}
-                  />
-                ))}
+          {mode === 'text' && (
+            <View style={s.textStage}>
+              <TextInput
+                autoFocus
+                value={body}
+                onChangeText={(text) => { setBody(text); setError(''); }}
+                placeholder="Type a status"
+                placeholderTextColor={foreground === '#ffffff' ? 'rgba(255,255,255,0.45)' : 'rgba(28,27,27,0.42)'}
+                style={[s.statusTextInput, { color: foreground }]}
+                multiline
+                textAlign="center"
+                maxLength={700}
+              />
+              {!!song && (
+                <View style={s.composerSongText}>
+                  <SongCard song={song} tint={foreground} />
+                  <Pressable onPress={() => setSong(null)} hitSlop={8} style={{ padding: 5 }}>
+                    <Icon name="close" size={16} color={foreground} />
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          )}
+
+          {mode !== 'choose' && (
+            <View style={s.composerFooter}>
+              {!!error && (
+                <View style={s.errorRow}>
+                  <Icon name="alert-circle" size={14} color={mode === 'photo' ? '#ffb4ab' : theme.danger} />
+                  <Text style={[type.bodySm, { color: mode === 'photo' ? '#ffb4ab' : theme.danger, flex: 1 }]}>{error}</Text>
+                </View>
+              )}
+              <View style={s.sendRow}>
+                <Pressable
+                  onPress={() => setPrivacyOpen(true)}
+                  style={({ pressed }) => [s.privacyPill, pressed && { backgroundColor: 'rgba(255,255,255,0.18)' }]}
+                >
+                  <Icon name={meta.icon} size={16} color="#ffffff" />
+                  <Text style={[type.labelSm, { color: '#ffffff', flexShrink: 1 }]} numberOfLines={1}>{meta.label}</Text>
+                  <Icon name="chevron-down-outline" size={14} color="#ffffff" />
+                </Pressable>
+                <Pressable
+                  onPress={submit}
+                  disabled={posting}
+                  android_ripple={rippleFor(theme, { borderless: false, radius: 30 })}
+                  style={({ pressed }) => [s.sendButton, pressed && Platform.OS !== 'android' && { opacity: 0.82 }, posting && { opacity: 0.55 }]}
+                >
+                  {posting ? <ActivityIndicator color="#050505" /> : <Icon name="send" size={21} color="#050505" />}
+                </Pressable>
               </View>
-            )}
+            </View>
+          )}
+        </KeyboardAvoidingView>
+      </Modal>
 
-            <View style={s.attachRow}>
-              <Pressable onPress={pickImage} style={({ pressed }) => [s.attachBtn, inkBox(theme, 'thin'), pressed ? marker(theme, 1) : null]}>
-                <Icon name="image-outline" size={17} color={theme.ink} />
-                <Text style={[type.labelSm, { color: theme.ink }]}>Photo</Text>
-              </Pressable>
-              <Pressable onPress={() => setSongPicker(true)} style={({ pressed }) => [s.attachBtn, inkBox(theme, 'thin'), pressed ? marker(theme, 1) : null]}>
-                <Icon name="musical-notes-outline" size={17} color={theme.ink} />
-                <Text style={[type.labelSm, { color: theme.ink }]}>Song</Text>
+      <Modal visible={privacyOpen} transparent animationType="slide" onRequestClose={() => setPrivacyOpen(false)}>
+        <View style={[s.privacyOverlay, { backgroundColor: theme.overlay }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setPrivacyOpen(false)} />
+          <View style={[s.privacySheet, { backgroundColor: theme.bg, borderColor: theme.ink, paddingBottom: Math.max(insets.bottom, 20) }]}>
+            <View style={s.privacyHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[type.headlineMd, { color: theme.text }]}>Status privacy</Text>
+                <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>Who can see this update?</Text>
+              </View>
+              <Pressable onPress={() => setPrivacyOpen(false)} hitSlop={9} style={{ padding: 5 }}>
+                <Icon name="close" size={22} color={theme.ink} />
               </Pressable>
             </View>
-
-            <Text style={[type.labelXs, { color: theme.muted, marginTop: 22, marginBottom: 10 }]}>WHO CAN SEE THIS</Text>
-            <AudiencePicker
-              audience={audience}
-              onChange={setAudience}
-              recipientIds={recipientIds}
-              onChangeRecipients={setRecipientIds}
-            />
-
-            {!!error && (
-              <View style={s.errorRow}>
-                <Icon name="alert-circle" size={14} color={theme.danger} />
-                <Text style={[type.bodySm, { color: theme.danger }]}>{error}</Text>
-              </View>
-            )}
-
-            <Pressable
-              onPress={post}
-              disabled={posting}
-              style={({ pressed }) => [
-                s.postBtn, inkBox(theme, 'bold'),
-                { backgroundColor: pressed ? theme.highlighter : theme.ink },
-                posting && { opacity: 0.6 },
-              ]}
-            >
-              {posting ? <ActivityIndicator color={theme.onPrimary} /> : (
-                <>
-                  <Icon name="send" size={16} color={theme.onPrimary} />
-                  <Text style={[type.bodyStrong, { color: theme.onPrimary }]}>Post page</Text>
-                </>
-              )}
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 8 }}>
+              <AudiencePicker
+                audience={audience}
+                onChange={(next) => {
+                  if (next !== audience) setRecipientIds([]);
+                  setAudience(next);
+                  setError('');
+                }}
+                recipientIds={recipientIds}
+                onChangeRecipients={setRecipientIds}
+                options={STATUS_AUDIENCES}
+                layout="list"
+                contactsOnly
+              />
+            </ScrollView>
+            <Pressable onPress={() => setPrivacyOpen(false)} style={[s.privacyDone, { backgroundColor: '#050505' }]}>
+              <Icon name="checkmark" size={17} color="#ffffff" />
+              <Text style={[type.bodyStrong, { color: '#ffffff' }]}>Done</Text>
             </Pressable>
-          </ScrollView>
+          </View>
         </View>
       </Modal>
 
-      <SongPicker visible={songPicker} onClose={() => setSongPicker(false)} onSelect={(t) => { setSong(t); setSongPicker(false); }} />
+      <PhotoCropPicker
+        visible={cropPicker}
+        onClose={() => setCropPicker(false)}
+        onPick={(asset) => { setImage(asset); setMode('photo'); setError(''); }}
+        title="Crop status photo"
+        quality={0.82}
+      />
+      <SongPicker
+        visible={songPicker}
+        onClose={() => setSongPicker(false)}
+        onSelect={(track) => { setSong(track); setSongPicker(false); }}
+      />
     </>
   );
 }
 
+const stylesStatic = StyleSheet.create({
+  statusRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingHorizontal: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  statusRing: {
+    width: 60, height: 60, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center',
+  },
+});
+
 const makeStyles = (t) => StyleSheet.create({
-  scroll: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 120, maxWidth: 1080, width: '100%', alignSelf: 'center' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 },
-  pageTitle: { ...type.headlineLg, color: t.text },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14, borderBottomWidth: stroke.ink,
+  },
+  title: { ...type.headlineLg, color: t.text },
+  headerAdd: { width: 40, height: 40, borderWidth: 2, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  scroll: { width: '100%', maxWidth: 680, alignSelf: 'center', padding: 18, paddingBottom: 140 },
+  myStatus: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, overflow: 'hidden' },
+  myStatusMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 14, padding: 13 },
+  myAvatarWrap: { position: 'relative' },
+  plusBadge: { position: 'absolute', right: -3, bottom: -3, width: 23, height: 23, borderRadius: radius.full, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  myQuickActions: { flexDirection: 'row', gap: 7, paddingRight: 12 },
+  quickButton: { width: 38, height: 38, borderWidth: 1, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  empty: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30, paddingVertical: 66 },
+  fabStack: { position: 'absolute', right: 24, bottom: 26, alignItems: 'center', gap: 13 },
+  fabSmall: { width: 44, height: 44, borderWidth: 2, borderRadius: 13, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  fab: { width: 58, height: 58, borderWidth: 3, borderColor: '#000000', borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
 
-  storiesSection: { marginTop: 22 },
-  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  sectionTitle: { ...type.headlineSm, fontSize: 20, color: t.text },
-  storiesRow: { flexDirection: 'row', gap: 18, paddingVertical: 4, paddingHorizontal: 2 },
-  storyItem: { alignItems: 'center', width: 76 },
-  storyRing: { width: 70, height: 70, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  storyAdd: { borderWidth: 2, borderStyle: 'dashed' },
-  plusBadge: { position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: radius.full, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  viewer: { flex: 1 },
+  tapZones: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', zIndex: 1 },
+  progressRow: { flexDirection: 'row', gap: 5, paddingHorizontal: 14, marginBottom: 12, zIndex: 3 },
+  progressBar: { flex: 1, height: 3, borderRadius: 3 },
+  viewerHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, zIndex: 3 },
+  viewerBody: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 22, paddingVertical: 20, zIndex: 2 },
+  viewerText: { ...type.headlineMd, fontSize: 28, lineHeight: 39, textAlign: 'center', maxWidth: 680 },
+  viewerImageFrame: { maxWidth: 720, maxHeight: '72%', overflow: 'hidden', backgroundColor: '#111111' },
+  viewerSong: { marginTop: 18, width: '100%', maxWidth: 360 },
+  viewerCaption: { maxWidth: 620, marginTop: 15, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.58)' },
 
-  dividerWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 30, marginBottom: 18 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -10 },
+  composer: { flex: 1 },
+  composerTopBar: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, zIndex: 4 },
+  composerIconButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  composerTools: { minWidth: 42, flexDirection: 'row', justifyContent: 'flex-end' },
+  chooseStage: { flex: 1, width: '100%', maxWidth: 560, alignSelf: 'center', justifyContent: 'center', padding: 24 },
+  chooseCard: { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 2, borderRadius: 12, padding: 16, marginBottom: 14 },
+  chooseIcon: { width: 46, height: 46, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  photoStage: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18, paddingBottom: 4 },
+  composerImageFrame: { flexShrink: 1, maxWidth: 720, maxHeight: '68%', overflow: 'hidden', backgroundColor: '#111111' },
+  editCropButton: { position: 'absolute', right: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.72)' },
+  emptyPhoto: { minWidth: 260, alignItems: 'center', padding: 32, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.38)', borderRadius: 12 },
+  captionBar: { width: '100%', maxWidth: 680, marginTop: 14, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)', paddingHorizontal: 16 },
+  captionInput: { ...type.bodyMd, color: '#ffffff', minHeight: 46, maxHeight: 92, paddingVertical: 11, outlineStyle: 'none' },
+  textStage: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  statusTextInput: { ...type.headlineMd, fontSize: 29, lineHeight: 40, width: '100%', maxWidth: 680, maxHeight: '65%', outlineStyle: 'none' },
+  composerSongDark: { width: '100%', maxWidth: 420, flexDirection: 'row', alignItems: 'center', marginTop: 12, backgroundColor: 'rgba(0,0,0,0.32)', borderRadius: 8 },
+  composerSongText: { width: '100%', maxWidth: 420, flexDirection: 'row', alignItems: 'center', marginTop: 20 },
+  composerFooter: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 7, width: '100%', maxWidth: 680, alignSelf: 'center', marginBottom: 8 },
+  sendRow: { width: '100%', maxWidth: 680, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  privacyPill: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 14, borderRadius: 24, backgroundColor: 'rgba(0,0,0,0.68)' },
+  sendButton: { width: 56, height: 56, borderRadius: radius.full, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
 
-  card: { padding: 14, position: 'relative', overflow: 'hidden' },
-  tape: { position: 'absolute', top: -8, left: '50%', marginLeft: -28, width: 56, height: 20, borderWidth: 1, borderStyle: 'dashed', opacity: 0.85, transform: [{ rotate: '-3deg' }] },
-  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
-  cardImageWrap: { width: '100%', aspectRatio: 1.1, marginTop: 12, overflow: 'hidden' },
-
-  fab: { position: 'absolute', right: 24, bottom: 26, width: 54, height: 54, alignItems: 'center', justifyContent: 'center' },
-
-  composerScreen: { flex: 1 },
-  composerScroll: { padding: 20, paddingBottom: 60, maxWidth: 560, width: '100%', alignSelf: 'center' },
-  composerTopBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  previewCard: { minHeight: 220, alignItems: 'center', justifyContent: 'center', padding: 20, position: 'relative', overflow: 'hidden' },
-  previewImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.9 },
-  previewImageX: { position: 'absolute', top: 10, right: 10, width: 26, height: 26, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  previewInput: { ...type.headlineMd, fontSize: 22, textAlign: 'center', width: '100%', maxHeight: 200, outlineStyle: 'none' },
-  previewSong: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, width: '100%' },
-  colorRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 16 },
-  swatch: { width: 28, height: 28, borderWidth: 1.5 },
-  swatchActive: { borderWidth: 3 },
-
-  attachRow: { flexDirection: 'row', gap: 12, marginTop: 20 },
-  attachBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
-
-  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 16 },
-  postBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, marginTop: 24 },
-
-  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, minHeight: 48, marginHorizontal: 20 },
-  searchWrapInput: { flex: 1, ...type.bodyLg, color: t.text, paddingVertical: 10, outlineStyle: 'none' },
-
-  viewer: { flex: 1, paddingTop: 48 },
-  progressRow: { flexDirection: 'row', gap: 5, paddingHorizontal: 16, marginBottom: 14 },
-  progressBar: { flex: 1, height: 3 },
-  viewerHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20 },
-  viewerBody: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  viewerText: { ...type.headlineMd, fontSize: 26, textAlign: 'center', lineHeight: 40 },
-  viewerImage: { width: '100%', height: '70%' },
-  viewerSong: { marginTop: 20, width: '100%', maxWidth: 340 },
+  privacyOverlay: { flex: 1, justifyContent: 'flex-end' },
+  privacySheet: { position: 'relative', maxHeight: '88%', borderTopWidth: 3, borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingHorizontal: 18, paddingTop: 18 },
+  privacyHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
+  privacyDone: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 8, marginTop: 10 },
 });

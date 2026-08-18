@@ -78,7 +78,8 @@ export const api = {
   updateMe: (payload) => request('/api/me', { method: 'PATCH', body: payload }),
   updateSettings: (payload) => request('/api/me/settings', { method: 'PATCH', body: payload }),
   changePassword: (payload) => request('/api/me/password', { method: 'POST', body: payload }),
-  users: (q = '') => request(`/api/users?q=${encodeURIComponent(q)}`),
+  users: (q = '', { contactsOnly = false } = {}) =>
+    request(`/api/users?q=${encodeURIComponent(q)}${contactsOnly ? '&contacts=1' : ''}`),
 
   // Colleagues — shared colleges/institutions, organizations and workplaces
   affiliations: ({ q, type, mine } = {}) => {

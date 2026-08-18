@@ -10,26 +10,38 @@ import { type, inkBox, marker, dashedRule } from '../theme';
 export const AUDIENCE = {
   public: { key: 'public', label: 'Public', sub: 'Everyone on +one can see this', icon: 'earth-outline' },
   contacts: { key: 'contacts', label: 'Friends', sub: 'Only people you already chat with', icon: 'people-outline' },
-  selected: { key: 'selected', label: 'Selected people', sub: 'Pick exactly who sees it', icon: 'person-add-outline' },
+  contacts_except: { key: 'contacts_except', label: 'Friends except…', sub: 'All friends except the people you choose', icon: 'person-remove-outline' },
+  selected: { key: 'selected', label: 'Private', sub: 'Only the people you choose can see it', icon: 'lock-closed-outline' },
 };
 
+const DEFAULT_OPTIONS = ['public', 'contacts', 'selected'];
+
 /**
- * Three-way audience selector for a status post: Public / Friends (contacts)
- * / Selected people. Choosing "Selected" opens an inline contact picker with
- * checkboxes, matching the app's existing InkCheckbox / list treatment.
+ * Reusable audience selector. Network uses the default Public / Friends /
+ * Private grid; Status can pass the WhatsApp-style Friends-except option and
+ * a vertical radio-list layout. Inclusion/exclusion people are picked inline.
  */
-export default function AudiencePicker({ audience, onChange, recipientIds, onChangeRecipients }) {
+export default function AudiencePicker({
+  audience, onChange, recipientIds, onChangeRecipients, options = DEFAULT_OPTIONS, layout = 'grid',
+  contactsOnly = false,
+}) {
   const { theme } = useTheme();
   const [users, setUsers] = useState([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const s = makeStyles(theme);
+  const optionItems = options
+    .map((option) => (typeof option === 'string' ? AUDIENCE[option] : option))
+    .filter(Boolean);
+  const choosingPeople = audience === 'selected' || audience === 'contacts_except';
+  const activeMeta = optionItems.find((option) => option.key === audience) || AUDIENCE[audience];
+  const listLayout = layout === 'list';
 
   useEffect(() => {
-    if (audience !== 'selected' || users.length) return;
+    if (!choosingPeople || users.length) return;
     setLoading(true);
-    api.users().then(({ users }) => setUsers(users)).catch(() => {}).finally(() => setLoading(false));
-  }, [audience]);
+    api.users('', { contactsOnly }).then(({ users }) => setUsers(users)).catch(() => {}).finally(() => setLoading(false));
+  }, [choosingPeople, contactsOnly, users.length]);
 
   const filtered = users.filter((u) => {
     const q = query.toLowerCase();
@@ -42,36 +54,50 @@ export default function AudiencePicker({ audience, onChange, recipientIds, onCha
 
   return (
     <View>
-      <View style={s.optionsRow}>
-        {Object.values(AUDIENCE).map((opt) => {
+      <View style={listLayout ? s.optionsList : s.optionsRow}>
+        {optionItems.map((opt) => {
           const active = audience === opt.key;
           return (
             <Pressable
               key={opt.key}
               onPress={() => onChange(opt.key)}
               style={({ pressed }) => [
-                s.option,
-                inkBox(theme, active ? 'ink' : 'thin'),
-                active ? { backgroundColor: theme.highlighterWash } : null,
+                listLayout ? s.optionList : s.option,
+                listLayout ? { borderBottomColor: theme.graphiteLine } : inkBox(theme, active ? 'ink' : 'thin'),
+                !listLayout && active ? { backgroundColor: theme.highlighterWash } : null,
                 pressed && !active ? marker(theme, 1) : null,
               ]}
             >
-              <Icon name={opt.icon} size={18} color={theme.ink} />
-              <Text style={[type.labelSm, { color: theme.ink, textAlign: 'center', marginTop: 6 }]}>{opt.label}</Text>
+              <Icon name={opt.icon} size={listLayout ? 21 : 18} color={theme.ink} />
+              {listLayout ? (
+                <>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[type.bodyStrong, { color: theme.text }]}>{opt.label}</Text>
+                    <Text style={[type.bodySm, { color: theme.subtext, marginTop: 2 }]}>{opt.sub}</Text>
+                  </View>
+                  <View style={[s.radio, { borderColor: active ? theme.ink : theme.graphiteLine }]}>
+                    {active && <View style={[s.radioDot, { backgroundColor: theme.ink }]} />}
+                  </View>
+                </>
+              ) : (
+                <Text style={[type.labelSm, { color: theme.ink, textAlign: 'center', marginTop: 6 }]}>{opt.label}</Text>
+              )}
             </Pressable>
           );
         })}
       </View>
-      <Text style={[type.bodySm, { color: theme.subtext, marginTop: 8 }]}>{AUDIENCE[audience]?.sub}</Text>
+      {!listLayout && (
+        <Text style={[type.bodySm, { color: theme.subtext, marginTop: 8 }]}>{activeMeta?.sub}</Text>
+      )}
 
-      {audience === 'selected' && (
+      {choosingPeople && (
         <View style={[s.pickerWrap, inkBox(theme, 'thin')]}>
           <View style={s.searchRow}>
             <Icon name="search" size={16} color={theme.muted} />
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Search people…"
+              placeholder={audience === 'contacts_except' ? 'Search people to exclude…' : 'Search people…' }
               placeholderTextColor={theme.muted}
               style={s.searchInput}
             />
@@ -99,7 +125,7 @@ export default function AudiencePicker({ audience, onChange, recipientIds, onCha
           )}
           {!!recipientIds.length && (
             <Text style={[type.labelXs, { color: theme.muted, marginTop: 8 }]}>
-              {recipientIds.length} selected
+              {recipientIds.length} {audience === 'contacts_except' ? 'excluded' : 'selected'}
             </Text>
           )}
         </View>
@@ -110,7 +136,11 @@ export default function AudiencePicker({ audience, onChange, recipientIds, onCha
 
 const makeStyles = (t) => StyleSheet.create({
   optionsRow: { flexDirection: 'row', gap: 8 },
+  optionsList: { width: '100%' },
   option: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 4 },
+  optionList: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 4, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  radio: { width: 22, height: 22, borderRadius: 999, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  radioDot: { width: 11, height: 11, borderRadius: 999 },
   pickerWrap: { marginTop: 12, padding: 10 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4, paddingBottom: 8 },
   searchInput: { flex: 1, color: t.text, paddingVertical: 6, outlineStyle: 'none' },

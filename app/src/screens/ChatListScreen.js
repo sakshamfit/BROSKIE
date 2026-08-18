@@ -20,6 +20,15 @@ import { confirm } from '../hooks/confirm';
 /* each divider leans a slightly different way, like a hand-ruled line */
 const TILTS = [-0.5, 0.8, -0.3, 0.6, -0.7, 0.4];
 
+// Chat tiles intentionally stay solid India-ink black in every theme. They
+// are the high-contrast "black boxes" that separate people from the paper
+// background instead of disappearing into it.
+const CHAT_TILE = '#090909';
+const CHAT_TILE_PRESSED = '#242321';
+const CHAT_TILE_TEXT = '#fdf8f8';
+const CHAT_TILE_MUTED = '#bdb9b7';
+const CHAT_TILE_LINE = '#000000';
+
 export default function ChatListScreen({ navigation }) {
   const { chats, refreshChats, typing, markRead, onChatRequestEvent } = useChat();
   const { user } = useAuth();
@@ -126,12 +135,12 @@ export default function ChatListScreen({ navigation }) {
           style={({ pressed }) => [
             s.row,
             hasUnread ? s.rowUnread : s.rowRead,
-            { borderColor: hasUnread ? theme.ink : theme.graphiteLine },
-            pressed ? marker(theme, 1) : null,
+            { borderColor: hasUnread ? theme.highlighter : CHAT_TILE_LINE },
+            pressed ? { backgroundColor: CHAT_TILE_PRESSED } : null,
           ]}
         >
-          {hasUnread && <View style={[s.unreadMark, { backgroundColor: theme.ink, borderColor: theme.bg }]} />}
-          <View style={[s.avatarFrame, { borderColor: theme.ink }]}>
+          {hasUnread && <View style={[s.unreadMark, { backgroundColor: theme.highlighter, borderColor: CHAT_TILE }]} />}
+          <View style={[s.avatarFrame, { borderColor: hasUnread ? theme.highlighter : CHAT_TILE_TEXT }]}>
           <Avatar
             uri={item.avatar}
             name={item.name}
@@ -147,13 +156,13 @@ export default function ChatListScreen({ navigation }) {
           <View style={s.rowBody}>
             <View style={s.rowTop}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginRight: 10 }}>
-                {item.pinned && <Icon name="pin" size={13} color={theme.ink} />}
+                {item.pinned && <Icon name="pin" size={13} color={theme.highlighter} />}
                 <EmojiText style={s.name} numberOfLines={1}>{item.name}</EmojiText>
                 {item.requestStatus === 'pending' && item.requestDirection === 'outgoing' && (
                   <Text style={[type.labelXs, s.requestSent]}>REQUEST SENT</Text>
                 )}
               </View>
-              <Text style={[s.time, hasUnread && { color: theme.ink }]}>
+              <Text style={[s.time, hasUnread && { color: theme.highlighter }]}>
                 {formatChatTime(lm?.createdAt || item.updatedAt)}
               </Text>
             </View>
@@ -161,28 +170,30 @@ export default function ChatListScreen({ navigation }) {
             <View style={s.rowBottom}>
               {typers.length > 0 ? (
                 <View style={marker(theme, 1)}>
-                  <Text style={[type.bodyMd, { color: theme.ink, fontStyle: 'italic', paddingHorizontal: 3 }]} numberOfLines={1}>
+                  <Text style={[type.bodyMd, { color: theme.highlighter, fontStyle: 'italic', paddingHorizontal: 3 }]} numberOfLines={1}>
                     {item.type === 'group' ? `${typers[0]} is typing…` : 'typing…'}
                   </Text>
                 </View>
               ) : (
                 <View style={s.previewRow}>
-                  {isMine && lm && lm.type !== 'system' && <Ticks status={lm.status} size={13} />}
+                  {isMine && lm && lm.type !== 'system' && (
+                    <Ticks status={lm.status} size={13} color={lm.status === 'read' ? theme.highlighter : CHAT_TILE_MUTED} />
+                  )}
                   {lm && (lm.type === 'image' || lm.type === 'voice') && !lm.deleted && (
                     <Emoji char={lm.type === 'image' ? '📷' : '🎤'} size={13} />
                   )}
                   {!!senderPrefix && (
-                    <Text style={[s.preview, { fontFamily: type.body(700), flex: 0 }]}>{senderPrefix}</Text>
+                    <Text style={[s.preview, { fontFamily: type.body(700), flex: 0, color: CHAT_TILE_TEXT }]}>{senderPrefix}</Text>
                   )}
                   <EmojiText
-                    style={[s.preview, hasUnread && { color: theme.text }]}
+                    style={[s.preview, hasUnread && { color: CHAT_TILE_TEXT }]}
                     numberOfLines={1}
                   >
                     {preview}
                   </EmojiText>
                 </View>
               )}
-              {item.muted && <Icon name="volume-mute" size={14} color={theme.muted} style={{ marginLeft: 8 }} />}
+              {item.muted && <Icon name="volume-mute" size={14} color={CHAT_TILE_MUTED} style={{ marginLeft: 8 }} />}
             </View>
           </View>
         </Pressable>
@@ -441,22 +452,23 @@ const makeStyles = (t) => StyleSheet.create({
   searchInput: { flex: 1, ...type.bodyLg, color: t.text, paddingVertical: 12, outlineStyle: 'none' },
 
   row: {
-    flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 12, alignItems: 'center', gap: 14,
-    borderWidth: 2, backgroundColor: t.card, marginBottom: 14,
-    borderTopLeftRadius: 4, borderTopRightRadius: 7, borderBottomRightRadius: 3, borderBottomLeftRadius: 6,
+    flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 13, alignItems: 'center', gap: 14,
+    borderWidth: 2, backgroundColor: CHAT_TILE, marginBottom: 14,
+    borderTopLeftRadius: 8, borderTopRightRadius: 12, borderBottomRightRadius: 8, borderBottomLeftRadius: 11,
+    overflow: 'hidden',
   },
-  rowUnread: { borderWidth: 3, transform: [{ rotate: '-0.35deg' }] },
-  rowRead: { borderStyle: 'dashed', transform: [{ rotate: '0.2deg' }] },
+  rowUnread: { borderWidth: 3, transform: [{ rotate: '-0.2deg' }] },
+  rowRead: { borderStyle: 'solid', transform: [{ rotate: '0.12deg' }] },
   avatarFrame: { padding: 3, borderWidth: 2, borderTopLeftRadius: 3, borderTopRightRadius: 6, borderBottomRightRadius: 4, borderBottomLeftRadius: 2 },
   unreadMark: { position: 'absolute', width: 13, height: 13, left: -7, top: '50%', marginTop: -6, transform: [{ rotate: '45deg' }], borderWidth: 2, zIndex: 2 },
   rowBody: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 },
-  name: { ...type.headlineSm, color: t.text, flexShrink: 1 },
-  time: { ...type.labelXs, color: t.muted },
-  requestSent: { color: t.ink, backgroundColor: t.highlighterSoft, paddingHorizontal: 5, paddingVertical: 2 },
+  name: { ...type.headlineSm, color: CHAT_TILE_TEXT, flexShrink: 1 },
+  time: { ...type.labelXs, color: CHAT_TILE_MUTED },
+  requestSent: { color: '#1c1b1b', backgroundColor: t.highlighter, paddingHorizontal: 5, paddingVertical: 2 },
   rowBottom: { flexDirection: 'row', alignItems: 'center' },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 },
-  preview: { ...type.bodyMd, color: t.subtext, flex: 1 },
+  preview: { ...type.bodyMd, color: CHAT_TILE_MUTED, flex: 1 },
 
   fab: {
     position: 'absolute', right: 24, bottom: 26, width: 58, height: 58,

@@ -323,10 +323,13 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
 
       <Pressable
         onPress={() => setComposerOpen(true)}
-        android_ripple={rippleFor(theme, { borderless: true, radius: 30 })}
-        style={({ pressed }) => [s.fab, inkBox(theme, 'bold'), { backgroundColor: pressed && Platform.OS !== 'android' ? theme.highlighter : theme.ink }]}
+        android_ripple={rippleFor(theme, { borderless: false, radius: 30 })}
+        style={({ pressed }) => [
+          s.fab,
+          { backgroundColor: pressed && Platform.OS !== 'android' ? '#242321' : '#050505', borderColor: '#000000' },
+        ]}
       >
-        <Icon name="create-outline" size={21} color={theme.onPrimary} />
+        <Icon name="create-outline" size={21} color="#ffffff" />
       </Pressable>
 
       <NewPostScreen
@@ -485,8 +488,9 @@ const makeStyles = (t) => StyleSheet.create({
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2, paddingHorizontal: 2 },
 
   fab: {
-    position: 'absolute', right: 24, bottom: 26, width: 54, height: 54,
-    alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', right: 24, bottom: 26, width: 58, height: 58,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderRadius: 14,
+    overflow: 'hidden',
   },
 
   lightbox: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },

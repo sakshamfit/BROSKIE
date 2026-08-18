@@ -838,7 +838,11 @@ app.post('/api/me/password', requireAuth, (req, res) => {
 
 app.get('/api/users', requireAuth, (req, res) => {
   const q = String(req.query.q || '').toLowerCase();
-  const all = db.prepare('SELECT * FROM users WHERE id != ? ORDER BY name').all(req.userId);
+  let all = db.prepare('SELECT * FROM users WHERE id != ? ORDER BY name').all(req.userId);
+  if (req.query.contacts === '1' || req.query.contacts === 'true') {
+    const allowed = new Set(contactIds(req.userId));
+    all = all.filter((user) => allowed.has(user.id));
+  }
   const filtered = q
     ? all.filter((u) =>
         u.name.toLowerCase().includes(q) ||
@@ -1667,6 +1671,10 @@ function canViewStatus(statusId, authorId, audience, viewerId) {
   if (blockedEitherWay(authorId, viewerId)) return false;
   if (audience === 'public') return true;
   if (audience === 'contacts') return contactIds(authorId).includes(viewerId);
+  if (audience === 'contacts_except') {
+    if (!contactIds(authorId).includes(viewerId)) return false;
+    return !db.prepare('SELECT 1 FROM status_recipients WHERE status_id = ? AND user_id = ?').get(statusId, viewerId);
+  }
   if (audience === 'selected') {
     return !!db.prepare('SELECT 1 FROM status_recipients WHERE status_id = ? AND user_id = ?').get(statusId, viewerId);
   }
@@ -1699,7 +1707,7 @@ function postAudienceIds(postId, authorId, audience) {
 
 function hydrateStatus(s, viewerId) {
   return {
-    id: s.id, type: s.type, body: s.body, mediaUrl: s.media_url, bg: s.bg,
+    id: s.id, type: s.type, body: s.body, mediaUrl: s.media_url, mediaAspect: s.media_aspect || null, bg: s.bg,
     song: s.song ? JSON.parse(s.song) : null,
     audience: s.audience || 'public',
     createdAt: s.created_at,
@@ -1730,37 +1738,55 @@ app.get('/api/status', requireAuth, (req, res) => {
 
 app.post('/api/status', requireAuth, (req, res) => {
   const {
-    type = 'text', body = '', mediaUrl = null, bg = '#075E54',
+    type = 'text', body = '', mediaUrl = null, mediaAspect = null, bg = '#075E54',
     song = null, audience = 'public', recipientIds = [],
   } = req.body || {};
 
-  const aud = ['public', 'contacts', 'selected'].includes(audience) ? audience : 'public';
-  if (aud === 'selected' && !recipientIds.length) {
+  const aud = ['public', 'contacts', 'contacts_except', 'selected'].includes(audience) ? audience : 'public';
+  const statusContacts = new Set(contactIds(req.userId));
+  const recipients = [...new Set(
+    (Array.isArray(recipientIds) ? recipientIds : [])
+      .map((id) => String(id))
+      .filter((id) => id !== req.userId && getUser(id) && statusContacts.has(id))
+  )];
+  if (aud === 'selected' && !recipients.length) {
     return res.status(400).json({ error: 'Pick at least one person for a private status.' });
   }
 
+  const cleanBody = String(body || '').trim().slice(0, 700);
+  const cleanMediaUrl = mediaUrl ? String(mediaUrl) : null;
+  const cleanType = type === 'image' && cleanMediaUrl ? 'image' : 'text';
+  if (!cleanBody && !cleanMediaUrl && !song) {
+    return res.status(400).json({ error: 'Write something, or attach a photo or a song.' });
+  }
+
   const s = {
-    id: nano(), user_id: req.userId, type, body, media_url: mediaUrl, bg,
+    id: nano(), user_id: req.userId, type: cleanType, body: cleanBody, media_url: cleanMediaUrl,
+    media_aspect: mediaAspect != null && Number.isFinite(Number(mediaAspect))
+      ? Math.max(0.4, Math.min(2.5, Number(mediaAspect)))
+      : null,
+    bg: String(bg || '#075E54').slice(0, 32),
     song: song ? JSON.stringify(song) : null, audience: aud,
     created_at: now(), expires_at: now() + 24 * 3600 * 1000,
   };
   db.prepare(
-    `INSERT INTO statuses (id, user_id, type, body, media_url, bg, song, audience, created_at, expires_at)
-     VALUES (@id, @user_id, @type, @body, @media_url, @bg, @song, @audience, @created_at, @expires_at)`
+    `INSERT INTO statuses (id, user_id, type, body, media_url, media_aspect, bg, song, audience, created_at, expires_at)
+     VALUES (@id, @user_id, @type, @body, @media_url, @media_aspect, @bg, @song, @audience, @created_at, @expires_at)`
   ).run(s);
 
-  if (aud === 'selected') {
+  if (aud === 'selected' || aud === 'contacts_except') {
     const stmt = db.prepare('INSERT OR IGNORE INTO status_recipients (status_id, user_id) VALUES (?, ?)');
-    recipientIds.filter((id) => getUser(id)).forEach((id) => stmt.run(s.id, id));
+    recipients.forEach((id) => stmt.run(s.id, id));
   }
 
   // Only notify sockets that are allowed to see it (and never someone
   // blocked either way, regardless of audience).
+  const excluded = new Set(recipients);
   const targets = (aud === 'public'
     ? [...sockets.keys()]
-    : aud === 'contacts'
-      ? contactIds(req.userId)
-      : recipientIds
+    : aud === 'contacts' || aud === 'contacts_except'
+      ? contactIds(req.userId).filter((id) => aud !== 'contacts_except' || !excluded.has(id))
+      : recipients
   ).filter((id) => !blockedEitherWay(req.userId, id));
   targets.forEach((uid) => emitToUser(uid, 'status:new', { userId: req.userId }));
   emitToUser(req.userId, 'status:new', { userId: req.userId });

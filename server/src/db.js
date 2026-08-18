@@ -138,9 +138,10 @@ CREATE TABLE IF NOT EXISTS statuses (
   type       TEXT DEFAULT 'text',               -- text | image | song
   body       TEXT,
   media_url  TEXT,
+  media_aspect REAL,
   bg         TEXT DEFAULT '#075E54',
   song       TEXT,                               -- JSON blob: {id,name,artist,albumArt,previewUrl,url}
-  audience   TEXT DEFAULT 'public',              -- public | contacts | selected
+  audience   TEXT DEFAULT 'public',              -- public | contacts | contacts_except | selected
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -340,6 +341,7 @@ addColumnIfMissing('users', 'username', 'username TEXT');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)');
 addColumnIfMissing('statuses', 'song', 'song TEXT');
 addColumnIfMissing('statuses', 'audience', "audience TEXT DEFAULT 'public'");
+addColumnIfMissing('statuses', 'media_aspect', 'media_aspect REAL');
 addColumnIfMissing('posts', 'song', 'song TEXT');
 addColumnIfMissing('posts', 'audience', "audience TEXT DEFAULT 'public'");
 addColumnIfMissing('posts', 'media_aspect', 'media_aspect REAL');
