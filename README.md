@@ -131,9 +131,10 @@ as their own message with live vote counts and bars; members can vote or change 
 vote, and results update in real time for everyone.
 
 **The Network** — a public worldwide feed. Anyone can post text, an image and a
-tag; posts appear live for every connected user via Socket.IO. Likes toggle with
-optimistic UI, threaded comments in a bottom sheet, tag filtering, trending tags,
-cursor pagination, and authors can delete their own posts.
+tag; posts appear live for every connected user via Socket.IO. Photo posts provide
+Original, 1:1, 4:5, 16:9 and 9:16 framing with native crop editing, and preserve that
+chosen box in the feed. Likes toggle with optimistic UI, threaded comments in a bottom
+sheet, tag filtering, trending tags, cursor pagination, and author deletion.
 
 **Colleagues** — place-based discovery inside The Network. Add a college/institution,
 organization, or workplace to your profile, join an existing registered place, search

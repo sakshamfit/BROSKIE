@@ -1786,6 +1786,7 @@ function hydratePost(row, viewerId) {
     title: row.title || '',
     body: row.body,
     mediaUrl: row.media_url,
+    mediaAspect: row.media_aspect || null,
     song: row.song ? JSON.parse(row.song) : null,
     tag: row.tag,
     audience: row.audience || 'public',
@@ -1857,7 +1858,7 @@ app.get('/api/posts', requireAuth, (req, res) => {
 
 app.post('/api/posts', requireAuth, (req, res) => {
   const {
-    body = '', title = '', mediaUrl = null, tag = null,
+    body = '', title = '', mediaUrl = null, mediaAspect = null, tag = null,
     song = null, audience = 'public', recipientIds = [],
   } = req.body || {};
   const text = String(body).trim();
@@ -1875,14 +1876,17 @@ app.post('/api/posts', requireAuth, (req, res) => {
     title: String(title).trim().slice(0, 120),
     body: text.slice(0, 2000),
     media_url: mediaUrl,
+    media_aspect: Number.isFinite(Number(mediaAspect))
+      ? Math.max(0.4, Math.min(2.5, Number(mediaAspect)))
+      : null,
     song: song ? JSON.stringify(song) : null,
     tag: tag ? String(tag).replace(/^#/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24) || null : null,
     audience: aud,
     created_at: now(),
   };
   db.prepare(
-    `INSERT INTO posts (id, user_id, title, body, media_url, song, tag, audience, created_at)
-     VALUES (@id, @user_id, @title, @body, @media_url, @song, @tag, @audience, @created_at)`
+    `INSERT INTO posts (id, user_id, title, body, media_url, media_aspect, song, tag, audience, created_at)
+     VALUES (@id, @user_id, @title, @body, @media_url, @media_aspect, @song, @tag, @audience, @created_at)`
   ).run(post);
 
   if (aud === 'selected') {

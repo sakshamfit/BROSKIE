@@ -4,7 +4,6 @@ import {
   Image, KeyboardAvoidingView, Platform, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { api } from '../api';
@@ -12,6 +11,7 @@ import useResponsive from '../hooks/useResponsive';
 import AudiencePicker from '../components/AudiencePicker';
 import SongCard from '../components/SongCard';
 import SongPicker from '../components/SongPicker';
+import PhotoCropPicker from '../components/PhotoCropPicker';
 import { rippleFor } from '../components/common';
 import { dashedRule, marker, radius, type } from '../theme';
 
@@ -32,6 +32,7 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
 
   const [body, setBody] = useState('');
   const [image, setImage] = useState(null);
+  const [cropPicker, setCropPicker] = useState(false);
   const [song, setSong] = useState(null);
   const [songPicker, setSongPicker] = useState(false);
   const [tag, setTag] = useState('');
@@ -42,18 +43,15 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
   const [error, setError] = useState('');
 
   const reset = () => {
-    setBody(''); setImage(null); setSong(null); setTag(''); setShowTagInput(false);
+    setBody(''); setImage(null); setCropPicker(false); setSong(null); setTag(''); setShowTagInput(false);
     setAudience('public'); setRecipientIds([]); setError('');
   };
 
   const close = () => { reset(); onClose(); };
 
-  const pickImage = async () => {
-    try {
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.75 });
-      if (res.canceled || !res.assets?.length) return;
-      setImage(res.assets[0]);
-    } catch (e) { setError(e.message); }
+  const pickImage = () => {
+    setError('');
+    setCropPicker(true);
   };
 
   const submit = async () => {
@@ -69,7 +67,8 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
         mediaUrl = up.url;
       }
       const { post } = await api.createPost({
-        body: text, mediaUrl, song, tag: tag.trim() || null,
+        body: text, mediaUrl, mediaAspect: image?.displayAspect || null,
+        song, tag: tag.trim() || null,
         audience, recipientIds: audience === 'selected' ? recipientIds : [],
       });
       onPosted?.(post);
@@ -130,10 +129,23 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
         </View>
 
         {!!image && (
-          <View style={[s.imagePreviewWrap, { borderColor: theme.graphiteLine }]}>
+          <View
+            style={[
+              s.imagePreviewWrap,
+              {
+                borderColor: theme.graphiteLine,
+                aspectRatio: image.displayAspect || 1,
+                width: (image.displayAspect || 1) < 0.7 ? '60%' : (image.displayAspect || 1) < 1 ? '78%' : '100%',
+              },
+            ]}
+          >
             <Image source={{ uri: image.uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
             <Pressable onPress={() => setImage(null)} style={[s.imagePreviewX, { backgroundColor: theme.ink }]}>
               <Icon name="close" size={13} color={theme.onPrimary} />
+            </Pressable>
+            <Pressable onPress={() => setCropPicker(true)} style={[s.imageEdit, { backgroundColor: theme.ink }]}>
+              <Icon name="create-outline" size={12} color={theme.onPrimary} />
+              <Text style={[type.labelXs, { color: theme.onPrimary }]}>EDIT FRAME</Text>
             </Pressable>
           </View>
         )}
@@ -247,6 +259,13 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
         </View>
       </View>
 
+      <PhotoCropPicker
+        visible={cropPicker}
+        onClose={() => setCropPicker(false)}
+        onPick={(asset) => { setImage(asset); setError(''); }}
+        title="Crop post photo"
+        quality={0.8}
+      />
       <SongPicker
         visible={songPicker}
         onClose={() => setSongPicker(false)}
@@ -279,8 +298,9 @@ const makeStyles = (t) => StyleSheet.create({
     padding: 20, ...type.bodyLg, outlineStyle: 'none',
   },
 
-  imagePreviewWrap: { width: '100%', height: 200, borderWidth: 1, overflow: 'hidden', position: 'relative' },
+  imagePreviewWrap: { borderWidth: 1, overflow: 'hidden', position: 'relative', alignSelf: 'center' },
   imagePreviewX: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  imageEdit: { position: 'absolute', left: 8, bottom: 8, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 3 },
   songPreviewWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 4 },
 
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },

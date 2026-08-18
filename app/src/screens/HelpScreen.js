@@ -51,7 +51,7 @@ const TOPICS = [
     title: 'The Network',
     summary: 'Public posts, tags, and purpose-based Communities',
     body: [
-      { h: 'Posting', p: 'Tap the pencil FAB on the Network tab to write a post — attach a photo, a song, or a #tag, and choose Public / Friends / Selected people, exactly like Status.' },
+      { h: 'Posting', p: 'Tap the pencil FAB on the Network tab to write a post — attach a photo, a song, or a #tag, and choose Public / Friends / Selected people. Photos offer Original, Square, Portrait, Wide and Story frames, followed by the native crop editor.' },
       { h: 'Liking & commenting', p: 'Tap the heart to like a post, or the speech bubble to open comments. Tap any #tag chip (yours or someone else\u2019s) to filter the feed to just that tag.' },
       { h: 'Communities', p: 'Switch to the COMMUNITIES tab at the top of Network to create or join purpose-based groups \u2014 Club Night, House Party, Chai Chat, Trip Planning, Running Group, Game Night, Study Group, or something custom.' },
       { h: 'Finding colleagues', p: 'Open the COLLEAGUES tab, then add or join your college, institution, organization, or workplace. People who register the same place appear as colleague cards. Send a connection request; once they accept, tap Message to start a direct chat.' },

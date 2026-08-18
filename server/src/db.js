@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS posts (
   title      TEXT DEFAULT '',
   body       TEXT NOT NULL DEFAULT '',
   media_url  TEXT,
+  media_aspect REAL,
   song       TEXT,
   tag        TEXT,
   audience   TEXT DEFAULT 'public',
@@ -341,6 +342,7 @@ addColumnIfMissing('statuses', 'song', 'song TEXT');
 addColumnIfMissing('statuses', 'audience', "audience TEXT DEFAULT 'public'");
 addColumnIfMissing('posts', 'song', 'song TEXT');
 addColumnIfMissing('posts', 'audience', "audience TEXT DEFAULT 'public'");
+addColumnIfMissing('posts', 'media_aspect', 'media_aspect REAL');
 // A single JSON blob for notification/privacy preferences — avoids a new
 // migration every time a toggle is added. Server validates/merges keys
 // (see DEFAULT_SETTINGS + sanitizeSettings in index.js) so bad client

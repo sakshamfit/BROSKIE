@@ -167,7 +167,17 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         )}
 
         {!!item.mediaUrl && (
-          <Pressable onPress={() => setLightbox(mediaUrl(item.mediaUrl))} style={[s.noteImage, inkBox(theme, 'ink')]}>
+          <Pressable
+            onPress={() => setLightbox(mediaUrl(item.mediaUrl))}
+            style={[
+              s.noteImage,
+              inkBox(theme, 'ink'),
+              {
+                aspectRatio: item.mediaAspect || 16 / 9,
+                width: (item.mediaAspect || 16 / 9) < 0.7 ? '62%' : (item.mediaAspect || 16 / 9) < 1 ? '80%' : '100%',
+              },
+            ]}
+          >
             <Image source={{ uri: mediaUrl(item.mediaUrl) }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
           </Pressable>
         )}
@@ -470,7 +480,7 @@ const makeStyles = (t) => StyleSheet.create({
   note: { padding: 18, marginBottom: 22, borderWidth: 1, borderColor: t.graphiteLine,
     borderTopLeftRadius: 2, borderTopRightRadius: 5, borderBottomRightRadius: 2, borderBottomLeftRadius: 4 },
   noteHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  noteImage: { width: '100%', height: 190, marginTop: 14, overflow: 'hidden' },
+  noteImage: { marginTop: 14, overflow: 'hidden', alignSelf: 'center' },
   actions: { flexDirection: 'row', gap: 22 },
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2, paddingHorizontal: 2 },
 
