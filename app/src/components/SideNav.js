@@ -41,7 +41,7 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
         <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={railOnly ? 34 : 40} />
         {!railOnly && (
           <View style={{ flex: 1 }}>
-            <Text style={s.wordmark}>友達</Text>
+            <Text style={s.wordmark}>+one</Text>
             <Text style={[type.labelXs, { color: theme.muted }]}>ONLINE</Text>
           </View>
         )}

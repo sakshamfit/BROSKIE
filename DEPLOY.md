@@ -1,4 +1,4 @@
-# Deploying 友達
+# Deploying +one
 
 **Recommendation: deploy to ONE host.** It is simpler, cheaper, faster, and
 removes a whole class of bugs. Details below, plus the two-host option if you
@@ -8,7 +8,7 @@ specifically need a CDN.
 
 ## Why one host wins here
 
-友達 is two programs: an Expo web frontend and a Node/Socket.IO backend.
++one is two programs: an Expo web frontend and a Node/Socket.IO backend.
 Vercel can host the frontend but **cannot host the backend** — Socket.IO needs
 a process that stays alive holding WebSocket connections, and Vercel's
 serverless functions spin up per-request and die. So "just use Vercel" is not
@@ -129,14 +129,14 @@ Only if you want the Vercel CDN. `vercel.json` is already in the repo.
 
 ## Never lose data on deploy (persistent storage)
 
-By default, 友達's SQLite database (`server/data/tomodachi.db`) and any
+By default, +one's SQLite database (`server/data/tomodachi.db`) and any
 locally-stored photo uploads (`server/uploads`) live on the container's
 **ephemeral disk** — every redeploy on Railway/Render wipes them, so chats,
 users, communities and posts all reset. Fix this once, before real users
 touch the app:
 
 ### Railway (recommended — takes ~1 minute)
-1. Open your Railway project → the 友達 service → **Volumes** tab → **+ New Volume**
+1. Open your Railway project → the +one service → **Volumes** tab → **+ New Volume**
 2. Attach it to the service, mount path can be anything, e.g. `/data`
 3. Redeploy — that's it. `server/src/db.js` and `server/src/storage.js` both
    auto-detect Railway's `RAILWAY_VOLUME_MOUNT_PATH` env var (Railway sets it

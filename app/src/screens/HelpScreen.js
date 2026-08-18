@@ -13,7 +13,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 /**
  * A real, substantive Help & Guide — not a placeholder. Explains every key
- * feature of 友達 with plain-language "how to" steps: Chats, See (Status),
+ * feature of +one with plain-language "how to" steps: Chats, See (Status),
  * The Network + Communities, Settings/Privacy, plus a short FAQ. Built as
  * an expandable-sections layout (tap a topic to open it) so it stays
  * scannable on a phone instead of one giant wall of text.
@@ -40,7 +40,7 @@ const TOPICS = [
     summary: '24-hour updates, discover feed, songs & photos',
     body: [
       { h: 'Posting a status', p: 'Tap the + on your own avatar at the top of See to share text, a photo, or an attached song. It disappears automatically after 24 hours, like a story.' },
-      { h: 'Who can see it', p: 'Every status has a visibility choice: Public (everyone on 友達), Friends (only people you already chat with), or Selected people (you hand-pick exactly who). This is enforced by the server, not just hidden in the app.' },
+      { h: 'Who can see it', p: 'Every status has a visibility choice: Public (everyone on +one), Friends (only people you already chat with), or Selected people (you hand-pick exactly who). This is enforced by the server, not just hidden in the app.' },
       { h: 'Viewing others\u2019', p: 'Tap the story ring at the top to view someone\u2019s update full-screen, or browse the "Trending" feed below for a masonry grid of recent public statuses from everyone.' },
     ],
   },
@@ -74,7 +74,7 @@ const TOPICS = [
 ];
 
 const FAQ = [
-  { q: 'Is my data private?', a: '友達 stores your account, messages, statuses and posts on the server so features like search and read receipts work. Data is not end-to-end encrypted in transit between clients \u2014 it travels over HTTPS to the server, which stores it and relays it to recipients. Treat it accordingly: it\u2019s a real working messenger, not a zero-knowledge service.' },
+  { q: 'Is my data private?', a: '+one stores your account, messages, statuses and posts on the server so features like search and read receipts work. Data is not end-to-end encrypted in transit between clients \u2014 it travels over HTTPS to the server, which stores it and relays it to recipients. Treat it accordingly: it\u2019s a real working messenger, not a zero-knowledge service.' },
   { q: 'Why did a status/post disappear?', a: 'Status updates always expire after 24 hours by design. A post or status can also vanish from your feed if its author changed its visibility to Friends/Selected and you\u2019re no longer eligible to see it, or if you\u2019ve blocked \u2014 or been blocked by \u2014 that person.' },
   { q: 'Can I recover a deleted message or post?', a: 'No \u2014 deletions are permanent. A deleted chat message shows "message deleted" to other participants but the content is gone server-side.' },
   { q: 'Why can\u2019t I see someone\u2019s online status?', a: 'They\u2019ve likely set their Last Seen privacy to "My contacts" or "Nobody" in Settings \u2192 Privacy. Note that this is mutual for last-seen and fully mutual for read receipts \u2014 hiding yours also hides theirs from you.' },
@@ -116,10 +116,10 @@ export default function HelpScreen({ navigation, embedded = false }) {
             <Icon name="bulb-outline" size={26} color={theme.ink} />
           </View>
           <Text style={[type.headlineSm, { color: theme.text, marginTop: 14 }]}>
-            Everything you need to know about 友達
+            Everything you need to know about +one
           </Text>
           <Text style={[type.bodySm, { color: theme.subtext, marginTop: 6, textAlign: 'center' }]}>
-            {'Tap a topic below to expand it. 友達 (Tomodachi) means "friend" \u2014 a realtime messenger with Chats, disappearing Status updates, a public Network feed, and purpose-based Communities.'}
+            {'Tap a topic below to expand it. +one is a realtime messenger for Chats, disappearing Status updates, a public Network feed, Communities, and colleague discovery.'}
           </Text>
         </View>
 
@@ -177,7 +177,7 @@ export default function HelpScreen({ navigation, embedded = false }) {
         </View>
 
         <View style={{ marginTop: 26, alignItems: 'center' }}>
-          <TapeChip label="友達 · GRAPHITE & PULP" />
+          <TapeChip label="+ONE · GRAPHITE & PULP" />
           <Text style={[type.labelXs, { color: theme.muted, marginTop: 10, textAlign: 'center' }]}>
             Not affiliated with WhatsApp.
           </Text>

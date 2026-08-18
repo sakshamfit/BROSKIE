@@ -1,8 +1,8 @@
-# 友達 — Median App Studio assets & setup
+# +one — Median App Studio assets & setup
 
-Everything here is generated in the **"Graphite & Pulp"** brand style
-(warm paper `#fdf8f8`, India ink `#1c1b1b`, one highlighter accent
-`#FFE24D`) so the splash, icon, status bar and the in-app UI all match.
+Everything here is generated from the canonical **+one** brush artwork in
+`source-logo.png`, on the warm paper `#fdf8f8` used by the app, so the splash,
+icon, status bar and in-app UI all share one identity.
 
 ## Files in this folder
 
@@ -25,9 +25,8 @@ Designed to match the app's **"Graphite & Pulp"** identity — no more blue
 wipe, just three quiet beats (1.5 s total, 30 fps):
 
 1. **Paper background** (`#fdf8f8`) fills the screen.
-2. Your **logo fades in and scales up** gently (88% → 100%, ease-out).
-3. A **highlighter-yellow underline** (`#FFE24D`) draws on beneath the
-   wordmark — like signing the brand.
+2. The **+one logo fades in and scales up** gently (88% → 100%, ease-out).
+3. The final frame holds briefly before the app opens.
 
 Everything is keyframes with no external files, so it works in any Lottie
 player (Median, lottie-web, lottie-android).
@@ -43,7 +42,7 @@ python3 make_preview.py
 ```
 
 Tweak the timing/position in `make_splash_animation.py` (constants at the
-top: `DUR`, `LOGO_CX/CY`, `UNDERLINE_W`, `LOGO_FADE_T`, `UNDERLINE_T0/T1`, …).
+top: `DUR`, `LOGO_CX/CY`, `SCALE`, `LOGO_FADE_T`, and `LOGO_SCALE_T`).
 
 > **iOS splash tip:** Apple wants launch screens via a *storyboard*, which
 > Median auto-generates from the app icon. If you'd rather use the full-screen
@@ -54,8 +53,8 @@ top: `DUR`, `LOGO_CX/CY`, `UNDERLINE_W`, `LOGO_FADE_T`, `UNDERLINE_T0/T1`, …).
 
 1. **App Icon** → upload `icon-1024.png`.
 2. **Splash Screen**
-   - Android 12+: the splash shows the (circular-cropped) app icon centered.
-     `icon-1024.png` is already a simple, low-complexity mark — perfect.
+   - Android 12+: the splash shows the masked app icon centered. Use the
+     generated `icon-1024.png` and set the surrounding background to black.
    - Optionally upload the per-platform splash PNGs above.
    - Set **splash background color** to `#fdf8f8` (paper) so the launch
      blends straight into the app UI.

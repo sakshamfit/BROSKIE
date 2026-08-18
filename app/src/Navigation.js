@@ -119,7 +119,7 @@ export default function Navigation() {
   const { theme, mode } = useTheme();
   const { isSplitCapable } = useResponsive();
 
-  if (booting) return <Loading label="STARTING 友達" />;
+  if (booting) return <Loading label="STARTING +ONE" />;
 
   // Wide web viewports AND tablets (in either orientation, once there's
   // enough width) get the persistent sidebar + master/detail split.

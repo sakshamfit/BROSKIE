@@ -1,6 +1,6 @@
-# Supabase Storage for 友達 uploads
+# Supabase Storage for +one uploads
 
-By default 友達 writes uploaded photos to `server/uploads` on local disk.
+By default +one writes uploaded photos to `server/uploads` on local disk.
 On Railway/Render that disk is **ephemeral** — every redeploy wipes it and
 previously shared images 404.
 

@@ -341,10 +341,10 @@ function GlitchWordmark({ small = false, compact = false }) {
   const offset = compact ? 2 : 4;
   return (
     <View style={s.glitchWrap}>
-      <Text style={[textStyle, s.glitchLayerRed, { transform: [{ translateX: offset }, { translateY: -offset * 0.75 }] }]}>友達</Text>
-      <Text style={[textStyle, s.glitchLayerCyan, { transform: [{ translateX: -offset }, { translateY: offset * 0.75 }] }]}>友達</Text>
-      <Text style={textStyle}>友達</Text>
-      <Text style={[s.wordmarkSub, compact && { fontSize: 18, letterSpacing: 2, marginTop: 4 }]}>TOMODACHI</Text>
+      <Text style={[textStyle, s.glitchLayerRed, { transform: [{ translateX: offset }, { translateY: -offset * 0.75 }] }]}>+one</Text>
+      <Text style={[textStyle, s.glitchLayerCyan, { transform: [{ translateX: -offset }, { translateY: offset * 0.75 }] }]}>+one</Text>
+      <Text style={textStyle}>+one</Text>
+      <Text style={[s.wordmarkSub, compact && { fontSize: 18, letterSpacing: 2, marginTop: 4 }]}>ONE NETWORK</Text>
     </View>
   );
 }

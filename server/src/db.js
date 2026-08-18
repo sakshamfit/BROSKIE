@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS users (
   username      TEXT UNIQUE,
   phone         TEXT UNIQUE NOT NULL,
   name          TEXT NOT NULL,
-  about         TEXT DEFAULT 'Hey there! I am using 友達.',
+  about         TEXT DEFAULT 'Hey there! I am using +one.',
   avatar        TEXT,
   password_hash TEXT NOT NULL,
   last_seen     INTEGER DEFAULT 0,
@@ -308,6 +308,11 @@ CREATE TABLE IF NOT EXISTS calls (
 );
 CREATE INDEX IF NOT EXISTS idx_calls_participants ON calls(caller_id, callee_id, started_at);
 `);
+
+/* Branding migration: update only the untouched legacy default; custom user
+   bios are never modified. Technical database/storage names intentionally
+   remain "tomodachi" so existing production data and installed sessions keep working. */
+db.prepare("UPDATE users SET about = 'Hey there! I am using +one.' WHERE about = 'Hey there! I am using 友達.'").run();
 
 /* ---- lightweight migrations for columns added after initial release ---- */
 function addColumnIfMissing(table, column, ddl) {

@@ -155,7 +155,7 @@ export default function ChatListScreen({ navigation }) {
       {/* TopAppBar — ruled underline, centred wordmark */}
       <View style={[s.header, { borderBottomWidth: stroke.ink, borderBottomColor: theme.ink }]}>
         <InkIconButton name="ellipsis-vertical" onPress={() => navigation.navigate('Settings')} size={38} iconSize={18} />
-        <Text style={s.wordmark}>友達</Text>
+        <Text style={s.wordmark}>+one</Text>
         <Pressable onPress={() => navigation.navigate('Settings')}>
           <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={38} />
         </Pressable>

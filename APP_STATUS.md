@@ -1,8 +1,8 @@
 # BROSKIE — Application Status & Operations Guide
 
-**Last updated:** 17 August 2026  
-**Repository:** `sakshamfit/BROSKIE`  
-**Primary production host:** Railway  
+**Last updated:** 18 August 2026
+**Repository:** `sakshamfit/BROSKIE`
+**Primary production host:** Railway
 **Production API:** `https://broskie-h.up.railway.app`
 
 This document is a plain-language reference for anyone maintaining, testing, or deploying BROSKIE. It describes what is live today, where data is stored, what is safe to change, and what still needs work.
@@ -11,7 +11,7 @@ This document is a plain-language reference for anyone maintaining, testing, or 
 
 ## 1. What BROSKIE is
 
-BROSKIE (display name **友達**) is a real-time social and messaging app built with:
+BROSKIE (display name **+one**) is a real-time social and messaging app built with:
 
 | Layer | Technology |
 |---|---|
@@ -170,6 +170,13 @@ Affiliations, requests, and accepted connections are stored in SQLite and update
 
 ## 7. Theme and UI status
 
+The public app name is **+one**, version **1.1.0**. The supplied black-and-white
+brush logo is used for the Android/iOS launcher icon, adaptive and monochrome
+Android icons, native splash, browser favicon, PWA icons, and Median assets.
+The Android package, iOS bundle identifier, Expo project ID, session keys,
+database filename, and storage bucket retain their legacy technical identifiers
+so installed accounts and production data are not broken by the rebrand.
+
 The app supports the following appearance choices:
 
 - Light
@@ -275,7 +282,7 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 ### High priority
 
 - [ ] Confirm Supabase Storage is active in Railway logs.
-- [ ] Build/distribute a new Android app binary containing the Railway API fix.
+- [ ] Build/distribute the new +one 1.1.0 Android APK (launcher name/icon changes require a fresh binary).
 - [ ] Test registration, login, logout, profile photo add/remove, and real-time messages on a second physical device.
 - [ ] Verify data remains after a Railway redeploy.
 

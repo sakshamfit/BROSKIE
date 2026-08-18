@@ -1,4 +1,4 @@
-# 🚂 Deploy 友達 Backend to Railway
+# 🚂 Deploy +one Backend to Railway
 
 ## Step 1 — Deploy to Railway
 

@@ -128,7 +128,7 @@ export default function App() {
               </ChatProvider>
             </AuthProvider>
           ) : (
-            <Loading label="LOADING 友達" />
+            <Loading label="LOADING +ONE" />
           )}
         </ThemeProvider>
       </SafeAreaProvider>

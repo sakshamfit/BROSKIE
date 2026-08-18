@@ -481,7 +481,7 @@ app.post('/api/auth/register', (req, res) => {
     // unique placeholder so old schema constraints keep working.
     phone: trimmedPhone || `unset:${nano()}`,
     name: String(name).trim(),
-    about: 'Hey there! I am using 友達.',
+    about: 'Hey there! I am using +one.',
     avatar: null,
     password_hash: bcrypt.hashSync(String(password), 8),
     last_seen: now(),
@@ -2389,7 +2389,7 @@ if (fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
 } else {
   app.get('/', (req, res) =>
     res.json({
-      name: '友達 API',
+      name: '+one API',
       status: 'ok',
       hint: 'No web build found. Run `npm run build` to serve the app from this server.',
     })
@@ -2398,7 +2398,7 @@ if (fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
 
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, '0.0.0.0', async () => {
-  console.log(`友達 server listening on http://0.0.0.0:${PORT}`);
+  console.log(`+one server listening on http://0.0.0.0:${PORT}`);
   console.log(`[storage] ${storage.describe()}`);
   await storage.ensureBucket();
 });

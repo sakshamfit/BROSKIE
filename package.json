@@ -2,7 +2,7 @@
   "name": "tomodachi",
   "version": "1.0.0",
   "private": true,
-  "description": "\u53cb\u9054 \u2014 realtime ink-and-paper messenger. Root manifest so hosts (Railway/Render/Nixpacks) detect a Node project and delegate to server/.",
+  "description": "+one — realtime ink-and-paper messenger. Root manifest so hosts (Railway/Render/Nixpacks) detect a Node project and delegate to server/.",
   "engines": {
     "node": "20.x"
   },

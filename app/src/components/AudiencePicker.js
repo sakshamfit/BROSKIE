@@ -8,7 +8,7 @@ import { EmojiText } from '../icons/Emoji';
 import { type, inkBox, marker, dashedRule } from '../theme';
 
 export const AUDIENCE = {
-  public: { key: 'public', label: 'Public', sub: 'Everyone on 友達 can see this', icon: 'earth-outline' },
+  public: { key: 'public', label: 'Public', sub: 'Everyone on +one can see this', icon: 'earth-outline' },
   contacts: { key: 'contacts', label: 'Friends', sub: 'Only people you already chat with', icon: 'people-outline' },
   selected: { key: 'selected', label: 'Selected people', sub: 'Pick exactly who sees it', icon: 'person-add-outline' },
 };

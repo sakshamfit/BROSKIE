@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-Build a NEW, hand-authored Lottie splash animation for 友達, using the
-user's logo image (embedded as base64 so the JSON is fully self-contained).
+Build the self-contained +one Lottie splash using the canonical
+``source-logo.png`` artwork embedded as base64.
 
-Design ("Graphite & Pulp"):
+Design:
   1. warm paper background (#fdf8f8) fills the whole canvas
-  2. the logo fades in + scales up gently (ease-out)
-  3. a highlighter-yellow underline draws on beneath it (like signing)
+  2. the +one logo fades in + scales up gently (ease-out)
 
 Keyframes are pre-sampled with a cubic ease-out and stored as dense linear
 keyframes, so every Lottie player interpolates the exact same motion AND the
@@ -23,7 +22,7 @@ import os
 import math
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LOGO = '/home/user/uploads/ChatGPT_Image_Aug_17__2026__11_24_51_AM-removebg-preview.png'
+LOGO = os.path.join(HERE, 'source-logo.png')
 
 W, H = 375, 667
 FPS = 30
@@ -34,10 +33,10 @@ END = 45
 PAPER = [0.992156862745098, 0.9725490196078431, 0.9725490196078431]   # #fdf8f8
 HIGHLIGHTER = [1.0, 0.8862745098039215, 0.30196078431372547]          # #FFE24D
 
-# ---- logo placement (displayed ~221px wide, centered above the underline) ----
-IMG_W, IMG_H = 670, 372
-SCALE = 33.0                                   # percent -> 221 x 123 px on canvas
-LOGO_CX, LOGO_CY = 187.5, 278.0
+# ---- logo placement (square artwork, ~232px wide on a 375px canvas) ----
+IMG_W, IMG_H = 1254, 1254
+SCALE = 18.5
+LOGO_CX, LOGO_CY = 187.5, 320.0
 UNDERLINE_W = 142.0
 UNDERLINE_H = 11.0
 UNDERLINE_Y = 357.0
@@ -175,12 +174,13 @@ def build():
         "op": END,
         "w": W,
         "h": H,
-        "nm": "tomodachi_splash",
+        "nm": "plus_one_splash",
         "ddd": 0,
         "assets": [{"id": "image_0", "w": IMG_W, "h": IMG_H, "u": "",
                     "p": f"data:image/png;base64,{b64}"}],
-        # Lottie layers array is TOP-TO-BOTTOM: first = topmost.
-        "layers": [logo, underline, bg],
+        # Lottie layers array is TOP-TO-BOTTOM: first = topmost. The supplied
+        # artwork already includes its own brush underline, so no extra mark.
+        "layers": [logo, bg],
         "markers": []
     }
 

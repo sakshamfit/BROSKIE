@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "友達",
-  "short_name": "友達",
-  "description": "友達 — a realtime ink-and-paper messenger.",
+  "name": "+one",
+  "short_name": "+one",
+  "description": "+one — a realtime ink-and-paper messenger.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "/",
