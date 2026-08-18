@@ -40,6 +40,9 @@ import OrientationManager from './src/components/OrientationManager';
 import CallOverlay from './src/components/CallOverlay';
 import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 
+// Changed whenever a web release needs to retire stale PWA/browser caches.
+const WEB_BUILD = '2026-08-18-chat-open-v3';
+
 /** On web, expand to full browser — no phone frame.
  *  We still wrap in a flex View because React Navigation's container needs
  *  an explicit parent to fill — without it, alignItems: center on webRoot
@@ -123,6 +126,23 @@ function Root() {
       document.head.appendChild(meta);
     }
     meta.content = theme.bg;
+
+    // Some installed PWAs kept an old hashed conversation bundle even after
+    // Vercel deployed the fix. Retire stale service workers/cache storage once
+    // per build; technical auth/session storage is deliberately untouched.
+    try {
+      if (window.localStorage?.getItem('+one.web-build') !== WEB_BUILD) {
+        window.localStorage?.setItem('+one.web-build', WEB_BUILD);
+        window.navigator?.serviceWorker?.getRegistrations?.()
+          .then((registrations) => registrations.forEach((registration) => registration.unregister()))
+          .catch(() => {});
+        if (window.caches?.keys) {
+          window.caches.keys()
+            .then((keys) => Promise.all(keys.map((key) => window.caches.delete(key))))
+            .catch(() => {});
+        }
+      }
+    } catch {}
 
     setupMedianBridge();
     setMedianTheme(mode, theme.bg);

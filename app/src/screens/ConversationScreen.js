@@ -21,7 +21,7 @@ import PollComposer from '../components/PollComposer';
 import { api, mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 
-export default function ConversationScreen({ route, navigation, embedded = false }) {
+function ConversationContent({ route, navigation, embedded = false }) {
   const { chatId, initialChat = null } = route.params || {};
   const {
     chats, messages, typing, refreshChats, loadMessages, sendMessage, markRead, setTypingState,
@@ -563,6 +563,58 @@ export default function ConversationScreen({ route, navigation, embedded = false
         }}
       />
     </KeyboardAvoidingView>
+  );
+}
+
+/** Never let one malformed legacy message turn the whole route into a white
+ * screen. The exact error is logged while the user keeps a working Back/Retry
+ * surface. A new boundary mounts for every chat id. */
+class ConversationErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error('[conversation render]', error, info); }
+  render() {
+    const { error } = this.state;
+    if (!error) return this.props.children;
+    const { theme, navigation, embedded } = this.props;
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: theme.bg }}>
+        <Icon name="alert-circle-outline" size={34} color={theme.danger} />
+        <Text style={[type.headlineSm, { color: theme.text, marginTop: 14 }]}>Chat hit a snag</Text>
+        <Text style={[type.bodySm, { color: theme.subtext, textAlign: 'center', marginTop: 7, maxWidth: 320 }]}>
+          The conversation could not render. Retry, or return to Chats without losing your messages.
+        </Text>
+        <Pressable
+          onPress={() => this.setState({ error: null })}
+          style={[inkBox(theme, 'ink'), { marginTop: 18, paddingHorizontal: 18, paddingVertical: 10 }]}
+        >
+          <Text style={[type.labelSm, { color: theme.ink }]}>TRY AGAIN</Text>
+        </Pressable>
+        {!embedded && (
+          <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 10, padding: 9 }}>
+            <Text style={[type.labelSm, { color: theme.subtext }]}>BACK TO CHATS</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
+}
+
+export default function ConversationScreen(props) {
+  const { theme } = useTheme();
+  const chatId = props.route?.params?.chatId || 'unknown';
+  return (
+    <ConversationErrorBoundary
+      key={chatId}
+      theme={theme}
+      navigation={props.navigation}
+      embedded={props.embedded}
+    >
+      <ConversationContent {...props} />
+    </ConversationErrorBoundary>
   );
 }
 
