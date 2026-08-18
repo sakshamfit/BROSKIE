@@ -50,6 +50,8 @@ export default function VoiceNote({ uri, duration = 0, isMine }) {
   return (
     <View style={s.wrap}>
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={playing ? 'Pause voice note' : 'Play voice note'}
         onPress={toggle}
         style={({ pressed }) => [
           s.play,

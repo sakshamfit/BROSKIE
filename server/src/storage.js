@@ -25,6 +25,11 @@ const SUPABASE_SERVICE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.SUPABASE_PUBLISHABLE_KEY;
 const BUCKET = process.env.SUPABASE_BUCKET || 'tomodachi-uploads';
+const ALLOWED_UPLOAD_MIME_TYPES = [
+  'image/png', 'image/jpeg', 'image/webp', 'image/gif',
+  'audio/m4a', 'audio/mp4', 'audio/aac', 'audio/mpeg', 'audio/wav',
+  'audio/webm', 'audio/ogg', 'audio/3gpp',
+];
 
 /**
  * Publishable/anon keys can upload only if the bucket already exists AND an
@@ -71,6 +76,14 @@ async function ensureBucket() {
   try {
     const { data, error } = await supabase.storage.getBucket(BUCKET);
     if (data && !error) {
+      // Keep existing production buckets compatible with browser WebM and
+      // native M4A/AAC voice notes as formats evolve.
+      const { error: updateErr } = await supabase.storage.updateBucket(BUCKET, {
+        public: true,
+        fileSizeLimit: '25MB',
+        allowedMimeTypes: ALLOWED_UPLOAD_MIME_TYPES,
+      });
+      if (updateErr) console.warn(`[storage] bucket MIME update skipped: ${updateErr.message}`);
       console.log(`[storage] bucket "${BUCKET}" found`);
       return;
     }
@@ -78,7 +91,7 @@ async function ensureBucket() {
     const { error: createErr } = await supabase.storage.createBucket(BUCKET, {
       public: true,
       fileSizeLimit: '25MB',
-      allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'audio/m4a', 'audio/mpeg', 'audio/wav'],
+      allowedMimeTypes: ALLOWED_UPLOAD_MIME_TYPES,
     });
 
     if (!createErr) {

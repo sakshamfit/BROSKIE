@@ -235,8 +235,9 @@ once every other member has a read receipt — so it works identically for group
 
 ## Notes & limits
 
-- Voice notes record duration and render a playable waveform bubble; capturing real
-  audio bytes needs `expo-audio` recording permissions on a device build.
+- Voice notes request microphone permission, record real WebM (web) or M4A/AAC
+  (Android/iOS) audio with `expo-audio`, upload it to the active storage backend,
+  and render a playable waveform bubble with the recorded duration.
 - Calls are real WebRTC on web (genuine peer-to-peer audio/video via the browser's
   native RTCPeerConnection). On native iOS/Android, actual camera/mic capture needs
   `react-native-webrtc`, which requires a custom dev build outside the managed/Expo Go

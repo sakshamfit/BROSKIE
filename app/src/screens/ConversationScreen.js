@@ -1,12 +1,16 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
-  Platform, Modal, Image, ActivityIndicator,
+  Platform, Modal, Image, ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import * as ImagePicker from 'expo-image-picker';
+import {
+  RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync,
+  useAudioRecorder, useAudioRecorderState,
+} from 'expo-audio';
 import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
@@ -31,6 +35,8 @@ function ConversationContent({ route, navigation, embedded = false }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const { isTablet } = useResponsive();
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const audioRecorderState = useAudioRecorderState(audioRecorder, 100);
 
   // `initialChat` is passed by NewChat so Android never waits on an async
   // Context render before it can draw the conversation shell.
@@ -43,10 +49,11 @@ function ConversationContent({ route, navigation, embedded = false }) {
   const [lightbox, setLightbox] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [recSecs, setRecSecs] = useState(0);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const recordingStartedAt = useRef(0);
   const listRef = useRef(null);
   const typingTimer = useRef(null);
-  const recTimer = useRef(null);
+  const recSecs = Math.max(0, Math.floor((audioRecorderState.durationMillis || 0) / 1000));
 
   // in-chat search
   const [searchOpen, setSearchOpen] = useState(false);
@@ -70,11 +77,12 @@ function ConversationContent({ route, navigation, embedded = false }) {
   }, [chatId, chat, refreshChats]);
   useEffect(() => { if (chatId && list.length) markRead(chatId); }, [chatId, list.length, markRead]);
 
-  useEffect(() => {
-    if (recording) recTimer.current = setInterval(() => setRecSecs((v) => v + 1), 1000);
-    else { clearInterval(recTimer.current); setRecSecs(0); }
-    return () => clearInterval(recTimer.current);
-  }, [recording]);
+  useEffect(() => () => {
+    try {
+      if (audioRecorder.getStatus()?.isRecording) audioRecorder.stop().catch(() => {});
+    } catch {}
+    setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+  }, [audioRecorder]);
 
   const typers = Object.values(typing[chatId] || {});
 
@@ -127,12 +135,87 @@ function ConversationContent({ route, navigation, embedded = false }) {
     } finally { setUploading(false); }
   };
 
-  const stopRecording = () => {
-    const secs = recSecs;
-    setRecording(false);
-    if (secs < 1) return;
-    sendMessage(chatId, { type: 'voice', mediaUrl: null, duration: secs, body: '' });
+  const restorePlaybackAudioMode = () => setAudioModeAsync({
+    allowsRecording: false,
+    playsInSilentMode: true,
+    interruptionMode: 'duckOthers',
+    shouldPlayInBackground: false,
+    shouldRouteThroughEarpiece: false,
+  }).catch(() => {});
+
+  const startRecording = async () => {
+    if (recording || voiceBusy) return;
+    setVoiceBusy(true);
+    try {
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Microphone permission needed', 'Allow microphone access in your device settings to record voice notes.');
+        return;
+      }
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        interruptionMode: 'doNotMix',
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: false,
+      });
+      await audioRecorder.prepareToRecordAsync();
+      recordingStartedAt.current = Date.now();
+      audioRecorder.record();
+      setRecording(true);
+      setReplyTo(null);
+      setShowEmoji(false);
+    } catch (error) {
+      console.warn('voice recording failed to start', error?.message);
+      Alert.alert('Could not record', error?.message || 'The microphone could not be started.');
+      await restorePlaybackAudioMode();
+    } finally {
+      setVoiceBusy(false);
+    }
   };
+
+  const stopRecording = async (shouldSend = true) => {
+    if (!recording || voiceBusy) return;
+    const elapsedMs = Math.max(
+      audioRecorderState.durationMillis || 0,
+      recordingStartedAt.current ? Date.now() - recordingStartedAt.current : 0
+    );
+    setVoiceBusy(true);
+    try {
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri || audioRecorder.getStatus()?.url;
+      setRecording(false);
+      await restorePlaybackAudioMode();
+
+      if (!shouldSend) return;
+      if (elapsedMs < 600) {
+        Alert.alert('Voice note too short', 'Record for at least one second.');
+        return;
+      }
+      if (!uri) throw new Error('The recording file was not created');
+
+      const web = Platform.OS === 'web';
+      const fileName = `voice-${Date.now()}.${web ? 'webm' : 'm4a'}`;
+      const mimeType = web ? 'audio/webm' : 'audio/m4a';
+      const { url } = await api.uploadFile(uri, fileName, mimeType);
+      sendMessage(chatId, {
+        type: 'voice',
+        mediaUrl: url,
+        duration: Math.max(1, Math.round(elapsedMs / 1000)),
+        body: '',
+      });
+    } catch (error) {
+      console.warn('voice note failed', error?.message);
+      setRecording(false);
+      await restorePlaybackAudioMode();
+      Alert.alert('Voice note failed', error?.message || 'The recording could not be sent.');
+    } finally {
+      recordingStartedAt.current = 0;
+      setVoiceBusy(false);
+    }
+  };
+
+  const cancelRecording = () => stopRecording(false);
 
   /* ---- in-chat search ---- */
   const runInChatSearch = useCallback((q) => {
@@ -441,8 +524,8 @@ function ConversationContent({ route, navigation, embedded = false }) {
             <Text style={[type.bodyLg, { flex: 1, color: theme.text }]}>
               Recording… {Math.floor(recSecs / 60)}:{String(recSecs % 60).padStart(2, '0')}
             </Text>
-            <Pressable onPress={() => setRecording(false)} hitSlop={8}>
-              <Text style={[type.labelSm, { color: theme.danger }]}>CANCEL</Text>
+            <Pressable accessibilityLabel="Cancel voice recording" onPress={cancelRecording} disabled={voiceBusy} hitSlop={8}>
+              <Text style={[type.labelSm, { color: theme.danger, opacity: voiceBusy ? 0.45 : 1 }]}>CANCEL</Text>
             </Pressable>
           </InkField>
         ) : (
@@ -482,19 +565,32 @@ function ConversationContent({ route, navigation, embedded = false }) {
         )}
 
         <Pressable
-          onPress={() => { if (text.trim()) send(); else if (editing) setEditing(null); else if (recording) stopRecording(); else setRecording(true); }}
+          accessibilityRole="button"
+          accessibilityLabel={voiceBusy ? 'Sending voice note' : recording ? 'Send voice note' : text.trim() ? 'Send message' : 'Start voice recording'}
+          onPress={() => {
+            if (text.trim()) send();
+            else if (editing) { setEditing(null); setText(''); }
+            else if (recording) stopRecording(true);
+            else startRecording();
+          }}
+          disabled={voiceBusy}
           android_ripple={rippleFor(theme, { color: 'rgba(255,255,255,0.3)' })}
           style={({ pressed }) => [
             s.sendBtn,
             inkBox(theme, 'bold'),
             { backgroundColor: pressed && Platform.OS !== 'android' ? theme.highlighter : theme.ink },
+            voiceBusy && { opacity: 0.55 },
           ]}
         >
-          <Icon
-            name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
-            size={18}
-            color={theme.onPrimary}
-          />
+          {voiceBusy ? (
+            <ActivityIndicator size="small" color={theme.onPrimary} />
+          ) : (
+            <Icon
+              name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
+              size={18}
+              color={theme.onPrimary}
+            />
+          )}
         </Pressable>
       </View>
 
