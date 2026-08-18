@@ -22,9 +22,9 @@ import { api, mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 
 export default function ConversationScreen({ route, navigation, embedded = false }) {
-  const { chatId } = route.params;
+  const { chatId, initialChat = null } = route.params || {};
   const {
-    chats, messages, typing, loadMessages, sendMessage, markRead, setTypingState,
+    chats, messages, typing, refreshChats, loadMessages, sendMessage, markRead, setTypingState,
     react, deleteMessage, editMessage, createPoll, votePoll, startCall, call, setMessages,
   } = useChat();
   const { user } = useAuth();
@@ -32,7 +32,9 @@ export default function ConversationScreen({ route, navigation, embedded = false
   const insets = useSafeAreaInsets();
   const { isTablet } = useResponsive();
 
-  const chat = chats.find((c) => c.id === chatId);
+  // `initialChat` is passed by NewChat so Android never waits on an async
+  // Context render before it can draw the conversation shell.
+  const chat = chats.find((c) => c.id === chatId) || initialChat;
   const list = messages[chatId] || [];
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
@@ -60,8 +62,13 @@ export default function ConversationScreen({ route, navigation, embedded = false
 
   const s = makeStyles(theme);
 
-  useEffect(() => { loadMessages(chatId).catch(() => {}); }, [chatId, loadMessages]);
-  useEffect(() => { if (list.length) markRead(chatId); }, [chatId, list.length, markRead]);
+  useEffect(() => {
+    if (chatId) loadMessages(chatId).catch(() => {});
+  }, [chatId, loadMessages]);
+  useEffect(() => {
+    if (chatId && !chat) refreshChats().catch(() => {});
+  }, [chatId, chat, refreshChats]);
+  useEffect(() => { if (chatId && list.length) markRead(chatId); }, [chatId, list.length, markRead]);
 
   useEffect(() => {
     if (recording) recTimer.current = setInterval(() => setRecSecs((v) => v + 1), 1000);
@@ -203,7 +210,20 @@ export default function ConversationScreen({ route, navigation, embedded = false
   };
 
   if (!chat) {
-    return <View style={[s.center, { backgroundColor: theme.bg }]}><ActivityIndicator color={theme.primary} /></View>;
+    return (
+      <View style={[s.center, { backgroundColor: theme.bg, padding: 28 }]}>
+        <ActivityIndicator color={theme.primary} />
+        <Text style={[type.labelSm, { color: theme.muted, marginTop: 14 }]}>OPENING CHAT…</Text>
+        <Pressable onPress={() => refreshChats().catch(() => {})} style={[inkBox(theme, 'thin'), { marginTop: 18, paddingHorizontal: 16, paddingVertical: 9 }]}>
+          <Text style={[type.labelSm, { color: theme.ink }]}>RETRY</Text>
+        </Pressable>
+        {!embedded && (
+          <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 12, padding: 8 }}>
+            <Text style={[type.labelSm, { color: theme.subtext }]}>BACK TO CHATS</Text>
+          </Pressable>
+        )}
+      </View>
+    );
   }
 
   const subtitle = typers.length

@@ -40,8 +40,13 @@ export default function NewChatScreen({ navigation, embedded = false }) {
     setBusy(true);
     try {
       const { chat } = await api.directChat(u.id);
+      if (!chat?.id) throw new Error('Could not open this conversation');
+      // Give Conversation an immediate route fallback and also synchronize the
+      // shared inbox before navigating. This removes the blank-screen race on
+      // slower Android devices where navigation committed before Context state.
       upsertChat(chat);
-      navigation.replace('Conversation', { chatId: chat.id });
+      await refreshChats().catch(() => {});
+      navigation.replace('Conversation', { chatId: chat.id, initialChat: chat });
     } finally { setBusy(false); }
   };
 
@@ -55,7 +60,7 @@ export default function NewChatScreen({ navigation, embedded = false }) {
       const { chat } = await api.groupChat({ name: groupName.trim(), memberIds: selected });
       upsertChat(chat);
       await refreshChats();
-      navigation.replace('Conversation', { chatId: chat.id });
+      navigation.replace('Conversation', { chatId: chat.id, initialChat: chat });
     } finally { setBusy(false); }
   };
 
