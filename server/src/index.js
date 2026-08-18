@@ -1742,7 +1742,11 @@ app.post('/api/status', requireAuth, (req, res) => {
     song = null, audience = 'public', recipientIds = [],
   } = req.body || {};
 
-  const aud = ['public', 'contacts', 'contacts_except', 'selected'].includes(audience) ? audience : 'public';
+  const allowedAudiences = ['public', 'contacts', 'contacts_except', 'selected'];
+  if (!allowedAudiences.includes(audience)) {
+    return res.status(400).json({ error: 'Invalid status privacy option.' });
+  }
+  const aud = audience;
   const statusContacts = new Set(contactIds(req.userId));
   const recipients = [...new Set(
     (Array.isArray(recipientIds) ? recipientIds : [])
