@@ -520,7 +520,10 @@ export default function ConversationScreen({ route, navigation, embedded = false
             </Text>
             <View style={{ gap: 8 }}>
               {(() => {
-                const remaining = timerMsg.expiresAt ? Math.round((timerMsg.expiresAt - Date.now()) / 1000) : 0;
+                // Modal children render even while `visible` is false. Keep the
+                // initial null timer selection safe so opening any chat cannot
+                // crash to a blank screen.
+                const remaining = timerMsg?.expiresAt ? Math.round((timerMsg.expiresAt - Date.now()) / 1000) : 0;
                 const isActive = (sec) => (sec === 0 ? remaining === 0 : Math.abs(remaining - sec) < Math.max(2, sec * 0.05));
                 return (
                   <>

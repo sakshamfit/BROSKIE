@@ -66,7 +66,7 @@ function LivingGrid() {
   useEffect(() => {
     const loop = Animated.loop(
       Animated.timing(drift, {
-        toValue: 1, duration: 16000, easing: Easing.linear, useNativeDriver: true,
+        toValue: 1, duration: 16000, easing: Easing.linear, useNativeDriver: Platform.OS !== 'web',
       })
     );
     loop.start();
@@ -76,22 +76,26 @@ function LivingGrid() {
   const offset = drift.interpolate({ inputRange: [0, 1], outputRange: [0, 24] });
   return (
     <Animated.View
-      pointerEvents="none"
       style={[
         styles.gridOverlay,
         {
-          opacity: theme.dark ? 0.16 : 0.2,
+          pointerEvents: 'none',
+          opacity: theme.dark ? 0.28 : 0.36,
           transform: [{ translateX: offset }, { translateY: offset }],
         },
       ]}
     >
       <Svg width="100%" height="100%">
         <Defs>
-          <Pattern id="app-grid" width="24" height="24" patternUnits="userSpaceOnUse">
-            <Path d="M 24 0 L 0 0 0 24" fill="none" stroke={theme.graphiteLine} strokeWidth="1" />
+          <Pattern id="app-grid-minor" width="24" height="24" patternUnits="userSpaceOnUse">
+            <Path d="M 24 0 L 0 0 0 24" fill="none" stroke={theme.graphiteLine} strokeWidth="0.8" />
+          </Pattern>
+          <Pattern id="app-grid-major" width="96" height="96" patternUnits="userSpaceOnUse">
+            <Path d="M 96 0 L 0 0 0 96" fill="none" stroke={theme.graphite} strokeWidth="1.15" />
           </Pattern>
         </Defs>
-        <Rect width="100%" height="100%" fill="url(#app-grid)" />
+        <Rect width="100%" height="100%" fill="url(#app-grid-minor)" />
+        <Rect width="100%" height="100%" fill="url(#app-grid-major)" />
       </Svg>
     </Animated.View>
   );
