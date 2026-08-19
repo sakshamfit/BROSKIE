@@ -15,7 +15,20 @@ const DEFAULT_MOBILE_API_URL = 'https://broskie-h.up.railway.app';
  * - Native fallback:    the production Railway API (override with EXPO_PUBLIC_API_URL)
  */
 function resolveBase() {
-  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '');
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    const configured = process.env.EXPO_PUBLIC_API_URL.trim().replace(/\/$/, '');
+    const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
+    // A release APK must never be pointed at cleartext/local development
+    // traffic. Fall back to the known HTTPS API if a build-time value is bad.
+    if (Platform.OS !== 'web' && !isDevelopment) {
+      if (!configured.startsWith('https://')) return DEFAULT_MOBILE_API_URL;
+      // Vercel hosts the public website, not this app's long-running
+      // Express/Socket.IO API. Guard against accidentally pasting the website
+      // URL into an EAS environment variable.
+      if (/\.vercel\.app(?:\/|$)/i.test(configured)) return DEFAULT_MOBILE_API_URL;
+    }
+    return configured;
+  }
 
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     const { protocol, hostname, host, port } = window.location;
@@ -50,28 +63,185 @@ let authToken = null;
 export const setToken = (t) => { authToken = t; };
 export const getToken = () => authToken;
 
-async function request(path, { method = 'GET', body, isForm } = {}) {
-  const headers = {};
+const DEFAULT_TIMEOUT_MS = 18000;
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export class ApiError extends Error {
+  constructor(message, { status = 0, code = 'API_ERROR', technicalMessage = '' } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.technicalMessage = technicalMessage;
+  }
+}
+
+function logTechnicalFailure(path, error) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.warn(`[API ${path}]`, error?.technicalMessage || error?.message || error);
+  }
+}
+
+function networkFailure(error, timedOut) {
+  const technicalMessage = String(error?.message || error || 'Unknown network error');
+  if (timedOut || error?.name === 'AbortError') {
+    return new ApiError('The request took too long. Check your connection and try again.', {
+      code: 'TIMEOUT', technicalMessage,
+    });
+  }
+  return new ApiError('Unable to connect. Check your internet connection and try again.', {
+    code: 'NETWORK_ERROR', technicalMessage,
+  });
+}
+
+/**
+ * Shared production HTTP layer. GETs retry once by default; callers may opt a
+ * genuinely idempotent POST (login) into one retry. Registration and other
+ * writes never auto-retry because a lost response could otherwise duplicate
+ * an operation that already reached the server.
+ */
+async function request(path, {
+  method = 'GET', body, isForm = false, timeoutMs = DEFAULT_TIMEOUT_MS,
+  retries = method === 'GET' ? 1 : 0,
+} = {}) {
+  const url = API_URL + path;
+  const headers = { Accept: 'application/json' };
   if (!isForm) headers['Content-Type'] = 'application/json';
   if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  const serializedBody = isForm ? body : body !== undefined ? JSON.stringify(body) : undefined;
 
-  const res = await fetch(API_URL + path, {
-    method,
-    headers,
-    body: isForm ? body : body ? JSON.stringify(body) : undefined,
-  });
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    let timedOut = false;
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller?.abort();
+        reject(new Error('REQUEST_TIMEOUT'));
+      }, timeoutMs);
+    });
 
-  const text = await res.text();
-  let data;
-  try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    let response;
+    try {
+      const fetchPromise = fetch(url, {
+        method,
+        headers,
+        body: serializedBody,
+        signal: controller?.signal,
+        redirect: 'follow',
+        cache: method === 'GET' ? 'no-store' : 'default',
+      });
+      response = await Promise.race([fetchPromise, timeoutPromise]);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      const failure = networkFailure(error, timedOut || error?.message === 'REQUEST_TIMEOUT');
+      if (attempt < retries) {
+        await wait(450 * (attempt + 1));
+        continue;
+      }
+      logTechnicalFailure(path, failure);
+      throw failure;
+    }
+
+    let text = '';
+    try {
+      text = await Promise.race([response.text(), timeoutPromise]);
+      clearTimeout(timeoutId);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      const failure = networkFailure(error, timedOut || error?.message === 'REQUEST_TIMEOUT');
+      if (attempt < retries) {
+        await wait(450 * (attempt + 1));
+        continue;
+      }
+      logTechnicalFailure(path, failure);
+      throw failure;
+    }
+
+    let data = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        if (response.ok) {
+          const failure = new ApiError('The service returned an unreadable response. Please try again.', {
+            status: response.status,
+            code: 'INVALID_RESPONSE',
+            technicalMessage: text.slice(0, 300),
+          });
+          logTechnicalFailure(path, failure);
+          throw failure;
+        }
+      }
+    }
+
+    if (!response.ok) {
+      if (attempt < retries && RETRYABLE_STATUS.has(response.status)) {
+        await wait(450 * (attempt + 1));
+        continue;
+      }
+      const isServerFailure = response.status >= 500;
+      const failure = new ApiError(
+        isServerFailure
+          ? 'Service is temporarily unavailable. Please try again shortly.'
+          : (typeof data?.error === 'string' && data.error.trim()) || `Request failed (${response.status})`,
+        {
+          status: response.status,
+          code: isServerFailure ? 'SERVICE_UNAVAILABLE' : 'HTTP_ERROR',
+          technicalMessage: typeof data?.error === 'string' ? data.error : text.slice(0, 300),
+        }
+      );
+      logTechnicalFailure(path, failure);
+      throw failure;
+    }
+
+    return data;
+  }
+
+  throw new ApiError('Unable to connect. Check your internet connection and try again.', { code: 'NETWORK_ERROR' });
+}
+
+// Exported for focused network diagnostics/tests; application code uses `api` below.
+export const requestJson = request;
+
+function checkedAuthPayload(data) {
+  if (!data?.token || !data?.user?.id) {
+    throw new ApiError('The service returned an incomplete response. Please try again.', {
+      code: 'INVALID_RESPONSE', technicalMessage: 'Missing token or user in authentication response',
+    });
+  }
   return data;
 }
 
+/** Translate technical/API failures into the small set of safe auth messages. */
+export function authErrorMessage(error, mode = 'login') {
+  if (error?.code === 'NETWORK_ERROR' || error?.code === 'TIMEOUT') return error.message;
+  if (error?.code === 'SERVICE_UNAVAILABLE' || error?.code === 'INVALID_RESPONSE' || error?.status >= 500) {
+    return 'Service is temporarily unavailable. Please try again shortly.';
+  }
+  if (error?.status === 401) return 'Incorrect username or password.';
+  if (error?.status === 409 && /username/i.test(error.message || '')) return 'That username is already taken.';
+  if (/password must be at least 8/i.test(error?.message || '')) return 'Password must be at least 8 characters.';
+  if (/username is required/i.test(error?.message || '')) return 'Username is required.';
+  if (/username must be .*characters or fewer/i.test(error?.message || '')) return error.message;
+  if (/phone number is already registered/i.test(error?.message || '')) return 'That phone number is already registered.';
+  return mode === 'register'
+    ? 'Unable to create your account. Please check your details and try again.'
+    : 'Unable to sign in. Please try again.';
+}
+
 export const api = {
-  register: (payload) => request('/api/auth/register', { method: 'POST', body: payload }),
-  login: (payload) => request('/api/auth/login', { method: 'POST', body: payload }),
-  usernameAvailable: (username) => request(`/api/auth/username-available?username=${encodeURIComponent(username)}`),
+  register: async (payload) => checkedAuthPayload(await request('/api/auth/register', {
+    method: 'POST', body: payload, timeoutMs: 22000, retries: 0,
+  })),
+  login: async (payload) => checkedAuthPayload(await request('/api/auth/login', {
+    method: 'POST', body: payload, timeoutMs: 18000, retries: 1,
+  })),
+  usernameAvailable: (username) => request(`/api/auth/username-available?username=${encodeURIComponent(username)}`, {
+    timeoutMs: 10000, retries: 1,
+  }),
   me: () => request('/api/me'),
   greetingSummary: () => request('/api/greeting-summary'),
   deleteAccount: (password) => request('/api/me', { method: 'DELETE', body: { password } }),

@@ -46,6 +46,7 @@
       "barStyle": "default"
     },
     "plugins": [
+      "./plugins/withAuthNetworkSecurity",
       "expo-audio",
       [
         "expo-location",

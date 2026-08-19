@@ -41,7 +41,7 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
     setSaving(true);
     setError('');
     try {
-      const value = editing === 'username' ? draft.trim().toLowerCase() : draft.trim();
+      const value = draft.trim();
       await updateProfile({ [editing]: value });
       setEditing(null);
     } catch (e) {
@@ -175,6 +175,7 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
                 autoFocus
                 multiline={editing === 'about'}
                 autoCapitalize={editing === 'username' ? 'none' : 'sentences'}
+                maxLength={editing === 'username' ? 64 : editing === 'about' ? 180 : 80}
                 keyboardType={editing === 'phone' ? 'phone-pad' : 'default'}
                 placeholderTextColor={theme.muted}
               />

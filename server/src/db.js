@@ -54,6 +54,7 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
   username      TEXT UNIQUE,
+  username_key  TEXT,
   phone         TEXT UNIQUE NOT NULL,
   name          TEXT NOT NULL,
   about         TEXT DEFAULT 'Hey there! I am using +one.',
@@ -338,7 +339,12 @@ function addColumnIfMissing(table, column, ddl) {
   if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
 }
 addColumnIfMissing('users', 'username', 'username TEXT');
+addColumnIfMissing('users', 'username_key', 'username_key TEXT');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+// Every legacy username was already stored as lowercase ASCII. Backfill a
+// canonical lookup key once, while keeping the visible username untouched.
+db.exec("UPDATE users SET username_key = lower(trim(username)) WHERE username IS NOT NULL AND (username_key IS NULL OR username_key = '')");
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_key ON users(username_key) WHERE username_key IS NOT NULL');
 addColumnIfMissing('statuses', 'song', 'song TEXT');
 addColumnIfMissing('statuses', 'audience', "audience TEXT DEFAULT 'public'");
 addColumnIfMissing('statuses', 'media_aspect', 'media_aspect REAL');

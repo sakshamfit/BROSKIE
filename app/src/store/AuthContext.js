@@ -22,9 +22,15 @@ export function AuthProvider({ children }) {
           setUser(user);
           setTok(saved);
         }
-      } catch {
-        await AsyncStorage.removeItem(TOKEN_KEY);
-        setToken(null);
+      } catch (error) {
+        // A temporary network outage must not erase a valid remembered
+        // session. Only a real 401 means the token itself is no longer valid.
+        if (error?.status === 401) {
+          await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
+          setToken(null);
+        } else if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn('Could not restore session:', error?.technicalMessage || error?.message);
+        }
       } finally {
         setBooting(false);
       }
@@ -32,10 +38,18 @@ export function AuthProvider({ children }) {
   }, []);
 
   const persist = useCallback(async (tok, usr) => {
+    // Complete the live sign-in immediately; slow or unavailable device
+    // storage should only affect the next launch, never the current session.
     setToken(tok);
-    await AsyncStorage.setItem(TOKEN_KEY, tok);
     setTok(tok);
     setUser(usr);
+    try {
+      await AsyncStorage.setItem(TOKEN_KEY, tok);
+    } catch (error) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('Could not remember this session:', error?.message);
+      }
+    }
   }, []);
 
   const login = useCallback(async (username, password) => {
@@ -59,7 +73,9 @@ export function AuthProvider({ children }) {
     // Removing the remembered token is best-effort; a failure here must not
     // prevent the current session from ending.
     return AsyncStorage.removeItem(TOKEN_KEY).catch((error) => {
-      console.warn('Could not clear remembered session:', error?.message);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('Could not clear remembered session:', error?.message);
+      }
     });
   }, []);
 

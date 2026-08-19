@@ -17,14 +17,11 @@ const nano = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
 const now = () => Date.now();
 
 
-// Production password policy: long enough to resist trivial guessing and
-// diverse enough that a short numeric or dictionary password cannot pass.
-const PASSWORD_RULE = 'Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.';
+// Keep account creation approachable and consistent across every client.
+// Length is the only password-shape rule; bcrypt still hashes every password.
+const PASSWORD_RULE = 'Password must be at least 8 characters.';
 function passwordError(value) {
-  const password = String(value || '');
-  if (password.length < 8) return PASSWORD_RULE;
-  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9\s]/.test(password)) return PASSWORD_RULE;
-  return null;
+  return String(value || '').length < 8 ? PASSWORD_RULE : null;
 }
 
 const app = express();
@@ -145,26 +142,28 @@ const publicUser = (u) =>
     createdAt: u.created_at,
   };
 
-const USERNAME_RE = /^[a-z0-9](?:[a-z0-9._]{1,22})[a-z0-9]$/;
+const MAX_USERNAME_LENGTH = 64;
 
-function normalizeUsername(raw) {
-  return String(raw || '').trim().toLowerCase();
+/** Preserve the username people typed; only surrounding whitespace is input chrome. */
+function cleanUsername(raw) {
+  return String(raw ?? '').trim();
+}
+
+/** Separate canonical key keeps sign-in/uniqueness compatible with legacy lowercase accounts. */
+function usernameKey(raw) {
+  return cleanUsername(raw).normalize('NFKC').toLowerCase();
 }
 
 function validateUsername(raw) {
-  const u = normalizeUsername(raw);
-  if (!u) return 'Username is required';
-  if (u.length < 3 || u.length > 24) return 'Username must be 3–24 characters';
-  if (!USERNAME_RE.test(u)) {
-    return 'Username can only contain letters, numbers, "." and "_", and must start/end with a letter or number';
-  }
-  if (/[._]{2,}/.test(u)) return 'Username cannot have consecutive "." or "_"';
+  const username = cleanUsername(raw);
+  if (!username) return 'Username is required';
+  if (username.length > MAX_USERNAME_LENGTH) return `Username must be ${MAX_USERNAME_LENGTH} characters or fewer`;
   return null;
 }
 
 const getUser = (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 const getUserByUsername = (username) =>
-  db.prepare('SELECT * FROM users WHERE username = ?').get(normalizeUsername(username));
+  db.prepare('SELECT * FROM users WHERE username_key = ?').get(usernameKey(username));
 
 const AFFILIATION_TYPES = ['institution', 'organization', 'workplace'];
 
@@ -642,15 +641,16 @@ app.get('/api/auth/username-available', (req, res) => {
 
 app.post('/api/auth/register', (req, res) => {
   const { username, phone, name, password } = req.body || {};
-  if (!name || !password) return res.status(400).json({ error: 'name and password are required' });
+  if (!String(name || '').trim()) return res.status(400).json({ error: 'Name is required' });
   const passwordValidationError = passwordError(password);
   if (passwordValidationError) return res.status(400).json({ error: passwordValidationError });
 
   const usernameErr = validateUsername(username);
   if (usernameErr) return res.status(400).json({ error: usernameErr });
-  const normalizedUsername = normalizeUsername(username);
+  const visibleUsername = cleanUsername(username);
+  const canonicalUsername = usernameKey(username);
 
-  if (getUserByUsername(normalizedUsername)) {
+  if (getUserByUsername(visibleUsername)) {
     return res.status(409).json({ error: 'That username is already taken' });
   }
 
@@ -662,7 +662,8 @@ app.post('/api/auth/register', (req, res) => {
 
   const user = {
     id: nano(),
-    username: normalizedUsername,
+    username: visibleUsername,
+    username_key: canonicalUsername,
     // phone is optional now but the column is NOT NULL — fall back to a
     // unique placeholder so old schema constraints keep working.
     phone: trimmedPhone || `unset:${nano()}`,
@@ -675,8 +676,8 @@ app.post('/api/auth/register', (req, res) => {
     created_at: now(),
   };
   db.prepare(
-    `INSERT INTO users (id, username, phone, name, about, avatar, password_hash, last_seen, is_online, created_at)
-     VALUES (@id, @username, @phone, @name, @about, @avatar, @password_hash, @last_seen, @is_online, @created_at)`
+    `INSERT INTO users (id, username, username_key, phone, name, about, avatar, password_hash, last_seen, is_online, created_at)
+     VALUES (@id, @username, @username_key, @phone, @name, @about, @avatar, @password_hash, @last_seen, @is_online, @created_at)`
   ).run(user);
 
   res.json({ token: sign(user), user: accountUser(user) });
@@ -783,12 +784,14 @@ app.patch('/api/me', requireAuth, (req, res) => {
   const u = getUser(req.userId);
 
   let nextUsername = u.username;
-  if (username !== undefined && normalizeUsername(username) !== u.username) {
+  let nextUsernameKey = u.username_key || usernameKey(u.username);
+  if (username !== undefined && cleanUsername(username) !== u.username) {
     const err = validateUsername(username);
     if (err) return res.status(400).json({ error: err });
     const taken = getUserByUsername(username);
     if (taken && taken.id !== req.userId) return res.status(409).json({ error: 'That username is already taken' });
-    nextUsername = normalizeUsername(username);
+    nextUsername = cleanUsername(username);
+    nextUsernameKey = usernameKey(username);
   }
 
   let nextPhone = u.phone;
@@ -806,11 +809,12 @@ app.patch('/api/me', requireAuth, (req, res) => {
   // prevent an accidental picker/upload failure from clearing the photo.
   const nextAvatar = avatar === null ? null : avatar !== undefined ? (String(avatar).trim() || u.avatar) : u.avatar;
 
-  db.prepare('UPDATE users SET name = ?, about = ?, avatar = ?, username = ?, phone = ? WHERE id = ?').run(
+  db.prepare('UPDATE users SET name = ?, about = ?, avatar = ?, username = ?, username_key = ?, phone = ? WHERE id = ?').run(
     name ?? u.name,
     about ?? u.about,
     nextAvatar,
     nextUsername,
+    nextUsernameKey,
     nextPhone,
     req.userId
   );

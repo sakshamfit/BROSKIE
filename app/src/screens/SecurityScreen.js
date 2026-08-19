@@ -10,8 +10,8 @@ import { confirm } from '../hooks/confirm';
 import { PaperCard, InkField, InkButton, Rule } from '../components/common';
 import { type, inkBox } from '../theme';
 
-const PASSWORD_HINT = 'Use 8+ characters with uppercase, lowercase, a number, and a special character.';
-const isStrongPassword = (value) => value.length >= 8 && /[A-Z]/.test(value) && /[a-z]/.test(value) && /[0-9]/.test(value) && /[^A-Za-z0-9\s]/.test(value);
+const PASSWORD_HINT = 'Password must be at least 8 characters.';
+const isValidPassword = (value) => value.length >= 8;
 
 /** "Security & Privacy" — change password + a read-only session summary. */
 export default function SecurityScreen({ navigation, embedded = false }) {
@@ -33,7 +33,7 @@ export default function SecurityScreen({ navigation, embedded = false }) {
     setError('');
     setSuccess(false);
     if (!current || !next) return setError('Fill in both password fields.');
-    if (!isStrongPassword(next)) return setError(PASSWORD_HINT);
+    if (!isValidPassword(next)) return setError(PASSWORD_HINT);
     if (next !== confirm) return setError('New passwords do not match.');
     setBusy(true);
     try {
@@ -80,7 +80,7 @@ export default function SecurityScreen({ navigation, embedded = false }) {
             label="New password"
             value={next}
             onChangeText={(v) => { setNext(v); setError(''); }}
-            placeholder="8+ chars · Aa1!"
+            placeholder="At least 8 characters"
           />
           <Field
             theme={theme}
