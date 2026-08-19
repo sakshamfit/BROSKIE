@@ -98,6 +98,18 @@ export default function AuthScreen() {
     <View style={[s.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <HalftoneBackground />
       <SpeedLines />
+      {canLeave && (
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={10}
+          style={s.backToLanding}
+          accessibilityRole="button"
+          accessibilityLabel="Back to landing"
+        >
+          <Icon name="arrow-back" size={16} color={VOID.primaryContainer} />
+          <Text style={s.backToLandingText}>BACK TO +ONE</Text>
+        </Pressable>
+      )}
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -356,6 +368,17 @@ function GlitchWordmark({ small = false, compact = false }) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: VOID.background },
   scroll: { flexGrow: 1, minHeight: '100%' },
+  backToLanding: {
+    position: 'absolute', top: 18, left: 18, zIndex: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 2, borderColor: VOID.primaryContainer,
+    paddingHorizontal: 12, paddingVertical: 7,
+    backgroundColor: VOID.onTertiaryFixed,
+  },
+  backToLandingText: {
+    fontFamily: 'SpaceMono_700Bold', fontSize: 11, letterSpacing: 1.4,
+    color: VOID.primaryContainer,
+  },
 
   layout: {
     flex: 1,

@@ -13,6 +13,7 @@ import { Loading, CountBead } from './components/common';
 import { marker, stroke } from './theme';
 import SplitLayout from './DesktopLayout';
 
+import LandingScreen from './screens/LandingScreen';
 import AuthScreen from './screens/AuthScreen';
 import ChatListScreen from './screens/ChatListScreen';
 import ConversationScreen from './screens/ConversationScreen';
@@ -161,7 +162,14 @@ export default function Navigation() {
         }}
       >
         {!user ? (
-          <Stack.Screen name="Auth" component={AuthScreen} />
+          Platform.OS === 'web' ? (
+            <>
+              <Stack.Screen name="Landing" component={LandingScreen} />
+              <Stack.Screen name="Auth" component={AuthScreen} />
+            </>
+          ) : (
+            <Stack.Screen name="Auth" component={AuthScreen} />
+          )
         ) : (
           <>
             <Stack.Screen name="Home" component={HomeTabs} />
