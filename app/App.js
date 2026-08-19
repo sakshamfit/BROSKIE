@@ -1,9 +1,8 @@
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import * as Updates from 'expo-updates';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import Svg, { Circle, Defs, Pattern, Path, Rect } from 'react-native-svg';
 import { useFonts } from 'expo-font';
 import {
@@ -43,36 +42,7 @@ import DailyAIGreeting from './src/components/DailyAIGreeting';
 import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 
 // Changed whenever a web release needs to retire stale PWA/browser caches.
-const WEB_BUILD = '2026-08-19-auth-update-recovery-v9';
-
-/**
- * The embedded bundle no longer stays silently stale. On native release
- * builds, check the APK's configured EAS channel, download a compatible
- * update in the background and reload once it is ready. Expo's own rollback
- * protection still decides whether an update is safe to launch.
- */
-function OTAUpdateManager() {
-  useEffect(() => {
-    if (Platform.OS === 'web' || (typeof __DEV__ !== 'undefined' && __DEV__) || !Updates.isEnabled) {
-      return undefined;
-    }
-    let active = true;
-    (async () => {
-      try {
-        const check = await Updates.checkForUpdateAsync();
-        if (!active || !check.isAvailable) return;
-        const fetched = await Updates.fetchUpdateAsync();
-        if (active && fetched.isNew) await Updates.reloadAsync();
-      } catch (error) {
-        if (typeof __DEV__ !== 'undefined' && __DEV__) {
-          console.warn('OTA update check failed:', error?.message);
-        }
-      }
-    })();
-    return () => { active = false; };
-  }, []);
-  return null;
-}
+const WEB_BUILD = '2026-08-19-android-startup-recovery-v10';
 
 /** On web, expand to full browser — no phone frame.
  *  We still wrap in a flex View because React Navigation's container needs
@@ -172,7 +142,6 @@ function Root() {
   return (
     <>
       <StatusBar style={theme.dark ? 'light' : 'dark'} backgroundColor={theme.bg} />
-      <OTAUpdateManager />
       <OrientationManager />
       {/* Vercel Web Analytics — page views only load the tracking script in a
           real browser (it injects a <script> tag into document.head), so it's
@@ -189,6 +158,35 @@ function Root() {
       <CallOverlay />
     </>
   );
+}
+
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { failed: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <View style={styles.startupError}>
+          <Text style={styles.startupBrand}>+one</Text>
+          <Text style={styles.startupTitle}>The app could not finish starting.</Text>
+          <Text style={styles.startupBody}>
+            Force-stop +one and open it again. If this remains, clear the app cache and retry.
+          </Text>
+          <Pressable onPress={() => this.setState({ failed: false })} style={styles.startupRetry}>
+            <Text style={styles.startupRetryText}>RETRY</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 export default function App() {
@@ -213,19 +211,21 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          {fontsLoaded ? (
-            <AuthProvider>
-              <ChatProvider>
-                <Root />
-              </ChatProvider>
-            </AuthProvider>
-          ) : (
-            <Loading label="LOADING +ONE" />
-          )}
-        </ThemeProvider>
-      </SafeAreaProvider>
+      <AppErrorBoundary>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            {fontsLoaded ? (
+              <AuthProvider>
+                <ChatProvider>
+                  <Root />
+                </ChatProvider>
+              </AuthProvider>
+            ) : (
+              <Loading label="LOADING +ONE" />
+            )}
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </AppErrorBoundary>
     </GestureHandlerRootView>
   );
 }
@@ -238,4 +238,16 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
     zIndex: 9999,
   },
+  startupError: {
+    flex: 1, backgroundColor: '#131313', alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  startupBrand: { color: '#FFE24D', fontSize: 42, fontWeight: '900', fontStyle: 'italic' },
+  startupTitle: { color: '#f4f0ef', fontSize: 20, fontWeight: '700', textAlign: 'center', marginTop: 20 },
+  startupBody: { color: '#bdb8b5', fontSize: 15, lineHeight: 22, textAlign: 'center', marginTop: 10, maxWidth: 360 },
+  startupRetry: {
+    minWidth: 150, minHeight: 48, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#FFE24D', borderWidth: 2, borderColor: '#000000', borderRadius: 8, marginTop: 24,
+  },
+  startupRetryText: { color: '#131313', fontSize: 14, fontWeight: '800', letterSpacing: 1.2 },
 });

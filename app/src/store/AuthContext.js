@@ -18,7 +18,7 @@ export function AuthProvider({ children }) {
         const saved = await AsyncStorage.getItem(TOKEN_KEY);
         if (saved) {
           setToken(saved);
-          const { user } = await api.me();
+          const { user } = await api.restoreSession();
           setUser(user);
           setTok(saved);
         }

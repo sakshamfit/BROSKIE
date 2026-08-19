@@ -248,6 +248,9 @@ export const api = {
     timeoutMs: 10000, retries: 1,
   }),
   me: () => request('/api/me'),
+  // Startup must never hold a low-end phone on a blank/loading screen for
+  // multiple full retry windows. A normal refresh can still use `me()`.
+  restoreSession: () => request('/api/me', { timeoutMs: 8000, retries: 0 }),
   greetingSummary: () => request('/api/greeting-summary'),
   deleteAccount: (password) => request('/api/me', { method: 'DELETE', body: { password } }),
   updateMe: (payload) => request('/api/me', { method: 'PATCH', body: payload }),
