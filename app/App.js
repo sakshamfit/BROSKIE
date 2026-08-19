@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -191,7 +191,7 @@ class AppErrorBoundary extends React.Component {
 
 export default function App() {
   // Aliases keep theme.js font names short (Bricolage_800ExtraBold etc.)
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Bricolage_600SemiBold: BricolageGrotesque_600SemiBold,
     Bricolage_700Bold: BricolageGrotesque_700Bold,
     Bricolage_800ExtraBold: BricolageGrotesque_800ExtraBold,
@@ -208,13 +208,19 @@ export default function App() {
     Caveat_600SemiBold,
     Caveat_700Bold,
   });
+  const [fontGraceExpired, setFontGraceExpired] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setFontGraceExpired(true), 2500);
+    return () => clearTimeout(timer);
+  }, []);
+  const canRenderApp = fontsLoaded || !!fontError || fontGraceExpired;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppErrorBoundary>
         <SafeAreaProvider>
           <ThemeProvider>
-            {fontsLoaded ? (
+            {canRenderApp ? (
               <AuthProvider>
                 <ChatProvider>
                   <Root />

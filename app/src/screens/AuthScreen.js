@@ -151,7 +151,11 @@ export default function AuthScreen() {
             {/* Only the authentication object changes; the existing +one manga background and branding stay untouched. */}
             <View style={s.cardWrap}>
               <View style={[s.card, isSmallPhone && s.cardCompact]}>
-                <PulpTexture />
+                <View pointerEvents="none" style={s.cardTexture}>
+                  <View style={[s.cardFiber, { top: '18%', left: '8%', width: '40%', transform: [{ rotate: '-2deg' }] }]} />
+                  <View style={[s.cardFiber, { top: '54%', right: '5%', width: '32%', transform: [{ rotate: '3deg' }] }]} />
+                  <View style={[s.cardFiber, { bottom: '13%', left: '22%', width: '52%', opacity: 0.08 }]} />
+                </View>
                 <View style={s.cardContent}>
                   <View style={s.cardHeader}>
                     <View style={s.cardIconBadge}>
@@ -347,23 +351,6 @@ function Field({ icon, label, suffix, focused, ...inputProps }) {
   );
 }
 
-/** Subtle pulp fibres and graphite flecks, clipped by the auth card. */
-function PulpTexture() {
-  return (
-    <Svg pointerEvents="none" style={s.cardTexture} width="100%" height="100%">
-      <Defs>
-        <Pattern id="auth-pulp" width="22" height="22" patternUnits="userSpaceOnUse">
-          <Circle cx="4" cy="5" r="0.8" fill="#ffffff" opacity={0.12} />
-          <Circle cx="17" cy="15" r="0.65" fill="#000000" opacity={0.34} />
-          <Rect x="2" y="11" width="14" height="0.7" fill="#ffffff" opacity={0.07} transform="rotate(-7 9 11)" />
-          <Rect x="10" y="20" width="10" height="0.55" fill="#000000" opacity={0.18} transform="rotate(9 15 20)" />
-        </Pattern>
-      </Defs>
-      <Rect x="0" y="0" width="100%" height="100%" fill="url(#auth-pulp)" />
-    </Svg>
-  );
-}
-
 /** Halftone dot-grid background, tiled via an SVG pattern (works everywhere, no images). */
 function HalftoneBackground() {
   return (
@@ -525,7 +512,8 @@ const s = StyleSheet.create({
     elevation: 18,
   },
   cardCompact: { padding: 18, borderRadius: 12 },
-  cardTexture: { ...StyleSheet.absoluteFillObject, opacity: 0.72 },
+  cardTexture: { ...StyleSheet.absoluteFillObject, opacity: 0.7, overflow: 'hidden', borderRadius: 14 },
+  cardFiber: { position: 'absolute', height: 1, backgroundColor: '#ffffff', opacity: 0.06 },
   cardContent: { position: 'relative', zIndex: 1 },
   cardHeader: {
     flexDirection: 'row',
