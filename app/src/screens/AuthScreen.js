@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
-  Platform, ScrollView, ActivityIndicator, Animated, Easing,
+  Platform, ScrollView, ActivityIndicator, Animated, Easing, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, Pattern, Circle, Rect } from 'react-native-svg';
@@ -51,7 +51,21 @@ const PASSWORD_HINT = 'Password must be at least 8 characters.';
 export default function AuthScreen() {
   const { login, register } = useAuth();
   const insets = useSafeAreaInsets();
-  const { isSplitCapable, isSmallPhone } = useResponsive();
+  const { isSplitCapable, isSmallPhone, isWeb, height } = useResponsive();
+
+  /**
+   * Android's `adjustResize` shrinks the *window* while the keyboard is up,
+   * and mobile web browsers shrink the viewport the same way. Any layout that
+   * depends on viewport height — flex-grow centering, `minHeight: '100%'`,
+   * a forced 640dp minimum — gets pulled into a feedback loop with the
+   * platform's "keep the focused field visible" scrolling: the card
+   * re-centers, the system re-scrolls, the fields (and cursor) visibly trip
+   * up and down at high speed. When `anchorTop` is true the form is pinned to
+   * the top of a natural-height scroll area, so field positions never change
+   * when the keyboard appears or while hint/error rows appear below.
+   */
+  const screenHeight = Dimensions.get('screen').height || height;
+  const anchorTop = Platform.OS === 'android' || (isWeb && height < screenHeight * 0.82);
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
@@ -125,17 +139,18 @@ export default function AuthScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <ScrollView
-          contentContainerStyle={s.scroll}
+          contentContainerStyle={anchorTop ? s.scrollAnchored : s.scroll}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          overScrollMode={anchorTop ? 'never' : 'auto'}
         >
-          <View style={[s.layout, { flexDirection: isSplitCapable ? 'row' : 'column' }]}>
+          <View style={[anchorTop ? s.layoutAnchored : s.layout, { flexDirection: isSplitCapable ? 'row' : 'column' }]}>
             {/* -------- Branding splash — hidden on phones to leave room for the
                 form (matches how the mockup's own layout collapses on small
                 screens); tablets/desktop keep the full split. -------- */}
             {isSplitCapable && (
-              <View style={s.brandSection}>
+              <View style={[s.brandSection, anchorTop && s.brandSectionAnchored]}>
                 <GlitchWordmark small={isSmallPhone} />
                 <View style={s.tagBadge}>
                   <Text style={s.tagBadgeText}>SYSTEM: V.01-SHONEN</Text>
@@ -150,7 +165,7 @@ export default function AuthScreen() {
             )}
 
             {/* Only the authentication object changes; the existing +one manga background and branding stay untouched. */}
-            <View style={s.cardWrap}>
+            <View style={anchorTop ? s.cardWrapAnchored : s.cardWrap}>
               <View style={[s.card, isSmallPhone && s.cardCompact]}>
                 <View pointerEvents="none" style={s.cardTexture}>
                   <View style={[s.cardFiber, { top: '18%', left: '8%', width: '40%', transform: [{ rotate: '-2deg' }] }]} />
@@ -344,6 +359,7 @@ function Field({ icon, label, suffix, focused, ...inputProps }) {
           placeholderTextColor={CARD.muted}
           selectionColor={CARD.accent}
           cursorColor={CARD.accent}
+          underlineColorAndroid="transparent"
           {...inputProps}
         />
         {suffix}
@@ -353,7 +369,7 @@ function Field({ icon, label, suffix, focused, ...inputProps }) {
 }
 
 /** Halftone dot-grid background, tiled via an SVG pattern (works everywhere, no images). */
-function HalftoneBackground() {
+const HalftoneBackground = memo(function HalftoneBackground() {
   return (
     <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
       <Defs>
@@ -364,10 +380,10 @@ function HalftoneBackground() {
       <Rect x="0" y="0" width="100%" height="100%" fill="url(#halftone)" />
     </Svg>
   );
-}
+});
 
 /** Diagonal cyan speed-line overlay, looping via a native Animated translate. */
-function SpeedLines() {
+const SpeedLines = memo(function SpeedLines() {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const loop = Animated.loop(
@@ -389,10 +405,10 @@ function SpeedLines() {
       </Animated.View>
     </View>
   );
-}
+});
 
 /** Red/cyan double-exposed "glitch" wordmark, built from stacked offset text layers. */
-function GlitchWordmark({ small = false, compact = false }) {
+const GlitchWordmark = memo(function GlitchWordmark({ small = false, compact = false }) {
   const size = compact ? (small ? 44 : 56) : (small ? 64 : 88);
   const textStyle = [s.glitchText, { fontSize: size, lineHeight: size + 4 }];
   const offset = compact ? 2 : 4;
@@ -404,7 +420,7 @@ function GlitchWordmark({ small = false, compact = false }) {
       <Text style={[s.wordmarkSub, compact && { fontSize: 18, letterSpacing: 2, marginTop: 4 }]}>ONE NETWORK</Text>
     </View>
   );
-}
+});
 
 /* ------------------------------------------------------------------ */
 /* styles                                                              */
@@ -413,11 +429,17 @@ function GlitchWordmark({ small = false, compact = false }) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: VOID.background },
   scroll: { flexGrow: 1, minHeight: '100%' },
+  // Natural-height scroll content: never a function of the (keyboard-shrunk)
+  // viewport, so the form cannot re-flow while the IME is animating.
+  scrollAnchored: { paddingBottom: 40 },
 
   layout: {
     flex: 1,
     minHeight: 640,
   },
+  // No forced minimum: on phones this is content-height, on tablets it fills
+  // the row — either way nothing re-centers when the window height changes.
+  layoutAnchored: { flex: 1 },
 
   brandSection: {
     flex: 1,
@@ -425,6 +447,10 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 40,
     paddingHorizontal: 24,
+  },
+  brandSectionAnchored: {
+    justifyContent: 'flex-start',
+    paddingTop: 64,
   },
   brandSectionCompact: {
     alignItems: 'center',
@@ -496,6 +522,17 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 22,
     paddingVertical: 28,
+    position: 'relative',
+  },
+  // Top-anchored twin: the card's Y position is padding-driven, independent
+  // of viewport height, so focused fields never move when the keyboard opens.
+  cardWrapAnchored: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 22,
+    paddingTop: 18,
+    paddingBottom: 44,
     position: 'relative',
   },
   card: {

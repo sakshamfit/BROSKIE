@@ -42,7 +42,7 @@ import DailyAIGreeting from './src/components/DailyAIGreeting';
 import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 
 // Changed whenever a web release needs to retire stale PWA/browser caches.
-const WEB_BUILD = '2026-08-19-android-startup-recovery-v10';
+const WEB_BUILD = '2026-08-19-auth-keyboard-bounce-fix-v11';
 
 /** On web, expand to full browser — no phone frame.
  *  We still wrap in a flex View because React Navigation's container needs
