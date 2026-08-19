@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>+one — an ink-and-paper messenger</title>
+  <meta name="description" content="+one is a realtime ink-and-paper messenger: chats, The Network, colleagues, voice and video, stories, and a daily AI greeting. Drawn like a sketchbook. Built for iOS, Android and the web." />
+  <meta name="theme-color" content="#fdf8f8" />
+  <meta property="og:title" content="+one — an ink-and-paper messenger" />
+  <meta property="og:description" content="Write to someone. For real. A realtime messenger drawn like a sketchbook." />
+  <meta property="og:image" content="./assets/logo.png" />
+  <link rel="icon" href="./assets/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@500;700&family=Karla:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="paper-grain" aria-hidden="true"></div>
+
+  <div class="site">
+    <header class="nav" id="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="#top">
+          <img src="./assets/logo.png" alt="" width="40" height="40" />
+          <span class="wordmark">+one</span>
+        </a>
+
+        <nav class="nav-links" aria-label="Primary">
+          <a href="#features">Features</a>
+          <a href="#network">Network</a>
+          <a href="#design">Design</a>
+          <a href="#platforms">Platforms</a>
+        </nav>
+
+        <div class="cta-row">
+          <a class="btn btn-fill nav-cta desktop" data-app-link href="#open">Open +one</a>
+          <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false">
+            <span></span><span></span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <div class="hero-meta reveal">
+              <span class="tape accent">An ink-and-paper messenger</span>
+              <span class="tape">Version 1.2</span>
+              <span class="tape">iOS · Android · Web</span>
+            </div>
+            <h1 class="reveal d1">Find your <em>+ones</em>.</h1>
+            <div class="brush reveal d1" aria-hidden="true"></div>
+            <p class="lede reveal d2">
+              A realtime messenger drawn like a sketchbook. Chats that feel handwritten.
+              A public Network. Colleagues from the places you actually share.
+              Voice, video, stories — and a daily greeting that knows the weather.
+            </p>
+            <div class="cta-row reveal d3">
+              <a class="btn btn-fill" data-app-link data-mode="register" href="#open">Create a One ID</a>
+              <a class="btn btn-ghost" data-app-link data-mode="login" href="#open">Sign in</a>
+            </div>
+            <p class="label muted reveal d4">No seed accounts. No fake friends. Just people who show up.</p>
+
+            <figure class="hero-still ink-box raised reveal d4">
+              <img src="./assets/hero-still.jpg" alt="Fountain pen, India ink, graphite pencil and a yellow highlighter on handmade paper" />
+            </figure>
+          </div>
+
+          <div class="stage reveal d2" aria-hidden="true">
+            <div class="phone back">
+              <div class="phone-screen">
+                <div class="ui-bar">
+                  <div class="ui-icon">≡</div>
+                  <div class="ui-word">+one</div>
+                  <div class="tape">Requests</div>
+                </div>
+                <div class="ui-recent">
+                  <strong>RECENT CHATS</strong>
+                  <div class="ui-line"></div>
+                  <div class="ui-line fine"></div>
+                </div>
+                <div class="ui-search"><span>Search chats...</span><span>⌕</span></div>
+                <div class="chat-tile unread">
+                  <div class="avatar">MY</div>
+                  <div>
+                    <div class="who"><span>Maya</span><span class="when">NOW</span></div>
+                    <div class="preview live">typing…</div>
+                  </div>
+                </div>
+                <div class="chat-tile">
+                  <div class="avatar">SC</div>
+                  <div>
+                    <div class="who"><span>Studio crew</span><span class="when">2:14 PM</span></div>
+                    <div class="preview">📊 Friday critique — in or out?</div>
+                  </div>
+                </div>
+                <div class="chat-tile">
+                  <div class="avatar">AJ</div>
+                  <div>
+                    <div class="who"><span>Arjun</span><span class="when">YESTERDAY</span></div>
+                    <div class="preview">🎤 Voice message</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="phone front">
+              <div class="phone-screen">
+                <div class="conv-head">
+                  <div class="ui-icon">←</div>
+                  <div class="avatar" style="width:34px;height:34px;font-size:11px;border-color:#1c1b1b;color:#1c1b1b;background:#e5e2e1">MY</div>
+                  <div style="flex:1">
+                    <div class="who">Maya</div>
+                    <div class="sub">online</div>
+                  </div>
+                  <div class="ui-icon">◎</div>
+                  <div class="ui-icon">☎</div>
+                </div>
+                <div class="day-tape"><span>TODAY</span></div>
+                <div class="bubbles">
+                  <div class="bubble in">
+                    Did you see the Network post with the 4:5 crop?
+                    <div class="meta">2:11 PM</div>
+                  </div>
+                  <div class="bubble out">
+                    the late studio one — yes. highlighter on the title.
+                    <div class="meta">2:12 PM  ✓✓</div>
+                  </div>
+                  <div class="bubble in">
+                    Call after class? I found two more colleagues from NID.
+                    <div class="meta">2:13 PM</div>
+                  </div>
+                  <div class="bubble out">
+                    let’s find the +ones.
+                    <div class="meta">2:13 PM  ✓✓</div>
+                  </div>
+                </div>
+                <div class="composer">
+                  <div class="field">Message</div>
+                  <div class="send">➤</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="marquee-wrap" aria-hidden="true">
+        <div class="marquee">
+          <span>REALTIME CHAT</span><span><b>+</b></span>
+          <span>GROUPS &amp; POLLS</span><span><b>+</b></span>
+          <span>THE NETWORK</span><span><b>+</b></span>
+          <span>COLLEAGUES</span><span><b>+</b></span>
+          <span>COMMUNITIES</span><span><b>+</b></span>
+          <span>VOICE &amp; VIDEO</span><span><b>+</b></span>
+          <span>SEE / STORIES</span><span><b>+</b></span>
+          <span>DISAPPEARING INK</span><span><b>+</b></span>
+          <span>DAILY AI GREETING</span><span><b>+</b></span>
+          <span>REALTIME CHAT</span><span><b>+</b></span>
+          <span>GROUPS &amp; POLLS</span><span><b>+</b></span>
+          <span>THE NETWORK</span><span><b>+</b></span>
+          <span>COLLEAGUES</span><span><b>+</b></span>
+          <span>COMMUNITIES</span><span><b>+</b></span>
+          <span>VOICE &amp; VIDEO</span><span><b>+</b></span>
+          <span>SEE / STORIES</span><span><b>+</b></span>
+          <span>DISAPPEARING INK</span><span><b>+</b></span>
+          <span>DAILY AI GREETING</span><span><b>+</b></span>
+        </div>
+      </div>
+
+      <section class="section" id="features">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow">The whole roll</span>
+            <h2>Everything a messenger needs. Nothing a sketchbook wouldn’t allow.</h2>
+            <p class="lede">Built as one Expo codebase for iOS, Android and the web. Live over Socket.IO. Drawn in India ink on warm pulp.</p>
+          </div>
+
+          <div class="feat-grid">
+            <article class="feat-card ink-box raised">
+              <div class="feat-ico">✎</div>
+              <h3>Realtime chat</h3>
+              <p>1:1 and groups. Optimistic send, reply threads, edit, forward, delete-for-everyone, 32-emoji reactions, images with a lightbox, and voice notes with a waveform.</p>
+            </article>
+            <article class="feat-card ink-box raised">
+              <div class="feat-ico">✓✓</div>
+              <h3>Ticks that tell the truth</h3>
+              <p>Single tick sent, double delivered, blue when read. Typing indicators, last-seen, unread beads. Receipts catch up the moment someone reconnects.</p>
+            </article>
+            <article class="feat-card ink-box raised">
+              <div class="feat-ico">✉</div>
+              <h3>Message requests</h3>
+              <p>First notes from outside your contacts land in a Requests inbox. Preview, accept, delete, or block — the main chat list stays a blank page until you say so.</p>
+            </article>
+            <article class="feat-card pencil-box raised">
+              <div class="feat-ico">◎</div>
+              <h3>Voice &amp; video</h3>
+              <p>Real 1:1 WebRTC calling, signalled on the same socket. Ring, accept, decline, mute, hang up, and a Calls tab to dial someone back.</p>
+            </article>
+            <article class="feat-card pencil-box raised">
+              <div class="feat-ico">◷</div>
+              <h3>Disappearing ink</h3>
+              <p>Chat-wide timers — 30s, 5m, 1h, 24h — or a timer on a single message. Expired lines are hard-deleted server-side and vanish on every device.</p>
+            </article>
+            <article class="feat-card pencil-box raised">
+              <div class="feat-ico">▤</div>
+              <h3>Polls in groups</h3>
+              <p>Question plus two to six options, rendered as their own message. Live bars, live counts. Change your vote; everyone sees it move.</p>
+            </article>
+            <article class="feat-card ink-box raised">
+              <div class="feat-ico">☆</div>
+              <h3>Keep the good lines</h3>
+              <p>Star any message. Pin chats to the top. Archive, mute, search the whole inbox or jump to a match inside a conversation.</p>
+            </article>
+            <article class="feat-card ink-box raised">
+              <div class="feat-ico">◉</div>
+              <h3>See — 24-hour stories</h3>
+              <p>Coloured text statuses, viewed rings, tap-through progress. Public, contacts, or a list you pick. They expire with the day.</p>
+            </article>
+            <article class="feat-card pencil-box raised">
+              <div class="feat-ico">⌘</div>
+              <h3>A One ID that’s yours</h3>
+              <p>Username and password, bcrypt, JWT, editable name and about, profile photo. Delete the ID for good — shared groups transfer, nothing is left hanging.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="network" style="padding-top: 24px;">
+        <div class="wrap">
+          <article class="dive">
+            <div class="dive-copy">
+              <span class="tape accent">The Network</span>
+              <h2>A public page the whole world can pin things to.</h2>
+              <p class="lede">Post text, a photograph, a song, a tag. Choose Original, 1:1, 4:5, 16:9 or 9:16 and keep that box in the feed. Likes and threaded comments update live.</p>
+              <ul>
+                <li>Audience: public, contacts, or the people you pick</li>
+                <li>Trending tags, cursor pagination, author deletion</li>
+                <li>Communities for club nights, trips, chai, runs, study</li>
+              </ul>
+            </div>
+            <div class="phone" style="justify-self:center;transform:rotate(2deg)">
+              <div class="phone-screen">
+                <div class="ui-word" style="transform:rotate(-1deg)">The Network</div>
+                <p class="label muted">Share publicly, with friends, or just the people you pick</p>
+                <div class="note">
+                  <div class="by">
+                    <div class="avatar" style="width:30px;height:30px;font-size:10px;border-color:#1c1b1b;color:#1c1b1b;background:#e5e2e1">RY</div>
+                    <div>@riya · PUBLIC</div>
+                  </div>
+                  <h4>late studio light</h4>
+                  <p>Kept the 4:5 crop. The highlighter is the only loud thing in the room.</p>
+                  <span class="tape" style="margin-top:10px">#process</span>
+                  <div class="acts"><span>♥ 24</span><span>💬 6</span></div>
+                </div>
+                <div class="note" style="transform:rotate(-0.8deg);background:#fdf8f8">
+                  <div class="by">
+                    <div class="avatar" style="width:30px;height:30px;font-size:10px;border-color:#1c1b1b;color:#1c1b1b;background:#e2e3de">KB</div>
+                    <div>@kabir · CONTACTS</div>
+                  </div>
+                  <h4>who’s going to critique</h4>
+                  <p>Studio crew poll is up. Don’t leave me hanging.</p>
+                  <div class="acts"><span>♥ 11</span><span>💬 3</span></div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="dive reverse">
+            <div class="dive-copy">
+              <span class="tape">Colleagues</span>
+              <h2>Find people through the places you already share.</h2>
+              <p class="lede">Add a college, institution, organization or workplace. Join a registered place. Search its members. Send a connection request. Accepted colleagues become contacts — and a chat opens immediately.</p>
+              <ul>
+                <li>Place-based discovery, not a stranger directory</li>
+                <li>Requests update live on every connected device</li>
+                <li>Blocking severs the colleague link, cleanly</li>
+              </ul>
+            </div>
+            <figure class="still-frame ink-box raised-lg">
+              <img src="./assets/hero-still.jpg" alt="Desk still life of ink, pencil and highlighter" />
+            </figure>
+          </article>
+
+          <article class="dive">
+            <div class="dive-copy">
+              <span class="tape">Once a day</span>
+              <h2>A greeting that already knows the weather.</h2>
+              <p class="lede">After you sign in, a GLB character speaks once — first name, local Open-Meteo weather, unread chats, message requests, colleague and community counts — then closes itself after “Let’s find the +ones.”</p>
+              <ul>
+                <li>Original embedded animation, looped in Three.js</li>
+                <li>No bone retargeting, no invented gestures</li>
+                <li>Foreground location, used only for the briefing</li>
+              </ul>
+            </div>
+            <figure class="still-frame ink-box raised-lg">
+              <img src="./assets/ink-wash.jpg" alt="Black ink bloom on cream paper with a yellow highlighter stroke" />
+            </figure>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="design">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow">Graphite &amp; Pulp</span>
+            <h2>No shadows-as-elevation. Depth is a thicker line.</h2>
+            <p class="lede">Bricolage Grotesque headlines, Karla body, JetBrains Mono labels. Highlighter yellow used like a felt-tip — sparingly, for focus. Four appearances, one voice.</p>
+          </div>
+
+          <div class="theme-grid">
+            <article class="theme-card ink-box raised">
+              <div class="theme-swatch light">
+                <span class="label">Paper</span>
+                <div class="swatch-row">
+                  <i class="dot p"></i><i class="dot i"></i><i class="dot y"></i>
+                </div>
+                <strong style="font-family:'Bricolage Grotesque',sans-serif;font-size:28px;font-style:italic">+one</strong>
+              </div>
+              <div class="theme-body">
+                <h3>Light</h3>
+                <p>Warm pulp, India ink, graphite rules. The default sketchbook.</p>
+              </div>
+            </article>
+            <article class="theme-card ink-box raised">
+              <div class="theme-swatch dark">
+                <span class="label">Chalk</span>
+                <div class="swatch-row">
+                  <i class="dot i" style="background:#1c1b1b;border-color:#f4f0ef"></i>
+                  <i class="dot p"></i>
+                  <i class="dot y"></i>
+                </div>
+                <strong style="font-family:'Bricolage Grotesque',sans-serif;font-size:28px;font-style:italic">+one</strong>
+              </div>
+              <div class="theme-body">
+                <h3>Dark</h3>
+                <p>Ink-on-slate. Chalk letters, the same highlighter for read ticks.</p>
+              </div>
+            </article>
+            <article class="theme-card ink-box raised">
+              <div class="theme-swatch kinetic">
+                <span class="label">V.01-SHONEN</span>
+                <div class="swatch-row">
+                  <i class="dot k"></i><i class="dot r"></i>
+                </div>
+                <strong style="font-family:'Bricolage Grotesque',sans-serif;font-size:28px;font-style:italic">+one</strong>
+              </div>
+              <div class="theme-body">
+                <h3>Kinetic Ink</h3>
+                <p>High-contrast manga-tech. Cyan action, red for the things that matter.</p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="platforms" style="padding-top: 20px;">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow">One codebase</span>
+            <h2>Write it once. Carry it everywhere.</h2>
+          </div>
+          <div class="plat-grid">
+            <article class="plat ink-box raised">
+              <span class="label">01</span>
+              <strong>iOS</strong>
+              <p>Expo Go in a minute, or a signed build through EAS. Tablet split view included.</p>
+            </article>
+            <article class="plat ink-box raised">
+              <span class="label">02</span>
+              <strong>Android</strong>
+              <p>Installable APK. Edge-to-edge chrome. The same ink tiles as the phone on your desk.</p>
+            </article>
+            <article class="plat ink-box raised">
+              <span class="label">03</span>
+              <strong>Web</strong>
+              <p>A proper PWA — add to home screen, standalone, paper-coloured theme-color.</p>
+            </article>
+            <article class="plat ink-box raised">
+              <span class="label">04</span>
+              <strong>Realtime</strong>
+              <p>Socket.IO end to end. Two tabs, two accounts, ticks that move while you watch.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="finale" id="open">
+        <div class="wrap">
+          <div class="finale-card ink-box bold raised-lg">
+            <img class="wash" src="./assets/ink-wash.jpg" alt="" />
+            <span class="tape accent">Ready when you are</span>
+            <h2>Let’s find the +ones.</h2>
+            <p class="lede">Create a One ID. Add a place. Write to someone. The database starts empty on purpose — the first page is yours.</p>
+            <div class="cta-row">
+              <a class="btn btn-fill" data-app-link data-mode="register" href="#open">Create a One ID</a>
+              <a class="btn btn-ghost" data-app-link data-mode="login" href="#open">I already have one</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap foot">
+        <div>
+          <div class="brand">
+            <img src="./assets/logo.png" alt="" width="36" height="36" />
+            <span class="wordmark">+one</span>
+          </div>
+          <p>An original ink-and-paper messenger. Not affiliated with WhatsApp. Built for learning, demo, and the people who still like a good pen.</p>
+        </div>
+        <p class="label">MIT · Graphite &amp; Pulp · v1.2.0</p>
+      </div>
+    </footer>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

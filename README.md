@@ -3,6 +3,13 @@
 A full-stack, real-time messaging app: **Expo / React Native** client + **Node, Socket.IO, SQLite** backend.
 Runs on iOS, Android and the web from one codebase.
 
+A Graphite & Pulp marketing page lives in [`landing/`](./landing/). On the web, unauthenticated visitors see that showcase first, then sign in. Open it locally with any static server:
+
+```bash
+cd landing
+python3 -m http.server 4173
+```
+
 > Not affiliated with WhatsApp. Built as an original clone-style app for learning/demo purposes.
 
 ---
