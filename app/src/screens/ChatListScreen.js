@@ -2,7 +2,6 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Platform, Modal, Alert,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import Svg, { Polyline } from 'react-native-svg';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
@@ -13,9 +12,19 @@ import { useTheme } from '../store/ThemeContext';
 import {
   Avatar, Ticks, EmptyState, CountBead, formatChatTime, SketchDivider, InkIconButton, Rule, PaperCard, MotionIn,
 } from '../components/common';
-import { type, inkBox, marker, stroke } from '../theme';
+import { type, inkBox, marker, radius, stroke } from '../theme';
 import { api } from '../api';
 import { confirm } from '../hooks/confirm';
+
+// Older installed APKs may not yet contain expo-blur's native view. Loading it
+// optionally keeps OTA updates usable on those APKs; they get a strong frosted
+// fallback, while newer APKs automatically use the real native blur.
+let BlurView = null;
+try {
+  BlurView = require('expo-blur').BlurView;
+} catch {
+  BlurView = null;
+}
 
 /* each divider leans a slightly different way, like a hand-ruled line */
 const TILTS = [-0.5, 0.8, -0.3, 0.6, -0.7, 0.4];
@@ -127,7 +136,10 @@ export default function ChatListScreen({ navigation }) {
     }
 
     return (
-      <MotionIn delay={Math.min(index, 8) * 28} distance={10}>
+      <MotionIn delay={Math.min(index, 8) * 28} distance={10} style={s.rowWrap}>
+        {/* A hard offset plate plus a soft shadow gives the black card real
+            depth on Android, iOS and web without adding another native module. */}
+        <View pointerEvents="none" style={[s.rowDepth, hasUnread && { backgroundColor: '#8d7900' }]} />
         <Pressable
           onPress={() => navigation.navigate('Conversation', { chatId: item.id })}
           onLongPress={() => setSheetChat(item)}
@@ -135,22 +147,31 @@ export default function ChatListScreen({ navigation }) {
           style={({ pressed }) => [
             s.row,
             hasUnread ? s.rowUnread : s.rowRead,
-            { borderColor: hasUnread ? theme.highlighter : CHAT_TILE_LINE },
+            {
+              borderColor: hasUnread ? theme.highlighter : CHAT_TILE_LINE,
+              transform: [
+                { rotate: hasUnread ? '-0.18deg' : '0.1deg' },
+                { translateX: pressed ? 2 : 0 },
+                { translateY: pressed ? 4 : 0 },
+              ],
+            },
             pressed ? { backgroundColor: CHAT_TILE_PRESSED } : null,
           ]}
         >
+          <View pointerEvents="none" style={s.rowSheen} />
+          <View pointerEvents="none" style={s.rowEdge} />
           {hasUnread && <View style={[s.unreadMark, { backgroundColor: theme.highlighter, borderColor: CHAT_TILE }]} />}
           <View style={[s.avatarFrame, { borderColor: hasUnread ? theme.highlighter : CHAT_TILE_TEXT }]}>
-          <Avatar
-            uri={item.avatar}
-            name={item.name}
-            id={item.otherUserId || item.id}
-            group={item.type === 'group'}
-            online={item.isOnline}
-            unread={hasUnread}
-            weight={hasUnread ? 'ink' : 'thin'}
-            size={56}
-          />
+            <Avatar
+              uri={item.avatar}
+              name={item.name}
+              id={item.otherUserId || item.id}
+              group={item.type === 'group'}
+              online={item.isOnline}
+              unread={hasUnread}
+              weight={hasUnread ? 'ink' : 'thin'}
+              size={56}
+            />
           </View>
 
           <View style={s.rowBody}>
@@ -320,12 +341,22 @@ export default function ChatListScreen({ navigation }) {
       {/* long-press action sheet */}
       <Modal visible={!!sheetChat} transparent animationType="fade" onRequestClose={() => !sheetBusy && setSheetChat(null)}>
         <View style={[s.overlay, { backgroundColor: theme.dark ? 'rgba(0,0,0,0.28)' : 'rgba(28,27,27,0.18)' }]}>
-          <BlurView
-            intensity={Platform.OS === 'android' ? 52 : 65}
-            tint={theme.dark ? 'dark' : 'light'}
-            experimentalBlurMethod="dimezisBlurView"
-            style={StyleSheet.absoluteFill}
-          />
+          {BlurView ? (
+            <BlurView
+              intensity={Platform.OS === 'android' ? 52 : 65}
+              tint={theme.dark ? 'dark' : 'light'}
+              experimentalBlurMethod="dimezisBlurView"
+              style={StyleSheet.absoluteFill}
+            />
+          ) : (
+            <View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: theme.dark ? 'rgba(8,8,8,0.82)' : 'rgba(235,231,228,0.88)' },
+              ]}
+            />
+          )}
           <Pressable style={StyleSheet.absoluteFill} onPress={() => !sheetBusy && setSheetChat(null)} />
           <PaperCard weight="ink" style={[s.sheet, { backgroundColor: theme.dark ? 'rgba(31,30,30,0.96)' : 'rgba(253,248,248,0.96)' }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6 }}>
@@ -451,15 +482,36 @@ const makeStyles = (t) => StyleSheet.create({
   },
   searchInput: { flex: 1, ...type.bodyLg, color: t.text, paddingVertical: 12, outlineStyle: 'none' },
 
+  rowWrap: {
+    position: 'relative', marginBottom: 20,
+    shadowColor: '#000000', shadowOffset: { width: 0, height: 9 }, shadowOpacity: 0.28, shadowRadius: 9,
+    elevation: 10,
+  },
+  rowDepth: {
+    position: 'absolute', left: 5, right: -5, top: 7, bottom: -7,
+    backgroundColor: '#302e2b', borderWidth: 2, borderColor: '#000000',
+    borderTopLeftRadius: 8, borderTopRightRadius: 12, borderBottomRightRadius: 9, borderBottomLeftRadius: 11,
+  },
   row: {
     flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 13, alignItems: 'center', gap: 14,
-    borderWidth: 2, backgroundColor: CHAT_TILE, marginBottom: 14,
+    borderWidth: 2, backgroundColor: CHAT_TILE,
     borderTopLeftRadius: 8, borderTopRightRadius: 12, borderBottomRightRadius: 8, borderBottomLeftRadius: 11,
     overflow: 'hidden',
   },
-  rowUnread: { borderWidth: 3, transform: [{ rotate: '-0.2deg' }] },
-  rowRead: { borderStyle: 'solid', transform: [{ rotate: '0.12deg' }] },
-  avatarFrame: { padding: 3, borderWidth: 2, borderTopLeftRadius: 3, borderTopRightRadius: 6, borderBottomRightRadius: 4, borderBottomLeftRadius: 2 },
+  rowSheen: {
+    position: 'absolute', left: 12, right: 16, top: 1, height: 1,
+    backgroundColor: 'rgba(255,255,255,0.24)',
+  },
+  rowEdge: {
+    position: 'absolute', top: 10, right: 1, bottom: 10, width: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  rowUnread: { borderWidth: 3 },
+  rowRead: { borderStyle: 'solid' },
+  avatarFrame: {
+    width: 66, height: 66, padding: 3, borderWidth: 2, borderRadius: radius.full,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: '#111111',
+  },
   unreadMark: { position: 'absolute', width: 13, height: 13, left: -7, top: '50%', marginTop: -6, transform: [{ rotate: '45deg' }], borderWidth: 2, zIndex: 2 },
   rowBody: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 },
