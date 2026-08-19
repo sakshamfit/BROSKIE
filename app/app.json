@@ -24,7 +24,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png",
         "backgroundColor": "#000000"
       },
-      "softwareKeyboardLayoutMode": "resize",
+      "softwareKeyboardLayoutMode": "pan",
       "permissions": [
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE"

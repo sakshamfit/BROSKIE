@@ -8,7 +8,34 @@ import Svg, { Defs, Pattern, Circle, Rect } from 'react-native-svg';
 import Icon from '../icons/Icon';
 import { useAuth } from '../store/AuthContext';
 import { api, authErrorMessage } from '../api';
-import useResponsive from '../hooks/useResponsive';
+
+/**
+ * Auth must not subscribe to the live window height. Android and mobile web
+ * change that height for every frame of the keyboard animation; feeding those
+ * frames into the auth component re-renders controlled TextInputs and can
+ * make their caret visibly flash or jump. Width/orientation changes are the
+ * only layout changes this screen needs.
+ */
+function useAuthLayout() {
+  const screenRef = useRef(Dimensions.get('screen'));
+  const [width, setWidth] = useState(() => Dimensions.get('window').width);
+
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setWidth((previousWidth) => previousWidth === window.width ? previousWidth : window.width);
+    });
+    return () => subscription?.remove();
+  }, []);
+
+  const screen = screenRef.current;
+  const shortSide = Math.min(screen.width || width, screen.height || width);
+  return {
+    width,
+    isWeb: Platform.OS === 'web',
+    isSmallPhone: shortSide < 360,
+    isSplitCapable: width >= 840 && shortSide >= 600,
+  };
+}
 
 /**
  * "Enter the Void" — dark manga/glitch login screen. Scoped ONLY to Auth;
@@ -51,21 +78,21 @@ const PASSWORD_HINT = 'Password must be at least 8 characters.';
 export default function AuthScreen() {
   const { login, register } = useAuth();
   const insets = useSafeAreaInsets();
-  const { isSplitCapable, isSmallPhone, isWeb, height } = useResponsive();
+  const { isSplitCapable, isSmallPhone, isWeb, width } = useAuthLayout();
 
   /**
-   * Android's `adjustResize` shrinks the *window* while the keyboard is up,
-   * and mobile web browsers shrink the viewport the same way. Any layout that
-   * depends on viewport height — flex-grow centering, `minHeight: '100%'`,
-   * a forced 640dp minimum — gets pulled into a feedback loop with the
-   * platform's "keep the focused field visible" scrolling: the card
-   * re-centers, the system re-scrolls, the fields (and cursor) visibly trip
-   * up and down at high speed. When `anchorTop` is true the form is pinned to
-   * the top of a natural-height scroll area, so field positions never change
-   * when the keyboard appears or while hint/error rows appear below.
+   * Keep phone auth top-anchored for the entire session. In particular, do
+   * not decide this from the current viewport height: mobile browsers report
+   * a smaller height as soon as the IME opens, which used to switch the form
+   * from centered to top-anchored in the middle of the keyboard animation.
+   * That switch made the card, fields, and caret visibly bounce.
+   *
+   * The native Android activity also uses adjustPan (app.json), so the OS can
+   * move the window just enough to reveal a focused field without continuously
+   * resizing this form. The phone layout remains a natural-height scroll
+   * surface rather than a flex box that re-centers on every IME frame.
    */
-  const screenHeight = Dimensions.get('screen').height || height;
-  const anchorTop = Platform.OS === 'android' || (isWeb && height < screenHeight * 0.82);
+  const anchorTop = isWeb ? width < 600 : !isSplitCapable;
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
@@ -132,18 +159,24 @@ export default function AuthScreen() {
       <HalftoneBackground />
       <SpeedLines />
 
-      {/* Android already uses adjustResize; a second JS height adjustment made focused inputs bounce. */}
+      {/*
+        Only iOS gets KeyboardAvoidingView padding. Android uses the activity's
+        adjustPan mode, and mobile web relies on its own input scrolling. Do
+        not combine KAV padding with ScrollView's automatic keyboard insets:
+        two independent offsets are a common cause of a focused TextInput
+        oscillating while the keyboard animates.
+      */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         enabled={Platform.OS === 'ios'}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+        keyboardVerticalOffset={0}
       >
         <ScrollView
           contentContainerStyle={anchorTop ? s.scrollAnchored : s.scroll}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'none'}
-          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          keyboardDismissMode="none"
+          automaticallyAdjustKeyboardInsets={false}
           contentInsetAdjustmentBehavior="never"
           removeClippedSubviews={false}
           overScrollMode={anchorTop ? 'never' : 'auto'}
@@ -368,6 +401,9 @@ function Field({ icon, label, suffix, focused, ...inputProps }) {
           cursorColor={CARD.accent}
           underlineColorAndroid="transparent"
           textAlignVertical="center"
+          multiline={false}
+          numberOfLines={1}
+          textBreakStrategy={Platform.OS === 'android' ? 'simple' : undefined}
           disableFullscreenUI
           {...inputProps}
         />
@@ -440,15 +476,16 @@ const s = StyleSheet.create({
   scroll: { flexGrow: 1, minHeight: '100%' },
   // Natural-height scroll content: never a function of the (keyboard-shrunk)
   // viewport, so the form cannot re-flow while the IME is animating.
-  scrollAnchored: { paddingBottom: 40 },
+  scrollAnchored: { flexGrow: 0, paddingBottom: 40 },
 
   layout: {
     flex: 1,
     minHeight: 640,
   },
-  // No forced minimum: on phones this is content-height, on tablets it fills
-  // the row — either way nothing re-centers when the window height changes.
-  layoutAnchored: { flex: 1 },
+  // No forced minimum and, importantly, no flex growth on phone layouts. A
+  // flex-growing child would be remeasured every time Android reports another
+  // IME inset and could re-centre the card underneath the focused TextInput.
+  layoutAnchored: { flexGrow: 0 },
 
   brandSection: {
     flex: 1,
