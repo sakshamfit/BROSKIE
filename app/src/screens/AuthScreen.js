@@ -220,6 +220,7 @@ export default function AuthScreen() {
                       autoComplete="name"
                       textContentType="name"
                       maxLength={80}
+                      editable={!busy}
                     />
                   )}
 
@@ -237,6 +238,7 @@ export default function AuthScreen() {
                     autoComplete="username"
                     textContentType="username"
                     maxLength={MAX_USERNAME_LENGTH}
+                    editable={!busy}
                     suffix={
                       mode === 'register' ? (
                         checking ? (
@@ -271,6 +273,7 @@ export default function AuthScreen() {
                       keyboardType="phone-pad"
                       autoComplete="tel"
                       textContentType="telephoneNumber"
+                      editable={!busy}
                     />
                   )}
 
@@ -290,6 +293,7 @@ export default function AuthScreen() {
                     textContentType={mode === 'login' ? 'password' : 'newPassword'}
                     returnKeyType="done"
                     onSubmitEditing={submit}
+                    editable={!busy}
                     suffix={
                       <Pressable
                         onPress={() => setShowPassword((visible) => !visible)}
