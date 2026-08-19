@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import * as Updates from 'expo-updates';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { View, StyleSheet, Platform } from 'react-native';
@@ -42,7 +43,36 @@ import DailyAIGreeting from './src/components/DailyAIGreeting';
 import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 
 // Changed whenever a web release needs to retire stale PWA/browser caches.
-const WEB_BUILD = '2026-08-19-auth-compatibility-v8';
+const WEB_BUILD = '2026-08-19-auth-update-recovery-v9';
+
+/**
+ * The embedded bundle no longer stays silently stale. On native release
+ * builds, check the APK's configured EAS channel, download a compatible
+ * update in the background and reload once it is ready. Expo's own rollback
+ * protection still decides whether an update is safe to launch.
+ */
+function OTAUpdateManager() {
+  useEffect(() => {
+    if (Platform.OS === 'web' || (typeof __DEV__ !== 'undefined' && __DEV__) || !Updates.isEnabled) {
+      return undefined;
+    }
+    let active = true;
+    (async () => {
+      try {
+        const check = await Updates.checkForUpdateAsync();
+        if (!active || !check.isAvailable) return;
+        const fetched = await Updates.fetchUpdateAsync();
+        if (active && fetched.isNew) await Updates.reloadAsync();
+      } catch (error) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn('OTA update check failed:', error?.message);
+        }
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+  return null;
+}
 
 /** On web, expand to full browser — no phone frame.
  *  We still wrap in a flex View because React Navigation's container needs
@@ -142,6 +172,7 @@ function Root() {
   return (
     <>
       <StatusBar style={theme.dark ? 'light' : 'dark'} backgroundColor={theme.bg} />
+      <OTAUpdateManager />
       <OrientationManager />
       {/* Vercel Web Analytics — page views only load the tracking script in a
           real browser (it injects a <script> tag into document.head), so it's
