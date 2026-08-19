@@ -135,14 +135,17 @@ export default function AuthScreen() {
       {/* Android already uses adjustResize; a second JS height adjustment made focused inputs bounce. */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
+        enabled={Platform.OS === 'ios'}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <ScrollView
           contentContainerStyle={anchorTop ? s.scrollAnchored : s.scroll}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'none'}
           automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentInsetAdjustmentBehavior="never"
+          removeClippedSubviews={false}
           overScrollMode={anchorTop ? 'never' : 'auto'}
         >
           <View style={[anchorTop ? s.layoutAnchored : s.layout, { flexDirection: isSplitCapable ? 'row' : 'column' }]}>
@@ -364,6 +367,8 @@ function Field({ icon, label, suffix, focused, ...inputProps }) {
           selectionColor={CARD.accent}
           cursorColor={CARD.accent}
           underlineColorAndroid="transparent"
+          textAlignVertical="center"
+          disableFullscreenUI
           {...inputProps}
         />
         {suffix}
@@ -531,11 +536,11 @@ const s = StyleSheet.create({
   // Top-anchored twin: the card's Y position is padding-driven, independent
   // of viewport height, so focused fields never move when the keyboard opens.
   cardWrapAnchored: {
-    flex: 1,
+    flex: 0,
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingHorizontal: 22,
-    paddingTop: 18,
+    paddingTop: 14,
     paddingBottom: 44,
     position: 'relative',
   },
@@ -547,11 +552,16 @@ const s = StyleSheet.create({
     borderColor: CARD.line,
     borderRadius: 14,
     padding: 26,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 18,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 14 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+      },
+      web: { boxShadow: '0 14px 28px rgba(0,0,0,0.5)' },
+      default: {},
+    }),
   },
   cardCompact: { padding: 18, borderRadius: 12 },
   cardTexture: { ...StyleSheet.absoluteFillObject, opacity: 0.7, overflow: 'hidden', borderRadius: 14 },
@@ -598,23 +608,21 @@ const s = StyleSheet.create({
     color: CARD.subtext, textTransform: 'uppercase', marginBottom: 7,
   },
   fieldInputRow: {
-    minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10,
+    height: 54, flexDirection: 'row', alignItems: 'center', gap: 10,
     borderWidth: 1.5, borderColor: CARD.line, borderRadius: 8,
     paddingHorizontal: 13, backgroundColor: CARD.bgDeep,
   },
   fieldInputRowFocused: {
     borderColor: CARD.accent,
     backgroundColor: '#191817',
-    shadowColor: CARD.accent,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 7,
-    elevation: 3,
   },
   fieldInput: {
-    flex: 1, minHeight: 50,
-    fontFamily: 'Hanken_400Regular', fontSize: 16, color: CARD.text,
-    paddingVertical: 11, outlineStyle: 'none',
+    flex: 1, height: 50,
+    fontFamily: Platform.OS === 'android' ? undefined : 'Hanken_400Regular',
+    fontSize: 16, lineHeight: 20, color: CARD.text,
+    paddingTop: 0, paddingBottom: 0, paddingVertical: 0,
+    includeFontPadding: false,
+    outlineStyle: 'none',
   },
   passwordToggle: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   fieldHint: { fontFamily: 'Hanken_400Regular', fontSize: 12, lineHeight: 17, color: CARD.error, marginTop: -10, marginBottom: 15 },
