@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Platform, useWindowDimensions, PixelRatio } from 'react-native';
+import { Platform, useWindowDimensions, PixelRatio, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /**
@@ -24,14 +24,22 @@ export default function useResponsive() {
   const insets = useSafeAreaInsets();
 
   return useMemo(() => {
-    const orientation = width >= height ? 'landscape' : 'portrait';
-    const shortSide = Math.min(width, height);
+    // Android's adjustResize changes the *window* height every time the IME
+    // opens. Device-class decisions based on Math.min(window width, height)
+    // therefore oscillated while typing: a normal phone temporarily became a
+    // "small phone", card padding changed, and the focused field/cursor jumped
+    // up and down. Screen dimensions remain stable while the keyboard opens.
+    const screen = Dimensions.get('screen');
+    const deviceWidth = screen.width || width;
+    const deviceHeight = screen.height || height;
+    const orientation = deviceWidth >= deviceHeight ? 'landscape' : 'portrait';
+    const deviceShortSide = Math.min(deviceWidth, deviceHeight);
 
-    // Tablet heuristic: short-side >= 600dp is the same rule Android uses
-    // for its own "sw600dp" resource qualifier; iPads are always >= that.
-    const isTablet = shortSide >= 600;
-    const isLargePhone = shortSide >= 400 && shortSide < 600; // Pro Max / Ultra class phones
-    const isSmallPhone = shortSide < 360; // SE-class phones
+    // Tablet heuristic: physical short-side >= 600dp is the same rule Android
+    // uses for its "sw600dp" resource qualifier; the IME cannot change it.
+    const isTablet = deviceShortSide >= 600;
+    const isLargePhone = deviceShortSide >= 400 && deviceShortSide < 600; // Pro Max / Ultra class phones
+    const isSmallPhone = deviceShortSide < 360; // SE-class phones
 
     let breakpoint = 'compact';
     if (width >= BREAKPOINTS.large) breakpoint = 'large';
@@ -56,7 +64,7 @@ export default function useResponsive() {
       // (e.g. 844×390) or a short desktop window would get a cramped
       // 3-pane squeeze — a real messenger keeps the single-column phone
       // layout there instead. shortSide ≥ 600 is the sw600dp tablet rule.
-      isSplitCapable: (breakpoint === 'expanded' || breakpoint === 'large') && shortSide >= 600,
+      isSplitCapable: (breakpoint === 'expanded' || breakpoint === 'large') && deviceShortSide >= 600,
       insets,
       fontScale,
       // Clamp fontScale so aggressive OS accessibility settings don't break

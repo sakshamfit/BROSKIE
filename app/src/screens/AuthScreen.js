@@ -118,9 +118,10 @@ export default function AuthScreen() {
       <HalftoneBackground />
       <SpeedLines />
 
+      {/* Android already uses adjustResize; a second JS height adjustment made focused inputs bounce. */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <ScrollView
