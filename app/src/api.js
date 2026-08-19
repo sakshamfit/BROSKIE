@@ -42,6 +42,11 @@ function resolveBase() {
       return `${protocol}//${hostname}:4000`;
     }
 
+    // Vercel serves only the static website; Socket.IO/Express remain on
+    // Railway. This also makes newly-added Vercel aliases work even before an
+    // environment variable is copied into that deployment.
+    if (hostname.endsWith('.vercel.app')) return DEFAULT_MOBILE_API_URL;
+
     // Anything else (production single-host): same origin, use relative paths.
     return '';
   }
