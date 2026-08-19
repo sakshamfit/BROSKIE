@@ -3,10 +3,20 @@ import { View, Text, Image, StyleSheet, Pressable, ActivityIndicator, Platform, 
 import Icon from '../icons/Icon';
 import {
   colorFor, initials, AVATAR_INK, radius, type, tokens, stroke,
-  inkBox, sketchBox, sketchAvatarFrame, pencilBox, inkUnderline, dashedRule, marker, pressedInk,
+  inkBox, sketchBox, sketchAvatarFrame, pencilBox, inkUnderline, dashedRule, marker, pressedInk, raised,
 } from '../theme';
 import { mediaUrl } from '../api';
 import { useTheme } from '../store/ThemeContext';
+
+// expo-blur was added after some APKs had already shipped. Keep it optional so
+// OTA bundles remain safe on those installations; newer builds get native
+// blur, older ones receive an opaque frosted fallback instead of crashing.
+let OptionalBlurView = null;
+try {
+  OptionalBlurView = require('expo-blur').BlurView;
+} catch {
+  OptionalBlurView = null;
+}
 
 /**
  * Platform-native press feedback: Android gets a Material ripple,
@@ -17,6 +27,28 @@ export function rippleFor(theme, { borderless = false, radius: rippleRadius } = 
   return Platform.OS === 'android'
     ? { color: theme.ripple, borderless, radius: rippleRadius }
     : undefined;
+}
+
+/** Real native/web backdrop blur with a safe, solid fallback for old APKs. */
+export function FrostedBackdrop({ intensity = 60, dim = 0.2, style }) {
+  const { theme } = useTheme();
+  const fallback = theme.dark ? 'rgba(8,8,8,0.9)' : 'rgba(236,232,229,0.92)';
+  const veil = theme.dark ? `rgba(0,0,0,${dim + 0.08})` : `rgba(28,27,27,${dim})`;
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
+      {OptionalBlurView ? (
+        <OptionalBlurView
+          intensity={Platform.OS === 'android' ? Math.max(48, intensity - 8) : intensity}
+          tint={theme.dark ? 'dark' : 'light'}
+          experimentalBlurMethod="dimezisBlurView"
+          style={StyleSheet.absoluteFill}
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: fallback }]} />
+      )}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: veil }]} />
+    </View>
+  );
 }
 
 /** Subtle entrance motion for panels and screen content. */
@@ -43,7 +75,7 @@ export function PaperCard({ children, style, weight = 'pencil', dogEar = false }
   const { theme } = useTheme();
   const outline = weight === 'ink' ? inkBox(theme, 'ink') : pencilBox(theme);
   return (
-    <View style={[{ backgroundColor: theme.card, padding: 20 }, outline, style]}>
+    <View style={[{ backgroundColor: theme.card, padding: 20 }, raised(theme, weight === 'ink' ? 2 : 1), outline, style]}>
       {children}
       {dogEar && <DogEar />}
     </View>
@@ -79,8 +111,9 @@ export function PaperSurface({ children, onPress, onLongPress, style, weight = '
       android_ripple={rippleFor(theme)}
       style={({ pressed }) => [
         { backgroundColor: theme.card },
+        raised(theme, weight === 'ink' ? 2 : 1),
         outline,
-        pressed && Platform.OS !== 'android' ? pressedInk(theme) : null,
+        pressed && Platform.OS !== 'android' ? [pressedInk(theme), { transform: [{ translateY: 2 }] }] : null,
         disabled && { opacity: 0.5 },
         style,
       ]}
@@ -111,7 +144,9 @@ export function InkButton({ label, onPress, icon, style, textStyle, disabled, bu
         android_ripple={rippleFor(theme, { color: filled ? 'rgba(255,255,255,0.25)' : theme.ripple })}
         style={({ pressed }) => [
           styles.btn,
+          raised(theme, filled ? 2 : 1),
           inkBox(theme, 'ink', lineColor),
+          { backgroundColor: filled ? lineColor : theme.card },
           filled && { backgroundColor: lineColor },
           pressed && !filled && !isAndroid ? marker(theme, 2) : null,
           pressed && filled && !isAndroid ? { opacity: 0.82 } : null,
@@ -147,8 +182,10 @@ export function InkIconButton({ name, onPress, size = 40, iconSize = 19, iconCol
       hitSlop={Math.max(slop, 6)}
       android_ripple={rippleFor(theme, { borderless: true, radius: size * 0.8 })}
       style={({ pressed }) => [
-        { width: size, height: size, alignItems: 'center', justifyContent: 'center' },
+        { width: size, height: size, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.card },
+        raised(theme, active ? 2 : 1),
         inkBox(theme, weight),
+        { backgroundColor: theme.card },
         active ? marker(theme, 2) : null,
         pressed && !isAndroid ? marker(theme, 1) : null,
         disabled && { opacity: 0.4 },

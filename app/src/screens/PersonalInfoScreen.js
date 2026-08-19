@@ -8,7 +8,7 @@ import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
 import AffiliationPicker, { affiliationType } from '../components/AffiliationPicker';
-import { PaperCard, InkField, InkButton, TapeChip } from '../components/common';
+import { PaperCard, InkField, InkButton, TapeChip, FrostedBackdrop } from '../components/common';
 import { type, inkBox, marker } from '../theme';
 
 /** "Personal Information" — Name, Username, About, Phone. */
@@ -161,7 +161,8 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
       />
 
       <Modal visible={!!editing} transparent animationType="fade" onRequestClose={() => setEditing(null)}>
-        <View style={[s.overlay, { backgroundColor: theme.overlay }]}>
+        <View style={[s.overlay, { backgroundColor: 'transparent' }]}>
+          <FrostedBackdrop />
           <PaperCard style={s.dialog} weight="ink">
             <Text style={[type.headlineMd, { color: theme.text, marginBottom: 18, textTransform: 'capitalize' }]}>
               Edit {editing}

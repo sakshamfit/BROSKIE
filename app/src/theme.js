@@ -145,7 +145,6 @@ export function inkBox(theme, weight = 'ink', color) {
     borderTopRightRadius: radius.lg,
     borderBottomRightRadius: radius.DEFAULT,
     borderBottomLeftRadius: radius.md,
-    backgroundColor: 'transparent',
   };
 }
 
@@ -235,6 +234,25 @@ export function marker(theme, strength = 1) {
 /** Pressed state: ink thickens, highlighter bleeds in. */
 export function pressedInk(theme) {
   return { backgroundColor: theme.highlighterWash };
+}
+
+/**
+ * Cross-platform raised surface. A firm down-right shadow creates the tactile
+ * 3D card/button language without another native dependency.
+ */
+export function raised(theme, level = 1) {
+  const depth = level >= 2 ? 8 : 5;
+  const opacity = theme.dark ? 0.58 : level >= 2 ? 0.3 : 0.2;
+  if (isWeb) {
+    return { boxShadow: `${Math.max(3, depth - 2)}px ${depth}px 0 rgba(0,0,0,${opacity})` };
+  }
+  return {
+    shadowColor: '#000000',
+    shadowOffset: { width: Math.max(2, depth - 4), height: depth },
+    shadowOpacity: opacity,
+    shadowRadius: level >= 2 ? 7 : 4,
+    elevation: level >= 2 ? 10 : 6,
+  };
 }
 
 /* Back-compat shims so any stragglers don't crash.

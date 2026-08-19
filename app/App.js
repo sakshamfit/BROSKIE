@@ -42,7 +42,7 @@ import DailyAIGreeting from './src/components/DailyAIGreeting';
 import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 
 // Changed whenever a web release needs to retire stale PWA/browser caches.
-const WEB_BUILD = '2026-08-19-3d-chat-cards-v6';
+const WEB_BUILD = '2026-08-19-frosted-3d-surfaces-v7';
 
 /** On web, expand to full browser — no phone frame.
  *  We still wrap in a flex View because React Navigation's container needs

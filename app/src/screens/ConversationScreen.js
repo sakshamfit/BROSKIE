@@ -17,13 +17,14 @@ import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import {
   Avatar, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor, formatTime,
+  FrostedBackdrop,
 } from '../components/common';
 import EmojiPicker from '../components/EmojiPicker';
 import MessageBubble, { DISAPPEAR_OPTIONS } from '../components/MessageBubble';
 import ForwardSheet from '../components/ForwardSheet';
 import PollComposer from '../components/PollComposer';
 import { api, mediaUrl } from '../api';
-import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
+import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
 
 function ConversationContent({ route, navigation, embedded = false }) {
   const { chatId, initialChat = null } = route.params || {};
@@ -608,8 +609,9 @@ function ConversationContent({ route, navigation, embedded = false }) {
 
       {/* per-message disappearing timer */}
       <Modal visible={!!timerMsg} transparent animationType="fade" onRequestClose={() => setTimerMsg(null)}>
-        <Pressable style={[s.overlay, { backgroundColor: theme.overlay }]} onPress={() => setTimerMsg(null)}>
-          <Pressable style={[s.timerSheet, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
+        <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setTimerMsg(null)}>
+          <FrostedBackdrop />
+          <Pressable style={[s.timerSheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
             <Text style={[type.headlineSm, { color: theme.text }]}>Disappear in…</Text>
             <Text style={[type.bodySm, { color: theme.subtext, marginTop: 4, marginBottom: 12 }]}>
               The message self-destructs after the timer.

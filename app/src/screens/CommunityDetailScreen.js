@@ -7,9 +7,9 @@ import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, PaperCard, TapeChip, handleFor, Rule, InkButton, rippleFor } from '../components/common';
+import { Avatar, PaperCard, TapeChip, handleFor, Rule, InkButton, rippleFor, FrostedBackdrop } from '../components/common';
 import { categoryMeta, JOIN_POLICY } from '../components/communityMeta';
-import { radius, type, inkBox, marker } from '../theme';
+import { radius, type, inkBox, marker, raised } from '../theme';
 import { confirm } from '../hooks/confirm';
 
 /**
@@ -105,7 +105,7 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
     if (community.isMember) return null;
     if (community.pendingRequest) {
       return (
-        <View style={[s.pendingPill, { borderColor: theme.outline }]}>
+        <View style={[s.pendingPill, { borderColor: theme.graphiteLine }]}>
           <Icon name="hourglass-outline" size={15} color={theme.subtext} />
           <Text style={[type.labelSm, { color: theme.subtext }]}>Request sent — waiting on an admin</Text>
         </View>
@@ -113,7 +113,7 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
     }
     if (community.joinPolicy === 'invite') {
       return (
-        <View style={[s.pendingPill, { borderColor: theme.outline }]}>
+        <View style={[s.pendingPill, { borderColor: theme.graphiteLine }]}>
           <Icon name="lock-open-outline" size={15} color={theme.subtext} />
           <Text style={[type.labelSm, { color: theme.subtext }]}>Invite only — ask an admin to add you</Text>
         </View>
@@ -219,8 +219,9 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
       </ScrollView>
 
       <Modal visible={showRequests} animationType="slide" transparent onRequestClose={() => setShowRequests(false)}>
-        <View style={[s.reqOverlay, { backgroundColor: theme.overlay }]}>
-          <View style={[s.reqSheet, { backgroundColor: theme.bg, paddingBottom: Math.max(insets.bottom, 20) }]}>
+        <View style={[s.reqOverlay, { backgroundColor: 'transparent' }]}>
+          <FrostedBackdrop />
+          <View style={[s.reqSheet, raised(theme, 2), { backgroundColor: theme.bg, borderTopColor: theme.ink, paddingBottom: Math.max(insets.bottom, 20) }]}>
             <View style={s.reqHead}>
               <Text style={[type.headlineSm, { color: theme.text, flex: 1 }]}>Join requests</Text>
               <Pressable onPress={() => setShowRequests(false)} hitSlop={10}>
@@ -240,7 +241,7 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
                     <EmojiText style={[type.bodyMd, { color: theme.text }]}>{r.user.name}</EmojiText>
                     <Text style={[type.labelXs, { color: theme.graphite, marginTop: 2 }]}>{handleFor(r.user)}</Text>
                   </View>
-                  <Pressable onPress={() => respond(r.user.id, 'decline')} style={[s.reqBtn, { borderColor: theme.outline }]}>
+                  <Pressable onPress={() => respond(r.user.id, 'decline')} style={[s.reqBtn, { borderColor: theme.graphiteLine }]}>
                     <Icon name="close" size={16} color={theme.subtext} />
                   </Pressable>
                   <Pressable onPress={() => respond(r.user.id, 'approve')} style={[s.reqBtn, { backgroundColor: theme.ink, borderColor: theme.ink }]}>
@@ -266,7 +267,7 @@ const makeStyles = (t) => StyleSheet.create({
   pendingPill: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9 },
 
   reqOverlay: { flex: 1, justifyContent: 'flex-end' },
-  reqSheet: { paddingHorizontal: 20, paddingTop: 16, maxHeight: '80%' },
+  reqSheet: { paddingHorizontal: 20, paddingTop: 16, maxHeight: '80%', borderTopWidth: 3, borderTopLeftRadius: 18, borderTopRightRadius: 18 },
   reqHead: { flexDirection: 'row', alignItems: 'center' },
   reqRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   reqBtn: { width: 34, height: 34, borderRadius: radius.full, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginLeft: 6 },

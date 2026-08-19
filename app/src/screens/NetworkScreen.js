@@ -10,13 +10,13 @@ import { api, mediaUrl } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFor } from '../components/common';
+import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFor, FrostedBackdrop } from '../components/common';
 import { AUDIENCE } from '../components/AudiencePicker';
 import SongCard from '../components/SongCard';
 import NewPostScreen from './NewPostScreen';
 import CommunitiesScreen from './CommunitiesScreen';
 import ColleaguesScreen from './ColleaguesScreen';
-import { type, inkBox, marker, dashedRule, stroke, radius } from '../theme';
+import { type, inkBox, marker, dashedRule, stroke, radius, raised } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
 
@@ -136,7 +136,7 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
   const renderPost = ({ item, index }) => {
     const audienceMeta = AUDIENCE[item.audience] || AUDIENCE.public;
     return (
-      <View style={[s.note, { transform: [{ rotate: tiltFor(index) }], backgroundColor: index % 2 ? theme.cardAlt : theme.card }]}>
+      <View style={[s.note, raised(theme, 1), { transform: [{ rotate: tiltFor(index) }], backgroundColor: index % 2 ? theme.cardAlt : theme.card }]}>
         <View style={s.noteHead}>
           <Avatar uri={item.author.avatar} name={item.author.name} id={item.author.id} size={38} />
           <View style={{ flex: 1 }}>
@@ -389,11 +389,13 @@ function CommentsSheet({ post, onClose, onCounted }) {
 
   return (
     <Modal visible={!!post} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={[s.sheetOverlay, { backgroundColor: theme.overlay }]}>
+      <View style={[s.sheetOverlay, { backgroundColor: 'transparent' }]}>
+        <FrostedBackdrop />
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={[
             s.sheet,
+            raised(theme, 2),
             { backgroundColor: theme.bg, borderTopWidth: stroke.bold, borderTopColor: theme.ink, paddingBottom: Math.max(insets.bottom, 24) },
           ]}
         >

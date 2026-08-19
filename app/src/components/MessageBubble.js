@@ -3,7 +3,7 @@ import { View, Text, Image, Pressable, StyleSheet, Modal } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
-import { Ticks, formatTime, PaperCard, Rule } from './common';
+import { Ticks, formatTime, PaperCard, Rule, FrostedBackdrop } from './common';
 import { mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 import VoiceNote from './VoiceNote';
@@ -142,7 +142,8 @@ export default function MessageBubble({
       </Pressable>
 
       <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)}>
-        <Pressable style={[s.overlay, { backgroundColor: theme.overlay }]} onPress={() => setMenu(false)}>
+        <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setMenu(false)}>
+          <FrostedBackdrop />
           <PaperCard weight="ink" style={s.menu}>
             <View style={s.quickRow}>
               {QUICK.map((e) => (

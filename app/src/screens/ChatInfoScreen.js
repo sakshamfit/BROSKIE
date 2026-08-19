@@ -8,8 +8,8 @@ import { EmojiText } from '../icons/Emoji';
 import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, lastSeenText, PaperCard, TapeChip, handleFor, Rule, InkButton, InkField } from '../components/common';
-import { radius, type, inkBox, marker, dashedRule } from '../theme';
+import { Avatar, lastSeenText, PaperCard, TapeChip, handleFor, Rule, InkButton, InkField, FrostedBackdrop } from '../components/common';
+import { radius, type, inkBox, marker, dashedRule, raised } from '../theme';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 import { DISAPPEAR_OPTIONS, disappearLabel } from '../components/MessageBubble';
@@ -244,8 +244,9 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
 
       {/* rename modal */}
       <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}>
-        <Pressable style={[s.overlay, { backgroundColor: theme.overlay }]} onPress={() => setRenameOpen(false)}>
-          <Pressable style={[s.sheet, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
+        <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setRenameOpen(false)}>
+          <FrostedBackdrop />
+          <Pressable style={[s.sheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
             <Text style={[type.headlineSm, { color: theme.text }]}>Rename group</Text>
             <InkField style={{ marginTop: 14 }}>
               <TextInput
@@ -272,8 +273,9 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
 
       {/* disappearing timer modal */}
       <Modal visible={disappearOpen} transparent animationType="fade" onRequestClose={() => setDisappearOpen(false)}>
-        <Pressable style={[s.overlay, { backgroundColor: theme.overlay }]} onPress={() => setDisappearOpen(false)}>
-          <Pressable style={[s.sheet, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
+        <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setDisappearOpen(false)}>
+          <FrostedBackdrop />
+          <Pressable style={[s.sheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
             <Text style={[type.headlineSm, { color: theme.text }]}>Disappearing messages</Text>
             <Text style={[type.bodySm, { color: theme.subtext, marginTop: 4, marginBottom: 12 }]}>
               New messages in this {chat.type === 'group' ? 'group' : 'chat'} self-destruct after the timer.

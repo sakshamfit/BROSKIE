@@ -3,8 +3,8 @@ import { View, Text, Pressable, StyleSheet, Modal, FlatList } from 'react-native
 import Icon from '../icons/Icon';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, InkCheckbox, InkButton, EmptyState, Rule } from './common';
-import { type, inkBox, marker, radius } from '../theme';
+import { Avatar, InkCheckbox, InkButton, EmptyState, Rule, FrostedBackdrop } from './common';
+import { type, inkBox, marker, radius, raised } from '../theme';
 import { api } from '../api';
 
 /**
@@ -45,8 +45,9 @@ export default function ForwardSheet({ visible, message, onClose }) {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
-      <Pressable style={[s.overlay, { backgroundColor: theme.overlay }]} onPress={close}>
-        <Pressable style={[s.sheet, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
+      <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={close}>
+        <FrostedBackdrop />
+        <Pressable style={[s.sheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
           <View style={s.head}>
             <View style={{ flex: 1 }}>
               <Text style={[type.headlineSm, { color: theme.text }]}>Forward to…</Text>

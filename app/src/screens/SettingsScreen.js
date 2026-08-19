@@ -8,7 +8,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
 import useResponsive from '../hooks/useResponsive';
-import { Avatar, InkButton, InkField, PaperCard, TapeChip, handleFor, MotionIn } from '../components/common';
+import { Avatar, InkButton, InkField, PaperCard, TapeChip, handleFor, MotionIn, FrostedBackdrop } from '../components/common';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
@@ -209,7 +209,8 @@ export default function SettingsScreen({ navigation, embedded = false }) {
       </ScrollView>
 
       <Modal visible={deleteOpen} transparent animationType="fade" onRequestClose={closeDelete}>
-        <View style={[s.deleteOverlay, { backgroundColor: theme.overlay }]}>
+        <View style={[s.deleteOverlay, { backgroundColor: 'transparent' }]}>
+          <FrostedBackdrop />
           <PaperCard weight="ink" style={s.deleteDialog}>
             <View style={s.deleteDialogHead}>
               <View style={[s.deleteIcon, { backgroundColor: theme.dangerContainer }]}>

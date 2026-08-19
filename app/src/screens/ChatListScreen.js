@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Platform, Modal, Alert,
+  View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Modal, Alert,
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import Icon from '../icons/Icon';
@@ -11,20 +11,11 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import {
   Avatar, Ticks, EmptyState, CountBead, formatChatTime, SketchDivider, InkIconButton, Rule, PaperCard, MotionIn,
+  FrostedBackdrop,
 } from '../components/common';
 import { type, inkBox, marker, radius, stroke } from '../theme';
 import { api } from '../api';
 import { confirm } from '../hooks/confirm';
-
-// Older installed APKs may not yet contain expo-blur's native view. Loading it
-// optionally keeps OTA updates usable on those APKs; they get a strong frosted
-// fallback, while newer APKs automatically use the real native blur.
-let BlurView = null;
-try {
-  BlurView = require('expo-blur').BlurView;
-} catch {
-  BlurView = null;
-}
 
 /* each divider leans a slightly different way, like a hand-ruled line */
 const TILTS = [-0.5, 0.8, -0.3, 0.6, -0.7, 0.4];
@@ -341,22 +332,7 @@ export default function ChatListScreen({ navigation }) {
       {/* long-press action sheet */}
       <Modal visible={!!sheetChat} transparent animationType="fade" onRequestClose={() => !sheetBusy && setSheetChat(null)}>
         <View style={[s.overlay, { backgroundColor: theme.dark ? 'rgba(0,0,0,0.28)' : 'rgba(28,27,27,0.18)' }]}>
-          {BlurView ? (
-            <BlurView
-              intensity={Platform.OS === 'android' ? 52 : 65}
-              tint={theme.dark ? 'dark' : 'light'}
-              experimentalBlurMethod="dimezisBlurView"
-              style={StyleSheet.absoluteFill}
-            />
-          ) : (
-            <View
-              pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: theme.dark ? 'rgba(8,8,8,0.82)' : 'rgba(235,231,228,0.88)' },
-              ]}
-            />
-          )}
+          <FrostedBackdrop intensity={65} dim={0.16} />
           <Pressable style={StyleSheet.absoluteFill} onPress={() => !sheetBusy && setSheetChat(null)} />
           <PaperCard weight="ink" style={[s.sheet, { backgroundColor: theme.dark ? 'rgba(31,30,30,0.96)' : 'rgba(253,248,248,0.96)' }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6 }}>

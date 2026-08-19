@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Modal } from 'react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
-import { InkButton, InkField, Rule } from './common';
-import { type, inkBox, marker } from '../theme';
+import { InkButton, InkField, Rule, FrostedBackdrop } from './common';
+import { type, inkBox, marker, raised } from '../theme';
 
 const MAX_OPTIONS = 6;
 
@@ -42,8 +42,9 @@ export default function PollComposer({ visible, onClose, onCreate }) {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
-      <Pressable style={[s.overlay, { backgroundColor: theme.overlay }]} onPress={close}>
-        <Pressable style={[s.sheet, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
+      <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={close}>
+        <FrostedBackdrop />
+        <Pressable style={[s.sheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
           <View style={s.head}>
             <View style={{ flex: 1 }}>
               <Text style={[type.headlineSm, { color: theme.text }]}>Create a poll</Text>

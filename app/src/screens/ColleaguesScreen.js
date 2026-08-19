@@ -12,7 +12,7 @@ import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import AffiliationPicker, { AFFILIATION_TYPES, affiliationType } from '../components/AffiliationPicker';
 import { Avatar, InkField, TapeChip, handleFor, rippleFor } from '../components/common';
-import { type, inkBox, marker, dashedRule } from '../theme';
+import { type, inkBox, marker, dashedRule, raised } from '../theme';
 
 const FILTERS = [{ key: '', short: 'All', icon: 'globe-outline' }, ...AFFILIATION_TYPES];
 const CARD_TILTS = ['0.5deg', '-0.8deg', '1deg'];
@@ -274,6 +274,7 @@ export default function ColleaguesScreen({ onOpenChat }) {
                   style={[
                     s.card,
                     isTablet && s.cardWide,
+                    raised(theme, index % 3 === 2 ? 2 : 1),
                     inkBox(theme, index % 3 === 2 ? 'ink' : 'thin', index % 3 === 2 ? theme.ink : theme.graphiteLine),
                     { transform: [{ rotate: CARD_TILTS[index % CARD_TILTS.length] }] },
                   ]}

@@ -13,7 +13,7 @@ import SongCard from '../components/SongCard';
 import SongPicker from '../components/SongPicker';
 import PhotoCropPicker from '../components/PhotoCropPicker';
 import { rippleFor } from '../components/common';
-import { dashedRule, marker, radius, type } from '../theme';
+import { dashedRule, marker, radius, type, raised } from '../theme';
 
 /**
  * Full-screen "New Post" composer for The Network — a dedicated page
@@ -117,7 +117,7 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
       >
         <View style={s.canvasWrap}>
           <TextInput
-            style={[s.canvas, { borderColor: theme.ink, backgroundColor: theme.card, color: theme.text }]}
+            style={[s.canvas, raised(theme, 1), { borderColor: theme.ink, backgroundColor: theme.card, color: theme.text }]}
             placeholder="What's on your mind?"
             placeholderTextColor={theme.muted}
             value={body}
@@ -164,7 +164,7 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
           <Pressable
             onPress={pickImage}
             style={({ pressed }) => [
-              s.actionBtn, { borderColor: theme.outline, transform: [{ rotate: '-1deg' }] },
+              s.actionBtn, raised(theme, 1), { borderColor: theme.graphiteLine, backgroundColor: theme.card, transform: [{ rotate: '-1deg' }] },
               pressed ? marker(theme, 1) : null,
             ]}
           >
@@ -174,7 +174,7 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
           <Pressable
             onPress={() => setSongPicker(true)}
             style={({ pressed }) => [
-              s.actionBtn, { borderColor: theme.outline, transform: [{ rotate: '1deg' }] },
+              s.actionBtn, raised(theme, 1), { borderColor: theme.graphiteLine, backgroundColor: theme.card, transform: [{ rotate: '1deg' }] },
               pressed ? marker(theme, 1) : null,
             ]}
           >
@@ -184,7 +184,7 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
           <Pressable
             onPress={() => setShowTagInput((v) => !v)}
             style={({ pressed }) => [
-              s.actionBtn, { borderColor: theme.outline, transform: [{ rotate: '-0.6deg' }] },
+              s.actionBtn, raised(theme, 1), { borderColor: theme.graphiteLine, backgroundColor: theme.card, transform: [{ rotate: '-0.6deg' }] },
               pressed ? marker(theme, 1) : null,
               showTagInput && { backgroundColor: theme.highlighterWash },
             ]}
@@ -211,7 +211,7 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
 
         {/* -------- visibility -------- */}
         <View style={s.visibilitySection}>
-          <Text style={[s.sketchLabel, { color: theme.outline }]}>Visibility Protocol…</Text>
+          <Text style={[s.sketchLabel, { color: theme.graphite }]}>Visibility Protocol…</Text>
           <AudiencePicker
             audience={audience}
             onChange={(v) => { setAudience(v); setError(''); }}

@@ -10,7 +10,7 @@ import { api } from '../api';
 import useResponsive from '../hooks/useResponsive';
 import { rippleFor } from '../components/common';
 import { CATEGORY_LIST, JOIN_POLICY_LIST } from '../components/communityMeta';
-import { dashedRule, marker, radius, type } from '../theme';
+import { dashedRule, marker, radius, type, raised } from '../theme';
 
 /**
  * Full-screen "New Community" composer — mirrors NewPostScreen's structure
@@ -84,7 +84,7 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
           <View>
             <Text style={[type.labelXs, { color: theme.muted, marginBottom: 8 }]}>WHAT ARE YOU PLANNING?</Text>
             <TextInput
-              style={[s.nameInput, { borderColor: theme.ink, backgroundColor: theme.card, color: theme.text }]}
+              style={[s.nameInput, raised(theme, 1), { borderColor: theme.ink, backgroundColor: theme.card, color: theme.text }]}
               placeholder="e.g. Saturday Club Night, Rishikesh Trip…"
               placeholderTextColor={theme.muted}
               value={name}
@@ -96,7 +96,7 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
           <View>
             <Text style={[type.labelXs, { color: theme.muted, marginBottom: 8, marginTop: 20 }]}>DETAILS (OPTIONAL)</Text>
             <TextInput
-              style={[s.descInput, { borderColor: theme.ink, backgroundColor: theme.card, color: theme.text }]}
+              style={[s.descInput, raised(theme, 1), { borderColor: theme.ink, backgroundColor: theme.card, color: theme.text }]}
               placeholder="Who's invited, when, where, the vibe…"
               placeholderTextColor={theme.muted}
               value={description}
@@ -108,7 +108,7 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
           </View>
 
           <View style={{ marginTop: 24 }}>
-            <Text style={[s.sketchLabel, { color: theme.outline }]}>Pick a category…</Text>
+            <Text style={[s.sketchLabel, { color: theme.graphite }]}>Pick a category…</Text>
             <View style={s.categoryGrid}>
               {CATEGORY_LIST.map((c) => {
                 const active = category === c.key;
@@ -118,8 +118,9 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
                     onPress={() => setCategory(c.key)}
                     style={({ pressed }) => [
                       s.categoryCard,
-                      { borderColor: theme.outline },
-                      active && { backgroundColor: theme.highlighterWash, borderColor: theme.ink },
+                      raised(theme, active ? 2 : 1),
+                      { borderColor: theme.graphiteLine, backgroundColor: theme.card, transform: [{ translateY: pressed ? 2 : 0 }] },
+                      active && { backgroundColor: theme.highlighter, borderColor: theme.ink },
                       pressed && !active ? marker(theme, 1) : null,
                     ]}
                   >
@@ -132,7 +133,7 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
           </View>
 
           <View style={{ marginTop: 24 }}>
-            <Text style={[s.sketchLabel, { color: theme.outline }]}>Who can join…</Text>
+            <Text style={[s.sketchLabel, { color: theme.graphite }]}>Who can join…</Text>
             <View style={{ gap: 10, marginTop: 4 }}>
               {JOIN_POLICY_LIST.map((p) => {
                 const active = joinPolicy === p.key;
@@ -142,8 +143,9 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
                     onPress={() => setJoinPolicy(p.key)}
                     style={({ pressed }) => [
                       s.policyRow,
-                      { borderColor: theme.outline },
-                      active && { backgroundColor: theme.highlighterWash, borderColor: theme.ink },
+                      raised(theme, active ? 2 : 1),
+                      { borderColor: theme.graphiteLine, backgroundColor: theme.card, transform: [{ translateY: pressed ? 2 : 0 }] },
+                      active && { backgroundColor: theme.highlighter, borderColor: theme.ink },
                       pressed && !active ? marker(theme, 1) : null,
                     ]}
                   >
@@ -181,17 +183,17 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
               android_ripple={rippleFor(theme, { color: 'rgba(255,255,255,0.25)' })}
               style={({ pressed }) => [
                 s.createBtn,
-                { backgroundColor: theme.ink, borderColor: theme.ink },
-                Platform.OS !== 'android' && pressed ? { opacity: 0.85 } : null,
+                raised(theme, 2),
+                { backgroundColor: pressed && Platform.OS !== 'android' ? '#242321' : '#050505', borderColor: '#000000' },
                 busy && { opacity: 0.6 },
               ]}
             >
               {busy ? (
-                <ActivityIndicator color={theme.onPrimary} />
+                <ActivityIndicator color="#ffffff" />
               ) : (
                 <>
-                  <Icon name="people-outline" size={19} color={theme.onPrimary} />
-                  <Text style={[type.headlineSm, { fontSize: 17, color: theme.onPrimary, textTransform: 'uppercase', letterSpacing: 1 }]}>
+                  <Icon name="people-outline" size={19} color="#ffffff" />
+                  <Text style={[type.headlineSm, { fontSize: 17, color: '#ffffff', textTransform: 'uppercase', letterSpacing: 1 }]}>
                     Start Community
                   </Text>
                 </>
@@ -224,10 +226,10 @@ const makeStyles = (t) => StyleSheet.create({
 
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   categoryCard: {
-    width: '31%', aspectRatio: 1.05, borderWidth: 1, borderRadius: 8,
+    width: '31%', aspectRatio: 1.05, borderWidth: 2, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6,
   },
-  policyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 8, padding: 14 },
+  policyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 2, borderRadius: 10, padding: 14 },
 
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 16 },
 

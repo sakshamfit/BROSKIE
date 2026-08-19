@@ -10,7 +10,7 @@ import { Avatar, EmptyState, TapeChip, rippleFor } from '../components/common';
 import { CATEGORY_LIST, categoryMeta } from '../components/communityMeta';
 import NewCommunityScreen from './NewCommunityScreen';
 import CommunityDetailScreen from './CommunityDetailScreen';
-import { type, inkBox, marker, radius } from '../theme';
+import { type, inkBox, marker, radius, raised } from '../theme';
 
 const tiltFor = (i) => (i % 2 === 0 ? '-0.7deg' : '0.6deg');
 
@@ -72,7 +72,13 @@ export default function CommunitiesScreen({ onOpenChat }) {
         onPress={() => setOpenId(item.id)}
         android_ripple={rippleFor(theme)}
         style={({ pressed }) => [
-          s.card, { transform: [{ rotate: tiltFor(index) }], backgroundColor: index % 2 ? theme.cardAlt : theme.card, borderColor: theme.graphiteLine },
+          s.card,
+          raised(theme, 1),
+          {
+            transform: [{ rotate: tiltFor(index) }, { translateY: pressed ? 3 : 0 }],
+            backgroundColor: index % 2 ? theme.cardAlt : theme.card,
+            borderColor: theme.ink,
+          },
           pressed && marker(theme, 1),
         ]}
       >
@@ -106,11 +112,17 @@ export default function CommunitiesScreen({ onOpenChat }) {
   const ListHeader = (
     <View style={s.headerWrap}>
       <View style={s.scopeRow}>
-        <Pressable onPress={() => setScope('discover')} style={[s.scopeBtn, scope === 'discover' && s.scopeActive, { borderColor: theme.ink }]}>
-          <Text style={[type.labelSm, { color: scope === 'discover' ? theme.onPrimary : theme.text }]}>DISCOVER</Text>
+        <Pressable
+          onPress={() => setScope('discover')}
+          style={({ pressed }) => [s.scopeBtn, raised(theme, scope === 'discover' ? 2 : 1), { borderColor: theme.ink, backgroundColor: scope === 'discover' ? '#050505' : theme.card }, pressed && { transform: [{ translateY: 2 }] }]}
+        >
+          <Text style={[type.labelSm, { color: scope === 'discover' ? '#ffffff' : theme.text }]}>DISCOVER</Text>
         </Pressable>
-        <Pressable onPress={() => setScope('mine')} style={[s.scopeBtn, scope === 'mine' && s.scopeActive, { borderColor: theme.ink }]}>
-          <Text style={[type.labelSm, { color: scope === 'mine' ? theme.onPrimary : theme.text }]}>MY COMMUNITIES</Text>
+        <Pressable
+          onPress={() => setScope('mine')}
+          style={({ pressed }) => [s.scopeBtn, raised(theme, scope === 'mine' ? 2 : 1), { borderColor: theme.ink, backgroundColor: scope === 'mine' ? '#050505' : theme.card }, pressed && { transform: [{ translateY: 2 }] }]}
+        >
+          <Text style={[type.labelSm, { color: scope === 'mine' ? '#ffffff' : theme.text }]}>MY COMMUNITIES</Text>
         </Pressable>
       </View>
 
@@ -162,13 +174,20 @@ export default function CommunitiesScreen({ onOpenChat }) {
         }
       />
 
-      <Pressable
-        onPress={() => setComposerOpen(true)}
-        android_ripple={rippleFor(theme, { borderless: true, radius: 30 })}
-        style={({ pressed }) => [s.fab, inkBox(theme, 'bold'), { backgroundColor: pressed ? theme.highlighter : theme.ink }]}
-      >
-        <Icon name="add" size={24} color={theme.onPrimary} />
-      </Pressable>
+      <View style={s.createFabWrap} pointerEvents="box-none">
+        <View pointerEvents="none" style={s.createFabDepth} />
+        <Pressable
+          accessibilityLabel="Create community"
+          onPress={() => setComposerOpen(true)}
+          android_ripple={rippleFor(theme, { borderless: false, radius: 28 })}
+          style={({ pressed }) => [s.fab, pressed && { transform: [{ translateX: 2 }, { translateY: 4 }], backgroundColor: '#242321' }]}
+        >
+          <View style={[s.fabIcon, { backgroundColor: theme.highlighter }]}>
+            <Icon name="add" size={19} color="#050505" />
+          </View>
+          <Text style={[type.labelSm, { color: '#ffffff' }]}>CREATE COMMUNITY</Text>
+        </Pressable>
+      </View>
 
       <NewCommunityScreen visible={composerOpen} onClose={() => setComposerOpen(false)} onCreated={onCreated} />
 
@@ -187,17 +206,30 @@ const makeStyles = (t) => StyleSheet.create({
   list: { paddingHorizontal: 20, paddingBottom: 120 },
   headerWrap: { paddingTop: 6, paddingBottom: 16, gap: 14 },
   scopeRow: { flexDirection: 'row', gap: 10 },
-  scopeBtn: { flex: 1, borderWidth: 1, borderRadius: 999, paddingVertical: 10, alignItems: 'center' },
-  scopeActive: { backgroundColor: t.ink },
+  scopeBtn: { flex: 1, borderWidth: 2, borderRadius: 999, paddingVertical: 11, alignItems: 'center' },
   catRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 
   card: {
-    flex: 1, padding: 16, marginBottom: 16, borderWidth: 1,
-    borderTopLeftRadius: 2, borderTopRightRadius: 5, borderBottomRightRadius: 2, borderBottomLeftRadius: 4,
+    flex: 1, padding: 17, marginBottom: 22, borderWidth: 2,
+    borderTopLeftRadius: 7, borderTopRightRadius: 12, borderBottomRightRadius: 7, borderBottomLeftRadius: 10,
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   catBadge: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   cardFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 },
 
-  fab: { position: 'absolute', right: 24, bottom: 26, width: 54, height: 54, alignItems: 'center', justifyContent: 'center' },
+  createFabWrap: {
+    position: 'absolute', right: 24, bottom: 26, width: 196, height: 58,
+    shadowColor: '#000000', shadowOffset: { width: 3, height: 8 }, shadowOpacity: 0.36, shadowRadius: 7,
+    elevation: 12,
+  },
+  createFabDepth: {
+    position: 'absolute', left: 5, right: -5, top: 7, bottom: -7,
+    backgroundColor: '#8d7900', borderWidth: 2, borderColor: '#000000', borderRadius: 15,
+  },
+  fab: {
+    width: '100%', height: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    paddingHorizontal: 14, backgroundColor: '#050505', borderWidth: 3, borderColor: '#000000', borderRadius: 15,
+    overflow: 'hidden',
+  },
+  fabIcon: { width: 30, height: 30, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
 });

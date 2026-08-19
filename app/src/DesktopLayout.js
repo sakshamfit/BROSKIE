@@ -7,7 +7,8 @@ import { useTheme } from './store/ThemeContext';
 import { useAuth } from './store/AuthContext';
 import { useChat } from './store/ChatContext';
 import useResponsive from './hooks/useResponsive';
-import { type, inkBox, stroke } from './theme';
+import { FrostedBackdrop } from './components/common';
+import { type, inkBox, stroke, raised } from './theme';
 
 import ChatListScreen from './screens/ChatListScreen';
 import ConversationScreen from './screens/ConversationScreen';
@@ -276,13 +277,15 @@ function OverlayPanel({ visible, onClose, width = 480, children }) {
   if (!visible) return null;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={[styles.overlayBackdrop, { backgroundColor: theme.overlay }]}>
+      <View style={[styles.overlayBackdrop, { backgroundColor: 'transparent' }]}>
+        <FrostedBackdrop />
         {/* Do not place a full-screen Pressable behind/around this panel.
             React Native Web promoted it above descendants and swallowed every
             contact-row click. Panels close through their own back/close UI. */}
         <View
           style={[
             styles.overlayPanel,
+            raised(theme, 2),
             inkBox(theme, 'bold'),
             { width, maxWidth: '92%', backgroundColor: theme.bg },
           ]}

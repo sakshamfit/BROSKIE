@@ -10,12 +10,12 @@ import { api, mediaUrl } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
-import { Avatar, formatChatTime, rippleFor } from '../components/common';
+import { Avatar, formatChatTime, rippleFor, FrostedBackdrop } from '../components/common';
 import AudiencePicker, { AUDIENCE } from '../components/AudiencePicker';
 import PhotoCropPicker from '../components/PhotoCropPicker';
 import SongCard from '../components/SongCard';
 import SongPicker from '../components/SongPicker';
-import { radius, type, inkBox, marker, stroke } from '../theme';
+import { radius, type, inkBox, marker, stroke, raised } from '../theme';
 
 const BG_COLORS = ['#FFE24D', '#fdf8f8', '#e2e3de', '#5d5f5b', '#1c1b1b', '#39444c'];
 
@@ -617,9 +617,10 @@ function StatusComposer({ visible, initialMode, onClose, onPosted }) {
       </Modal>
 
       <Modal visible={privacyOpen} transparent animationType="slide" onRequestClose={() => setPrivacyOpen(false)}>
-        <View style={[s.privacyOverlay, { backgroundColor: theme.overlay }]}>
+        <View style={[s.privacyOverlay, { backgroundColor: 'transparent' }]}>
+          <FrostedBackdrop />
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setPrivacyOpen(false)} />
-          <View style={[s.privacySheet, { backgroundColor: theme.bg, borderColor: theme.ink, paddingBottom: Math.max(insets.bottom, 20) }]}>
+          <View style={[s.privacySheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink, paddingBottom: Math.max(insets.bottom, 20) }]}>
             <View style={s.privacyHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[type.headlineMd, { color: theme.text }]}>Status privacy</Text>
