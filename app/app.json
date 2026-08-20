@@ -2,14 +2,14 @@
   "expo": {
     "name": "+one",
     "slug": "saksham",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ai.arena.tomodachi",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "+one uses the microphone to record voice messages.",
         "NSPhotoLibraryUsageDescription": "+one needs photo access so you can share images in chats.",
@@ -18,13 +18,13 @@
     },
     "android": {
       "package": "ai.arena.tomodachi",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png",
         "backgroundColor": "#000000"
       },
-      "softwareKeyboardLayoutMode": "resize",
+      "softwareKeyboardLayoutMode": "pan",
       "permissions": [
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE"
