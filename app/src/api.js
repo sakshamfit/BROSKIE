@@ -87,7 +87,7 @@ let authToken = null;
 export const setToken = (t) => { authToken = t; };
 export const getToken = () => authToken;
 
-const DEFAULT_TIMEOUT_MS = 18000;
+const DEFAULT_TIMEOUT_MS = 25000; // increased for Realme / slow 5G where Railway cold-start + 5G DNS can exceed 18s
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -109,7 +109,14 @@ function logTechnicalFailure(path, error) {
 
 function networkFailure(error, timedOut) {
   const technicalMessage = String(error?.message || error || 'Unknown network error');
-  if (timedOut || error?.name === 'AbortError') {
+  const lower = technicalMessage.toLowerCase();
+  // Realme / low-end devices often hit TLS trust or date-time drift → surface actionable hint
+  if (lower.includes('certificate') || lower.includes('ssl') || lower.includes('tls') || lower.includes('trust anchor') || lower.includes('unable to find valid certification')) {
+    return new ApiError('Secure connection failed. Please check your device date & time is correct and try again.', {
+      code: 'CERT_ERROR', technicalMessage,
+    });
+  }
+  if (timedOut || error?.name === 'AbortError' || lower.includes('abort') || lower.includes('timeout')) {
     return new ApiError('The request took too long. Check your connection and try again.', {
       code: 'TIMEOUT', technicalMessage,
     });
@@ -120,110 +127,150 @@ function networkFailure(error, timedOut) {
 }
 
 /**
- * Shared production HTTP layer. GETs retry once by default; callers may opt a
- * genuinely idempotent POST (login) into one retry. Registration and other
- * writes never auto-retry because a lost response could otherwise duplicate
- * an operation that already reached the server.
+ * Shared production HTTP layer. GETs retry once by default; auth POSTs (login/register)
+ * retry once with fallback base to survive single-edge failures on Realme / low-end
+ * devices (Vercel ↔ Railway). The fallback ensures a transient 5G DNS/TLS hiccup on
+ * one edge does not become “Unable to connect” — the second base is tried before
+ * surfacing an error. Registration retry is safe: a duplicate hits 409 and maps to
+ * “That username is already taken” rather than a silent duplicate.
  */
+// Build ordered list of bases to try: native tries Vercel proxy first, then direct Railway fallback (and vice versa)
+// This makes Realme 11x 5G resilient when one edge is blocked/slow but the other works — no extra user action needed.
+function candidateBases(path) {
+  if (Platform.OS === 'web') return [API_URL];
+  const primary = API_URL;
+  const secondary = primary === DEFAULT_MOBILE_API_URL ? DEFAULT_SERVER_URL : primary === DEFAULT_SERVER_URL ? DEFAULT_MOBILE_API_URL : null;
+  return secondary && secondary !== primary ? [primary, secondary] : [primary];
+}
+
 async function request(path, {
   method = 'GET', body, isForm = false, timeoutMs = DEFAULT_TIMEOUT_MS,
   retries = method === 'GET' ? 1 : 0,
 } = {}) {
-  const url = API_URL + path;
-  const headers = { Accept: 'application/json' };
-  if (!isForm) headers['Content-Type'] = 'application/json';
-  if (authToken) headers.Authorization = `Bearer ${authToken}`;
-  const serializedBody = isForm ? body : body !== undefined ? JSON.stringify(body) : undefined;
+  const bases = candidateBases(path);
+  let lastError = null;
+  for (let baseIdx = 0; baseIdx < bases.length; baseIdx += 1) {
+    const base = bases[baseIdx];
+    const url = base + path;
+    const headers = { Accept: 'application/json' };
+    if (!isForm) headers['Content-Type'] = 'application/json';
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    const serializedBody = isForm ? body : body !== undefined ? JSON.stringify(body) : undefined;
 
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    let timedOut = false;
-    let timeoutId;
-    const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => {
-        timedOut = true;
-        controller?.abort();
-        reject(new Error('REQUEST_TIMEOUT'));
-      }, timeoutMs);
-    });
-
-    let response;
-    try {
-      const fetchPromise = fetch(url, {
-        method,
-        headers,
-        body: serializedBody,
-        signal: controller?.signal,
-        redirect: 'follow',
-        cache: method === 'GET' ? 'no-store' : 'default',
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      let timedOut = false;
+      let timeoutId;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          controller?.abort();
+          reject(new Error('REQUEST_TIMEOUT'));
+        }, timeoutMs);
       });
-      response = await Promise.race([fetchPromise, timeoutPromise]);
-    } catch (error) {
-      clearTimeout(timeoutId);
-      const failure = networkFailure(error, timedOut || error?.message === 'REQUEST_TIMEOUT');
-      if (attempt < retries) {
-        await wait(450 * (attempt + 1));
-        continue;
-      }
-      logTechnicalFailure(path, failure);
-      throw failure;
-    }
 
-    let text = '';
-    try {
-      text = await Promise.race([response.text(), timeoutPromise]);
-      clearTimeout(timeoutId);
-    } catch (error) {
-      clearTimeout(timeoutId);
-      const failure = networkFailure(error, timedOut || error?.message === 'REQUEST_TIMEOUT');
-      if (attempt < retries) {
-        await wait(450 * (attempt + 1));
-        continue;
-      }
-      logTechnicalFailure(path, failure);
-      throw failure;
-    }
-
-    let data = {};
-    if (text) {
+      let response;
       try {
-        data = JSON.parse(text);
-      } catch {
-        if (response.ok) {
-          const failure = new ApiError('The service returned an unreadable response. Please try again.', {
+        const fetchPromise = fetch(url, {
+          method,
+          headers,
+          body: serializedBody,
+          signal: controller?.signal,
+          redirect: 'follow',
+          cache: method === 'GET' ? 'no-store' : 'default',
+        });
+        response = await Promise.race([fetchPromise, timeoutPromise]);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        const failure = networkFailure(error, timedOut || error?.message === 'REQUEST_TIMEOUT');
+        // On network/timeout, try next base before retrying same base if this is the first attempt and we have fallback
+        if ((failure.code === 'NETWORK_ERROR' || failure.code === 'TIMEOUT' || failure.code === 'CERT_ERROR') && baseIdx + 1 < bases.length && attempt === 0) {
+          lastError = failure;
+          break; // break attempt loop, try next base
+        }
+        if (attempt < retries) {
+          await wait(450 * (attempt + 1));
+          continue;
+        }
+        logTechnicalFailure(path, failure);
+        if (baseIdx + 1 < bases.length) {
+          lastError = failure;
+          break;
+        }
+        throw failure;
+      }
+
+      let text = '';
+      try {
+        text = await Promise.race([response.text(), timeoutPromise]);
+        clearTimeout(timeoutId);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        const failure = networkFailure(error, timedOut || error?.message === 'REQUEST_TIMEOUT');
+        if ((failure.code === 'NETWORK_ERROR' || failure.code === 'TIMEOUT') && baseIdx + 1 < bases.length && attempt === 0) {
+          lastError = failure;
+          break;
+        }
+        if (attempt < retries) {
+          await wait(450 * (attempt + 1));
+          continue;
+        }
+        logTechnicalFailure(path, failure);
+        if (baseIdx + 1 < bases.length) {
+          lastError = failure;
+          break;
+        }
+        throw failure;
+      }
+
+      let data = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          if (response.ok) {
+            const failure = new ApiError('The service returned an unreadable response. Please try again.', {
+              status: response.status,
+              code: 'INVALID_RESPONSE',
+              technicalMessage: text.slice(0, 300),
+            });
+            logTechnicalFailure(path, failure);
+            throw failure;
+          }
+        }
+      }
+
+      if (!response.ok) {
+        if (attempt < retries && RETRYABLE_STATUS.has(response.status)) {
+          await wait(450 * (attempt + 1));
+          continue;
+        }
+        const isServerFailure = response.status >= 500;
+        const failure = new ApiError(
+          isServerFailure
+            ? 'Service is temporarily unavailable. Please try again shortly.'
+            : (typeof data?.error === 'string' && data.error.trim()) || `Request failed (${response.status})`,
+          {
             status: response.status,
-            code: 'INVALID_RESPONSE',
-            technicalMessage: text.slice(0, 300),
-          });
-          logTechnicalFailure(path, failure);
-          throw failure;
+            code: isServerFailure ? 'SERVICE_UNAVAILABLE' : 'HTTP_ERROR',
+            technicalMessage: typeof data?.error === 'string' ? data.error : text.slice(0, 300),
+          }
+        );
+        logTechnicalFailure(path, failure);
+        if (isServerFailure && baseIdx + 1 < bases.length) {
+          lastError = failure;
+          break;
         }
+        throw failure;
       }
-    }
 
-    if (!response.ok) {
-      if (attempt < retries && RETRYABLE_STATUS.has(response.status)) {
-        await wait(450 * (attempt + 1));
-        continue;
-      }
-      const isServerFailure = response.status >= 500;
-      const failure = new ApiError(
-        isServerFailure
-          ? 'Service is temporarily unavailable. Please try again shortly.'
-          : (typeof data?.error === 'string' && data.error.trim()) || `Request failed (${response.status})`,
-        {
-          status: response.status,
-          code: isServerFailure ? 'SERVICE_UNAVAILABLE' : 'HTTP_ERROR',
-          technicalMessage: typeof data?.error === 'string' ? data.error : text.slice(0, 300),
-        }
-      );
-      logTechnicalFailure(path, failure);
-      throw failure;
+      return data;
     }
-
-    return data;
+    // continue to next base if we broke due to network error
+    if (lastError && baseIdx + 1 < bases.length) continue;
+    if (lastError) throw lastError;
   }
-
+  if (lastError) throw lastError;
   throw new ApiError('Unable to connect. Check your internet connection and try again.', { code: 'NETWORK_ERROR' });
 }
 
@@ -241,6 +288,7 @@ function checkedAuthPayload(data) {
 
 /** Translate technical/API failures into the small set of safe auth messages. */
 export function authErrorMessage(error, mode = 'login') {
+  if (error?.code === 'CERT_ERROR') return error.message;
   if (error?.code === 'NETWORK_ERROR' || error?.code === 'TIMEOUT') return error.message;
   if (error?.code === 'SERVICE_UNAVAILABLE' || error?.code === 'INVALID_RESPONSE' || error?.status >= 500) {
     return 'Service is temporarily unavailable. Please try again shortly.';
@@ -258,10 +306,10 @@ export function authErrorMessage(error, mode = 'login') {
 
 export const api = {
   register: async (payload) => checkedAuthPayload(await request('/api/auth/register', {
-    method: 'POST', body: payload, timeoutMs: 22000, retries: 0,
+    method: 'POST', body: payload, timeoutMs: 30000, retries: 1,
   })),
   login: async (payload) => checkedAuthPayload(await request('/api/auth/login', {
-    method: 'POST', body: payload, timeoutMs: 18000, retries: 1,
+    method: 'POST', body: payload, timeoutMs: 30000, retries: 1,
   })),
   usernameAvailable: (username) => request(`/api/auth/username-available?username=${encodeURIComponent(username)}`, {
     timeoutMs: 10000, retries: 1,

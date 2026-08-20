@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
-  Platform, Modal, Image, ActivityIndicator, Alert,
+  Platform, Modal, Image, ActivityIndicator, Alert, Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -67,6 +67,35 @@ function ConversationContent({ route, navigation, embedded = false }) {
   const [forwardMsg, setForwardMsg] = useState(null);
   const [timerMsg, setTimerMsg] = useState(null);
   const [pollOpen, setPollOpen] = useState(false);
+
+  // Realme 11x 5G + all Android: keyboard was covering the composer (pan mode).
+  // Track the native keyboard height and push the UI above it. iOS still uses
+  // KeyboardAvoidingView padding; Android uses this manual height so no rebuild
+  // (softwareKeyboardLayoutMode) is needed for the OTA update.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    if (embedded || Platform.OS === 'web') return;
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = (e) => {
+      const h = e?.endCoordinates?.height ?? 0;
+      setKeyboardHeight(h);
+      // Keep the latest message visible when the keyboard slides up (Realme often needs extra tick)
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+    };
+    const onHide = () => setKeyboardHeight(0);
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+    // Some Realme / ColorOS builds only emit DidShow, so also listen to DidShow on Android as fallback
+    const fallbackSub = Platform.OS === 'android' ? Keyboard.addListener('keyboardDidShow', onShow) : null;
+    const fallbackHide = Platform.OS === 'android' ? Keyboard.addListener('keyboardDidHide', onHide) : null;
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      fallbackSub?.remove();
+      fallbackHide?.remove();
+    };
+  }, [embedded]);
 
   const s = makeStyles(theme);
 
@@ -316,11 +345,15 @@ function ConversationContent({ route, navigation, embedded = false }) {
       ? chat.members.map((m) => (m.id === user.id ? 'You' : m.name.split(' ')[0])).join(', ')
       : lastSeenText(chat.isOnline, chat.lastSeen);
 
+  // Android manual pad: when keyboardHeight >0, push the whole conversation above the keyboard.
+  // iOS uses KAV padding; Android uses this height (works with softwareKeyboardLayoutMode="pan" OTA).
+  const androidKeyboardPad = Platform.OS === 'android' && !embedded ? keyboardHeight : 0;
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: theme.chatBg }}
+      style={{ flex: 1, backgroundColor: theme.chatBg, paddingBottom: androidKeyboardPad }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      enabled={Platform.OS === 'ios' && !embedded}
     >
       {/* header — floating clay bar; own top inset only when not embedded
           in the desktop/tablet split (that shell already pads for the notch). */}
@@ -432,7 +465,11 @@ function ConversationContent({ route, navigation, embedded = false }) {
         ref={listRef}
         data={rows}
         keyExtractor={(i) => i.id}
-        contentContainerStyle={{ paddingVertical: 14, flexGrow: 1, justifyContent: 'flex-end' }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={{ paddingVertical: 14, flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 8 }}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
         onScrollToIndexFailed={(info) => {
           // Rows vary in height; fall back to an estimated offset, then retry.
@@ -522,7 +559,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
 
       {/* composer — bottom safe-area (home indicator / gesture bar) only
           applies full-screen; the desktop/tablet split already handles it. */}
-      <View style={[s.composerWrap, !embedded && { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <View style={[s.composerWrap, !embedded && { paddingBottom: androidKeyboardPad > 0 ? 8 : Math.max(insets.bottom, 12) }]}>
         {recording ? (
           <InkField style={s.inputBar}>
             <View style={[s.recDot, { backgroundColor: theme.danger }]} />

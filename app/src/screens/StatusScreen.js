@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput, RefreshControl,
-  ActivityIndicator, Image, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -50,6 +50,17 @@ export default function StatusScreen() {
   const [replySending, setReplySending] = useState(false);
   const [replyFeedback, setReplyFeedback] = useState('');
   const [replyFocused, setReplyFocused] = useState(false);
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const onShow = (e) => setKbHeight(e?.endCoordinates?.height ?? 0);
+    const onHide = () => setKbHeight(0);
+    const s1 = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', onShow);
+    const s2 = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', onHide);
+    const f1 = Platform.OS === 'android' ? Keyboard.addListener('keyboardDidShow', onShow) : null;
+    const f2 = Platform.OS === 'android' ? Keyboard.addListener('keyboardDidHide', onHide) : null;
+    return () => { s1.remove(); s2.remove(); f1?.remove(); f2?.remove(); };
+  }, []);
   const s = makeStyles(theme);
 
   const load = useCallback(async () => {
@@ -330,7 +341,7 @@ export default function StatusScreen() {
 
             {/* ── gentle update: reply composer (not a rebuild) ── */}
             {isOwnStatus ? (
-              <View style={[s.replyHintWrap, { paddingBottom: Math.max(insets.bottom, 12) }]} pointerEvents="none">
+              <View style={[s.replyHintWrap, { paddingBottom: (Platform.OS === 'android' && kbHeight > 0 ? kbHeight + 10 : Math.max(insets.bottom, 12)) }]} pointerEvents="none">
                 <Text style={[type.labelXs, { color: foregroundFor(current), opacity: 0.72, textAlign: 'center' }]}>
                   Replies to your update appear as messages in Chats
                 </Text>
@@ -338,7 +349,8 @@ export default function StatusScreen() {
             ) : (
               <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={[s.replyBarWrap, { paddingBottom: Math.max(insets.bottom, 12) }]}
+                enabled={Platform.OS === 'ios'}
+                style={[s.replyBarWrap, { paddingBottom: (Platform.OS === 'android' && kbHeight > 0 ? kbHeight + 10 : Math.max(insets.bottom, 12)) }]}
               >
                 <View style={s.replyBar}>
                   <TextInput
