@@ -106,8 +106,25 @@ export default function ColleaguesScreen({ onOpenChat }) {
     onOpenChat?.(chat.id);
   });
 
-  const joinedPlaces = user?.affiliations || [];
-  const discoverPlaces = useMemo(() => places.slice(0, query.trim() ? 20 : 8), [places, query]);
+  const joinedPlaces = useMemo(() => {
+    const base = user?.affiliations || [];
+    // keep colleges / institutions at the top when showing All
+    if (!activeType) {
+      const order = { institution: 0, organization: 1, workplace: 2 };
+      return [...base].sort((a, b) => (order[a.type] ?? 9) - (order[b.type] ?? 9));
+    }
+    return base;
+  }, [user?.affiliations, activeType]);
+
+  const discoverPlaces = useMemo(() => {
+    const base = places.slice(0, query.trim() ? 20 : 8);
+    // colleges / institutions should appear first so "college should be up"
+    if (!activeType) {
+      const order = { institution: 0, organization: 1, workplace: 2 };
+      return [...base].sort((a, b) => (order[a.type] ?? 9) - (order[b.type] ?? 9));
+    }
+    return base;
+  }, [places, query, activeType]);
 
   const relationshipButton = (person) => {
     const relation = person.relationship || { status: 'none' };
@@ -234,92 +251,7 @@ export default function ColleaguesScreen({ onOpenChat }) {
           </View>
         )}
 
-        {requests.length > 0 && (
-          <>
-            <SectionTitle theme={theme} title="Requests waiting" note={`${requests.length} NEW`} />
-            <View style={[s.requestPanel, inkBox(theme, 'ink')]}>
-              {requests.map((request, index) => (
-                <View key={request.id}>
-                  <View style={s.requestRow}>
-                    <Avatar uri={request.user.avatar} name={request.user.name} id={request.user.id} size={46} />
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <EmojiText style={[type.bodyStrong, { color: theme.text }]}>{request.user.name}</EmojiText>
-                      <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]} numberOfLines={1}>
-                        {request.user.sharedAffiliations?.map((a) => a.name).join(' · ').toUpperCase()}
-                      </Text>
-                    </View>
-                    <ActionButton theme={theme} label="Accept" onPress={() => respond(request.id, 'accept')} busy={busy === `request:${request.id}:accept`} filled />
-                    <Pressable onPress={() => respond(request.id, 'decline')} hitSlop={8} style={{ padding: 6 }}>
-                      <Icon name="close" size={18} color={theme.muted} />
-                    </Pressable>
-                  </View>
-                  {index < requests.length - 1 && <View style={[dashedRule(theme), { marginVertical: 8 }]} />}
-                </View>
-              ))}
-            </View>
-          </>
-        )}
-
-        <SectionTitle theme={theme} title="Colleagues" note={`${colleagues.length} FOUND`} />
-
-        {loading ? (
-          <ActivityIndicator color={theme.ink} style={{ marginVertical: 50 }} />
-        ) : colleagues.length ? (
-          <View style={s.cardGrid}>
-            {colleagues.map((person, index) => {
-              const lead = person.sharedAffiliations?.[0];
-              return (
-                <View
-                  key={person.id}
-                  style={[
-                    s.card,
-                    isTablet && s.cardWide,
-                    raised(theme, index % 3 === 2 ? 2 : 1),
-                    inkBox(theme, index % 3 === 2 ? 'ink' : 'thin', index % 3 === 2 ? theme.ink : theme.graphiteLine),
-                    { transform: [{ rotate: CARD_TILTS[index % CARD_TILTS.length] }] },
-                  ]}
-                >
-                  <View style={[s.tape, { backgroundColor: theme.cardAlt, left: index % 2 ? 24 : '42%', transform: [{ rotate: index % 2 ? '5deg' : '-4deg' }] }]} />
-                  <View style={s.cardHead}>
-                    <View style={{ transform: [{ rotate: index % 2 ? '-3deg' : '5deg' }] }}>
-                      <Avatar uri={person.avatar} name={person.name} id={person.id} size={62} online={person.isOnline} weight={index % 3 === 0 ? 'ink' : 'thin'} />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <EmojiText style={[type.headlineSm, { color: theme.text, fontSize: 21 }]} numberOfLines={1}>{person.name}</EmojiText>
-                      <Text style={[type.labelXs, { color: theme.graphite, marginTop: 4 }]} numberOfLines={2}>
-                        {lead?.title ? `${lead.title} @ ${lead.name}` : lead?.name || handleFor(person)}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={[dashedRule(theme), { marginTop: 14, marginBottom: 11 }]} />
-                  <EmojiText style={[type.bodySm, { color: theme.text, minHeight: 42 }]} numberOfLines={2}>
-                    {person.about || 'A colleague from your shared network.'}
-                  </EmojiText>
-
-                  <View style={s.cardTags}>
-                    {(person.sharedAffiliations || []).slice(0, 2).map((place) => (
-                      <TapeChip key={place.id} label={place.name.toUpperCase()} />
-                    ))}
-                  </View>
-
-                  <View style={{ marginTop: 15 }}>{relationshipButton(person)}</View>
-                </View>
-              );
-            })}
-          </View>
-        ) : (
-          <View style={[s.empty, inkBox(theme, 'thin')]}>
-            <Icon name="people-outline" size={31} color={theme.muted} />
-            <Text style={[type.headlineSm, { color: theme.text, marginTop: 12, textAlign: 'center' }]}>No colleagues found yet</Text>
-            <Text style={[type.bodySm, { color: theme.subtext, marginTop: 6, textAlign: 'center', maxWidth: 360 }]}>
-              {joinedPlaces.length
-                ? 'Invite people to add the same place to their profile, or try another search.'
-                : 'Add an institution, organization or workplace to begin.'}
-            </Text>
-          </View>
-        )}
-
+        {/* Discover places moved to the top so colleges / institutions are visible first */}
         <SectionTitle theme={theme} title="Discover places" note="JOIN DIRECTLY" />
         <View style={{ gap: 10 }}>
           {discoverPlaces.map((place) => {
@@ -352,6 +284,95 @@ export default function ColleaguesScreen({ onOpenChat }) {
           <Icon name="add-circle-outline" size={19} color={theme.ink} />
           <Text style={[type.labelSm, { color: theme.ink }]}>REGISTER OR ADD ANOTHER PLACE</Text>
         </Pressable>
+
+        {requests.length > 0 && (
+          <>
+            <SectionTitle theme={theme} title="Requests waiting" note={`${requests.length} NEW`} />
+            <View style={[s.requestPanel, inkBox(theme, 'ink')]}>
+              {requests.map((request, index) => (
+                <View key={request.id}>
+                  <View style={s.requestRow}>
+                    <Avatar uri={request.user.avatar} name={request.user.name} id={request.user.id} size={46} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <EmojiText style={[type.bodyStrong, { color: theme.text }]}>{request.user.name}</EmojiText>
+                      <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]} numberOfLines={1}>
+                        {request.user.sharedAffiliations?.map((a) => a.name).join(' · ').toUpperCase()}
+                      </Text>
+                    </View>
+                    <ActionButton theme={theme} label="Accept" onPress={() => respond(request.id, 'accept')} busy={busy === `request:${request.id}:accept`} filled />
+                    <Pressable onPress={() => respond(request.id, 'decline')} hitSlop={8} style={{ padding: 6 }}>
+                      <Icon name="close" size={18} color={theme.muted} />
+                    </Pressable>
+                  </View>
+                  {index < requests.length - 1 && <View style={[dashedRule(theme), { marginVertical: 8 }]} />}
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* Dedicated section for colleagues — all discovered people live inside "Your colleagues" */}
+        <View style={s.colleaguesSection}>
+          <SectionTitle theme={theme} title="Your colleagues" note={`${colleagues.length} FOUND`} />
+
+          {loading ? (
+            <ActivityIndicator color={theme.ink} style={{ marginVertical: 50 }} />
+          ) : colleagues.length ? (
+            <View style={s.cardGrid}>
+              {colleagues.map((person, index) => {
+                const lead = person.sharedAffiliations?.[0];
+                return (
+                  <View
+                    key={person.id}
+                    style={[
+                      s.card,
+                      isTablet && s.cardWide,
+                      raised(theme, index % 3 === 2 ? 2 : 1),
+                      inkBox(theme, index % 3 === 2 ? 'ink' : 'thin', index % 3 === 2 ? theme.ink : theme.graphiteLine),
+                      { transform: [{ rotate: CARD_TILTS[index % CARD_TILTS.length] }] },
+                    ]}
+                  >
+                    <View style={[s.tape, { backgroundColor: theme.cardAlt, left: index % 2 ? 24 : '42%', transform: [{ rotate: index % 2 ? '5deg' : '-4deg' }] }]} />
+                    <View style={s.cardHead}>
+                      <View style={{ transform: [{ rotate: index % 2 ? '-3deg' : '5deg' }] }}>
+                        <Avatar uri={person.avatar} name={person.name} id={person.id} size={62} online={person.isOnline} weight={index % 3 === 0 ? 'ink' : 'thin'} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <EmojiText style={[type.headlineSm, { color: theme.text, fontSize: 21 }]} numberOfLines={1}>{person.name}</EmojiText>
+                        <Text style={[type.labelXs, { color: theme.graphite, marginTop: 4 }]} numberOfLines={2}>
+                          {lead?.title ? `${lead.title} @ ${lead.name}` : lead?.name || handleFor(person)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={[dashedRule(theme), { marginTop: 14, marginBottom: 11 }]} />
+                    <EmojiText style={[type.bodySm, { color: theme.text, minHeight: 42 }]} numberOfLines={2}>
+                      {person.about || 'A colleague from your shared network.'}
+                    </EmojiText>
+
+                    <View style={s.cardTags}>
+                      {(person.sharedAffiliations || []).slice(0, 2).map((place) => (
+                        <TapeChip key={place.id} label={place.name.toUpperCase()} />
+                      ))}
+                    </View>
+
+                    <View style={{ marginTop: 15 }}>{relationshipButton(person)}</View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={[s.empty, inkBox(theme, 'thin')]}>
+              <Icon name="people-outline" size={31} color={theme.muted} />
+              <Text style={[type.headlineSm, { color: theme.text, marginTop: 12, textAlign: 'center' }]}>No colleagues found yet</Text>
+              <Text style={[type.bodySm, { color: theme.subtext, marginTop: 6, textAlign: 'center', maxWidth: 360 }]}>
+                {joinedPlaces.length
+                  ? 'Invite people to add the same place to their profile, or try another search.'
+                  : 'Add an institution, organization or workplace to begin.'}
+              </Text>
+            </View>
+          )}
+        </View>
       </Animated.ScrollView>
 
       <AffiliationPicker
@@ -428,6 +449,7 @@ const makeStyles = (t) => StyleSheet.create({
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13 },
   placeIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   registerButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, paddingVertical: 12, marginTop: 14 },
+  colleaguesSection: { marginTop: 8, paddingTop: 2 },
 });
 
 const styles = StyleSheet.create({
