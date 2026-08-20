@@ -373,6 +373,11 @@ addColumnIfMissing('messages', 'edited', 'edited INTEGER DEFAULT 0');
 addColumnIfMissing('messages', 'forwarded_from', 'forwarded_from TEXT');
 addColumnIfMissing('messages', 'poll_id', 'poll_id TEXT');
 
+/* ---- status replies: every reply is also a chat message with a status reference (gentle update, no rebuild) ---- */
+addColumnIfMissing('messages', 'status_id', 'status_id TEXT');
+addColumnIfMissing('messages', 'status_snapshot', 'status_snapshot TEXT');
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_messages_status_id ON messages(status_id) WHERE status_id IS NOT NULL'); } catch {}
+
 /* ---- starred messages: per-user bookmarking, across all chats ---- */
 db.exec(`
 CREATE TABLE IF NOT EXISTS starred_messages (

@@ -329,6 +329,26 @@ function hydrateMessage(m, viewerId) {
     ? !!db.prepare('SELECT 1 FROM starred_messages WHERE message_id = ? AND user_id = ?').get(m.id, viewerId)
     : false;
 
+  // Status reply preview — frozen snapshot so the quoted status survives after the 24h expiry.
+  let statusReply = null;
+  if (m.status_id) {
+    if (m.status_snapshot) {
+      try { statusReply = JSON.parse(m.status_snapshot); } catch {}
+    }
+    if (!statusReply) {
+      const st = db.prepare('SELECT * FROM statuses WHERE id = ?').get(m.status_id);
+      if (st) {
+        statusReply = {
+          id: st.id, type: st.type, body: st.body, mediaUrl: st.media_url, mediaAspect: st.media_aspect || null, bg: st.bg,
+          song: st.song ? JSON.parse(st.song) : null, audience: st.audience || 'public', createdAt: st.created_at,
+          author: publicUser(getUser(st.user_id)),
+        };
+      } else {
+        statusReply = { id: m.status_id, expired: true };
+      }
+    }
+  }
+
   return {
     id: m.id,
     chatId: m.chat_id,
@@ -345,6 +365,7 @@ function hydrateMessage(m, viewerId) {
     starred,
     poll: !m.deleted && m.type === 'poll' ? hydratePoll(m.poll_id, viewerId) : null,
     replyTo,
+    statusReply,
     status,
     reactions: reactions.map((r) => ({ userId: r.user_id, emoji: r.emoji })),
   };
@@ -1640,14 +1661,16 @@ function insertSystemMessage(chatId, body) {
  */
 function persistMessage(msg, chatId) {
   db.prepare(
-    `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, duration, reply_to, expires_at, edited, forwarded_from, poll_id, created_at)
-     VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @duration, @reply_to, @expires_at, @edited, @forwarded_from, @poll_id, @created_at)`
+    `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, duration, reply_to, expires_at, edited, forwarded_from, poll_id, status_id, status_snapshot, created_at)
+     VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @duration, @reply_to, @expires_at, @edited, @forwarded_from, @poll_id, @status_id, @status_snapshot, @created_at)`
   ).run({
     ...msg,
     expires_at: msg.expires_at ?? null,
     edited: msg.edited ?? 0,
     forwarded_from: msg.forwarded_from ?? null,
     poll_id: msg.poll_id ?? null,
+    status_id: msg.status_id ?? null,
+    status_snapshot: msg.status_snapshot ?? null,
   });
   db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(msg.created_at, chatId);
   memberIds(chatId).filter((x) => x !== msg.sender_id && sockets.has(x)).forEach((x) => {
@@ -1809,6 +1832,119 @@ app.post('/api/status/:id/view', requireAuth, (req, res) => {
   }
   db.prepare('INSERT OR IGNORE INTO status_views (status_id, user_id, at) VALUES (?,?,?)').run(req.params.id, req.userId, now());
   res.json({ ok: true });
+});
+
+// ── gentle update (not a rebuild): status replies ──────────────────
+// Anyone who can view a status can reply to it. The reply is delivered
+// as a normal direct chat message with a frozen status preview, so the
+// existing chat inbox, push/socket plumbing and disappearing-message
+// machinery handle it without a new standalone inbox or a native rebuild.
+app.post('/api/status/:id/reply', requireAuth, (req, res) => {
+  const statusId = String(req.params.id || '');
+  const s = db.prepare('SELECT * FROM statuses WHERE id = ?').get(statusId);
+  if (!s) return res.status(404).json({ error: 'Status not found' });
+  if (s.user_id === req.userId) return res.status(400).json({ error: "You can't reply to your own status" });
+  if (!canViewStatus(s.id, s.user_id, s.audience || 'public', req.userId)) {
+    return res.status(404).json({ error: 'Status not found' });
+  }
+  if (blockedEitherWay(s.user_id, req.userId)) {
+    return res.status(403).json({ error: "You can't reply to this status" });
+  }
+  const body = String(req.body?.body || req.body?.text || '').trim().slice(0, 700);
+  if (!body) return res.status(400).json({ error: 'Write a reply first' });
+
+  // Ensure there is a direct chat between the viewer and the author.
+  // Reuse the existing one if it exists; otherwise create it on the fly.
+  // Updating a pending request to 'accepted' guarantees the reply is
+  // immediately visible in the main Chats list (mirrors WhatsApp status
+  // reply behaviour) even if the two users have never chatted before.
+  let chatId = db.prepare(
+    `SELECT c.id FROM chats c
+     JOIN chat_members a ON a.chat_id = c.id AND a.user_id = ?
+     JOIN chat_members b ON b.chat_id = c.id AND b.user_id = ?
+     WHERE c.type = 'direct'`
+  ).get(req.userId, s.user_id)?.id;
+
+  const t = now();
+  let isNewChat = false;
+  if (!chatId) {
+    chatId = nano();
+    db.prepare('INSERT INTO chats (id, type, created_by, created_at, updated_at) VALUES (?,?,?,?,?)')
+      .run(chatId, 'direct', req.userId, t, t);
+    const add = db.prepare('INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)');
+    add.run(chatId, req.userId, 'member', t);
+    add.run(chatId, s.user_id, 'member', t);
+    isNewChat = true;
+  } else {
+    // If a pending request exists in either direction, accept it so the
+    // reply lands in the main inbox, not the Requests panel.
+    const pending = db.prepare("SELECT * FROM chat_requests WHERE chat_id = ? AND status = 'pending'").get(chatId);
+    if (pending) {
+      db.prepare("UPDATE chat_requests SET status = 'accepted', responded_at = ? WHERE chat_id = ?").run(t, chatId);
+    }
+    // Clear a stale cleared_at so the chat reappears if one side deleted it.
+    db.prepare('UPDATE chat_members SET cleared_at = NULL WHERE chat_id = ? AND user_id IN (?,?)')
+      .run(chatId, req.userId, s.user_id);
+  }
+
+  const author = getUser(s.user_id);
+  const snapshot = {
+    id: s.id,
+    type: s.type,
+    body: s.body,
+    mediaUrl: s.media_url,
+    mediaAspect: s.media_aspect || null,
+    bg: s.bg,
+    song: s.song ? JSON.parse(s.song) : null,
+    audience: s.audience || 'public',
+    createdAt: s.created_at,
+    author: author ? { id: author.id, name: author.name, avatar: author.avatar, username: author.username } : null,
+  };
+
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
+  const expiresAt = chat?.disappear_seconds ? t + chat.disappear_seconds * 1000 : null;
+
+  const msg = {
+    id: nano(),
+    chat_id: chatId,
+    sender_id: req.userId,
+    type: 'text',
+    body,
+    media_url: null,
+    duration: 0,
+    reply_to: null,
+    status_id: s.id,
+    status_snapshot: JSON.stringify(snapshot),
+    expires_at: expiresAt,
+    edited: 0,
+    forwarded_from: null,
+    poll_id: null,
+    created_at: t,
+  };
+  persistMessage(msg, chatId);
+  const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id);
+
+  // Fan-out to both sides. Use per-viewer hydration so each side sees its
+  // own read-receipt state, and include the frozen preview.
+  memberIds(chatId).forEach((uid) => {
+    const hydrated = hydrateMessage(row, uid);
+    emitToUser(uid, 'message:new', { message: hydrated });
+    emitToUser(uid, 'chat:updated', chatSummary(chatId, uid));
+  });
+  if (isNewChat) {
+    // Ensure the receiver that has never chatted before gets a chat:new too
+    // (chat:updated already covers it, but belt-and-braces for older clients).
+    emitToUser(s.user_id, 'chat:new', chatSummary(chatId, s.user_id));
+  }
+  emitToUser(s.user_id, 'status:reply', {
+    statusId: s.id,
+    chatId,
+    messageId: msg.id,
+    from: publicUser(getUser(req.userId)),
+    preview: body.slice(0, 80),
+  });
+
+  res.json({ ok: true, chatId, message: hydrateMessage(row, req.userId) });
 });
 
 /** Song search for status composer — proxies Jamendo's public track search API. */

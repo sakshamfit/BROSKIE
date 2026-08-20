@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput, RefreshControl,
-  ActivityIndicator, Image, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -46,6 +46,21 @@ export default function StatusScreen() {
   const [viewer, setViewer] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [replyText, setReplyText] = useState('');
+  const [replySending, setReplySending] = useState(false);
+  const [replyFeedback, setReplyFeedback] = useState('');
+  const [replyFocused, setReplyFocused] = useState(false);
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const onShow = (e) => setKbHeight(e?.endCoordinates?.height ?? 0);
+    const onHide = () => setKbHeight(0);
+    const s1 = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', onShow);
+    const s2 = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', onHide);
+    const f1 = Platform.OS === 'android' ? Keyboard.addListener('keyboardDidShow', onShow) : null;
+    const f2 = Platform.OS === 'android' ? Keyboard.addListener('keyboardDidHide', onHide) : null;
+    return () => { s1.remove(); s2.remove(); f1?.remove(); f2?.remove(); };
+  }, []);
   const s = makeStyles(theme);
 
   const load = useCallback(async () => {
@@ -67,6 +82,9 @@ export default function StatusScreen() {
 
   const closeViewer = () => {
     setViewer(null);
+    setReplyText('');
+    setReplyFeedback('');
+    setReplyFocused(false);
     load();
   };
 
@@ -79,15 +97,38 @@ export default function StatusScreen() {
     try { await api.viewStatus(viewer.group.items[next].id); } catch {}
   };
 
+  const sendStatusReply = async () => {
+    const text = replyText.trim();
+    if (!text || !current || !viewer) return;
+    if (viewer.group.user.id === user.id) return;
+    setReplySending(true);
+    setReplyFeedback('');
+    try {
+      await api.replyToStatus(current.id, text);
+      setReplyText('');
+      setReplyFeedback('Reply sent \u2713  · check Chats');
+      setTimeout(() => setReplyFeedback(''), 2400);
+    } catch (e) {
+      setReplyFeedback(e.message || 'Could not send reply');
+      setTimeout(() => setReplyFeedback(''), 2600);
+    } finally {
+      setReplySending(false);
+    }
+  };
+
   const current = viewer?.group.items[viewer.index];
+  const isOwnStatus = viewer?.group.user.id === user?.id;
+  useEffect(() => { setReplyText(''); setReplyFeedback(''); setReplyFocused(false); }, [current?.id]);
   useEffect(() => {
     if (!current) return undefined;
+    // Pause auto-advance while the reply input is focused so typing isn't interrupted.
+    if (replyFocused) return undefined;
     const timer = setTimeout(() => moveStatus(1), current.type === 'image' ? 6500 : 5500);
     return () => clearTimeout(timer);
     // The current id is the timer boundary; moveStatus intentionally uses the
     // viewer snapshot associated with that id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id]);
+  }, [current?.id, replyFocused]);
 
   const recent = data.others.filter((group) => !group.allViewed);
   const viewed = data.others.filter((group) => group.allViewed);
@@ -297,6 +338,57 @@ export default function StatusScreen() {
                 </View>
               )}
             </View>
+
+            {/* ── gentle update: reply composer (not a rebuild) ── */}
+            {isOwnStatus ? (
+              <View style={[s.replyHintWrap, { paddingBottom: (Platform.OS === 'android' && kbHeight > 0 ? kbHeight + 10 : Math.max(insets.bottom, 12)) }]} pointerEvents="none">
+                <Text style={[type.labelXs, { color: foregroundFor(current), opacity: 0.72, textAlign: 'center' }]}>
+                  Replies to your update appear as messages in Chats
+                </Text>
+              </View>
+            ) : (
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                enabled={Platform.OS === 'ios'}
+                style={[s.replyBarWrap, { paddingBottom: (Platform.OS === 'android' && kbHeight > 0 ? kbHeight + 10 : Math.max(insets.bottom, 12)) }]}
+              >
+                <View style={s.replyBar}>
+                  <TextInput
+                    value={replyText}
+                    onChangeText={setReplyText}
+                    onFocus={() => setReplyFocused(true)}
+                    onBlur={() => setReplyFocused(false)}
+                    placeholder={`Reply to ${viewer.group.user.name.split(' ')[0]}...`}
+                    placeholderTextColor="rgba(28,27,27,0.48)"
+                    style={s.replyInput}
+                    returnKeyType="send"
+                    onSubmitEditing={sendStatusReply}
+                    editable={!replySending}
+                    maxLength={700}
+                  />
+                  <Pressable
+                    onPress={sendStatusReply}
+                    disabled={replySending || !replyText.trim()}
+                    style={({ pressed }) => [
+                      s.replySend,
+                      (replySending || !replyText.trim()) && { opacity: 0.42 },
+                      pressed && { opacity: 0.82 },
+                    ]}
+                  >
+                    {replySending ? (
+                      <ActivityIndicator color="#050505" size="small" />
+                    ) : (
+                      <Icon name="send" size={18} color="#050505" />
+                    )}
+                  </Pressable>
+                </View>
+                {!!replyFeedback && (
+                  <Text style={[type.labelXs, { color: '#ffffff', textAlign: 'center', marginTop: 7, opacity: 0.94 }]}>
+                    {replyFeedback}
+                  </Text>
+                )}
+              </KeyboardAvoidingView>
+            )}
           </View>
         )}
       </Modal>
@@ -742,4 +834,10 @@ const makeStyles = (t) => StyleSheet.create({
   privacySheet: { position: 'relative', maxHeight: '88%', borderTopWidth: 3, borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingHorizontal: 18, paddingTop: 18 },
   privacyHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
   privacyDone: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 8, marginTop: 10 },
+
+  replyBarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 14, paddingTop: 12, zIndex: 5, backgroundColor: 'rgba(0,0,0,0.18)' },
+  replyBar: { width: '100%', maxWidth: 680, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.08)' },
+  replyInput: { flex: 1, ...type.bodyMd, color: '#1c1b1b', paddingVertical: 6, outlineStyle: 'none' },
+  replySend: { width: 38, height: 38, borderRadius: radius.full, backgroundColor: '#FFE24D', borderWidth: 2, borderColor: '#1c1b1b', alignItems: 'center', justifyContent: 'center' },
+  replyHintWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 10, zIndex: 4, alignItems: 'center' },
 });
