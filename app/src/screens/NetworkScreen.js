@@ -15,7 +15,6 @@ import { AUDIENCE } from '../components/AudiencePicker';
 import SongCard from '../components/SongCard';
 import NewPostScreen from './NewPostScreen';
 import CommunitiesScreen from './CommunitiesScreen';
-import ColleaguesScreen from './ColleaguesScreen';
 import { type, inkBox, marker, dashedRule, stroke, radius, raised } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
@@ -28,7 +27,7 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
   const { onPostEvent } = useChat();
   const { theme } = useTheme();
   const { isTablet } = useResponsive();
-  const [section, setSection] = useState('feed'); // feed | communities | colleagues
+  const [section, setSection] = useState('feed'); // feed | communities — colleagues lives as its own top-level tab, not inside Network
 
   const [posts, setPosts] = useState([]);
   const [tags, setTags] = useState([]);
@@ -222,10 +221,6 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         <Icon name="people-outline" size={14} color={section === 'communities' ? theme.onPrimary : theme.text} />
         <Text style={[type.labelSm, { color: section === 'communities' ? theme.onPrimary : theme.text }]}>COMMUNITIES</Text>
       </Pressable>
-      <Pressable onPress={() => setSection('colleagues')} style={[s.sectionBtn, section === 'colleagues' && s.sectionActive, { borderColor: theme.ink }]}>
-        <Icon name="school-outline" size={14} color={section === 'colleagues' ? theme.onPrimary : theme.text} />
-        <Text style={[type.labelSm, { color: section === 'colleagues' ? theme.onPrimary : theme.text }]}>COLLEAGUES</Text>
-      </Pressable>
     </View>
   );
 
@@ -270,20 +265,8 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
     );
   }
 
-  if (section === 'colleagues') {
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.bg }}>
-        <View style={[s.communitiesHeaderWrap, isTablet && s.listWide]}>
-          <Text style={s.pageTitle}>The Network</Text>
-          <Text style={[type.labelXs, { color: theme.muted, marginBottom: 14 }]}>
-            FIND YOUR PEOPLE THROUGH THE PLACES YOU SHARE
-          </Text>
-          {SectionToggle}
-        </View>
-        <ColleaguesScreen onOpenChat={onOpenChat} />
-      </View>
-    );
-  }
+  // colleagues now lives as a dedicated top-level tab (see Navigation / DesktopLayout),
+  // so Network only toggles between feed and communities
 
   if (loading) {
     return (
