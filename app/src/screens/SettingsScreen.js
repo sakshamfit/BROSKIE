@@ -8,7 +8,8 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
 import useResponsive from '../hooks/useResponsive';
-import { Avatar, InkButton, InkField, PaperCard, TapeChip, handleFor, MotionIn, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
+import { Avatar, InkButton, InkField, PaperCard, TapeChip, handleFor, MotionIn, FrostedBackdrop, GoldTick, hasGoldTick, HandDrawnToggle } from '../components/common';
+import UpdateSection from '../components/UpdateSection';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
@@ -121,7 +122,7 @@ export default function SettingsScreen({ navigation, embedded = false }) {
                 {preference === 'system' ? `SYSTEM (${mode.toUpperCase()})` : theme.dark ? 'ON' : 'OFF'}
               </Text>
             </View>
-            <HandDrawnToggle value={theme.dark} onToggle={toggle} theme={theme} />
+            <HandDrawnToggle value={theme.dark} onToggle={toggle} />
           </View>
           <Divider theme={theme} />
           <NavRow
@@ -160,6 +161,10 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             onPress={() => navigation.navigate('Starred')}
           />
         </View></MotionIn>
+
+        {/* -------- App updates -------- */}
+        <MotionIn delay={150}><SectionHeading theme={theme} label="App Updates" tilt="-1deg" />
+        <UpdateSection /></MotionIn>
 
         {/* -------- Support -------- */}
         <SectionHeading theme={theme} label="Support" tilt="-1deg" />
@@ -388,30 +393,6 @@ function NavRow({ theme, icon, title, subtitle, onPress }) {
 
 function Divider({ theme }) {
   return <View style={{ height: 10 }} />;
-}
-
-/** Hand-drawn pill toggle — ink outline, sketch-square thumb. */
-function HandDrawnToggle({ value, onToggle, theme }) {
-  return (
-    <Pressable
-      onPress={onToggle}
-      style={[
-        {
-          width: 52, height: 28, borderRadius: radius.full, padding: 3, justifyContent: 'center',
-          borderWidth: 2, borderColor: theme.ink,
-          backgroundColor: value ? theme.highlighter : theme.cardAlt,
-        },
-      ]}
-    >
-      <View
-        style={{
-          width: 20, height: 20, borderRadius: radius.full, backgroundColor: theme.ink,
-          borderWidth: 1, borderColor: theme.ink,
-          transform: [{ translateX: value ? 22 : 0 }],
-        }}
-      />
-    </Pressable>
-  );
 }
 
 const makeStyles = (t) => StyleSheet.create({

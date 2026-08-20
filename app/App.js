@@ -2,10 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, Text, Pressable, StyleSheet, Platform, AppState } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import Svg, { Circle, Defs, Pattern, Path, Rect } from 'react-native-svg';
 import { useFonts } from 'expo-font';
-import * as Updates from 'expo-updates';
 import {
   BricolageGrotesque_600SemiBold,
   BricolageGrotesque_700Bold,
@@ -41,48 +40,19 @@ import OrientationManager from './src/components/OrientationManager';
 import CallOverlay from './src/components/CallOverlay';
 import DailyAIGreeting from './src/components/DailyAIGreeting';
 import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
-
-// Changed whenever a web release needs to retire stale PWA/browser caches.
-const WEB_BUILD = '2026-08-20-auth-network-proxy-v13';
+import { WEB_BUILD, startUpdateLifecycle } from './src/updates';
 
 /**
- * Download native OTA updates quietly whenever the app starts or returns to
- * the foreground. We deliberately do not reload the running app: Expo applies
- * the downloaded update on the next cold open, avoiding interrupted chats or
- * a surprise restart while the user is active.
+ * Keep +one current without the user thinking about it.
+ *
+ * The update centre (src/updates.js) checks on launch and on every return to
+ * the foreground, downloads new releases in the background, and installs a
+ * pending one the next time the app is reopened — so a build no longer waits
+ * for a true cold start that may never happen. Settings ▸ App Updates exposes
+ * the same engine with an explicit "Update now" button.
  */
-function useSilentAutoUpdates() {
-  useEffect(() => {
-    if (__DEV__ || Platform.OS === 'web' || !Updates.isEnabled) return undefined;
-
-    let checking = false;
-    let disposed = false;
-
-    const downloadAvailableUpdate = async () => {
-      if (checking || disposed) return;
-      checking = true;
-      try {
-        const update = await Updates.checkForUpdateAsync();
-        if (update.isAvailable && !disposed) {
-          await Updates.fetchUpdateAsync();
-        }
-      } catch {
-        // Connectivity and update-server failures must never block app use.
-      } finally {
-        checking = false;
-      }
-    };
-
-    downloadAvailableUpdate();
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') downloadAvailableUpdate();
-    });
-
-    return () => {
-      disposed = true;
-      subscription.remove();
-    };
-  }, []);
+function useAutoUpdates() {
+  useEffect(() => startUpdateLifecycle(), []);
 }
 
 /** On web, expand to full browser — no phone frame.
@@ -231,7 +201,7 @@ class AppErrorBoundary extends React.Component {
 }
 
 export default function App() {
-  useSilentAutoUpdates();
+  useAutoUpdates();
 
   // Aliases keep theme.js font names short (Bricolage_800ExtraBold etc.)
   const [fontsLoaded, fontError] = useFonts({
