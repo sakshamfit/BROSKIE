@@ -6,6 +6,7 @@ import {
   colorFor, initials, AVATAR_INK, radius, type, tokens, stroke,
   inkBox, sketchBox, sketchAvatarFrame, pencilBox, inkUnderline, dashedRule, marker, pressedInk, raised,
 } from '../theme';
+import { usePressScale, Pop, FloatLoop } from '../motion';
 import { mediaUrl } from '../api';
 import { useTheme } from '../store/ThemeContext';
 
@@ -168,10 +169,11 @@ export function InkButton({ label, onPress, icon, style, textStyle, disabled, bu
   );
 }
 
-/** Square-ish icon button drawn in ink. */
+/** Square-ish icon button drawn in ink, with a physical press-scale spring. */
 export function InkIconButton({ name, onPress, size = 40, iconSize = 19, iconColor, style, weight = 'ink', disabled, active }) {
   const { theme } = useTheme();
   const isAndroid = Platform.OS === 'android';
+  const { scale, onPressIn, onPressOut } = usePressScale(0.94);
   // Real devices need a minimum ~44dp tap target (Apple HIG / Material both
   // recommend this) even when the drawn box itself is smaller — hitSlop
   // widens the touchable area without changing the visual size.
@@ -181,6 +183,8 @@ export function InkIconButton({ name, onPress, size = 40, iconSize = 19, iconCol
       onPress={onPress}
       disabled={disabled}
       hitSlop={Math.max(slop, 6)}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       android_ripple={rippleFor(theme, { borderless: true, radius: size * 0.8 })}
       style={({ pressed }) => [
         { width: size, height: size, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.card },
@@ -193,7 +197,9 @@ export function InkIconButton({ name, onPress, size = 40, iconSize = 19, iconCol
         style,
       ]}
     >
-      <Icon name={name} size={iconSize} color={iconColor || theme.ink} />
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Icon name={name} size={iconSize} color={iconColor || theme.ink} />
+      </Animated.View>
     </Pressable>
   );
 }
@@ -235,23 +241,26 @@ export function TapeChip({ label, style, textStyle, tone = 'ink' }) {
   );
 }
 
-/** Unread count — small ink-filled bead. */
+/** Unread count — small ink-filled bead. Pops with a tiny spring whenever
+ * the count changes (0 → small → 100%), without bouncing the whole bar. */
 export function CountBead({ label, style, small }) {
   const { theme } = useTheme();
   const d = small ? 17 : 21;
   return (
-    <View
-      style={[
-        {
-          minWidth: d, height: d, paddingHorizontal: small ? 4 : 6,
-          alignItems: 'center', justifyContent: 'center',
-          backgroundColor: theme.badge, borderRadius: radius.full,
-        },
-        style,
-      ]}
-    >
-      <Text style={[type.labelXs, { color: theme.onBadge, fontSize: small ? 9 : 10.5 }]}>{label}</Text>
-    </View>
+    <Pop trigger={label} from={0.4}>
+      <View
+        style={[
+          {
+            minWidth: d, height: d, paddingHorizontal: small ? 4 : 6,
+            alignItems: 'center', justifyContent: 'center',
+            backgroundColor: theme.badge, borderRadius: radius.full,
+          },
+          style,
+        ]}
+      >
+        <Text style={[type.labelXs, { color: theme.onBadge, fontSize: small ? 9 : 10.5 }]}>{label}</Text>
+      </View>
+    </Pop>
   );
 }
 
@@ -444,9 +453,13 @@ export function EmptyState({ icon = 'chatbubbles-outline', title, subtitle }) {
   const { theme } = useTheme();
   return (
     <View style={{ alignItems: 'center', justifyContent: 'center', padding: 40, flex: 1 }}>
-      <View style={[{ width: 84, height: 84, alignItems: 'center', justifyContent: 'center', marginBottom: 22 }, inkBox(theme, 'ink')]}>
-        <Icon name={icon} size={36} color={theme.ink} />
-      </View>
+      {/* slow, near-still float so empty screens feel alive; unmounts with
+          the list when content arrives, so it never animates off-screen */}
+      <FloatLoop amplitude={5} duration={3800}>
+        <View style={[{ width: 84, height: 84, alignItems: 'center', justifyContent: 'center', marginBottom: 22 }, inkBox(theme, 'ink')]}>
+          <Icon name={icon} size={36} color={theme.ink} />
+        </View>
+      </FloatLoop>
       <Text style={[type.headlineSm, { color: theme.text, textAlign: 'center' }]}>{title}</Text>
       {!!subtitle && (
         <Text style={[type.bodySm, { marginTop: 8, color: theme.subtext, textAlign: 'center', maxWidth: 290 }]}>{subtitle}</Text>
