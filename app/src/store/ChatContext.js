@@ -25,6 +25,7 @@ export function ChatProvider({ children }) {
   const [messages, setMessages] = useState({});   // chatId -> message[]
   const [typing, setTyping] = useState({});       // chatId -> { userId: name }
   const [connected, setConnected] = useState(false);
+  const [activityUnread, setActivityUnread] = useState(0);
   const socketRef = useRef(null);
   const postListeners = useRef(new Set());
   const statusListeners = useRef(new Set());
@@ -95,7 +96,7 @@ export function ChatProvider({ children }) {
     if (!token) {
       socketRef.current?.disconnect();
       socketRef.current = null;
-      setChats([]); setMessages({}); setConnected(false);
+      setChats([]); setMessages({}); setConnected(false); setActivityUnread(0);
       return;
     }
 
@@ -157,10 +158,12 @@ export function ChatProvider({ children }) {
 
     socket.on('chat:request', (payload) => {
       chatRequestListeners.current.forEach((fn) => fn('chat:request', payload));
+      api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
     });
     socket.on('chat:request:resolved', (payload) => {
       if (payload?.action === 'accept' && payload?.chat) upsertChat(payload.chat);
       chatRequestListeners.current.forEach((fn) => fn('chat:request:resolved', payload));
+      api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
     });
 
     // The Network — re-broadcast post events to any subscribed screen
@@ -179,12 +182,16 @@ export function ChatProvider({ children }) {
      'community:declined', 'community:added', 'community:removed', 'community:left'].forEach((ev) => {
       socket.on(ev, (payload) => {
         communityListeners.current.forEach((fn) => fn(ev, payload));
+        if (ev === 'community:request' || ev === 'community:approved' || ev === 'community:declined') {
+          api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
+        }
       });
     });
 
     ['colleague:updated', 'affiliation:updated'].forEach((ev) => {
       socket.on(ev, (payload) => {
         colleagueListeners.current.forEach((fn) => fn(ev, payload));
+        api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
       });
     });
 
@@ -208,6 +215,7 @@ export function ChatProvider({ children }) {
         direction: 'incoming', status: 'ringing', with: payload.caller, startedAt: payload.startedAt,
       });
       playRingtone();
+      api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
     });
 
     socket.on('call:accepted', (payload) => {
@@ -252,9 +260,11 @@ export function ChatProvider({ children }) {
       teardownWebRTC();
       setCall((prev) => (prev && prev.id === payload.id ? { ...prev, status: 'ended', endedReason: payload.endedReason } : prev));
       setTimeout(() => setCall((prev) => (prev && prev.status === 'ended' ? null : prev)), 2500);
+      api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
     });
 
     api.chats().then(({ chats }) => setChats(sortChats(chats))).catch(() => {});
+    api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
 
     return () => {
       stopRingtone();
@@ -420,6 +430,15 @@ export function ChatProvider({ children }) {
     setChats(sortChats(chats));
   }, []);
 
+  const refreshActivity = useCallback(async () => {
+    try {
+      const result = await api.activity();
+      setActivityUnread(result.unread || 0);
+    } catch {
+      // Keep the rest of the app usable if an older backend is still redeploying.
+    }
+  }, []);
+
   const loadMessages = useCallback(async (chatId) => {
     const { messages: list } = await api.messages(chatId);
     setMessages((prev) => ({ ...prev, [chatId]: list }));
@@ -503,8 +522,8 @@ export function ChatProvider({ children }) {
   return (
     <ChatContext.Provider
       value={{
-        chats, messages, typing, connected,
-        refreshChats, loadMessages, sendMessage, markRead,
+        chats, messages, typing, connected, activityUnread,
+        refreshChats, refreshActivity, loadMessages, sendMessage, markRead,
         setTypingState, react, deleteMessage, editMessage, createPoll, votePoll,
         upsertChat, onPostEvent, onStatusEvent, onCommunityEvent, onColleagueEvent, onChatRequestEvent,
         // exposed for lightweight local patches (e.g. optimistic star/timer state)

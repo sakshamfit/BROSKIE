@@ -169,8 +169,11 @@ Affiliations, requests, and accepted connections are stored in SQLite and update
 
 ### Message requests
 
-A new **Requests** control appears at the top-right of Chats. First messages from
-people outside accepted contacts do not enter the main inbox. The receiver can preview
+Tapping a username or opening a composer does **not** send a request. Tap the
+**+one** sign in front of a person in find +ones to send a connect request, or
+send a first real message (text, photo, or voice). Incoming requests, likes,
+comments and calls appear in **Activity**, opened from the +one wordmark or the
+Instagram-style heart. The receiver can preview
 the first message, then accept and chat, delete the request, or block the sender.
 Existing direct chats remain accepted for backward compatibility.
 

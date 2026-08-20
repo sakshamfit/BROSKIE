@@ -22,6 +22,7 @@ import PersonalInfoScreen from './screens/PersonalInfoScreen';
 import SecurityScreen from './screens/SecurityScreen';
 import AppearanceScreen from './screens/AppearanceScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
+import ActivityScreen from './screens/ActivityScreen';
 import PrivacyScreen from './screens/PrivacyScreen';
 import BlockedUsersScreen from './screens/BlockedUsersScreen';
 import HelpScreen from './screens/HelpScreen';
@@ -41,7 +42,7 @@ export default function SplitLayout() {
   const { logout } = useAuth();
   const { chats } = useChat();
   const { insets, isWeb } = useResponsive();
-  const [tab, setTab] = useState('chats');
+  const [tab, setTab] = useState('network');
   const [selectedChatId, setSelectedChatId] = useState(null);
   const [overlay, setOverlay] = useState(null); // { name, params }
 
@@ -67,7 +68,7 @@ export default function SplitLayout() {
       if (name === 'Help') { openOverlay('Help'); return; }
       if (SETTINGS_SUBSCREENS.includes(name)) setSettingsSub(name);
     },
-    goBack: () => (settingsSub ? setSettingsSub(null) : setTab('chats')),
+    goBack: () => (settingsSub ? setSettingsSub(null) : setTab('network')),
     replace: () => {},
   };
 
@@ -99,6 +100,7 @@ export default function SplitLayout() {
       if (name === 'Conversation') setSelectedChatId(params.chatId);
       else if (name === 'Settings') { setSettingsSub(null); setTab('settings'); }
       else if (name === 'NewChat') openOverlay('NewChat');
+      else if (name === 'Activity') openOverlay('Activity');
     },
     goBack: () => {},
     replace(name, params) { this.navigate(name, params); },
@@ -143,7 +145,7 @@ export default function SplitLayout() {
         return true;
       }
       if (tab === 'settings') {
-        setTab('chats');
+        setTab('network');
         return true;
       }
       if (selectedChatId) {
@@ -160,7 +162,11 @@ export default function SplitLayout() {
       <SideNav
         active={tab}
         railOnly={true}
-        onNavigate={(key) => { setSettingsSub(null); setTab(key); }}
+        onNavigate={(key) => {
+          if (key === 'activity') { openOverlay('Activity'); return; }
+          setSettingsSub(null);
+          setTab(key);
+        }}
         onNewChat={() => openOverlay('NewChat')}
         onSettings={() => { setSettingsSub(null); setTab('settings'); }}
         onHelp={() => openOverlay('Help')}
@@ -196,6 +202,10 @@ export default function SplitLayout() {
         {tab === 'network' && (
           <View style={[s.fullPane, s.centeredPane]}>
             <NetworkScreen
+              navigation={{
+                navigate: (name) => { if (name === 'Activity') openOverlay('Activity'); },
+                goBack: () => {},
+              }}
               onOpenChat={(chatId) => { setTab('chats'); setSelectedChatId(chatId); }}
             />
           </View>
@@ -252,6 +262,14 @@ export default function SplitLayout() {
           real substance (expandable topics + FAQ) instead of one paragraph. */}
       <OverlayPanel visible={overlay?.name === 'Help'} onClose={closeOverlay} width={620}>
         <HelpScreen navigation={{ goBack: closeOverlay }} embedded />
+      </OverlayPanel>
+
+      <OverlayPanel visible={overlay?.name === 'Activity'} onClose={closeOverlay} width={520}>
+        <ActivityScreen
+          embedded
+          navigation={{ goBack: closeOverlay }}
+          onOpenChat={(chatId) => { closeOverlay(); setTab('chats'); setSelectedChatId(chatId); }}
+        />
       </OverlayPanel>
     </View>
   );

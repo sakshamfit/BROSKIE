@@ -12,6 +12,7 @@ import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import { AUDIENCE } from '../components/AudiencePicker';
+import BrandHeader from '../components/BrandHeader';
 import SongCard from '../components/SongCard';
 import NewPostScreen from './NewPostScreen';
 import CommunitiesScreen from './CommunitiesScreen';
@@ -21,6 +22,7 @@ import { confirm } from '../hooks/confirm';
 
 /* Sticky notes alternate their tilt, like scraps pinned to a board. */
 const tiltFor = (i) => (i % 2 === 0 ? '-0.8deg' : '0.7deg');
+const INSTAGRAM_HEART = '#ED4956';
 
 export default function NetworkScreen({ navigation, onOpenChat }) {
   const { user } = useAuth();
@@ -201,9 +203,17 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         <View style={[dashedRule(theme), { marginTop: 16, marginBottom: 12 }]} />
 
         <View style={s.actions}>
-          <Pressable onPress={() => toggleLike(item)} style={({ pressed }) => [s.action, pressed && marker(theme, 1)]} hitSlop={6}>
-            <Icon name={item.liked ? 'heart' : 'heart-outline'} size={17} color={item.liked ? theme.ink : theme.graphite} />
-            <Text style={[type.labelSm, { color: item.liked ? theme.ink : theme.graphite }]}>{item.likes}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={item.liked ? 'Unlike' : 'Like'}
+            onPress={() => toggleLike(item)}
+            style={({ pressed }) => [s.action, pressed && { transform: [{ scale: 1.12 }] }]}
+            hitSlop={8}
+          >
+            <Icon name={item.liked ? 'heart' : 'heart-outline'} size={24} color={item.liked ? INSTAGRAM_HEART : theme.ink} />
+            {item.likes > 0 && (
+              <Text style={[type.labelSm, { color: item.liked ? INSTAGRAM_HEART : theme.ink }]}>{item.likes}</Text>
+            )}
           </Pressable>
           <Pressable onPress={() => setCommentsFor(item)} style={({ pressed }) => [s.action, pressed && marker(theme, 1)]} hitSlop={6}>
             <Icon name="chatbubble-outline" size={16} color={theme.graphite} />
@@ -273,14 +283,18 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={theme.ink} />
+      <View style={{ flex: 1, backgroundColor: theme.bg }}>
+        <BrandHeader navigation={navigation} />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={theme.ink} />
+        </View>
       </View>
     );
   }
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <BrandHeader navigation={navigation} />
       <FlatList
         data={posts}
         keyExtractor={(i) => i.id}
@@ -474,7 +488,7 @@ const makeStyles = (t) => StyleSheet.create({
   noteHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   noteImage: { marginTop: 14, overflow: 'hidden', alignSelf: 'center' },
   actions: { flexDirection: 'row', gap: 22 },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2, paddingHorizontal: 2 },
+  action: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2, paddingHorizontal: 2 },
 
   fab: {
     position: 'absolute', right: 24, bottom: 26, width: 58, height: 58,

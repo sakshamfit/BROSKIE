@@ -22,9 +22,9 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
   const s = makeStyles(theme);
 
   const ITEMS = [
-    { key: 'chats', label: 'Chats', icon: 'chatbubbles' },
-    { key: 'status', label: 'See', icon: 'eye' },
     { key: 'network', label: 'Network', icon: 'people' },
+    { key: 'status', label: 'See', icon: 'eye' },
+    { key: 'chats', label: 'Chats', icon: 'chatbubbles' },
     { key: 'colleagues', label: 'Colleagues', icon: 'school-outline', outlineOnly: true },
     { key: 'calls', label: 'Calls', icon: 'call' },
     { key: 'settings', label: 'Settings', icon: 'settings' },
@@ -39,12 +39,25 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
       ]}
     >
       <View style={[s.brandRow, railOnly && s.brandRowRail]}>
-        <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={railOnly ? 34 : 40} />
+        <Pressable onPress={() => onNavigate?.('activity')} hitSlop={6} style={railOnly && { alignItems: 'center' }}>
+          <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={railOnly ? 34 : 40} />
+        </Pressable>
         {!railOnly && (
-          <View style={{ flex: 1 }}>
+          <Pressable onPress={() => onNavigate?.('activity')} style={{ flex: 1 }}>
             <Text style={s.wordmark}>+one</Text>
-            <Text style={[type.labelXs, { color: theme.muted }]}>ONLINE</Text>
-          </View>
+            <Text style={[type.labelXs, { color: theme.muted }]}>ACTIVITY</Text>
+          </Pressable>
+        )}
+        {railOnly && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Activity"
+            onPress={() => onNavigate?.('activity')}
+            hitSlop={6}
+            style={{ marginTop: 12, alignItems: 'center' }}
+          >
+            <Icon name="heart-outline" size={20} color={theme.ink} />
+          </Pressable>
         )}
       </View>
 
@@ -119,7 +132,7 @@ const makeStyles = (t) => StyleSheet.create({
   wrap: { width: 264, height: '100%', paddingVertical: 28, paddingHorizontal: 20 },
   wrapRail: { width: 76, paddingHorizontal: 12 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
-  brandRowRail: { justifyContent: 'center', marginBottom: 24 },
+  brandRowRail: { flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
   wordmark: { ...type.headlineSm, fontSize: 22, color: t.text, fontStyle: 'italic' },
   newBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

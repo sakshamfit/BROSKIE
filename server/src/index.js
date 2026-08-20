@@ -86,11 +86,14 @@ function getSettings(u) {
 }
 
 function areContacts(idA, idB) {
-  const [userA, userB] = [idA, idB].sort();
+  const [userA, userB] = colleaguePair(idA, idB);
   const colleagues = !!db
     .prepare('SELECT 1 FROM colleague_connections WHERE user_a = ? AND user_b = ?')
     .get(userA, userB);
   if (colleagues) return true;
+  // Opening a blank composer must not make two strangers contacts. A direct
+  // chat only counts after it is accepted, or it is a legacy thread that
+  // already has real messages and never went through requests.
   return !!db
     .prepare(
       `SELECT 1 FROM chat_members a
@@ -98,7 +101,17 @@ function areContacts(idA, idB) {
        JOIN chats c ON c.id = a.chat_id
        LEFT JOIN chat_requests cr ON cr.chat_id = c.id
        WHERE a.user_id = ? AND b.user_id = ?
-         AND (c.type != 'direct' OR cr.chat_id IS NULL OR cr.status = 'accepted')
+         AND (
+           c.type != 'direct'
+           OR cr.status = 'accepted'
+           OR (
+             cr.chat_id IS NULL
+             AND EXISTS (
+               SELECT 1 FROM messages m
+               WHERE m.chat_id = c.id AND m.type != 'system' AND m.deleted = 0
+             )
+           )
+         )
        LIMIT 1`
     )
     .get(idA, idB);
@@ -143,6 +156,12 @@ const publicUser = (u) =>
   };
 
 const MAX_USERNAME_LENGTH = 64;
+
+/** Usernames that must never exist — wiped on boot and blocked at register. */
+const RESERVED_USERNAMES = new Set(['yupp']);
+function isReservedUsername(raw) {
+  return RESERVED_USERNAMES.has(usernameKey(raw));
+}
 
 /** Preserve the username people typed; only surrounding whitespace is input chrome. */
 function cleanUsername(raw) {
@@ -463,7 +482,17 @@ function contactIds(userId) {
        JOIN chats c ON c.id = cm1.chat_id
        LEFT JOIN chat_requests cr ON cr.chat_id = c.id
        WHERE cm1.user_id = ?
-         AND (c.type != 'direct' OR cr.chat_id IS NULL OR cr.status = 'accepted')`
+         AND (
+           c.type != 'direct'
+           OR cr.status = 'accepted'
+           OR (
+             cr.chat_id IS NULL
+             AND EXISTS (
+               SELECT 1 FROM messages m
+               WHERE m.chat_id = c.id AND m.type != 'system' AND m.deleted = 0
+             )
+           )
+         )`
     )
     .all(userId)
     .map((r) => r.user_id);
@@ -485,13 +514,22 @@ function userChats(userId) {
        LEFT JOIN chat_requests cr ON cr.chat_id = c.id
        WHERE cm.user_id = ?
          AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
-         AND (cm.cleared_at IS NULL OR EXISTS (
-           SELECT 1 FROM messages visible_message
-           WHERE visible_message.chat_id = c.id AND visible_message.created_at > cm.cleared_at
-         ))
+         AND (
+           EXISTS (
+             SELECT 1 FROM messages visible_message
+             WHERE visible_message.chat_id = c.id
+               AND visible_message.created_at > COALESCE(cm.cleared_at, 0)
+           )
+           OR (
+             c.type = 'direct'
+             AND c.created_by = ?
+             AND cr.chat_id IS NULL
+             AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id)
+           )
+         )
        ORDER BY c.updated_at DESC`
     )
-    .all(userId, userId);
+    .all(userId, userId, userId, userId);
   // Pinned chats float to the top; within each group keep recency order.
   return rows
     .map((r) => chatSummary(r.id, userId))
@@ -646,6 +684,31 @@ function deleteAccountData(userId) {
   };
 }
 
+/** One-shot admin wipe for reserved usernames (currently @yupp). Runs at boot. */
+function wipeReservedAccounts() {
+  RESERVED_USERNAMES.forEach((key) => {
+    const user = db.prepare('SELECT * FROM users WHERE username_key = ?').get(key);
+    if (!user) return;
+    try {
+      const result = deleteAccountData(user.id);
+      result.directPeers.forEach((peerId) => result.directChats.forEach((chatId) =>
+        emitToUser(peerId, 'chat:removed', { chatId, accountDeleted: true })
+      ));
+      result.groupChats.forEach((chatId) => memberIds(chatId).forEach((uid) =>
+        emitToUser(uid, 'chat:updated', chatSummary(chatId, uid))
+      ));
+      result.postIds.forEach((id) => io.emit('post:deleted', { id }));
+      io.emit('user:deleted', { id: user.id });
+      const ids = sockets.get(user.id);
+      ids?.forEach((socketId) => io.sockets.sockets.get(socketId)?.disconnect(true));
+      sockets.delete(user.id);
+      console.log(`[admin wipe] removed @${user.username} (${user.id})`);
+    } catch (error) {
+      console.error(`[admin wipe] failed for @${user.username}`, error);
+    }
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* auth routes                                                         */
 /* ------------------------------------------------------------------ */
@@ -724,8 +787,7 @@ app.get('/api/greeting-summary', requireAuth, (req, res) => {
   const unreadChats = chats.filter((chat) => (chat.unread || 0) > 0).length;
   const messageRequests = db.prepare(
     `SELECT COUNT(*) c FROM chat_requests cr
-     WHERE cr.receiver_id = ? AND cr.status = 'pending'
-       AND EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = cr.chat_id)`
+     WHERE cr.receiver_id = ? AND cr.status = 'pending'`
   ).get(req.userId).c;
   const colleagueRequests = db.prepare(
     "SELECT COUNT(*) c FROM colleague_requests WHERE receiver_id = ? AND status = 'pending'"
@@ -877,11 +939,27 @@ app.get('/api/users', requireAuth, (req, res) => {
         (u.username && u.username.includes(q)) ||
         u.phone.includes(q))
     : all;
+  const contacts = new Set(contactIds(req.userId));
+  const pendingOut = new Set(
+    db.prepare("SELECT receiver_id FROM chat_requests WHERE sender_id = ? AND status = 'pending'")
+      .all(req.userId).map((r) => r.receiver_id)
+  );
+  const pendingIn = new Set(
+    db.prepare("SELECT sender_id FROM chat_requests WHERE receiver_id = ? AND status = 'pending'")
+      .all(req.userId).map((r) => r.sender_id)
+  );
   res.json({
     users: filtered.map((u) => ({
       ...publicUser(u),
       ...presenceFor(u, req.userId),
       blocked: isBlocked(req.userId, u.id),
+      connectStatus: contacts.has(u.id)
+        ? 'connected'
+        : pendingOut.has(u.id)
+          ? 'outgoing'
+          : pendingIn.has(u.id)
+            ? 'incoming'
+            : 'none',
     })),
   });
 });
@@ -1210,14 +1288,9 @@ app.post('/api/chats/direct', requireAuth, (req, res) => {
     .get(req.userId, userId);
 
   if (existing) {
-    const pending = pendingChatRequest(existing.id);
-    // Starting the existing conversation from the receiver side is an
-    // intentional reply, so treat it as accepting the message request.
-    if (pending && pending.receiver_id === req.userId) {
-      db.prepare("UPDATE chat_requests SET status = 'accepted', responded_at = ? WHERE chat_id = ?").run(now(), existing.id);
-      emitToUser(pending.sender_id, 'chat:request:resolved', { chatId: existing.id, action: 'accept', chat: chatSummary(existing.id, pending.sender_id) });
-      emitToUser(pending.receiver_id, 'chat:new', chatSummary(existing.id, pending.receiver_id));
-    }
+    // Opening the composer — or tapping a username — is not consent.
+    // Incoming requests stay pending until Accept in Activity, or until
+    // the receiver sends their own first message after accepting.
     return res.json({ chat: chatSummary(existing.id, req.userId) });
   }
 
@@ -1236,15 +1309,71 @@ app.post('/api/chats/direct', requireAuth, (req, res) => {
   if (knownContact) {
     [req.userId, userId].forEach((uid) => emitToUser(uid, 'chat:new', chatSummary(id, uid)));
   } else {
-    db.prepare(
-      `INSERT INTO chat_requests (chat_id, sender_id, receiver_id, status, created_at)
-       VALUES (?,?,?,?,?)`
-    ).run(id, req.userId, userId, 'pending', t);
-    // The receiver is notified only after the first real message is sent, so
-    // merely opening the composer never creates an empty inbox request.
+    // Do not insert a chat_request until the first real message is sent.
+    // Tapping a user id / opening the composer is only a private draft.
     emitToUser(req.userId, 'chat:new', chatSummary(id, req.userId));
   }
   res.json({ chat: chatSummary(id, req.userId) });
+});
+
+/**
+ * Explicit +one connect request from find +ones. Tapping a row still only
+ * opens a private draft; this is the action that notifies the other person.
+ */
+app.post('/api/connect/:userId', requireAuth, (req, res) => {
+  const targetId = req.params.userId;
+  const target = getUser(targetId);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (targetId === req.userId) return res.status(400).json({ error: "You can't connect with yourself" });
+  if (blockedEitherWay(req.userId, targetId)) return res.status(403).json({ error: 'Connection unavailable' });
+
+  if (areContacts(req.userId, targetId)) {
+    const existing = db.prepare(
+      `SELECT c.id FROM chats c
+       JOIN chat_members a ON a.chat_id = c.id AND a.user_id = ?
+       JOIN chat_members b ON b.chat_id = c.id AND b.user_id = ?
+       WHERE c.type = 'direct'`
+    ).get(req.userId, targetId);
+    return res.json({ status: 'connected', chatId: existing?.id || null });
+  }
+
+  let chatId = db.prepare(
+    `SELECT c.id FROM chats c
+     JOIN chat_members a ON a.chat_id = c.id AND a.user_id = ?
+     JOIN chat_members b ON b.chat_id = c.id AND b.user_id = ?
+     WHERE c.type = 'direct'`
+  ).get(req.userId, targetId)?.id;
+
+  const t = now();
+  if (!chatId) {
+    chatId = nano();
+    db.prepare('INSERT INTO chats (id, type, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(
+      chatId, 'direct', req.userId, t, t
+    );
+    const addMember = db.prepare('INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)');
+    addMember.run(chatId, req.userId, 'member', t);
+    addMember.run(chatId, targetId, 'member', t);
+    emitToUser(req.userId, 'chat:new', chatSummary(chatId, req.userId));
+  }
+
+  const pending = pendingChatRequest(chatId);
+  if (pending && pending.sender_id === req.userId) {
+    return res.json({ status: 'outgoing', chatId, requestId: pending.chat_id });
+  }
+  if (pending && pending.receiver_id === req.userId) {
+    return res.status(409).json({ error: 'This person already sent you a request — accept it in Activity' });
+  }
+  if (!pending) {
+    db.prepare(
+      `INSERT INTO chat_requests (chat_id, sender_id, receiver_id, status, created_at)
+       VALUES (?,?,?,?,?)`
+    ).run(chatId, req.userId, targetId, 'pending', t);
+  }
+
+  const request = pendingChatRequest(chatId);
+  emitToUser(req.userId, 'chat:updated', chatSummary(chatId, req.userId));
+  emitToUser(targetId, 'chat:request', hydrateChatRequest(request, targetId));
+  res.json({ status: 'outgoing', chatId, requestId: chatId });
 });
 
 /** WhatsApp-style inbox for first messages from people outside contacts. */
@@ -1258,6 +1387,134 @@ app.get('/api/chat-requests', requireAuth, (req, res) => {
     )
     .all(req.userId);
   res.json({ requests: rows.map((row) => hydrateChatRequest(row, req.userId)).filter(Boolean) });
+});
+
+
+/** Instagram-style activity: message requests, likes, comments, calls, colleague/community requests. */
+app.get('/api/activity', requireAuth, (req, res) => {
+  const blockedSql = `NOT EXISTS (
+    SELECT 1 FROM blocked_users b
+    WHERE (b.blocker_id = ? AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = ?)
+  )`;
+  const items = [];
+
+  db.prepare(
+    `SELECT cr.* FROM chat_requests cr
+     WHERE cr.receiver_id = ? AND cr.status = 'pending'`
+  ).all(req.userId).forEach((row) => {
+    const hydrated = hydrateChatRequest(row, req.userId);
+    if (!hydrated) return;
+    const message = hydrated.chat?.lastMessage;
+    const hasMessage = !!message && !message.deleted && (message.body || message.mediaUrl);
+    items.push({
+      id: `${hasMessage ? 'message' : 'connect'}_request:${row.chat_id}`,
+      type: hasMessage ? 'message_request' : 'connect_request',
+      createdAt: row.created_at,
+      user: hydrated.requester,
+      chatId: row.chat_id,
+      preview: hasMessage
+        ? (message?.deleted ? 'This message was deleted.' : (message?.body || 'Started a conversation with you.'))
+        : 'wants to connect',
+    });
+  });
+
+  db.prepare(
+    `SELECT r.id, r.created_at, r.sender_id FROM colleague_requests r
+     JOIN users u ON u.id = r.sender_id
+     WHERE r.receiver_id = ? AND r.status = 'pending' AND ${blockedSql}
+     ORDER BY r.created_at DESC`
+  ).all(req.userId, req.userId, req.userId).forEach((row) => {
+    items.push({
+      id: `colleague_request:${row.id}`,
+      type: 'colleague_request',
+      createdAt: row.created_at,
+      requestId: row.id,
+      user: hydrateColleague(getUser(row.sender_id), req.userId),
+    });
+  });
+
+  db.prepare(
+    `SELECT r.community_id, r.user_id, r.requested_at, c.name community_name
+     FROM community_requests r
+     JOIN community_members me ON me.community_id = r.community_id AND me.user_id = ? AND me.role = 'admin'
+     JOIN communities c ON c.id = r.community_id
+     JOIN users u ON u.id = r.user_id
+     WHERE ${blockedSql}
+     ORDER BY r.requested_at DESC`
+  ).all(req.userId, req.userId, req.userId).forEach((row) => {
+    items.push({
+      id: `community_request:${row.community_id}:${row.user_id}`,
+      type: 'community_request',
+      createdAt: row.requested_at,
+      communityId: row.community_id,
+      communityName: row.community_name,
+      user: publicUser(getUser(row.user_id)),
+    });
+  });
+
+  db.prepare(
+    `SELECT pl.post_id, pl.user_id, pl.at, p.body, p.media_url, p.title
+     FROM post_likes pl
+     JOIN posts p ON p.id = pl.post_id
+     JOIN users u ON u.id = pl.user_id
+     WHERE p.user_id = ? AND pl.user_id != ? AND p.deleted = 0 AND ${blockedSql}
+     ORDER BY pl.at DESC LIMIT 40`
+  ).all(req.userId, req.userId, req.userId, req.userId).forEach((row) => {
+    items.push({
+      id: `like:${row.post_id}:${row.user_id}`,
+      type: 'like',
+      createdAt: row.at,
+      postId: row.post_id,
+      preview: row.title || row.body || (row.media_url ? 'Photo' : 'your post'),
+      user: publicUser(getUser(row.user_id)),
+    });
+  });
+
+  db.prepare(
+    `SELECT pc.id, pc.post_id, pc.user_id, pc.body, pc.created_at
+     FROM post_comments pc
+     JOIN posts p ON p.id = pc.post_id
+     JOIN users u ON u.id = pc.user_id
+     WHERE p.user_id = ? AND pc.user_id != ? AND p.deleted = 0 AND ${blockedSql}
+     ORDER BY pc.created_at DESC LIMIT 40`
+  ).all(req.userId, req.userId, req.userId, req.userId).forEach((row) => {
+    items.push({
+      id: `comment:${row.id}`,
+      type: 'comment',
+      createdAt: row.created_at,
+      postId: row.post_id,
+      preview: row.body,
+      user: publicUser(getUser(row.user_id)),
+    });
+  });
+
+  db.prepare(
+    `SELECT * FROM calls WHERE caller_id = ? OR callee_id = ?
+     ORDER BY started_at DESC LIMIT 25`
+  ).all(req.userId, req.userId).forEach((row) => {
+    const otherId = row.caller_id === req.userId ? row.callee_id : row.caller_id;
+    items.push({
+      id: `call:${row.id}`,
+      type: 'call',
+      createdAt: row.started_at,
+      callId: row.id,
+      chatId: row.chat_id,
+      callType: row.type,
+      status: row.status,
+      direction: row.caller_id === req.userId ? 'outgoing' : 'incoming',
+      user: publicUser(getUser(otherId)),
+    });
+  });
+
+  items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const unread = items.filter((item) => (
+    item.type === 'message_request'
+    || item.type === 'colleague_request'
+    || item.type === 'community_request'
+    || (item.type === 'call' && item.status === 'missed' && item.direction === 'incoming')
+  )).length;
+
+  res.json({ activity: items.slice(0, 80), unread });
 });
 
 app.post('/api/chat-requests/:chatId/respond', requireAuth, (req, res) => {
@@ -2592,9 +2849,22 @@ io.on('connection', (socket) => {
         const otherId = memberIds(chatId).find((x) => x !== uid);
         if (otherId && blockedEitherWay(uid, otherId)) return ack?.({ error: "You can't message this person" });
       }
-      const request = pendingChatRequest(chatId);
+      let request = pendingChatRequest(chatId);
       if (request && request.receiver_id === uid) {
         return ack?.({ error: 'Accept this message request before replying' });
+      }
+      // First real message to a stranger opens the request. Tapping their
+      // user id / opening the composer never does this on its own.
+      if (!request && chat && chat.type === 'direct') {
+        const otherId = memberIds(chatId).find((x) => x !== uid);
+        if (otherId && !areContacts(uid, otherId)) {
+          const tReq = now();
+          db.prepare(
+            `INSERT INTO chat_requests (chat_id, sender_id, receiver_id, status, created_at)
+             VALUES (?,?,?,?,?)`
+          ).run(chatId, uid, otherId, 'pending', tReq);
+          request = pendingChatRequest(chatId);
+        }
       }
 
       // Disappearing messages: per-message override wins, otherwise the
@@ -2963,4 +3233,6 @@ server.listen(PORT, '0.0.0.0', async () => {
   console.log(`+one server listening on http://0.0.0.0:${PORT}`);
   console.log(`[storage] ${storage.describe()}`);
   await storage.ensureBucket();
+  wipeReservedAccounts();
 });
+
