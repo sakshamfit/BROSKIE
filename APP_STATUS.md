@@ -1,7 +1,6 @@
 # BROSKIE — Application Status & Operations Guide
 
-**Last updated:** 20 August 2026
-**Repository:** `sakshamfit/BROSKIE`
+**Last updated:** 20 August 2026**Repository:** `sakshamfit/BROSKIE`
 **Primary production host:** Railway
 **Production API:** `https://broskie-h.up.railway.app`
 
@@ -79,8 +78,40 @@ A full Supabase/Postgres migration must preserve existing records and be impleme
 
 ## 3. Mobile connection status
 
-Native Android/iOS builds must reach the public Railway API, not `localhost`.
+### Android device compatibility (every supported phone)
 
+The Android build floor is **Android 7.0 (API 24)** — `minSdkVersion: 24` is
+set explicitly in `app.json`. That is the lowest API level React Native 0.86
+(Expo SDK 57) can run on; it covers essentially every Android phone in use
+since 2016, new and old alike. Below API 24, no React Native 0.86 app can
+run — that is a hard upstream limit of the framework, not of this app.
+
+What makes old-device support work:
+
+- `app/plugins/withAuthNetworkSecurity.js` bundles the **ISRG Root X1
+  certificate** into the APK and pins it (system + pinned roots, cleartext
+  off) for the production Railway API domain — Android 7.0's trust store
+  predates that root, and without this older phones would reject the API's
+  HTTPS chain before any JavaScript runs.
+- All new motion is transform/opacity with `useNativeDriver: true` (60fps on
+  mid/low-end hardware), `prefers-reduced-motion` is respected, and continuous
+  animations are tiny (typing dots, skeletons, empty-state float) and
+  auto-paused when unmounted.
+- Heavy UI work is gated/fallback-safe: `expo-blur` is optional (opaque
+  fallback on old APKs), fonts have a grace timer, and a root error boundary
+  keeps one bad screen from blanking the app.
+- No native modules beyond the SDK-57-aligned set were added; every Expo
+  dependency in `package.json` matches `bundledNativeModules.json` for SDK 57
+  (`npx expo install --check` clean), so native autolinking succeeds on
+  current and future build pipelines.
+- `expo-haptics` is optional at runtime (guarded try/catch, no-op on web and
+  on devices without a haptic engine).
+
+Current release metadata: version **1.3.0**, Android `versionCode` **5**.
+
+### API endpoint for native builds
+
+Native Android/iOS builds must reach the public Railway API, not `localhost`.
 The source currently defaults native builds to:
 
 ```text
