@@ -22,6 +22,7 @@ const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 export function ChatProvider({ children }) {
   const { token, user, logout, applySettings } = useAuth();
   const [chats, setChats] = useState([]);
+  const [chatsLoaded, setChatsLoaded] = useState(false); // first fetch done (drives skeleton UI)
   const [messages, setMessages] = useState({});   // chatId -> message[]
   const [typing, setTyping] = useState({});       // chatId -> { userId: name }
   const [connected, setConnected] = useState(false);
@@ -32,6 +33,7 @@ export function ChatProvider({ children }) {
   const communityListeners = useRef(new Set());
   const colleagueListeners = useRef(new Set());
   const chatRequestListeners = useRef(new Set());
+  const chatThemeListeners = useRef(new Set());
 
   /* ---------------- calls (WebRTC, signalled over the same socket) ---------------- */
   // call: null | { id, chatId, type, direction:'incoming'|'outgoing', status:'ringing'|'connecting'|'ongoing'|'ended', with, startedAt, endedReason }
@@ -74,6 +76,12 @@ export function ChatProvider({ children }) {
     return () => chatRequestListeners.current.delete(fn);
   }, []);
 
+  /** Subscribe to per-conversation chat-theme changes. Returns an unsubscribe fn. */
+  const onChatThemeEvent = useCallback((fn) => {
+    chatThemeListeners.current.add(fn);
+    return () => chatThemeListeners.current.delete(fn);
+  }, []);
+
   // Pinned chats float to the top; within each group, recency order.
   const sortChats = (list) =>
     [...list].sort((a, b) =>
@@ -96,7 +104,7 @@ export function ChatProvider({ children }) {
     if (!token) {
       socketRef.current?.disconnect();
       socketRef.current = null;
-      setChats([]); setMessages({}); setConnected(false); setActivityUnread(0);
+      setChats([]); setMessages({}); setConnected(false); setActivityUnread(0); setChatsLoaded(false);
       return;
     }
 
@@ -116,9 +124,13 @@ export function ChatProvider({ children }) {
       setMessages((prev) => {
         const list = prev[message.chatId] || [];
         // replace optimistic copy if present
-        const withoutTemp = tempId ? list.filter((m) => m.id !== tempId) : list;
+        const replaced = tempId ? list.find((m) => m.id === tempId) : null;
+        const withoutTemp = replaced ? list.filter((m) => m.id !== tempId) : list;
         if (withoutTemp.some((m) => m.id === message.id)) return prev;
-        return { ...prev, [message.chatId]: [...withoutTemp, message] };
+        // `_new` marks genuinely new arrivals so the bubble can animate in
+        // once. A real message replacing our optimistic copy is NOT new (the
+        // optimistic bubble already animated) — no double animation.
+        return { ...prev, [message.chatId]: [...withoutTemp, { ...message, _new: !replaced }] };
       });
     });
 
@@ -155,6 +167,17 @@ export function ChatProvider({ children }) {
 
     socket.on('chat:updated', upsertChat);
     socket.on('chat:new', upsertChat);
+
+    // Per-conversation chat theme changed (this device or another
+    // participant). Patch the chat summary immediately and notify any
+    // subscribed screen (the chat-theme store) so open chats re-theme
+    // without waiting for the full chat:updated round-trip.
+    socket.on('chat:theme', (payload) => {
+      setChats((prev) => prev.map((c) => (c.id === payload.chatId
+        ? { ...c, themeId: payload.themeId, themeUpdatedBy: payload.themeUpdatedBy, themeUpdatedAt: payload.themeUpdatedAt }
+        : c)));
+      chatThemeListeners.current.forEach((fn) => fn('chat:theme', payload));
+    });
 
     socket.on('chat:request', (payload) => {
       chatRequestListeners.current.forEach((fn) => fn('chat:request', payload));
@@ -263,7 +286,10 @@ export function ChatProvider({ children }) {
       api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
     });
 
-    api.chats().then(({ chats }) => setChats(sortChats(chats))).catch(() => {});
+    api.chats().then(({ chats }) => { setChats(sortChats(chats)); setChatsLoaded(true); })
+      // Even a failed first fetch ends the skeleton state so the list never
+      // shimmers forever (pull-to-refresh remains available).
+      .catch(() => setChatsLoaded(true));
     api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
 
     return () => {
@@ -462,6 +488,7 @@ export function ChatProvider({ children }) {
       reactions: [],
       replyTo: payload.replyToMessage || null,
       pending: true,
+      _new: true, // optimistic bubble animates in like any new message
     };
     setMessages((prev) => ({ ...prev, [chatId]: [...(prev[chatId] || []), optimistic] }));
 
@@ -522,10 +549,11 @@ export function ChatProvider({ children }) {
   return (
     <ChatContext.Provider
       value={{
-        chats, messages, typing, connected, activityUnread,
+        chats, chatsLoaded, messages, typing, connected, activityUnread,
         refreshChats, refreshActivity, loadMessages, sendMessage, markRead,
         setTypingState, react, deleteMessage, editMessage, createPoll, votePoll,
         upsertChat, onPostEvent, onStatusEvent, onCommunityEvent, onColleagueEvent, onChatRequestEvent,
+        onChatThemeEvent,
         // exposed for lightweight local patches (e.g. optimistic star/timer state)
         setMessages,
         // Calls

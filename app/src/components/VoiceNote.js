@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { radius, type, inkBox, marker, tokens } from '../theme';
+import { alpha } from '../chatThemes';
 
 /** Ink voice note: drawn play box + graphite waveform. */
 export default function VoiceNote({ uri, duration = 0, isMine }) {
@@ -44,7 +45,10 @@ export default function VoiceNote({ uri, duration = 0, isMine }) {
   const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const active = Math.floor(progress * bars.length);
   const activeColor = isMine ? theme.highlighter : theme.ink;
-  const idleColor = isMine ? 'rgba(255,255,255,0.35)' : theme.graphiteLine;
+  // Idle bars/metadata sit on the bubble — tint the bubble's own ink so the
+  // voice note reads correctly in every chat theme.
+  const idleColor = isMine ? alpha(theme.onBubbleOut, 0.35) : theme.graphiteLine;
+  const metaColor = isMine ? alpha(theme.onBubbleOut, 0.6) : theme.muted;
   const s = makeStyles(theme);
 
   return (
@@ -73,11 +77,11 @@ export default function VoiceNote({ uri, duration = 0, isMine }) {
             />
           ))}
         </View>
-        <Text style={[type.labelXs, { fontSize: 9.5, color: isMine ? 'rgba(255,255,255,0.6)' : theme.muted, marginTop: 4 }]}>
+        <Text style={[type.labelXs, { fontSize: 9.5, color: metaColor, marginTop: 4 }]}>
           {fmt(playing ? duration * progress : duration)}
         </Text>
       </View>
-      <Icon name="mic" size={14} color={isMine ? 'rgba(255,255,255,0.5)' : theme.muted} />
+      <Icon name="mic" size={14} color={metaColor} />
     </View>
   );
 }

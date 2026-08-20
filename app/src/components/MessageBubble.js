@@ -1,14 +1,22 @@
-import React, { useState } from 'react';
-import { View, Text, Image, Pressable, StyleSheet, Modal } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, Image, Pressable, StyleSheet, Modal, Animated } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
 import { Ticks, formatTime, PaperCard, Rule, FrostedBackdrop, GoldTick, hasGoldTick } from './common';
 import { mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
+import { alpha } from '../chatThemes';
+import { Pop, SheetSpringIn, HeartBurst, haptic, useReducedMotion } from '../motion';
 import VoiceNote from './VoiceNote';
 
 const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+// Message ids that already played their entrance animation this session.
+// Keeps FlatList row recycling (scroll away + back) from re-animating old
+// content while still animating genuinely new messages once.
+const ANIMATED_IDS = new Set();
+const MAX_TRACKED_IDS = 4000;
 
 /** Disappearing-message presets (seconds) — keep in sync with the server. */
 export const DISAPPEAR_OPTIONS = [
@@ -26,8 +34,53 @@ export default function MessageBubble({
   onEdit, onForward, onStar, onSetTimer, onVotePoll,
 }) {
   const { theme } = useTheme();
+  const reduced = useReducedMotion();
   const [menu, setMenu] = useState(false);
+  const [burst, setBurst] = useState(false);
+  const lastTapAt = useRef(0);
   const s = makeStyles(theme);
+
+  // ---- long-press lift: the message rises slightly out of the thread while
+  // its context menu is open, then settles back when it closes ----
+  const lift = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduced) return undefined;
+    if (menu) Animated.spring(lift, { toValue: 1, friction: 6, tension: 170, useNativeDriver: true }).start();
+    else Animated.spring(lift, { toValue: 0, friction: 7, tension: 220, useNativeDriver: true }).start();
+  }, [menu, reduced, lift]);
+
+  // ---- entrance: only genuinely new messages animate (once per id) ----
+  const shouldAnimateIn = !!message._new && !ANIMATED_IDS.has(message.id);
+  const appear = useRef(new Animated.Value(shouldAnimateIn ? 0 : 1)).current;
+  const entranceStarted = useRef(false);
+  useEffect(() => {
+    if (!shouldAnimateIn || entranceStarted.current) return undefined;
+    entranceStarted.current = true;
+    ANIMATED_IDS.add(message.id);
+    if (ANIMATED_IDS.size > MAX_TRACKED_IDS) {
+      const oldest = ANIMATED_IDS.values().next().value;
+      if (oldest) ANIMATED_IDS.delete(oldest);
+    }
+    if (reduced) { appear.setValue(1); return undefined; }
+    Animated.spring(appear, { toValue: 1, friction: 9, tension: 110, useNativeDriver: true }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const appearOpacity = appear.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  const appearY = appear.interpolate({ inputRange: [0, 1], outputRange: [10, 0] });
+  const appearScale = appear.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
+
+  // ---- double-tap → heart burst + ❤️ reaction (original +one interaction) ----
+  const handleTap = () => {
+    const now = Date.now();
+    if (now - lastTapAt.current < 320) {
+      lastTapAt.current = 0;
+      haptic('impact');
+      setBurst(true);
+      onReact?.(message.id, '❤️');
+    } else {
+      lastTapAt.current = now;
+    }
+  };
 
   if (message.type === 'system') {
     return (
@@ -44,7 +97,9 @@ export default function MessageBubble({
   const reactionList = Object.entries(grouped);
 
   const ink = isMine ? theme.onBubbleOut : theme.onBubbleIn;
-  const subInk = isMine ? (theme.dark ? 'rgba(28,27,27,0.55)' : 'rgba(255,255,255,0.62)') : theme.muted;
+  // Metadata inside a bubble is the bubble's own ink at reduced opacity —
+  // adapts to any chat theme instead of hard-coding light/dark pairs.
+  const subInk = isMine ? alpha(ink, 0.62) : theme.muted;
 
   // hand-drawn asymmetry: the "tail" corner is squared off
   const shape = isMine
@@ -56,8 +111,13 @@ export default function MessageBubble({
 
   return (
     <>
-      <Pressable onLongPress={() => setMenu(true)} delayLongPress={280} style={[s.wrap, isMine ? s.wrapMine : s.wrapTheirs]}>
-        <View
+      <Pressable
+        onPress={handleTap}
+        onLongPress={() => { haptic('selection'); setMenu(true); }}
+        delayLongPress={280}
+        style={[s.wrap, isMine ? s.wrapMine : s.wrapTheirs]}
+      >
+        <Animated.View
           style={[
             s.bubble,
             shape,
@@ -66,8 +126,16 @@ export default function MessageBubble({
               borderWidth: stroke.ink,
               borderColor: theme.ink,
             },
+            shouldAnimateIn && { opacity: appearOpacity, transform: [{ translateY: appearY }, { scale: appearScale }] },
+            menu && !reduced && {
+              transform: [
+                { translateY: lift.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) },
+                { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] }) },
+              ],
+            },
           ]}
         >
+        {burst && <HeartBurst onDone={() => setBurst(false)} reduced={reduced} />}
           {isGroup && !isMine && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 }}>
               <Text style={[type.labelXs, { color: theme.graphite }]}>{senderName.toUpperCase()}</Text>
@@ -83,7 +151,7 @@ export default function MessageBubble({
           )}
 
           {message.statusReply && !message.deleted && (
-            <View style={[s.statusReply, { borderLeftColor: isMine ? subInk : theme.ink, backgroundColor: isMine ? 'rgba(255,255,255,0.14)' : theme.cardAlt }]}>
+            <View style={[s.statusReply, { borderLeftColor: isMine ? subInk : theme.ink, backgroundColor: isMine ? alpha(ink, 0.14) : theme.cardAlt }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                 <Icon name="eye-outline" size={12} color={subInk} />
                 <Text style={[type.labelXs, { color: subInk, letterSpacing: 0.6 }]} numberOfLines={1}>
@@ -100,7 +168,7 @@ export default function MessageBubble({
                       </EmojiText>
                     </View>
                   ) : (
-                    <View style={{ marginTop: 6, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6, backgroundColor: isMine ? 'rgba(0,0,0,0.14)' : theme.card, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.graphiteLine }}>
+                    <View style={{ marginTop: 6, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6, backgroundColor: isMine ? alpha(ink, 0.12) : theme.card, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.graphiteLine }}>
                       <EmojiText style={[type.bodySm, { color: isMine ? ink : theme.text }]} numberOfLines={2}>
                         {message.statusReply.body || (message.statusReply.song ? `🎵 ${message.statusReply.song.name || ''}` : 'Status')}
                       </EmojiText>
@@ -161,21 +229,26 @@ export default function MessageBubble({
           </View>
 
           {reactionList.length > 0 && (
-            <View style={[s.reactions, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
-              {reactionList.map(([emoji, count]) => (
-                <View key={emoji} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                  <Emoji char={emoji} size={13} />
-                  {count > 1 && <Text style={[type.labelXs, { color: theme.ink, fontSize: 9 }]}>{count}</Text>}
-                </View>
-              ))}
-            </View>
+            // Pop (firstStatic) = existing reactions stay put on load; a new
+            // reaction or count change springs the pill subtly.
+            <Pop trigger={reactionList.map(([e, c]) => `${e}${c}`).join(',')} firstStatic>
+              <View style={[s.reactions, { backgroundColor: theme.reactionAccent || theme.bg, borderColor: theme.ink }]}>
+                {reactionList.map(([emoji, count]) => (
+                  <View key={emoji} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                    <Emoji char={emoji} size={13} />
+                    {count > 1 && <Text style={[type.labelXs, { color: theme.ink, fontSize: 9 }]}>{count}</Text>}
+                  </View>
+                ))}
+              </View>
+            </Pop>
           )}
-        </View>
+        </Animated.View>
       </Pressable>
 
       <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)}>
         <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setMenu(false)}>
           <FrostedBackdrop />
+          <SheetSpringIn style={{ width: '100%', maxWidth: 340, alignItems: 'center' }}>
           <PaperCard weight="ink" style={s.menu}>
             <View style={s.quickRow}>
               {QUICK.map((e) => (
@@ -224,6 +297,7 @@ export default function MessageBubble({
               </Pressable>
             )}
           </PaperCard>
+          </SheetSpringIn>
         </Pressable>
       </Modal>
     </>

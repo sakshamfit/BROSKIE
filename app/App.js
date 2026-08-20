@@ -33,6 +33,7 @@ import { Analytics } from '@vercel/analytics/react';
 
 import { AuthProvider, useAuth } from './src/store/AuthContext';
 import { ChatProvider } from './src/store/ChatContext';
+import { ChatThemeProvider } from './src/store/ChatThemeContext';
 import { ThemeProvider, useTheme } from './src/store/ThemeContext';
 import Navigation from './src/Navigation';
 import { Loading } from './src/components/common';
@@ -236,7 +237,9 @@ export default function App() {
             {canRenderApp ? (
               <AuthProvider>
                 <ChatProvider>
-                  <Root />
+                  <ChatThemeProvider>
+                    <Root />
+                  </ChatThemeProvider>
                 </ChatProvider>
               </AuthProvider>
             ) : (

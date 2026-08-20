@@ -5,6 +5,9 @@ import { lightTheme, darkTheme, kineticInkTheme } from '../theme';
 
 const ThemeContext = createContext(null);
 export const useTheme = () => useContext(ThemeContext);
+// Raw context export: ChatThemeScope (per-conversation chat themes) re-provides
+// a chat-resolved theme to everything rendered inside a conversation.
+export { ThemeContext };
 
 const KEY = 'tomodachi.theme';
 

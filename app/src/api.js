@@ -371,6 +371,8 @@ export const api = {
   mute: (chatId, muted) => request(`/api/chats/${chatId}/mute`, { method: 'POST', body: { muted } }),
   pin: (chatId, pinned) => request(`/api/chats/${chatId}/pin`, { method: 'POST', body: { pinned } }),
   setDisappear: (chatId, seconds) => request(`/api/chats/${chatId}/disappear`, { method: 'POST', body: { seconds } }),
+  // Per-conversation chat theme (validated against the server allow-list).
+  setChatTheme: (chatId, themeId) => request(`/api/chats/${chatId}/theme`, { method: 'POST', body: { themeId } }),
   search: (q, chatId) =>
     request(`/api/search?q=${encodeURIComponent(q)}${chatId ? `&chatId=${encodeURIComponent(chatId)}` : ''}`),
 

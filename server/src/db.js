@@ -361,6 +361,14 @@ addColumnIfMissing('users', 'settings', "settings TEXT DEFAULT '{}'");
 // Per-chat default disappearing-message timer (seconds; 0 = off). Applied to
 // new messages unless a per-message override is sent.
 addColumnIfMissing('chats', 'disappear_seconds', 'disappear_seconds INTEGER DEFAULT 0');
+// Per-conversation chat theme. The theme belongs to the conversation (not the
+// user): everyone in the chat sees the same theme. theme_id is validated
+// against the server-side allow-list (see CHAT_THEMES in index.js) — arbitrary
+// client-provided ids/colors are never accepted. theme_updated_by/at record
+// who changed it and when, for the realtime "changed the chat theme" notice.
+addColumnIfMissing('chats', 'theme_id', "theme_id TEXT DEFAULT 'graphite'");
+addColumnIfMissing('chats', 'theme_updated_by', 'theme_updated_by TEXT');
+addColumnIfMissing('chats', 'theme_updated_at', 'theme_updated_at INTEGER');
 // Per-user chat-list state lives on membership rows.
 addColumnIfMissing('chat_members', 'pinned_at', 'pinned_at INTEGER');
 // Messages at or before this timestamp are hidden for that user after

@@ -16,6 +16,32 @@ const jamendo = require('./jamendo');
 const nano = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
 const now = () => Date.now();
 
+/* ------------------------------------------------------------------ */
+/* per-conversation chat themes                                        */
+/* ------------------------------------------------------------------ */
+
+// The single source of truth for which theme ids exist and their display
+// names. The client mirrors these ids in app/src/chatThemes.js — the id is
+// the contract; names shown in the chat UI come from the client registry.
+// Only ids in this map are ever persisted; anything else is rejected so no
+// arbitrary CSS/colors/theme objects can be injected through the database.
+const CHAT_THEMES = {
+  graphite: 'Graphite',
+  obsidian: 'Obsidian',
+  carbon: 'Carbon',
+  aurora: 'Aurora',
+  midnight: 'Midnight',
+  ocean: 'Ocean',
+  sunset: 'Sunset',
+  sakura: 'Sakura',
+  lavender: 'Lavender',
+  mint: 'Mint',
+  cream: 'Cream',
+  'neon-night': 'Neon Night',
+  galaxy: 'Galaxy',
+};
+const ALLOWED_THEME_IDS = new Set(Object.keys(CHAT_THEMES));
+
 
 // Keep account creation approachable and consistent across every client.
 // Length is the only password-shape rule; bcrypt still hashes every password.
@@ -436,7 +462,7 @@ function chatSummary(chatId, viewerId) {
   const unread = db
     .prepare(
       `SELECT COUNT(*) c FROM messages m
-       WHERE m.chat_id = ? AND m.sender_id != ? AND m.created_at > ?
+       WHERE m.chat_id = ? AND m.sender_id != ? AND m.sender_id != 'system' AND m.created_at > ?
          AND NOT EXISTS (SELECT 1 FROM receipts r WHERE r.message_id = m.id AND r.user_id = ? AND r.state='read')`
     )
     .get(chatId, viewerId, clearedAt, viewerId).c;
@@ -461,6 +487,12 @@ function chatSummary(chatId, viewerId) {
     archived,
     pinned: me ? !!me.pinned_at : false,
     disappearSeconds: chat.disappear_seconds || 0,
+    // Per-conversation chat theme — persisted on the chat row, broadcast to
+    // every participant via chat:updated / chat:theme. Unknown/legacy values
+    // are resolved by clients to the 'graphite' default.
+    themeId: chat.theme_id || 'graphite',
+    themeUpdatedBy: chat.theme_updated_by || null,
+    themeUpdatedAt: chat.theme_updated_at || null,
     role: me ? me.role : 'member',
     members: members.map((m) => ({ ...publicUser(m), role: m.role })),
     lastMessage: last ? hydrateMessage(last, viewerId) : null,
@@ -1657,6 +1689,55 @@ app.post('/api/chats/:id/disappear', requireAuth, (req, res) => {
   const seconds = clampDisappear(req.body.seconds);
   db.prepare('UPDATE chats SET disappear_seconds = ? WHERE id = ?').run(seconds, req.params.id);
   res.json({ chat: chatSummary(req.params.id, req.userId) });
+});
+
+/**
+ * Set the per-conversation chat theme. The theme lives on the conversation,
+ * not the user: changing it here changes it for every participant, and a
+ * theme change in one chat never touches another.
+ *
+ * - theme_id is validated against the server-side allow-list before anything
+ *   is persisted — arbitrary ids/colors/objects from clients are rejected.
+ * - A subtle system message is recorded in the chat ("✨ <name> changed the
+ *   chat theme to <Theme>") and broadcast live alongside chat:updated and the
+ *   dedicated chat:theme event, so everyone currently viewing the chat
+ *   updates instantly without a reload, and late joiners read the persisted
+ *   theme from the chat summary.
+ */
+app.post('/api/chats/:id/theme', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  const membership = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
+  if (!membership) return res.status(403).json({ error: 'Not a member of this chat' });
+
+  const themeId = String(req.body?.themeId || '');
+  if (!ALLOWED_THEME_IDS.has(themeId)) {
+    return res.status(400).json({ error: 'Unknown chat theme' });
+  }
+  if ((chat.theme_id || 'graphite') === themeId) {
+    // Idempotent re-apply: no system-message spam, still return current state.
+    return res.json({ ok: true, chat: chatSummary(chat.id, req.userId), themeId, themeUpdatedBy: chat.theme_updated_by, themeUpdatedAt: chat.theme_updated_at });
+  }
+
+  const t = now();
+  db.prepare('UPDATE chats SET theme_id = ?, theme_updated_by = ?, theme_updated_at = ? WHERE id = ?')
+    .run(themeId, req.userId, t, chat.id);
+
+  const changer = getUser(req.userId);
+  const themeMsg = insertSystemMessage(chat.id, `✨ ${changer.name} changed the chat theme to ${CHAT_THEMES[themeId]}`);
+
+  memberIds(chat.id).forEach((uid) => {
+    // The theme-change notice appears inline, like any other system message.
+    emitToUser(uid, 'message:new', { message: hydrateMessage(themeMsg, uid) });
+    // Full summary keeps lists + late-opening clients in sync.
+    emitToUser(uid, 'chat:updated', chatSummary(chat.id, uid));
+    // Targeted event lets open chats swap the active ChatTheme immediately.
+    emitToUser(uid, 'chat:theme', {
+      chatId: chat.id, themeId, themeUpdatedBy: req.userId, themeUpdatedAt: t, updatedByName: changer.name,
+    });
+  });
+
+  res.json({ ok: true, chat: chatSummary(chat.id, req.userId), themeId, themeUpdatedBy: req.userId, themeUpdatedAt: t });
 });
 
 /* ---- group admin controls ---- */
