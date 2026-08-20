@@ -21,7 +21,7 @@ frontend too costs nothing and removes work:
 |---|---|---|
 | Services to manage | 1 | 2 |
 | CORS config | none — same origin | must allow the Vercel domain |
-| `EXPO_PUBLIC_API_URL` | not needed | required, baked in at build time |
+| `EXPO_PUBLIC_API_URL` | not needed | optional — Vercel proxies HTTP API/media to Railway; set this only for a custom backend |
 | Redeploy after backend URL change | never | rebuild frontend every time |
 | Mixed-content (https/http) risk | none | real |
 | Cost | one free tier | two free tiers |
@@ -91,16 +91,13 @@ npm start         # http://localhost:4000 serves everything
 Only if you want the Vercel CDN. `vercel.json` is already in the repo.
 
 1. **Backend on Railway first** (steps above) and copy its URL
-2. **Vercel** → import the `BROSKIE` repo
-3. Add environment variable **before** deploying:
-
-   | Name | Value |
-   |---|---|
-   | `EXPO_PUBLIC_API_URL` | `https://your-backend.up.railway.app` |
-
-   No trailing slash. Expo inlines `EXPO_PUBLIC_*` at build time, so changing
-   it later needs a redeploy.
+2. **Vercel** → import the `BROSKIE` repo. The checked-in `vercel.json` proxies
+   `/api/*` and `/uploads/*` to the Railway origin, so phone/web HTTP requests
+   use the Vercel HTTPS origin and avoid device-specific Railway TLS failures.
+3. `EXPO_PUBLIC_API_URL` is optional. Set it only if you use a different
+   backend; do not point it at the Vercel website unless its proxy is deployed.
 4. Lock down CORS on the backend — in `server/src/index.js`:
+
    ```js
    const ORIGIN = process.env.CORS_ORIGIN || '*';
    app.use(cors({ origin: ORIGIN }));

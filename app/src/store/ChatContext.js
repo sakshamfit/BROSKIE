@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { io } from 'socket.io-client';
-import { API_URL, api } from '../api';
+import { SOCKET_URL, api } from '../api';
 import { useAuth } from './AuthContext';
 
 const ChatContext = createContext(null);
@@ -99,9 +99,10 @@ export function ChatProvider({ children }) {
       return;
     }
 
-    // API_URL === '' means same-origin (single-host deploy); socket.io handles
-    // undefined by connecting to the page origin.
-    const socket = io(API_URL || undefined, { auth: { token }, transports: ['websocket', 'polling'] });
+    // REST may use the Vercel proxy, but Socket.IO must use the persistent
+    // Railway origin. An empty target is still valid for a true single-host
+    // deploy; socket.io then connects to the page origin.
+    const socket = io(SOCKET_URL || undefined, { auth: { token }, transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
     socket.on('connect', () => setConnected(true));

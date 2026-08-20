@@ -1,31 +1,43 @@
 import { Platform } from 'react-native';
 
-// Public Railway origin used by native builds when no EXPO_PUBLIC_API_URL was
-// supplied at build time. Browser deployments still use their same origin.
-const DEFAULT_MOBILE_API_URL = 'https://broskie-h.up.railway.app';
+// Railway remains the realtime/socket origin. HTTP requests use the stable
+// Vercel app origin by default, which proxies /api and /uploads to Railway.
+// This avoids device-specific TLS/route failures when a phone can open the
+// app but cannot complete an HTTPS request directly to the Railway hostname.
+const DEFAULT_SERVER_URL = 'https://broskie-h.up.railway.app';
+const DEFAULT_MOBILE_API_URL = 'https://plusoneeeee.vercel.app';
 
 /**
  * Resolve the backend URL.
  *
- * - Explicit override:  EXPO_PUBLIC_API_URL (required for phones / split hosting)
- * - Single-host deploy: the Express server also serves this bundle, so the API
- *                       lives at the SAME origin -> '' (relative URLs)
+ * - Explicit override:  EXPO_PUBLIC_API_URL (useful for local/LAN development)
+ * - Single-host deploy: the Express server serves this bundle and API together
+ *                       -> '' (relative URLs)
  * - Web preview (e2b):  same host, port 4000 -> https://4000-<sandbox>.e2b.app
  * - Local web dev:      http://localhost:4000
- * - Native fallback:    the production Railway API (override with EXPO_PUBLIC_API_URL)
+ * - Native fallback:    stable Vercel HTTP proxy -> Railway
  */
 function resolveBase() {
+  // Prefer the same-origin Vercel proxy even if an old project-level
+  // EXPO_PUBLIC_API_URL still points directly at Railway. This makes a
+  // redeployed website pick up the transport fix without a second env edit.
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) {
+    return '';
+  }
+
   if (process.env.EXPO_PUBLIC_API_URL) {
     const configured = process.env.EXPO_PUBLIC_API_URL.trim().replace(/\/$/, '');
     const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
     // A release APK must never be pointed at cleartext/local development
-    // traffic. Fall back to the known HTTPS API if a build-time value is bad.
+    // traffic. Fall back to the stable HTTPS proxy if a bad build-time value
+    // was accidentally baked into the binary.
     if (Platform.OS !== 'web' && !isDevelopment) {
       if (!configured.startsWith('https://')) return DEFAULT_MOBILE_API_URL;
-      // Vercel hosts the public website, not this app's long-running
-      // Express/Socket.IO API. Guard against accidentally pasting the website
-      // URL into an EAS environment variable.
-      if (/\.vercel\.app(?:\/|$)/i.test(configured)) return DEFAULT_MOBILE_API_URL;
+      // Older release builds commonly baked the Railway origin into this
+      // variable. Route that exact production value through the Vercel HTTPS
+      // proxy too, so upgrading the app fixes the device transport without
+      // requiring another EAS environment change.
+      if (configured === DEFAULT_SERVER_URL) return DEFAULT_MOBILE_API_URL;
     }
     return configured;
   }
@@ -42,21 +54,28 @@ function resolveBase() {
       return `${protocol}//${hostname}:4000`;
     }
 
-    // Vercel serves only the static website; Socket.IO/Express remain on
-    // Railway. This also makes newly-added Vercel aliases work even before an
-    // environment variable is copied into that deployment.
-    if (hostname.endsWith('.vercel.app')) return DEFAULT_MOBILE_API_URL;
+    // Vercel proxies HTTP API/media requests to Railway. Keep the browser
+    // request same-origin so the proxy also removes CORS/TLS differences.
+    if (hostname.endsWith('.vercel.app')) return '';
 
     // Anything else (production single-host): same origin, use relative paths.
     return '';
   }
+  // Native HTTP goes through Vercel; realtime sockets still connect directly
+  // to Railway because Vercel does not host a persistent Socket.IO process.
   return DEFAULT_MOBILE_API_URL;
 }
 
 export const API_URL = resolveBase();
 
-/** Socket.IO target: '' (same origin) is fine for the browser client. */
-export const SOCKET_URL = API_URL;
+/** Socket.IO target: Vercel and native HTTP proxy clients still use the
+ * persistent Railway origin for realtime events. */
+const runningOnVercel = Platform.OS === 'web'
+  && typeof window !== 'undefined'
+  && window.location.hostname.endsWith('.vercel.app');
+export const SOCKET_URL = runningOnVercel || API_URL === DEFAULT_MOBILE_API_URL
+  ? DEFAULT_SERVER_URL
+  : API_URL;
 
 export function mediaUrl(u) {
   if (!u) return null;
