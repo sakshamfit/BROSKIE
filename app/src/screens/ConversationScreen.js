@@ -35,7 +35,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
   const { user } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { isTablet } = useResponsive();
+  const { height: windowHeight } = useResponsive();
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const audioRecorderState = useAudioRecorderState(audioRecorder, 100);
 
@@ -72,6 +72,9 @@ function ConversationContent({ route, navigation, embedded = false }) {
   // composer in the React layout as well, so it stays above keyboards that do
   // not resize the window (notably Realme/ColorOS). This also runs for the
   // tablet split view; the old embedded guard left that composer under the IME.
+  // iOS is handled by KeyboardAvoidingView; Android and mobile web get an
+  // explicit bottom inset because pan/overlay keyboards do not resize the chat
+  // list for us.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const keyboardScrollTimer = useRef(null);
   const scrollToLatest = useCallback((delay = 0) => {
@@ -87,7 +90,11 @@ function ConversationContent({ route, navigation, embedded = false }) {
     const keyboardHeightFrom = (event) => {
       const eventHeight = Number(event?.endCoordinates?.height) || 0;
       const metricsHeight = Number(Keyboard.metrics?.()?.height) || 0;
-      const height = Math.max(eventHeight, metricsHeight);
+      const top = Number(event?.endCoordinates?.screenY ?? Keyboard.metrics?.()?.screenY);
+      const overlapHeight = Number.isFinite(top) && top > 0 && windowHeight > 0
+        ? Math.max(0, windowHeight - top)
+        : 0;
+      const height = Math.max(eventHeight, metricsHeight, overlapHeight);
       if (height > 0) setKeyboardHeight(height);
       scrollToLatest(120);
     };
@@ -112,6 +119,28 @@ function ConversationContent({ route, navigation, embedded = false }) {
       hideSub.remove();
       frameSub?.remove();
       clearTimeout(keyboardScrollTimer.current);
+    };
+  }, [scrollToLatest, windowHeight]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.visualViewport) return undefined;
+
+    const viewport = window.visualViewport;
+    const updateWebKeyboardInset = () => {
+      const layoutHeight = Number(window.innerHeight) || 0;
+      const visualHeight = Number(viewport.height) || layoutHeight;
+      const offsetTop = Number(viewport.offsetTop) || 0;
+      const inset = Math.max(0, layoutHeight - visualHeight - offsetTop);
+      setKeyboardHeight(inset);
+      if (inset > 0) scrollToLatest(80);
+    };
+
+    updateWebKeyboardInset();
+    viewport.addEventListener('resize', updateWebKeyboardInset);
+    viewport.addEventListener('scroll', updateWebKeyboardInset);
+    return () => {
+      viewport.removeEventListener('resize', updateWebKeyboardInset);
+      viewport.removeEventListener('scroll', updateWebKeyboardInset);
     };
   }, [scrollToLatest]);
 
@@ -363,18 +392,18 @@ function ConversationContent({ route, navigation, embedded = false }) {
       ? chat.members.map((m) => (m.id === user.id ? 'You' : m.name.split(' ')[0])).join(', ')
       : lastSeenText(chat.isOnline, chat.lastSeen);
 
-  // Android manual pad: keep only the bottom controls above the keyboard.
+  // Keyboard pad: keep only the bottom controls above the keyboard.
   // Padding the outer container made pan-mode Android devices move the whole
   // conversation and still leave the TextInput behind the IME. Moving the
   // bottom controls preserves the message viewport and works in both the
   // phone stack and the embedded tablet split.
-  const androidKeyboardPad = Platform.OS === 'android' ? keyboardHeight : 0;
+  const keyboardPad = Platform.OS === 'android' || Platform.OS === 'web' ? keyboardHeight : 0;
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: theme.chatBg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
-      enabled={Platform.OS !== 'web'}
+      keyboardVerticalOffset={0}
+      enabled={Platform.OS === 'ios'}
     >
       {/* header — floating clay bar; own top inset only when not embedded
           in the desktop/tablet split (that shell already pads for the notch). */}
@@ -484,6 +513,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
 
       <FlatList
         ref={listRef}
+        style={s.messagesList}
         data={rows}
         keyExtractor={(i) => i.id}
         keyboardShouldPersistTaps="handled"
@@ -542,7 +572,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
         }
       />
 
-      <View style={androidKeyboardPad > 0 ? { marginBottom: androidKeyboardPad } : null}>
+      <View style={keyboardPad > 0 ? { marginBottom: keyboardPad } : null}>
         {replyTo && (
           <View style={[s.replyBar, inkBox(theme, 'thin')]}>
             <View style={[s.replyAccent, { backgroundColor: theme.primary }]} />
@@ -581,7 +611,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
 
       {/* composer — bottom safe-area (home indicator / gesture bar) only
           applies full-screen; the desktop/tablet split already handles it. */}
-      <View style={[s.composerWrap, androidKeyboardPad > 0
+      <View style={[s.composerWrap, keyboardPad > 0
         ? { paddingBottom: 8 }
         : !embedded ? { paddingBottom: Math.max(insets.bottom, 12) } : null
       ]}>
@@ -608,6 +638,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
               onChangeText={onChangeText}
               onFocus={() => scrollToLatest(120)}
               multiline
+              disableFullscreenUI
               onSubmitEditing={send}
               blurOnSubmit={false}
               onKeyPress={(e) => {
@@ -797,6 +828,7 @@ const makeStyles = (t) => StyleSheet.create({
     borderTopLeftRadius: 5, borderTopRightRadius: 3, borderBottomRightRadius: 6, borderBottomLeftRadius: 4,
     transform: [{ rotate: '-1deg' }],
   },
+  messagesList: { flex: 1, minHeight: 0 },
   emptyChat: { alignItems: 'center', justifyContent: 'center', padding: 40 },
   replyBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 8, padding: 10, gap: 12, backgroundColor: 'transparent' },
   replyAccent: { width: 3.5, alignSelf: 'stretch', borderRadius: 2 },
