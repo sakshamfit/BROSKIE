@@ -361,6 +361,7 @@ export const api = {
   statuses: () => request('/api/status'),
   postStatus: (payload) => request('/api/status', { method: 'POST', body: payload }),
   viewStatus: (id) => request(`/api/status/${id}/view`, { method: 'POST' }),
+  replyToStatus: (id, body) => request(`/api/status/${id}/reply`, { method: 'POST', body: { body } }),
   searchSongs: (q) => request(`/api/songs/search?q=${encodeURIComponent(q)}`),
 
   // Communities — purpose-based groups (club night, house party, trip planning, running, chai chat...)

@@ -82,6 +82,35 @@ export default function MessageBubble({
             </View>
           )}
 
+          {message.statusReply && !message.deleted && (
+            <View style={[s.statusReply, { borderLeftColor: isMine ? subInk : theme.ink, backgroundColor: isMine ? 'rgba(255,255,255,0.14)' : theme.cardAlt }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Icon name="eye-outline" size={12} color={subInk} />
+                <Text style={[type.labelXs, { color: subInk, letterSpacing: 0.6 }]} numberOfLines={1}>
+                  {message.statusReply.expired ? 'REPLIED TO STATUS · NO LONGER AVAILABLE' : `REPLIED TO ${String(message.statusReply.author?.name || 'STATUS').toUpperCase()}'S STATUS`}
+                </Text>
+              </View>
+              {!message.statusReply.expired && (
+                <>
+                  {message.statusReply.type === 'image' && message.statusReply.mediaUrl ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                      <Image source={{ uri: mediaUrl(message.statusReply.mediaUrl) }} style={{ width: 42, height: 42, borderWidth: 1, borderColor: theme.ink }} resizeMode="cover" />
+                      <EmojiText style={[type.bodySm, { color: isMine ? ink : theme.text, flex: 1 }]} numberOfLines={2}>
+                        {message.statusReply.body ? message.statusReply.body : 'Photo status'}
+                      </EmojiText>
+                    </View>
+                  ) : (
+                    <View style={{ marginTop: 6, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6, backgroundColor: isMine ? 'rgba(0,0,0,0.14)' : theme.card, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.graphiteLine }}>
+                      <EmojiText style={[type.bodySm, { color: isMine ? ink : theme.text }]} numberOfLines={2}>
+                        {message.statusReply.body || (message.statusReply.song ? `🎵 ${message.statusReply.song.name || ''}` : 'Status')}
+                      </EmojiText>
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+
           {message.replyTo && (
             <View style={[s.reply, { borderLeftColor: isMine ? subInk : theme.graphiteLine }]}>
               <Text style={[type.labelXs, { color: isMine ? subInk : theme.graphite }]} numberOfLines={1}>
@@ -273,6 +302,7 @@ const makeStyles = (t) => StyleSheet.create({
   quickBtn: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 6, paddingVertical: 12 },
 
+  statusReply: { borderLeftWidth: 3, paddingLeft: 9, paddingVertical: 7, paddingRight: 9, marginBottom: 8, borderRadius: 7 },
   pollOption: { paddingHorizontal: 10, paddingVertical: 8, marginBottom: 7 },
   pollOptionTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pollBar: { height: 6, marginTop: 7, borderWidth: 1, borderColor: t.ink, overflow: 'hidden', borderRadius: 2 },
