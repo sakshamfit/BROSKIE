@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, Image, Pressable, StyleSheet, Modal, Animated } from 'react-native';
+import { View, Text, Image, Pressable, StyleSheet, Modal, Animated, PanResponder, Platform } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
@@ -7,10 +7,26 @@ import { Ticks, formatTime, PaperCard, Rule, FrostedBackdrop, GoldTick, hasGoldT
 import { mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 import { alpha } from '../chatThemes';
-import { Pop, SheetSpringIn, HeartBurst, haptic, useReducedMotion } from '../motion';
+import { Pop, SheetSpringIn, HeartBurst, haptic, useReducedMotion, motion } from '../motion';
 import VoiceNote from './VoiceNote';
 
 const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+// ---- swipe-to-reply gesture tuning (dp) ----
+const SWIPE_MAX = 72;                  // max visual travel the bubble allows
+const SWIPE_THRESHOLD = 48;            // releasing at/after this commits the reply
+const SWIPE_RESIST_START = SWIPE_MAX * 0.7; // linear tracking until here…
+const SWIPE_RESIST = 0.3;              // …then each extra pixel counts for 30%
+
+/** Map raw finger dx to resisted, capped visual travel. */
+const visualTravel = (dx) => {
+  if (dx <= SWIPE_RESIST_START) return dx;
+  return SWIPE_RESIST_START + (dx - SWIPE_RESIST_START) * SWIPE_RESIST;
+};
+
+/** Claim only rightward, horizontal-dominant drags — vertical scroll, taps,
+ * long-press and the double-tap ❤️ all keep working. */
+const shouldClaimSwipe = (g) => g.dx > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.15;
 
 // Message ids that already played their entrance animation this session.
 // Keeps FlatList row recycling (scroll away + back) from re-animating old
@@ -32,6 +48,7 @@ export default function MessageBubble({
   message, isMine, isGroup, senderName, senderUser,
   onReply, onReact, onDelete, onImagePress,
   onEdit, onForward, onStar, onSetTimer, onVotePoll,
+  onOpenReply, highlighted,
 }) {
   const { theme } = useTheme();
   const reduced = useReducedMotion();
@@ -82,6 +99,82 @@ export default function MessageBubble({
     }
   };
 
+  // ---- swipe-to-reply (touch only). The bubble tracks the finger with a
+  // native-driver translateX (no re-renders, 60fps) and reveals a themed ↩
+  // badge. Web gets a hover-reveal reply button instead. ----
+  const isWeb = Platform.OS === 'web';
+  const translateX = useRef(new Animated.Value(0)).current;
+  const badgeScale = useRef(new Animated.Value(1)).current;
+  const armedRef = useRef(false);
+  const reducedRef = useRef(reduced);
+  reducedRef.current = reduced;
+  const liveRef = useRef({ message, onReply });
+  liveRef.current = { message, onReply };
+
+  const badgeOpacity = translateX.interpolate({
+    inputRange: [0, SWIPE_MAX * 0.25, SWIPE_MAX * 0.75, SWIPE_MAX],
+    outputRange: [0, 0, 1, 1],
+    extrapolate: 'clamp',
+  });
+
+  const snapBack = () => {
+    if (reducedRef.current) { translateX.setValue(0); return; }
+    Animated.spring(translateX, { toValue: 0, ...motion.springBack, useNativeDriver: true }).start();
+  };
+
+  const panResponder = useRef(PanResponder.create({
+    onMoveShouldSetPanResponderCapture: (e, g) => !isWeb && shouldClaimSwipe(g),
+    onMoveShouldSetPanResponder: (e, g) => !isWeb && shouldClaimSwipe(g),
+    onPanResponderGrant: () => { armedRef.current = false; translateX.setValue(0); },
+    onPanResponderMove: (e, g) => {
+      const v = Math.min(visualTravel(Math.max(0, g.dx)), SWIPE_MAX);
+      translateX.setValue(v);
+      // crossing the threshold arms the reply once per drag: badge pops + haptic
+      if (!armedRef.current && v >= SWIPE_THRESHOLD) {
+        armedRef.current = true;
+        haptic('impact');
+        if (!reducedRef.current) {
+          Animated.sequence([
+            Animated.spring(badgeScale, { toValue: 1.18, ...motion.springPop, useNativeDriver: true }),
+            Animated.spring(badgeScale, { toValue: 1, ...motion.springBack, useNativeDriver: true }),
+          ]).start();
+        }
+      }
+    },
+    onPanResponderRelease: (e, g) => {
+      const committed = Math.min(visualTravel(Math.max(0, g.dx)), SWIPE_MAX) >= SWIPE_THRESHOLD;
+      snapBack();
+      if (committed) liveRef.current.onReply?.(liveRef.current.message);
+    },
+    onPanResponderTerminate: () => snapBack(),
+    // once the swipe is committed, don't let the FlatList steal the gesture back
+    onPanResponderTerminationRequest: () => false,
+  })).current;
+
+  // ---- web hover → small ↩ reply button (swipe stays touch-only on desktop) ----
+  const [hovered, setHovered] = useState(false);
+  const hoverOpacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduced) { hoverOpacity.setValue(hovered ? 1 : 0); return undefined; }
+    Animated.timing(hoverOpacity, {
+      toValue: hovered ? 1 : 0, duration: motion.fast, easing: motion.easing.out, useNativeDriver: true,
+    }).start();
+    return undefined;
+  }, [hovered, reduced, hoverOpacity]);
+
+  // ---- brief highlighter wash when scrolled-to from a reply-quote tap ----
+  const hlOpacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduced) { hlOpacity.setValue(highlighted ? 1 : 0); return undefined; }
+    Animated.timing(hlOpacity, {
+      toValue: highlighted ? 1 : 0,
+      duration: highlighted ? 220 : 420,
+      easing: motion.easing.out,
+      useNativeDriver: true,
+    }).start();
+    return undefined;
+  }, [highlighted, reduced, hlOpacity]);
+
   if (message.type === 'system') {
     return (
       <View style={s.systemWrap}>
@@ -109,33 +202,75 @@ export default function MessageBubble({
   const canEdit = isMine && !message.deleted && message.type === 'text';
   const canForward = !message.deleted && message.type !== 'poll';
 
+  const liftY = lift.interpolate({ inputRange: [0, 1], outputRange: [0, -3] });
+  const liftScale = lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] });
+  // Compose the swipe translateX with the entrance + long-press lift so a
+  // single native-driven transform drives all three (they never overlap).
+  const bubbleTransform = [
+    { translateX },
+    ...(shouldAnimateIn ? [{ translateY: appearY }, { scale: appearScale }] : []),
+    ...(menu && !reduced ? [{ translateY: liftY }, { scale: liftScale }] : []),
+  ];
+
   return (
     <>
-      <Pressable
-        onPress={handleTap}
-        onLongPress={() => { haptic('selection'); setMenu(true); }}
-        delayLongPress={280}
+      <View
+        {...(isWeb ? {} : panResponder.panHandlers)}
         style={[s.wrap, isMine ? s.wrapMine : s.wrapTheirs]}
       >
-        <Animated.View
-          style={[
-            s.bubble,
-            shape,
-            {
-              backgroundColor: isMine ? theme.bubbleOut : theme.bubbleIn,
-              borderWidth: stroke.ink,
-              borderColor: theme.ink,
-            },
-            shouldAnimateIn && { opacity: appearOpacity, transform: [{ translateY: appearY }, { scale: appearScale }] },
-            menu && !reduced && {
-              transform: [
-                { translateY: lift.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) },
-                { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] }) },
-              ],
-            },
-          ]}
-        >
-        {burst && <HeartBurst onDone={() => setBurst(false)} reduced={reduced} />}
+        <View style={[s.bubbleSlot, isMine ? s.slotMine : s.slotTheirs]}>
+          {!isWeb && (
+            <Animated.View
+              pointerEvents="none"
+              style={[s.swipeBadge, { opacity: badgeOpacity, transform: [{ scale: badgeScale }] }]}
+            >
+              <View style={[s.swipeBadgeDot, { borderColor: theme.ink, backgroundColor: theme.replyPreview }]}>
+                <Icon name="arrow-undo-outline" size={17} color={theme.ink} />
+              </View>
+            </Animated.View>
+          )}
+          {isWeb && (
+            <Animated.View pointerEvents="box-none" style={[s.hoverBadge, { opacity: hoverOpacity }]}>
+              <Pressable
+                accessibilityLabel="Reply"
+                accessibilityRole="button"
+                onPress={() => onReply?.(message)}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  s.hoverBtn,
+                  { borderColor: theme.ink, backgroundColor: theme.replyPreview },
+                  pressed && { backgroundColor: theme.highlighterSoft },
+                ]}
+              >
+                <Icon name="arrow-undo-outline" size={16} color={theme.ink} />
+              </Pressable>
+            </Animated.View>
+          )}
+          <Pressable
+            onPress={handleTap}
+            onLongPress={() => { haptic('selection'); setMenu(true); }}
+            delayLongPress={280}
+            onHoverIn={isWeb ? () => setHovered(true) : undefined}
+            onHoverOut={isWeb ? () => setHovered(false) : undefined}
+          >
+            <Animated.View
+              style={[
+                s.bubble,
+                shape,
+                {
+                  backgroundColor: isMine ? theme.bubbleOut : theme.bubbleIn,
+                  borderWidth: stroke.ink,
+                  borderColor: theme.ink,
+                },
+                shouldAnimateIn && { opacity: appearOpacity },
+                { transform: bubbleTransform },
+              ]}
+            >
+            <Animated.View
+              pointerEvents="none"
+              style={[s.highlightWash, shape, { opacity: hlOpacity, backgroundColor: theme.highlighterWash }]}
+            />
+            {burst && <HeartBurst onDone={() => setBurst(false)} reduced={reduced} />}
           {isGroup && !isMine && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 }}>
               <Text style={[type.labelXs, { color: theme.graphite }]}>{senderName.toUpperCase()}</Text>
@@ -180,7 +315,16 @@ export default function MessageBubble({
           )}
 
           {message.replyTo && (
-            <View style={[s.reply, { borderLeftColor: isMine ? subInk : theme.graphiteLine }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View original message"
+              onPress={() => onOpenReply?.(message.replyTo.id)}
+              style={({ pressed }) => [
+                s.reply,
+                { borderLeftColor: isMine ? subInk : theme.graphiteLine },
+                pressed && { backgroundColor: alpha(ink, 0.06) },
+              ]}
+            >
               <Text style={[type.labelXs, { color: isMine ? subInk : theme.graphite }]} numberOfLines={1}>
                 {message.replyTo.senderName.toUpperCase()}
               </Text>
@@ -196,7 +340,7 @@ export default function MessageBubble({
                   {message.replyTo.body}
                 </EmojiText>
               )}
-            </View>
+            </Pressable>
           )}
 
           {message.deleted ? (
@@ -242,8 +386,10 @@ export default function MessageBubble({
               </View>
             </Pop>
           )}
-        </Animated.View>
-      </Pressable>
+            </Animated.View>
+          </Pressable>
+        </View>
+      </View>
 
       <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)}>
         <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setMenu(false)}>
@@ -358,7 +504,15 @@ const makeStyles = (t) => StyleSheet.create({
   wrap: { paddingHorizontal: 20, marginVertical: 5 },
   wrapMine: { alignItems: 'flex-end' },
   wrapTheirs: { alignItems: 'flex-start' },
-  bubble: { maxWidth: '84%', minWidth: 88, paddingHorizontal: 13, paddingTop: 9, paddingBottom: 7, marginBottom: 7 },
+  bubbleSlot: { position: 'relative', maxWidth: '84%', minWidth: 88 },
+  slotMine: { alignSelf: 'flex-end' },
+  slotTheirs: { alignSelf: 'flex-start' },
+  bubble: { width: '100%', paddingHorizontal: 13, paddingTop: 9, paddingBottom: 7, marginBottom: 7 },
+  swipeBadge: { position: 'absolute', left: 8, top: 0, bottom: 7, justifyContent: 'center' },
+  swipeBadgeDot: { width: 30, height: 30, borderRadius: 999, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  hoverBadge: { position: 'absolute', left: -14, top: 0, bottom: 7, justifyContent: 'center', zIndex: 5 },
+  hoverBtn: { width: 30, height: 30, borderRadius: 999, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  highlightWash: { ...StyleSheet.absoluteFillObject },
   deletedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   image: { width: 224, height: 224, borderWidth: 1 },
   meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 5, marginTop: 5 },

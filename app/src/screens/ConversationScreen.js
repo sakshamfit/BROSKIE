@@ -22,6 +22,7 @@ import {
 } from '../components/common';
 import EmojiPicker from '../components/EmojiPicker';
 import MessageBubble, { DISAPPEAR_OPTIONS } from '../components/MessageBubble';
+import ReplyBar from '../components/ReplyBar';
 import ForwardSheet from '../components/ForwardSheet';
 import PollComposer from '../components/PollComposer';
 import ChatBackground from '../components/ChatBackground';
@@ -51,6 +52,12 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [editing, setEditing] = useState(null);
+  // reply-quote navigation: which message to briefly highlight after
+  // scrolling to it, plus the "original unavailable" note when it's missing
+  const [replyHighlightId, setReplyHighlightId] = useState(null);
+  const [replyMissing, setReplyMissing] = useState(false);
+  const replyHighlightTimer = useRef(null);
+  const replyMissingTimer = useRef(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [lightbox, setLightbox] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -58,7 +65,10 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const [voiceBusy, setVoiceBusy] = useState(false);
   const recordingStartedAt = useRef(0);
   const listRef = useRef(null);
+  const inputRef = useRef(null);
   const typingTimer = useRef(null);
+  // Reply focus must not trigger the composer's usual scroll-to-bottom jump.
+  const suppressFocusScroll = useRef(false);
   const recSecs = Math.max(0, Math.floor((audioRecorderState.durationMillis || 0) / 1000));
 
   // in-chat search
@@ -183,6 +193,16 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     const m = chat?.members?.find((x) => x.id === id);
     return m ? m.name : 'Unknown';
   }, [chat, user]);
+
+  // Reply entry point (swipe, hover button, or long-press menu). Sets the
+  // reply and auto-focuses the composer (opens the keyboard on mobile) while
+  // preserving scroll position — the focus→jump-to-bottom is suppressed once.
+  const handleReply = useCallback((message) => {
+    setReplyTo(message);
+    setShowEmoji(false);
+    suppressFocusScroll.current = true;
+    setTimeout(() => inputRef.current?.focus(), 180);
+  }, []);
 
   const send = () => {
     const body = text.trim();
@@ -334,6 +354,28 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     if (idx === -1) return;
     listRef.current?.scrollToIndex({ index: idx, viewPosition: 0.4, animated: true });
   }, [rows]);
+
+  // Tapping a reply quote scrolls to the original (animated) and briefly
+  // highlights it with a theme-highlighter wash; missing originals show a
+  // non-blocking "Original message unavailable" note.
+  const openReply = useCallback((messageId) => {
+    const idx = rows.findIndex((r) => r._type === 'msg' && r.id === messageId);
+    if (idx === -1) {
+      setReplyMissing(true);
+      clearTimeout(replyMissingTimer.current);
+      replyMissingTimer.current = setTimeout(() => setReplyMissing(false), 2000);
+      return;
+    }
+    listRef.current?.scrollToIndex({ index: idx, viewPosition: 0.4, animated: true });
+    setReplyHighlightId(messageId);
+    clearTimeout(replyHighlightTimer.current);
+    replyHighlightTimer.current = setTimeout(() => setReplyHighlightId(null), 1600);
+  }, [rows]);
+
+  useEffect(() => () => {
+    clearTimeout(replyHighlightTimer.current);
+    clearTimeout(replyMissingTimer.current);
+  }, []);
 
   const startEdit = (message) => {
     setEditing(message);
@@ -579,7 +621,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               isGroup={chat.type === 'group'}
               senderName={nameFor(item.senderId)}
               senderUser={chat?.members?.find((m) => m.id === item.senderId)}
-              onReply={setReplyTo}
+              onReply={handleReply}
+              onOpenReply={openReply}
+              highlighted={replyHighlightId === item.id}
               onReact={react}
               onDelete={deleteMessage}
               onImagePress={setLightbox}
@@ -614,27 +658,20 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
           synchronized with the header — the chat "opens" as one gesture. */}
       <FadeSlide key={`cmp-${chatId}`} from="up" distance={10} duration={260} delay={40}>
       <View style={keyboardPad > 0 ? { marginBottom: keyboardPad } : null}>
-        {replyTo && (
-          <View style={[s.replyBar, inkBox(theme, 'thin')]}>
-            <View style={[s.replyAccent, { backgroundColor: theme.primary }]} />
-            <View style={{ flex: 1 }}>
-              <Text style={[type.labelXs, { color: theme.graphite }]}>{nameFor(replyTo.senderId).toUpperCase()}</Text>
-              {replyTo.type === 'image' || replyTo.type === 'voice' ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Emoji char={replyTo.type === 'image' ? '📷' : '🎤'} size={13} />
-                  <Text style={[type.bodySm, { color: theme.subtext }]}>
-                    {replyTo.type === 'image' ? 'Photo' : 'Voice message'}
-                  </Text>
-                </View>
-              ) : (
-                <EmojiText style={[type.bodySm, { color: theme.subtext }]} numberOfLines={1}>{replyTo.body}</EmojiText>
-              )}
+        <ReplyBar
+          replyTo={replyTo}
+          senderName={replyTo ? nameFor(replyTo.senderId) : null}
+          onClose={() => setReplyTo(null)}
+        />
+
+        {replyMissing && (
+          <Pop from={0.5}>
+            <View style={[s.missingToast, { backgroundColor: theme.cardAlt, borderColor: theme.ink }]}>
+              <Icon name="alert-circle-outline" size={15} color={theme.muted} />
+              <Text style={[type.bodySm, { color: theme.text }]}>Original message unavailable</Text>
             </View>
-            <Pressable onPress={() => setReplyTo(null)} hitSlop={8}>
-              <Icon name="close" size={20} color={theme.muted} />
-            </Pressable>
-          </View>
-      )}
+          </Pop>
+        )}
 
       {editing && (
         <View style={[s.editBar, { borderColor: theme.ink, backgroundColor: theme.cardAlt }]}>
@@ -672,12 +709,17 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               <Icon name={showEmoji ? 'keypad-outline' : 'happy-outline'} size={23} color={theme.muted} />
             </Pressable>
             <TextInput
+              ref={inputRef}
               style={s.input}
               placeholder={editing ? 'Edit message…' : 'Message'}
               placeholderTextColor={theme.muted}
               value={text}
               onChangeText={onChangeText}
-              onFocus={() => scrollToLatest(120)}
+              onFocus={() => {
+                // replying focuses the composer without jumping to the bottom
+                if (suppressFocusScroll.current) { suppressFocusScroll.current = false; return; }
+                scrollToLatest(120);
+              }}
               multiline
               disableFullscreenUI
               onSubmitEditing={send}
@@ -1018,8 +1060,11 @@ const makeStyles = (t) => StyleSheet.create({
   },
   messagesList: { flex: 1, minHeight: 0 },
   emptyChat: { alignItems: 'center', justifyContent: 'center', padding: 40 },
-  replyBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 8, padding: 10, gap: 12, backgroundColor: t.replyPreview },
-  replyAccent: { width: 3.5, alignSelf: 'stretch', borderRadius: 2 },
+  missingToast: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 9,
+    borderWidth: 1, borderRadius: 8, justifyContent: 'center',
+  },
   overflowMenu: { width: '100%', maxWidth: 320, padding: 14 },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 6, paddingVertical: 11 },
   menuIcon: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 999 },
