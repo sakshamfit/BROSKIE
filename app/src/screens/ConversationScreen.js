@@ -68,34 +68,52 @@ function ConversationContent({ route, navigation, embedded = false }) {
   const [timerMsg, setTimerMsg] = useState(null);
   const [pollOpen, setPollOpen] = useState(false);
 
-  // Realme 11x 5G + all Android: keyboard was covering the composer (pan mode).
-  // Track the native keyboard height and push the UI above it. iOS still uses
-  // KeyboardAvoidingView padding; Android uses this manual height so no rebuild
-  // (softwareKeyboardLayoutMode) is needed for the OTA update.
+  // Android's native config uses pan mode for older installed builds. Keep the
+  // composer in the React layout as well, so it stays above keyboards that do
+  // not resize the window (notably Realme/ColorOS). This also runs for the
+  // tablet split view; the old embedded guard left that composer under the IME.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const keyboardScrollTimer = useRef(null);
+  const scrollToLatest = useCallback((delay = 0) => {
+    clearTimeout(keyboardScrollTimer.current);
+    keyboardScrollTimer.current = setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated: delay > 0 });
+    }, delay);
+  }, []);
+
   useEffect(() => {
-    if (embedded || Platform.OS === 'web') return;
+    if (Platform.OS === 'web') return undefined;
+
+    const keyboardHeightFrom = (event) => {
+      const eventHeight = Number(event?.endCoordinates?.height) || 0;
+      const metricsHeight = Number(Keyboard.metrics?.()?.height) || 0;
+      const height = Math.max(eventHeight, metricsHeight);
+      if (height > 0) setKeyboardHeight(height);
+      scrollToLatest(120);
+    };
+    const onHide = () => {
+      clearTimeout(keyboardScrollTimer.current);
+      setKeyboardHeight(0);
+    };
+
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const onShow = (e) => {
-      const h = e?.endCoordinates?.height ?? 0;
-      setKeyboardHeight(h);
-      // Keep the latest message visible when the keyboard slides up (Realme often needs extra tick)
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
-    };
-    const onHide = () => setKeyboardHeight(0);
-    const showSub = Keyboard.addListener(showEvent, onShow);
+    const showSub = Keyboard.addListener(showEvent, keyboardHeightFrom);
     const hideSub = Keyboard.addListener(hideEvent, onHide);
-    // Some Realme / ColorOS builds only emit DidShow, so also listen to DidShow on Android as fallback
-    const fallbackSub = Platform.OS === 'android' ? Keyboard.addListener('keyboardDidShow', onShow) : null;
-    const fallbackHide = Platform.OS === 'android' ? Keyboard.addListener('keyboardDidHide', onHide) : null;
+    // Keyboard height can change when the suggestion row or navigation bar
+    // appears. Do not register a second keyboardDidShow listener: doing so on
+    // some ColorOS versions caused two competing layout updates.
+    const frameSub = Platform.OS === 'android'
+      ? Keyboard.addListener('keyboardDidChangeFrame', keyboardHeightFrom)
+      : null;
+
     return () => {
       showSub.remove();
       hideSub.remove();
-      fallbackSub?.remove();
-      fallbackHide?.remove();
+      frameSub?.remove();
+      clearTimeout(keyboardScrollTimer.current);
     };
-  }, [embedded]);
+  }, [scrollToLatest]);
 
   const s = makeStyles(theme);
 
@@ -345,15 +363,18 @@ function ConversationContent({ route, navigation, embedded = false }) {
       ? chat.members.map((m) => (m.id === user.id ? 'You' : m.name.split(' ')[0])).join(', ')
       : lastSeenText(chat.isOnline, chat.lastSeen);
 
-  // Android manual pad: when keyboardHeight >0, push the whole conversation above the keyboard.
-  // iOS uses KAV padding; Android uses this height (works with softwareKeyboardLayoutMode="pan" OTA).
-  const androidKeyboardPad = Platform.OS === 'android' && !embedded ? keyboardHeight : 0;
+  // Android manual pad: keep only the bottom controls above the keyboard.
+  // Padding the outer container made pan-mode Android devices move the whole
+  // conversation and still leave the TextInput behind the IME. Moving the
+  // bottom controls preserves the message viewport and works in both the
+  // phone stack and the embedded tablet split.
+  const androidKeyboardPad = Platform.OS === 'android' ? keyboardHeight : 0;
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: theme.chatBg, paddingBottom: androidKeyboardPad }}
+      style={{ flex: 1, backgroundColor: theme.chatBg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
-      enabled={Platform.OS === 'ios' && !embedded}
+      enabled={Platform.OS !== 'web'}
     >
       {/* header — floating clay bar; own top inset only when not embedded
           in the desktop/tablet split (that shell already pads for the notch). */}
@@ -521,26 +542,27 @@ function ConversationContent({ route, navigation, embedded = false }) {
         }
       />
 
-      {replyTo && (
-        <View style={[s.replyBar, inkBox(theme, 'thin')]}>
-          <View style={[s.replyAccent, { backgroundColor: theme.primary }]} />
-          <View style={{ flex: 1 }}>
-            <Text style={[type.labelXs, { color: theme.graphite }]}>{nameFor(replyTo.senderId).toUpperCase()}</Text>
-            {replyTo.type === 'image' || replyTo.type === 'voice' ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Emoji char={replyTo.type === 'image' ? '📷' : '🎤'} size={13} />
-                <Text style={[type.bodySm, { color: theme.subtext }]}>
-                  {replyTo.type === 'image' ? 'Photo' : 'Voice message'}
-                </Text>
-              </View>
-            ) : (
-              <EmojiText style={[type.bodySm, { color: theme.subtext }]} numberOfLines={1}>{replyTo.body}</EmojiText>
-            )}
+      <View style={androidKeyboardPad > 0 ? { marginBottom: androidKeyboardPad } : null}>
+        {replyTo && (
+          <View style={[s.replyBar, inkBox(theme, 'thin')]}>
+            <View style={[s.replyAccent, { backgroundColor: theme.primary }]} />
+            <View style={{ flex: 1 }}>
+              <Text style={[type.labelXs, { color: theme.graphite }]}>{nameFor(replyTo.senderId).toUpperCase()}</Text>
+              {replyTo.type === 'image' || replyTo.type === 'voice' ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Emoji char={replyTo.type === 'image' ? '📷' : '🎤'} size={13} />
+                  <Text style={[type.bodySm, { color: theme.subtext }]}>
+                    {replyTo.type === 'image' ? 'Photo' : 'Voice message'}
+                  </Text>
+                </View>
+              ) : (
+                <EmojiText style={[type.bodySm, { color: theme.subtext }]} numberOfLines={1}>{replyTo.body}</EmojiText>
+              )}
+            </View>
+            <Pressable onPress={() => setReplyTo(null)} hitSlop={8}>
+              <Icon name="close" size={20} color={theme.muted} />
+            </Pressable>
           </View>
-          <Pressable onPress={() => setReplyTo(null)} hitSlop={8}>
-            <Icon name="close" size={20} color={theme.muted} />
-          </Pressable>
-        </View>
       )}
 
       {editing && (
@@ -559,7 +581,10 @@ function ConversationContent({ route, navigation, embedded = false }) {
 
       {/* composer — bottom safe-area (home indicator / gesture bar) only
           applies full-screen; the desktop/tablet split already handles it. */}
-      <View style={[s.composerWrap, !embedded && { paddingBottom: androidKeyboardPad > 0 ? 8 : Math.max(insets.bottom, 12) }]}>
+      <View style={[s.composerWrap, androidKeyboardPad > 0
+        ? { paddingBottom: 8 }
+        : !embedded ? { paddingBottom: Math.max(insets.bottom, 12) } : null
+      ]}>
         {recording ? (
           <InkField style={s.inputBar}>
             <View style={[s.recDot, { backgroundColor: theme.danger }]} />
@@ -581,6 +606,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
               placeholderTextColor={theme.muted}
               value={text}
               onChangeText={onChangeText}
+              onFocus={() => scrollToLatest(120)}
               multiline
               onSubmitEditing={send}
               blurOnSubmit={false}
@@ -634,6 +660,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
             />
           )}
         </Pressable>
+        </View>
       </View>
 
       <Modal visible={!!lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(null)}>

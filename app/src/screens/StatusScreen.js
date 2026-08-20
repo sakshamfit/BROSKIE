@@ -52,14 +52,28 @@ export default function StatusScreen() {
   const [replyFocused, setReplyFocused] = useState(false);
   const [kbHeight, setKbHeight] = useState(0);
   useEffect(() => {
-    if (Platform.OS === 'web') return;
-    const onShow = (e) => setKbHeight(e?.endCoordinates?.height ?? 0);
+    if (Platform.OS === 'web') return undefined;
+
+    const keyboardHeightFrom = (event) => {
+      const eventHeight = Number(event?.endCoordinates?.height) || 0;
+      const metricsHeight = Number(Keyboard.metrics?.()?.height) || 0;
+      const height = Math.max(eventHeight, metricsHeight);
+      if (height > 0) setKbHeight(height);
+    };
     const onHide = () => setKbHeight(0);
-    const s1 = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', onShow);
-    const s2 = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', onHide);
-    const f1 = Platform.OS === 'android' ? Keyboard.addListener('keyboardDidShow', onShow) : null;
-    const f2 = Platform.OS === 'android' ? Keyboard.addListener('keyboardDidHide', onHide) : null;
-    return () => { s1.remove(); s2.remove(); f1?.remove(); f2?.remove(); };
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, keyboardHeightFrom);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+    const frameSub = Platform.OS === 'android'
+      ? Keyboard.addListener('keyboardDidChangeFrame', keyboardHeightFrom)
+      : null;
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      frameSub?.remove();
+    };
   }, []);
   const s = makeStyles(theme);
 

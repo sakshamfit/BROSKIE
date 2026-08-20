@@ -20,7 +20,7 @@ const RTC_SUPPORTED = Platform.OS === 'web' && typeof window !== 'undefined' && 
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
 export function ChatProvider({ children }) {
-  const { token, user, logout } = useAuth();
+  const { token, user, logout, applySettings } = useAuth();
   const [chats, setChats] = useState([]);
   const [messages, setMessages] = useState({});   // chatId -> message[]
   const [typing, setTyping] = useState({});       // chatId -> { userId: name }
@@ -109,6 +109,7 @@ export function ChatProvider({ children }) {
     socket.on('disconnect', () => setConnected(false));
     socket.on('connect_error', () => setConnected(false));
     socket.on('account:deleted', () => logout());
+    socket.on('settings:updated', ({ settings }) => applySettings(settings));
 
     socket.on('message:new', ({ message, tempId }) => {
       setMessages((prev) => {
@@ -261,7 +262,7 @@ export function ChatProvider({ children }) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [token, upsertChat, logout]);
+  }, [token, upsertChat, logout, applySettings]);
 
   /* ---------------- calls: WebRTC plumbing ---------------- */
 

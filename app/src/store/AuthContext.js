@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, setToken } from '../api';
 
@@ -85,10 +86,47 @@ export function AuthProvider({ children }) {
     return fresh;
   }, []);
 
+  // Settings and profile data can change from another device while this app
+  // remains installed. Refresh the account whenever the app returns to the
+  // foreground so screens do not keep displaying a stale settings snapshot.
+  useEffect(() => {
+    if (!token) return undefined;
+
+    let disposed = false;
+    let refreshing = false;
+    const refreshOnForeground = () => {
+      if (disposed || refreshing) return;
+      refreshing = true;
+      refreshUser()
+        .catch((error) => {
+          // A temporary offline period must not log the user out or interrupt
+          // the current screen; the next foreground transition retries it.
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.warn('Could not refresh account settings:', error?.technicalMessage || error?.message);
+          }
+        })
+        .finally(() => { refreshing = false; });
+    };
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') refreshOnForeground();
+    });
+
+    return () => {
+      disposed = true;
+      subscription.remove();
+    };
+  }, [token, refreshUser]);
+
   const updateProfile = useCallback(async (patch) => {
     const { user } = await api.updateMe(patch);
     setUser((prev) => ({ ...prev, ...user }));
     return user;
+  }, []);
+
+  const applySettings = useCallback((settings) => {
+    if (!settings) return;
+    setUser((prev) => (prev ? { ...prev, settings } : prev));
   }, []);
 
   const updateSettings = useCallback(async (patch) => {
@@ -98,7 +136,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, booting, login, register, logout, refreshUser, updateProfile, updateSettings }}>
+    <AuthContext.Provider value={{ user, token, booting, login, register, logout, refreshUser, updateProfile, applySettings, updateSettings }}>
       {children}
     </AuthContext.Provider>
   );
