@@ -26,6 +26,7 @@ import PersonalInfoScreen from './screens/PersonalInfoScreen';
 import SecurityScreen from './screens/SecurityScreen';
 import AppearanceScreen from './screens/AppearanceScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
+import ActivityScreen from './screens/ActivityScreen';
 import PrivacyScreen from './screens/PrivacyScreen';
 import BlockedUsersScreen from './screens/BlockedUsersScreen';
 import HelpScreen from './screens/HelpScreen';
@@ -39,16 +40,15 @@ function HomeTabs({ navigation }) {
   const { theme } = useTheme();
   const { chats } = useChat();
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState('chats');
+  const [tab, setTab] = useState('network');
   const unread = chats.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
   const s = makeStyles(theme);
 
-  // Colleagues is a first-class tab instead of being hidden only inside
-  // Network. Calls remain available from Settings and individual chats.
+  // Feed first, chat in the centre: Network → See → Chats → Colleagues → Settings.
   const TABS = [
-    { key: 'chats', label: 'Chats', icon: 'chatbubble', badge: unread },
-    { key: 'status', label: 'See', icon: 'eye' },
     { key: 'network', label: 'Network', icon: 'people' },
+    { key: 'status', label: 'See', icon: 'eye' },
+    { key: 'chats', label: 'Chats', icon: 'chatbubble', badge: unread },
     { key: 'colleagues', label: 'Colleagues', icon: 'school-outline', outlineOnly: true },
     { key: 'settings', label: 'Settings', icon: 'settings' },
   ];
@@ -165,6 +165,7 @@ export default function Navigation() {
         ) : (
           <>
             <Stack.Screen name="Home" component={HomeTabs} />
+            <Stack.Screen name="Activity" component={ActivityScreen} />
             <Stack.Screen name="Conversation" component={ConversationScreen} />
             <Stack.Screen name="NewChat" component={NewChatScreen} />
             <Stack.Screen name="ChatInfo" component={ChatInfoScreen} />

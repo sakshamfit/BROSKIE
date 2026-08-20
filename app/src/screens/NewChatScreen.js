@@ -6,13 +6,13 @@ import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, EmptyState, InkField, InkIconButton, InkCheckbox, handleFor, Rule, GoldTick, hasGoldTick } from '../components/common';
-import { radius, type, inkBox, marker, dashedRule } from '../theme';
+import { Avatar, EmptyState, InkField, InkIconButton, InkCheckbox, handleFor, GoldTick, hasGoldTick } from '../components/common';
+import { type, inkBox, marker, dashedRule } from '../theme';
 
 export default function NewChatScreen({ navigation, embedded = false }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { upsertChat, refreshChats } = useChat();
+  const { upsertChat, refreshChats, refreshActivity } = useChat();
   const [users, setUsers] = useState([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -20,12 +20,17 @@ export default function NewChatScreen({ navigation, embedded = false }) {
   const [selected, setSelected] = useState([]);
   const [groupName, setGroupName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [connectBusy, setConnectBusy] = useState(null);
+  const [connectError, setConnectError] = useState('');
 
   const s = makeStyles(theme);
 
-  useEffect(() => {
-    api.users().then(({ users }) => setUsers(users)).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  const loadUsers = () => api.users()
+    .then(({ users: list }) => setUsers(list))
+    .catch(() => {})
+    .finally(() => setLoading(false));
+
+  useEffect(() => { loadUsers(); }, []);
 
   const filtered = users.filter((u) => {
     const q = query.toLowerCase();
@@ -48,6 +53,27 @@ export default function NewChatScreen({ navigation, embedded = false }) {
       await refreshChats().catch(() => {});
       navigation.replace('Conversation', { chatId: chat.id, initialChat: chat });
     } finally { setBusy(false); }
+  };
+
+  const sendConnect = async (u) => {
+    if (u.connectStatus === 'connected' || u.connectStatus === 'outgoing') return;
+    if (u.connectStatus === 'incoming') {
+      setConnectError('They already sent you a +one — open Activity to accept.');
+      return;
+    }
+    setConnectBusy(u.id);
+    setConnectError('');
+    try {
+      const result = await api.connectUser(u.id);
+      setUsers((prev) => prev.map((person) => (
+        person.id === u.id ? { ...person, connectStatus: result.status || 'outgoing' } : person
+      )));
+      refreshActivity?.();
+    } catch (e) {
+      setConnectError(e.message || 'Could not send a +one request');
+    } finally {
+      setConnectBusy(null);
+    }
   };
 
   const toggleSelect = (u) =>
@@ -73,7 +99,7 @@ export default function NewChatScreen({ navigation, embedded = false }) {
         <View style={{ flex: 1 }}>
           <Text style={[type.headlineMd, { color: theme.text }]}>{groupMode ? 'New group' : 'find +ones'}</Text>
           <Text style={[type.bodySm, { color: theme.subtext }]}>
-            {groupMode ? `${selected.length} selected` : `${users.length} contacts`}
+            {groupMode ? `${selected.length} selected` : 'Tap +one to connect · tap a name to chat'}
           </Text>
         </View>
         <InkIconButton
@@ -109,6 +135,10 @@ export default function NewChatScreen({ navigation, embedded = false }) {
         />
       </InkField>
 
+      {!!connectError && (
+        <Text style={[type.bodySm, { color: theme.danger, paddingHorizontal: 20, marginBottom: 8 }]}>{connectError}</Text>
+      )}
+
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={theme.ink} />
       ) : (
@@ -126,6 +156,15 @@ export default function NewChatScreen({ navigation, embedded = false }) {
                 onPress={() => (groupMode ? toggleSelect(item) : openDirect(item))}
                 disabled={busy}
               >
+                {!groupMode && (
+                  <PlusOneButton
+                    theme={theme}
+                    status={item.connectStatus}
+                    busy={connectBusy === item.id}
+                    disabled={!!connectBusy || busy}
+                    onPress={() => sendConnect(item)}
+                  />
+                )}
                 {groupMode && <InkCheckbox checked={isSel} size={19} />}
                 <Avatar uri={item.avatar} name={item.name} id={item.id} online={item.isOnline} size={44} />
                 <View style={{ flex: 1 }}>
@@ -156,6 +195,36 @@ export default function NewChatScreen({ navigation, embedded = false }) {
   );
 }
 
+function PlusOneButton({ theme, status, busy, disabled, onPress }) {
+  const sent = status === 'outgoing';
+  const connected = status === 'connected';
+  const incoming = status === 'incoming';
+  const label = connected ? 'ONE' : sent ? 'SENT' : incoming ? 'IN' : '+one';
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={connected ? 'Already connected' : sent ? 'Request sent' : 'Send +one request'}
+      onPress={(e) => {
+        e?.stopPropagation?.();
+        if (!sent && !connected && !incoming) onPress();
+      }}
+      disabled={disabled || sent || connected || incoming}
+      hitSlop={6}
+      style={({ pressed }) => [
+        styles.plus,
+        inkBox(theme, connected || sent ? 'thin' : 'ink'),
+        connected && { backgroundColor: theme.ink },
+        pressed && !sent && !connected && marker(theme, 1),
+        (disabled || sent) && { opacity: busy ? 1 : 0.7 },
+      ]}
+    >
+      {busy
+        ? <ActivityIndicator size="small" color={theme.ink} />
+        : <Text style={[type.labelXs, { color: connected ? theme.onPrimary : theme.ink }]}>{label}</Text>}
+    </Pressable>
+  );
+}
+
 const makeStyles = (t) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14 },
   groupNameWrap: { marginHorizontal: 20, marginBottom: 14, paddingHorizontal: 2, minHeight: 48 },
@@ -163,6 +232,13 @@ const makeStyles = (t) => StyleSheet.create({
   searchWrap: { marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 2, minHeight: 46 },
   searchInput: { flex: 1, ...type.bodyMd, color: t.text, paddingVertical: 11, outlineStyle: 'none' },
   list: { paddingBottom: 110 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 13 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 13 },
   fab: { position: 'absolute', right: 24, bottom: 26, width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
+});
+
+const styles = StyleSheet.create({
+  plus: {
+    minWidth: 46, minHeight: 36, paddingHorizontal: 8, paddingVertical: 7,
+    alignItems: 'center', justifyContent: 'center',
+  },
 });

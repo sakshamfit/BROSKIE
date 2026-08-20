@@ -107,8 +107,9 @@ emoji reactions, delete-for-everyone, **edit sent messages**, **forward to one o
 chats** (with a FORWARDED tag), image sharing with lightbox, voice-note UI with
 waveform, 32-emoji picker, day separators, and per-user **Delete chat** that clears
 history only for the person deleting it and restores the thread when a new message arrives.
-First messages from people outside accepted contacts stay in a WhatsApp-style **Message
-requests** inbox until accepted, deleted, or blocked.
+First messages from people outside accepted contacts stay in Instagram-style **Activity**
+(the +one wordmark or heart) until accepted, deleted, or blocked. Opening a chat or
+tapping a username never sends a request — only sending a message does.
 
 **Real-time (Socket.IO)** — instant delivery, typing indicators, online/last-seen
 presence, single ✓ sent → double ✓✓ delivered → blue ✓✓ read, live unread badges,

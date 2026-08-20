@@ -359,8 +359,10 @@ export const api = {
   chats: () => request('/api/chats'),
   deleteChat: (chatId) => request(`/api/chats/${chatId}`, { method: 'DELETE' }),
   chatRequests: () => request('/api/chat-requests'),
+  activity: () => request('/api/activity'),
   respondChatRequest: (chatId, action) =>
     request(`/api/chat-requests/${chatId}/respond`, { method: 'POST', body: { action } }),
+  connectUser: (userId) => request(`/api/connect/${userId}`, { method: 'POST', body: {} }),
   directChat: (userId) => request('/api/chats/direct', { method: 'POST', body: { userId } }),
   groupChat: (payload) => request('/api/chats/group', { method: 'POST', body: payload }),
   updateChat: (chatId, payload) => request(`/api/chats/${chatId}`, { method: 'PATCH', body: payload }),

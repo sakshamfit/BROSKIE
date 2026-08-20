@@ -25,8 +25,8 @@ const TOPICS = [
     title: 'Chats',
     summary: '1:1 and group messaging, photos, voice notes, reactions',
     body: [
-      { h: 'Starting a conversation', p: 'Tap find +ones (bottom-right) on the Chats tab, then pick a person to message directly, or tap the group icon in the top-right to start a group with multiple people.' },
-      { h: 'Message requests', p: 'A first message from someone outside your accepted contacts appears under REQUESTS at the top-right of Chats instead of entering your main inbox. Preview it, then Accept & chat, Delete, or Block the sender.' },
+      { h: 'Starting a conversation', p: 'Open the Chats tab (centre of the bar), tap find +ones, then pick a person. Opening their chat does not notify them. Tap the +one sign in front of their name to send a connect request — it appears in their Activity. A message request is also created if you send text, a photo, or a voice note first.' },
+      { h: 'Activity & requests', p: 'Tap the +one wordmark or the heart (top-right, like Instagram) to open Activity. Message requests, likes, comments, colleague requests and calls all live there. Accept, delete, or block a request without it entering your main inbox.' },
       { h: 'Sending things', p: 'Type a message and hit send, or use the camera/photo icon to attach an image. Tap the mic to begin a real voice recording, tap the checkmark to upload and send it, or tap Cancel to discard it.' },
       { h: 'Replies & reactions', p: 'Swipe or long-press a message to reply to it, react with an emoji, or delete your own message. Long-press a chat in the list to archive or unarchive it.' },
       { h: 'Read receipts & typing', p: 'A single check means sent, two greyed checks mean delivered, and two highlighted checks mean read. You\u2019ll see "typing…" live while the other person is composing a reply. Turn off read receipts in Settings \u2192 Privacy if you\u2019d rather not send or see them.' },
@@ -51,8 +51,8 @@ const TOPICS = [
     title: 'The Network',
     summary: 'Public posts, tags, and purpose-based Communities',
     body: [
-      { h: 'Posting', p: 'Tap the pencil FAB on the Network tab to write a post — attach a photo, a song, or a #tag, and choose Public / Friends / Selected people. Photos offer Original, Square, Portrait, Wide and Story frames, followed by the native crop editor.' },
-      { h: 'Liking & commenting', p: 'Tap the heart to like a post, or the speech bubble to open comments. Tap any #tag chip (yours or someone else\u2019s) to filter the feed to just that tag.' },
+      { h: 'Posting', p: 'The Network is the first tab when you open +one. Tap the pencil FAB to write a post — attach a photo, a song, or a #tag, and choose Public / Friends / Selected people. Photos offer Original, Square, Portrait, Wide and Story frames, followed by the native crop editor.' },
+      { h: 'Liking & commenting', p: 'Tap the Instagram-style heart to like a post (it fills red when liked), or the speech bubble to open comments. Likes on your posts appear in Activity when you tap +one or the heart. Tap any #tag chip (yours or someone else\u2019s) to filter the feed to just that tag.' },
       { h: 'Communities', p: 'Switch to the COMMUNITIES tab at the top of Network to create or join purpose-based groups \u2014 Club Night, House Party, Chai Chat, Trip Planning, Running Group, Game Night, Study Group, or something custom.' },
       { h: 'Finding colleagues', p: 'Open the COLLEAGUES tab, then add or join your college, institution, organization, or workplace. People who register the same place appear as colleague cards. Send a connection request; once they accept, tap Message to start a direct chat.' },
       { h: 'Who can join a community', p: 'When you create one, pick: Open (anyone joins instantly), Ask to join (an admin must approve each request), or Invite only (not self-joinable \u2014 an admin adds people directly). Every community gets its own real group chat automatically, so members can talk right away.' },
