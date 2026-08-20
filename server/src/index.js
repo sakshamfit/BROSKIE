@@ -797,6 +797,9 @@ app.patch('/api/me/settings', requireAuth, (req, res) => {
     current
   );
   db.prepare('UPDATE users SET settings = ? WHERE id = ?').run(JSON.stringify(merged), req.userId);
+  // Keep every active session in sync immediately; foreground refresh still
+  // covers devices that were offline when this event was emitted.
+  emitToUser(req.userId, 'settings:updated', { settings: merged });
   res.json({ settings: merged });
 });
 
