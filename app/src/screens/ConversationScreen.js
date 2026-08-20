@@ -14,19 +14,24 @@ import {
 import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
+import { useChatTheme, ChatThemeScope } from '../store/ChatThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import {
   Avatar, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor, formatTime,
-  FrostedBackdrop, GoldTick, hasGoldTick,
+  FrostedBackdrop, GoldTick, hasGoldTick, PaperCard,
 } from '../components/common';
 import EmojiPicker from '../components/EmojiPicker';
 import MessageBubble, { DISAPPEAR_OPTIONS } from '../components/MessageBubble';
 import ForwardSheet from '../components/ForwardSheet';
 import PollComposer from '../components/PollComposer';
+import ChatBackground from '../components/ChatBackground';
+import ThemePickerSheet from '../components/ThemePickerSheet';
+import { ThemeRegistry, alpha } from '../chatThemes';
+import { FadeSlide, TypingDots, FloatLoop, SheetSpringIn, SpringPressable, Pop, haptic, motion } from '../motion';
 import { api, mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
 
-function ConversationContent({ route, navigation, embedded = false }) {
+function ConversationContent({ route, navigation, embedded = false, themePicker = null }) {
   const { chatId, initialChat = null } = route.params || {};
   const {
     chats, messages, typing, refreshChats, loadMessages, sendMessage, markRead, setTypingState,
@@ -67,6 +72,9 @@ function ConversationContent({ route, navigation, embedded = false }) {
   const [forwardMsg, setForwardMsg] = useState(null);
   const [timerMsg, setTimerMsg] = useState(null);
   const [pollOpen, setPollOpen] = useState(false);
+
+  // ⋯ overflow menu (Theme lives here, per the familiar chat-menu flow)
+  const [overflowOpen, setOverflowOpen] = useState(false);
 
   // Android's native config uses pan mode for older installed builds. Keep the
   // composer in the React layout as well, so it stays above keyboards that do
@@ -179,6 +187,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
   const send = () => {
     const body = text.trim();
     if (!body) return;
+    haptic('impact'); // subtle send acknowledgement
     if (editing) {
       editMessage(editing.id, body)
         .then(() => {})
@@ -386,11 +395,11 @@ function ConversationContent({ route, navigation, embedded = false }) {
     );
   }
 
-  const subtitle = typers.length
-    ? (chat.type === 'group' ? `${typers[0]} is typing…` : 'typing…')
-    : chat.type === 'group'
-      ? chat.members.map((m) => (m.id === user.id ? 'You' : m.name.split(' ')[0])).join(', ')
-      : lastSeenText(chat.isOnline, chat.lastSeen);
+  // Typing state is rendered separately with animated dots; this is the
+  // static "who's here / last seen" line used when nobody is typing.
+  const subtitle = chat.type === 'group'
+    ? chat.members.map((m) => (m.id === user.id ? 'You' : m.name.split(' ')[0])).join(', ')
+    : lastSeenText(chat.isOnline, chat.lastSeen);
 
   // Keyboard pad: keep only the bottom controls above the keyboard.
   // Padding the outer container made pan-mode Android devices move the whole
@@ -405,8 +414,15 @@ function ConversationContent({ route, navigation, embedded = false }) {
       keyboardVerticalOffset={0}
       enabled={Platform.OS === 'ios'}
     >
+      {/* per-conversation chat theme backdrop — animated gradient, crossfades
+          between themes in ~280ms (subtle, premium; no full-app rebuild) */}
+      <ChatBackground theme={theme} />
+
+      <View style={s.content}>
       {/* header — floating clay bar; own top inset only when not embedded
-          in the desktop/tablet split (that shell already pads for the notch). */}
+          in the desktop/tablet split (that shell already pads for the notch).
+          Slides in once per conversation, like the chat is "opening". */}
+      <FadeSlide key={`hdr-${chatId}`} from="down" distance={8} duration={260}>
       <View style={[s.headerWrap, !embedded && { paddingTop: 18 + insets.top }]}>
         <View style={s.header}>
           {!embedded && (
@@ -421,9 +437,18 @@ function ConversationContent({ route, navigation, embedded = false }) {
                 <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{chat.name}</EmojiText>
                 {hasGoldTick(chat) && <GoldTick size={16} />}
               </View>
-              <Text style={[type.bodySm, { fontSize: 12.5, color: typers.length ? theme.primary : theme.subtext }]} numberOfLines={1}>
-                {subtitle}
-              </Text>
+              {typers.length ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                  <TypingDots color={theme.primary} size={4} />
+                  <Text style={[type.bodySm, { fontSize: 12.5, color: theme.primary }]} numberOfLines={1}>
+                    {chat.type === 'group' ? `${typers[0]} is typing` : 'typing'}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={[type.bodySm, { fontSize: 12.5, color: theme.subtext }]} numberOfLines={1}>
+                  {subtitle}
+                </Text>
+              )}
             </View>
           </Pressable>
           <InkIconButton
@@ -459,12 +484,20 @@ function ConversationContent({ route, navigation, embedded = false }) {
               />
             </>
           )}
+          <InkIconButton
+            name="ellipsis-horizontal"
+            size={36}
+            iconSize={16}
+            onPress={() => setOverflowOpen(true)}
+          />
         </View>
         <Rule style={{ marginHorizontal: 20, marginTop: 10, marginBottom: 0 }} />
       </View>
+      </FadeSlide>
 
-      {/* in-chat search bar + results */}
+      {/* in-chat search bar + results — expands in smoothly */}
       {searchOpen && (
+        <FadeSlide from="down" distance={6} duration={motion.fast}>
         <View style={[s.searchWrap, { borderBottomWidth: stroke.thin, borderBottomColor: theme.graphiteLine }]}>
           <View style={s.searchRow}>
             <Icon name="search" size={17} color={theme.graphite} />
@@ -509,6 +542,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
             <Text style={[type.bodySm, { color: theme.muted, padding: 8, paddingHorizontal: 4 }]}>No matches</Text>
           )}
         </View>
+        </FadeSlide>
       )}
 
       <FlatList
@@ -540,6 +574,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
           ) : (
             <MessageBubble
               message={item}
+              animateIn={!!item._new}
               isMine={item.senderId === user.id}
               isGroup={chat.type === 'group'}
               senderName={nameFor(item.senderId)}
@@ -558,20 +593,26 @@ function ConversationContent({ route, navigation, embedded = false }) {
         }
         ListEmptyComponent={
           <View style={s.emptyChat}>
-            <View style={{ alignItems: 'center', gap: 10 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-                <Emoji char="✒️" size={15} />
-                <Text style={[type.bodySm, { color: theme.muted }]}>This is the beginning of your conversation.</Text>
+            {/* slow, calm float so the empty state feels alive but never busy */}
+            <FloatLoop amplitude={4} duration={3600}>
+              <View style={{ alignItems: 'center', gap: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                  <Emoji char="✒️" size={15} />
+                  <Text style={[type.bodySm, { color: theme.muted }]}>This is the beginning of your conversation.</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                  <Text style={[type.bodySm, { color: theme.muted }]}>Say hello</Text>
+                  <Emoji char="👋" size={16} />
+                </View>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-                <Text style={[type.bodySm, { color: theme.muted }]}>Say hello</Text>
-                <Emoji char="👋" size={16} />
-              </View>
-            </View>
+            </FloatLoop>
           </View>
         }
       />
 
+      {/* bottom stack (reply bar → composer) slides up once per conversation,
+          synchronized with the header — the chat "opens" as one gesture. */}
+      <FadeSlide key={`cmp-${chatId}`} from="up" distance={10} duration={260} delay={40}>
       <View style={keyboardPad > 0 ? { marginBottom: keyboardPad } : null}>
         {replyTo && (
           <View style={[s.replyBar, inkBox(theme, 'thin')]}>
@@ -663,7 +704,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
           </InkField>
         )}
 
-        <Pressable
+        <SpringPressable
           accessibilityRole="button"
           accessibilityLabel={voiceBusy ? 'Sending voice note' : recording ? 'Send voice note' : text.trim() ? 'Send message' : 'Start voice recording'}
           onPress={() => {
@@ -673,26 +714,27 @@ function ConversationContent({ route, navigation, embedded = false }) {
             else startRecording();
           }}
           disabled={voiceBusy}
-          android_ripple={rippleFor(theme, { color: 'rgba(255,255,255,0.3)' })}
+          android_ripple={rippleFor(theme, { color: alpha(theme.onSendButton, 0.3) })}
           style={({ pressed }) => [
             s.sendBtn,
             inkBox(theme, 'bold'),
-            { backgroundColor: pressed && Platform.OS !== 'android' ? theme.highlighter : theme.ink },
+            { backgroundColor: pressed && Platform.OS !== 'android' ? theme.highlighter : theme.sendButton },
             voiceBusy && { opacity: 0.55 },
           ]}
         >
           {voiceBusy ? (
-            <ActivityIndicator size="small" color={theme.onPrimary} />
+            <ActivityIndicator size="small" color={theme.onSendButton} />
           ) : (
             <Icon
               name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
               size={18}
-              color={theme.onPrimary}
+              color={theme.onSendButton}
             />
           )}
-        </Pressable>
+        </SpringPressable>
         </View>
       </View>
+      </FadeSlide>
 
       <Modal visible={!!lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(null)}>
         <Pressable style={s.lightbox} onPress={() => setLightbox(null)}>
@@ -710,6 +752,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
       <Modal visible={!!timerMsg} transparent animationType="fade" onRequestClose={() => setTimerMsg(null)}>
         <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setTimerMsg(null)}>
           <FrostedBackdrop />
+          <SheetSpringIn style={{ width: '100%', maxWidth: 360 }}>
           <Pressable style={[s.timerSheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
             <Text style={[type.headlineSm, { color: theme.text }]}>Disappear in…</Text>
             <Text style={[type.bodySm, { color: theme.subtext, marginTop: 4, marginBottom: 12 }]}>
@@ -748,6 +791,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
               })()}
             </View>
           </Pressable>
+          </SheetSpringIn>
         </Pressable>
       </Modal>
 
@@ -759,6 +803,97 @@ function ConversationContent({ route, navigation, embedded = false }) {
           await createPoll(chatId, question, options);
         }}
       />
+
+      {/* ⋯ overflow menu — Theme sits here, clearly visible, not dominant */}
+      <Modal visible={overflowOpen} transparent animationType="fade" onRequestClose={() => setOverflowOpen(false)}>
+        <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setOverflowOpen(false)}>
+          <FrostedBackdrop />
+          <PaperCard weight="ink" style={s.overflowMenu}>
+            <Pressable
+              style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
+              onPress={() => { setOverflowOpen(false); themePicker?.setPickerOpen(true); }}
+            >
+              <View style={[s.menuIcon, { backgroundColor: alpha(theme.accent, 0.16) }]}>
+                <Icon name="color-palette-outline" size={18} color={theme.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[type.bodyMd, { color: theme.text }]}>Chat theme</Text>
+                <Text style={[type.labelXs, { color: theme.muted, marginTop: 2 }]}>
+                  {ThemeRegistry.get(theme.chatThemeId || 'graphite').name}
+                </Text>
+              </View>
+            </Pressable>
+            <Rule style={{ marginVertical: 6 }} />
+            <Pressable
+              style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
+              onPress={() => { setOverflowOpen(false); navigation.navigate('ChatInfo', { chatId }); }}
+            >
+              <Icon name="information-circle-outline" size={18} color={theme.ink} style={{ width: 26 }} />
+              <Text style={[type.bodyMd, { color: theme.text }]}>Chat info</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
+              onPress={() => { setOverflowOpen(false); navigation.navigate('ChatInfo', { chatId }); }}
+            >
+              <Icon name="timer-outline" size={18} color={theme.ink} style={{ width: 26 }} />
+              <Text style={[type.bodyMd, { color: theme.text }]}>Disappearing messages</Text>
+            </Pressable>
+            {!embedded && (
+              <Pressable
+                style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
+                onPress={() => { setOverflowOpen(false); navigation.navigate('Starred'); }}
+              >
+                <Icon name="star-outline" size={18} color={theme.ink} style={{ width: 26 }} />
+                <Text style={[type.bodyMd, { color: theme.text }]}>Starred messages</Text>
+              </Pressable>
+            )}
+          </PaperCard>
+        </Pressable>
+      </Modal>
+
+      {/* per-conversation chat theme picker — live preview, Apply to save */}
+      {themePicker && (
+        <ThemePickerSheet
+          visible={themePicker.pickerOpen}
+          savedThemeId={themePicker.savedThemeId}
+          previewThemeId={themePicker.previewThemeId}
+          onPreview={themePicker.setPreviewThemeId}
+          onApply={themePicker.handleApply}
+          applying={themePicker.applying}
+          globalTheme={themePicker.globalTheme}
+          onClose={() => { themePicker.setPreviewThemeId(null); themePicker.setPickerOpen(false); }}
+        />
+      )}
+
+      {/* small non-blocking theme feedback: success ✓ pop or calm error */}
+      {themePicker?.themeToast && (
+        <View pointerEvents="none" style={[s.toastWrap, { top: (embedded ? 10 : 10 + insets.top) + 84 }]}>
+          <Pop trigger={themePicker.themeToast} from={0.5}>
+            <View
+              style={[
+                s.toast,
+                raised(theme, 2),
+                { backgroundColor: theme.card, borderColor: themePicker.themeToast === 'success' ? theme.accent : theme.danger },
+              ]}
+            >
+              {themePicker.themeToast === 'success' ? (
+                <>
+                  <Icon name="checkmark-circle" size={16} color={theme.accent} />
+                  <Text style={[type.bodySm, { color: theme.text, flex: 1 }]}>Theme applied.</Text>
+                </>
+              ) : (
+                <>
+                  <Icon name="alert-circle-outline" size={15} color={theme.danger} />
+                  <Text style={[type.bodySm, { color: theme.text, flex: 1 }]}>
+                    Couldn't save the theme. Check your connection and try again.
+                  </Text>
+                </>
+              )}
+            </View>
+          </Pop>
+        </View>
+      )}
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -800,6 +935,58 @@ class ConversationErrorBoundary extends React.Component {
   }
 }
 
+/**
+ * Wraps the conversation in the per-chat theme scope. The active ChatTheme is
+ * resolved here (saved theme + optional live picker preview) and re-provided
+ * as the app ThemeContext, so every widget inside the chat consumes it.
+ * Apply is optimistic with rollback — a failed save restores the previous
+ * persisted theme and shows a small non-blocking toast instead of breaking
+ * messaging.
+ */
+function ThemedConversation(props) {
+  const chatId = props.route?.params?.chatId || null;
+  const { theme: globalTheme } = useTheme();
+  const { themeIdFor, applyTheme, applyState, clearApplyError } = useChatTheme();
+  const [previewThemeId, setPreviewThemeId] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [themeToast, setThemeToast] = useState(null); // null | 'error' | 'success'
+  const toastTimer = useRef(null);
+
+  const savedThemeId = chatId ? themeIdFor(chatId) : 'graphite';
+
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  const handleApply = async (id) => {
+    const ok = await applyTheme(chatId, id);
+    setPreviewThemeId(null);
+    setPickerOpen(false);
+    // Small non-blocking feedback either way — success pops a ✓ briefly,
+    // failure shows the calm error toast and the theme rolls back.
+    setThemeToast(ok ? 'success' : 'error');
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setThemeToast(null), ok ? 1600 : 4200);
+    clearApplyError(chatId);
+  };
+
+  const themePicker = {
+    savedThemeId,
+    previewThemeId,
+    setPreviewThemeId,
+    pickerOpen,
+    setPickerOpen,
+    handleApply,
+    applying: !!applyState[chatId]?.saving,
+    themeToast,
+    globalTheme,
+  };
+
+  return (
+    <ChatThemeScope chatId={chatId} overrideThemeId={previewThemeId || undefined}>
+      <ConversationContent {...props} themePicker={themePicker} />
+    </ChatThemeScope>
+  );
+}
+
 export default function ConversationScreen(props) {
   const { theme } = useTheme();
   const chatId = props.route?.params?.chatId || 'unknown';
@@ -810,13 +997,14 @@ export default function ConversationScreen(props) {
       navigation={props.navigation}
       embedded={props.embedded}
     >
-      <ConversationContent {...props} />
+      <ThemedConversation {...props} />
     </ConversationErrorBoundary>
   );
 }
 
 const makeStyles = (t) => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  content: { flex: 1, zIndex: 1 },
   headerWrap: { paddingTop: 18, paddingBottom: 4 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 10 },
   backBtn: { padding: 4 },
@@ -830,8 +1018,17 @@ const makeStyles = (t) => StyleSheet.create({
   },
   messagesList: { flex: 1, minHeight: 0 },
   emptyChat: { alignItems: 'center', justifyContent: 'center', padding: 40 },
-  replyBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 8, padding: 10, gap: 12, backgroundColor: 'transparent' },
+  replyBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 8, padding: 10, gap: 12, backgroundColor: t.replyPreview },
   replyAccent: { width: 3.5, alignSelf: 'stretch', borderRadius: 2 },
+  overflowMenu: { width: '100%', maxWidth: 320, padding: 14 },
+  menuRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 6, paddingVertical: 11 },
+  menuIcon: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 999 },
+  toastWrap: { position: 'absolute', left: 20, right: 20, alignItems: 'center', zIndex: 50 },
+  toast: {
+    flexDirection: 'row', alignItems: 'center', gap: 9,
+    maxWidth: 420, paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 2, borderRadius: 999,
+  },
   editBar: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 8,
@@ -839,7 +1036,7 @@ const makeStyles = (t) => StyleSheet.create({
   },
   // The raised, irregular composer gives the bottom of the conversation a torn-paper feel.
   composerWrap: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 20, paddingBottom: 22, paddingTop: 12, gap: 12, borderTopWidth: 1, borderTopColor: t.graphiteLine, borderStyle: 'dashed' },
-  inputBar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 12, minHeight: 48, borderTopLeftRadius: 5, borderTopRightRadius: 3, borderBottomRightRadius: 6, borderBottomLeftRadius: 4 },
+  inputBar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 12, minHeight: 48, borderTopLeftRadius: 5, borderTopRightRadius: 3, borderBottomRightRadius: 6, borderBottomLeftRadius: 4, backgroundColor: t.inputBackground },
   input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },
   sendBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   recDot: { width: 9, height: 9, borderRadius: radius.full },

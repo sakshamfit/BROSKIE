@@ -4,6 +4,7 @@ import Icon from '../icons/Icon';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, InkCheckbox, InkButton, EmptyState, Rule, FrostedBackdrop, GoldTick, hasGoldTick } from './common';
+import { SheetSpringIn } from '../motion';
 import { type, inkBox, marker, radius, raised } from '../theme';
 import { api } from '../api';
 
@@ -47,6 +48,7 @@ export default function ForwardSheet({ visible, message, onClose }) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
       <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={close}>
         <FrostedBackdrop />
+        <SheetSpringIn style={{ width: '100%', maxWidth: 420 }}>
         <Pressable style={[s.sheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
           <View style={s.head}>
             <View style={{ flex: 1 }}>
@@ -91,6 +93,7 @@ export default function ForwardSheet({ visible, message, onClose }) {
             busy={busy}
           />
         </Pressable>
+        </SheetSpringIn>
       </Pressable>
     </Modal>
   );

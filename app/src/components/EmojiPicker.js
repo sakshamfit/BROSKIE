@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet, TextInput, FlatList } from 'react-na
 import Icon from '../icons/Icon';
 import Emoji from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
+import { FadeSlide, SpringPressable } from '../motion';
 import { inkBox, marker, type, dashedRule } from '../theme';
 import META from '../icons/emojiMeta.json';
 
@@ -48,6 +49,7 @@ export default function EmojiPicker({ visible, onSelect }) {
   if (!visible) return null;
 
   return (
+    <FadeSlide from="up" distance={14} duration={220}>
     <View style={[styles.wrap, { backgroundColor: theme.card }, inkBox(theme, 'ink')]}>
       <View style={styles.searchRow}>
         <Icon name="search" size={15} color={theme.muted} />
@@ -91,9 +93,9 @@ export default function EmojiPicker({ visible, onSelect }) {
         contentContainerStyle={styles.gridContent}
         keyboardShouldPersistTaps="handled"
         renderItem={({ item }) => (
-          <Pressable onPress={() => onSelect(item)} style={styles.emojiBtn}>
+          <SpringPressable onPress={() => onSelect(item)} style={styles.emojiBtn} scaleTo={0.82}>
             <Emoji char={item} size={26} />
-          </Pressable>
+          </SpringPressable>
         )}
         ListEmptyComponent={
           <Text style={[type.bodySm, { color: theme.muted, textAlign: 'center', paddingVertical: 20 }]}>
@@ -102,6 +104,7 @@ export default function EmojiPicker({ visible, onSelect }) {
         }
       />
     </View>
+    </FadeSlide>
   );
 }
 

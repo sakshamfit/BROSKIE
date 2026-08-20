@@ -1,7 +1,6 @@
 # BROSKIE — Application Status & Operations Guide
 
-**Last updated:** 18 August 2026
-**Repository:** `sakshamfit/BROSKIE`
+**Last updated:** 20 August 2026**Repository:** `sakshamfit/BROSKIE`
 **Primary production host:** Railway
 **Production API:** `https://broskie-h.up.railway.app`
 
@@ -79,8 +78,40 @@ A full Supabase/Postgres migration must preserve existing records and be impleme
 
 ## 3. Mobile connection status
 
-Native Android/iOS builds must reach the public Railway API, not `localhost`.
+### Android device compatibility (every supported phone)
 
+The Android build floor is **Android 7.0 (API 24)** — `minSdkVersion: 24` is
+set explicitly in `app.json`. That is the lowest API level React Native 0.86
+(Expo SDK 57) can run on; it covers essentially every Android phone in use
+since 2016, new and old alike. Below API 24, no React Native 0.86 app can
+run — that is a hard upstream limit of the framework, not of this app.
+
+What makes old-device support work:
+
+- `app/plugins/withAuthNetworkSecurity.js` bundles the **ISRG Root X1
+  certificate** into the APK and pins it (system + pinned roots, cleartext
+  off) for the production Railway API domain — Android 7.0's trust store
+  predates that root, and without this older phones would reject the API's
+  HTTPS chain before any JavaScript runs.
+- All new motion is transform/opacity with `useNativeDriver: true` (60fps on
+  mid/low-end hardware), `prefers-reduced-motion` is respected, and continuous
+  animations are tiny (typing dots, skeletons, empty-state float) and
+  auto-paused when unmounted.
+- Heavy UI work is gated/fallback-safe: `expo-blur` is optional (opaque
+  fallback on old APKs), fonts have a grace timer, and a root error boundary
+  keeps one bad screen from blanking the app.
+- No native modules beyond the SDK-57-aligned set were added; every Expo
+  dependency in `package.json` matches `bundledNativeModules.json` for SDK 57
+  (`npx expo install --check` clean), so native autolinking succeeds on
+  current and future build pipelines.
+- `expo-haptics` is optional at runtime (guarded try/catch, no-op on web and
+  on devices without a haptic engine).
+
+Current release metadata: version **1.3.0**, Android `versionCode` **5**.
+
+### API endpoint for native builds
+
+Native Android/iOS builds must reach the public Railway API, not `localhost`.
 The source currently defaults native builds to:
 
 ```text
@@ -198,6 +229,68 @@ The app supports the following appearance choices:
 **Kinetic Ink** is a high-contrast dark manga-tech theme with cyan action accents and red notification/critical accents.
 
 The chat list and conversation interface use a manga/paper visual style, including hand-inked card outlines, tape-style date labels, unread markers, and a paper-panel composer. Every signed-in screen uses a lightly uneven sketch-graph background with pencil fibres and graphite smudges. Login/signup are explicitly excluded and retain their original dark manga halftone and speed lines.
+
+### Per-conversation chat themes
+
+Each conversation can have its own independent chat theme (Chat ▸ ⋯ ▸ Chat theme).
+The theme belongs to the **conversation**, not the user: it is persisted
+server-side on the chat row (`theme_id`, `theme_updated_by`, `theme_updated_at`
+columns on `chats`) and every participant sees the same theme. Changing the
+theme in one chat never touches another.
+
+- **Registry:** all themes live in `app/src/chatThemes.js` (13 launch themes:
+  Graphite, Obsidian, Carbon, Aurora, Midnight, Ocean, Sunset, Sakura,
+  Lavender, Mint, Cream, Neon Night, Galaxy), mirrored server-side by the
+  `CHAT_THEMES` allow-list in `server/src/index.js`. The server rejects any
+  theme id outside that list (no arbitrary CSS/colors/objects can be injected
+  through the database); clients fall back to `graphite` on unknown ids.
+- **Persistence & realtime:** `POST /api/chats/:id/theme` persists the theme,
+  records a subtle `✨ <name> changed the chat theme to <Theme>` system
+  message, and broadcasts `chat:theme` + `chat:updated` + `message:new` so
+  everyone viewing the chat re-themes instantly without a reload; late joiners
+  read the persisted theme from the chat summary.
+- **Picker UX:** bottom sheet with horizontally scrollable miniature
+  conversation previews, category chips (Recommended / Graphite / Atmospheric /
+  Pulp / Special) and an optional mood selector that recommends themes. Tapping
+  a card live-previews the chat behind the sheet; nothing is persisted until
+  **Apply theme** is pressed. A failed save rolls back to the previous
+  persisted theme and shows a small non-blocking error — messaging is never
+  blocked.
+- **Rendering:** chat widgets consume a centralized `ChatTheme` resolved from
+  the registry (`ChatThemeScope`), so adding a future theme is a registry entry
+  only — no chat component changes. Background gradients use `react-native-svg`
+  (no new native dependencies) and crossfade in ~280 ms.
+
+### Motion & interaction system
+
+`app/src/motion.js` is the single, centralized motion system. All animation
+tokens (micro 150ms / fast 210ms / normal 280ms / slow 380ms, spring presets,
+easing curves), the `prefers-reduced-motion` gate (web `matchMedia` + native
+`AccessibilityInfo`), safe haptics (`expo-haptics`, no-op on web), and the
+reusable primitives live there:
+
+- `SpringPressable` / `usePressScale` — physical 100% → 96% → 100% press
+  springs on buttons (send, FAB, icon buttons, tab items, theme cards, emoji).
+- `FadeSlide` — opacity + translate + scale entrances (tab switches, chat
+  header/composer opening, in-chat search, story segments, profile hero).
+- `Pop` — tiny spring for badges (unread count changes), reaction pills,
+  theme-picker check marks, tab icon activation.
+- `TypingDots` — three staggered pulsing dots in the chat header, chat list
+  rows and anywhere typing state shows.
+- `Skeleton` — soft shimmer placeholders (chat list shown until the first
+  chats fetch resolves).
+- `HeartBurst` — double-tap a message → heart springs up, bounces, fades, and
+  adds a ❤️ reaction.
+- `SheetSpringIn` — bottom sheets/modals (message menu, forward, poll, timers,
+  chat info, chat-list actions) rise with a soft spring instead of popping.
+- `FloatLoop` — slow calm float for empty states (paused by unmount when
+  content arrives).
+
+Chat behavior details: new messages animate in once (opacity + translate +
+scale spring; an id set prevents re-animation on scroll recycling); the
+optimistic copy and its server confirmation never double-animate; chat-list
+rows pulse the avatar and wash with a highlight when an incoming message
+arrives; story progress bars animate 0→100% with hold-to-pause and resume.
 
 ### Daily AI greeting
 
@@ -345,6 +438,8 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 | `2f8d999` | Strong password policy added. |
 | `9a59577` | Kinetic Ink appearance theme added. |
 | `20b1432` | Chat list/conversation manga-paper UI redesign. |
+| current | Per-conversation chat themes (13 themes, realtime sync, picker with live preview). |
+| current | Centralized motion system (`src/motion.js`): press springs, tab/section transitions, animated message entrances, double-tap ❤️, typing dots, skeleton chat list, story progress bars with hold-to-pause, spring sheets, reduced-motion + haptics support. |
 
 ---
 

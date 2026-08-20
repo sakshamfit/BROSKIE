@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput, RefreshControl,
-  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Keyboard,
+  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Keyboard, Animated, Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -16,6 +16,7 @@ import PhotoCropPicker from '../components/PhotoCropPicker';
 import SongCard from '../components/SongCard';
 import SongPicker from '../components/SongPicker';
 import { radius, type, inkBox, marker, stroke, raised } from '../theme';
+import { FadeSlide, Skeleton, motion } from '../motion';
 
 const BG_COLORS = ['#FFE24D', '#fdf8f8', '#e2e3de', '#5d5f5b', '#1c1b1b', '#39444c'];
 
@@ -132,17 +133,42 @@ export default function StatusScreen() {
 
   const current = viewer?.group.items[viewer.index];
   const isOwnStatus = viewer?.group.user.id === user?.id;
-  useEffect(() => { setReplyText(''); setReplyFeedback(''); setReplyFocused(false); }, [current?.id]);
+  const [held, setHeld] = useState(false); // story hold-to-pause
+  const progress = useRef(new Animated.Value(0)).current;
+  const progressVal = useRef(0);
+  const segIdRef = useRef(null);
+  const moveRef = useRef(null);
+  moveRef.current = moveStatus;
+
+  // Progress-bar engine: each segment's bar animates 0 → 1 over its display
+  // duration, pauses while held (finger down) or while the reply input is
+  // focused, resumes from where it stopped, and auto-advances on completion.
   useEffect(() => {
     if (!current) return undefined;
-    // Pause auto-advance while the reply input is focused so typing isn't interrupted.
-    if (replyFocused) return undefined;
-    const timer = setTimeout(() => moveStatus(1), current.type === 'image' ? 6500 : 5500);
-    return () => clearTimeout(timer);
-    // The current id is the timer boundary; moveStatus intentionally uses the
-    // viewer snapshot associated with that id.
+    const id = progress.addListener(({ value }) => { progressVal.current = value; });
+    if (segIdRef.current !== current.id) {
+      segIdRef.current = current.id;
+      progressVal.current = 0;
+      progress.setValue(0);
+    }
+    if (held || replyFocused) {
+      progress.stopAnimation();
+      return () => progress.removeListener(id);
+    }
+    const durationMs = current.type === 'image' ? 6500 : 5500;
+    const remaining = Math.max(50, (1 - progressVal.current) * durationMs);
+    progress.setValue(progressVal.current);
+    const anim = Animated.timing(progress, {
+      toValue: 1, duration: remaining, easing: Easing.linear, useNativeDriver: true,
+    });
+    anim.start(({ finished }) => { if (finished) moveRef.current(1); });
+    return () => { anim.stop(); progress.removeListener(id); };
+    // The current id is the segment boundary; moveStatus intentionally uses
+    // the viewer snapshot associated with that id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id, replyFocused]);
+  }, [current?.id, held, replyFocused]);
+
+  const progressScaleX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
 
   const recent = data.others.filter((group) => !group.allViewed);
   const viewed = data.others.filter((group) => group.allViewed);
@@ -165,7 +191,7 @@ export default function StatusScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 60 }} color={theme.ink} />
+        <StatusSkeleton />
       ) : (
         <ScrollView
           contentContainerStyle={s.scroll}
@@ -275,6 +301,9 @@ export default function StatusScreen() {
 
       <Modal visible={!!viewer} animationType="fade" onRequestClose={closeViewer}>
         {current && (
+          // Viewer opens with a soft scale/settle — the avatar's story
+          // "expands" into the full screen without a jarring pop.
+          <FadeSlide key={`story-${viewer.group.user.id}`} from="up" distance={16} scale={0.985} duration={motion.normal} style={{ flex: 1 }}>
           <View
             style={[
               s.viewer,
@@ -286,20 +315,37 @@ export default function StatusScreen() {
             ]}
           >
             <View style={s.tapZones}>
-              <Pressable style={{ flex: 0.34 }} onPress={() => moveStatus(-1)} />
-              <Pressable style={{ flex: 0.66 }} onPress={() => moveStatus(1)} />
+              <Pressable
+                style={{ flex: 0.34 }}
+                onPress={() => moveStatus(-1)}
+                onPressIn={() => setHeld(true)}
+                onPressOut={() => setHeld(false)}
+              />
+              <Pressable
+                style={{ flex: 0.66 }}
+                onPress={() => moveStatus(1)}
+                onPressIn={() => setHeld(true)}
+                onPressOut={() => setHeld(false)}
+              />
             </View>
 
+            {/* progress bars — the active segment animates 0 → 100%, pauses
+                on hold, and resumes cleanly */}
             <View style={s.progressRow} pointerEvents="none">
-              {viewer.group.items.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    s.progressBar,
-                    { backgroundColor: index <= viewer.index ? foregroundFor(current) : 'rgba(160,160,160,0.42)' },
-                  ]}
-                />
-              ))}
+              {viewer.group.items.map((item, index) => {
+                const done = index < viewer.index;
+                const active = index === viewer.index;
+                return (
+                  <View key={index} style={[s.progressBar, { backgroundColor: 'rgba(160,160,160,0.42)', overflow: 'hidden' }]}>
+                    {done && <View style={[StyleSheet.absoluteFill, { backgroundColor: foregroundFor(item) }]} />}
+                    {active && (
+                      <Animated.View
+                        style={[StyleSheet.absoluteFill, { backgroundColor: foregroundFor(item), transform: [{ scaleX: progressScaleX }], transformOrigin: 'left' }]}
+                      />
+                    )}
+                  </View>
+                );
+              })}
             </View>
 
             <View style={s.viewerHeader}>
@@ -324,6 +370,8 @@ export default function StatusScreen() {
             </View>
 
             <View style={s.viewerBody} pointerEvents="none">
+              {/* each story segment enters with a soft settle */}
+              <FadeSlide key={current.id} from="up" distance={14} scale={0.985} style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
               {current.type === 'image' ? (
                 <View
                   style={[
@@ -351,6 +399,7 @@ export default function StatusScreen() {
                   <EmojiText style={[type.bodyMd, { color: '#ffffff', textAlign: 'center' }]}>{current.body}</EmojiText>
                 </View>
               )}
+              </FadeSlide>
             </View>
 
             {/* ── gentle update: reply composer (not a rebuild) ── */}
@@ -404,8 +453,31 @@ export default function StatusScreen() {
               </KeyboardAvoidingView>
             )}
           </View>
+          </FadeSlide>
         )}
       </Modal>
+    </View>
+  );
+}
+
+/** Soft skeleton while the status feed loads — avatar rings + text bars. */
+function StatusSkeleton() {
+  const { theme } = useTheme();
+  return (
+    <View style={{ paddingHorizontal: 22, paddingTop: 18, gap: 24 }}>
+      {[0, 1, 2, 3].map((i) => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <Skeleton width={54} height={54} radius={999} />
+          <View style={{ flex: 1, gap: 9 }}>
+            <Skeleton width="38%" height={13} />
+            <Skeleton width="62%" height={11} />
+          </View>
+        </View>
+      ))}
+      <View style={{ marginTop: 6, gap: 12 }}>
+        <Skeleton width="30%" height={12} />
+        <Skeleton width="92%" height={120} radius={10} />
+      </View>
     </View>
   );
 }

@@ -9,6 +9,7 @@ import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, lastSeenText, PaperCard, TapeChip, handleFor, Rule, InkButton, InkField, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
+import { FadeSlide, SheetSpringIn } from '../motion';
 import { radius, type, inkBox, marker, dashedRule, raised } from '../theme';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
@@ -140,6 +141,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
           <Icon name="arrow-back" size={22} color={theme.ink} />
         </Pressable>
 
+        <FadeSlide from="down" distance={12} scale={0.97} duration={280}>
         <PaperCard style={s.hero} weight="ink">
           <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={104} />
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16 }}>
@@ -155,6 +157,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
             {chat.type === 'group' ? `Group · ${chat.members.length} participants` : lastSeenText(chat.isOnline, chat.lastSeen)}
           </Text>
         </PaperCard>
+        </FadeSlide>
 
         {chat.type === 'direct' && !!chat.about && (
           <PaperCard>
@@ -252,6 +255,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
       <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}>
         <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setRenameOpen(false)}>
           <FrostedBackdrop />
+          <SheetSpringIn style={{ width: '100%', maxWidth: 380 }}>
           <Pressable style={[s.sheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
             <Text style={[type.headlineSm, { color: theme.text }]}>Rename group</Text>
             <InkField style={{ marginTop: 14 }}>
@@ -274,6 +278,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
               </View>
             </View>
           </Pressable>
+          </SheetSpringIn>
         </Pressable>
       </Modal>
 
@@ -281,6 +286,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
       <Modal visible={disappearOpen} transparent animationType="fade" onRequestClose={() => setDisappearOpen(false)}>
         <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setDisappearOpen(false)}>
           <FrostedBackdrop />
+          <SheetSpringIn style={{ width: '100%', maxWidth: 380 }}>
           <Pressable style={[s.sheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
             <Text style={[type.headlineSm, { color: theme.text }]}>Disappearing messages</Text>
             <Text style={[type.bodySm, { color: theme.subtext, marginTop: 4, marginBottom: 12 }]}>
@@ -308,6 +314,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
               ))}
             </View>
           </Pressable>
+          </SheetSpringIn>
         </Pressable>
       </Modal>
     </View>
