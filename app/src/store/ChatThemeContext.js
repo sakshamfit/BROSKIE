@@ -117,7 +117,7 @@ export function ChatThemeProvider({ children }) {
  * with that theme but nothing is persisted until the user hits Apply.
  */
 export function ChatThemeScope({ chatId, overrideThemeId, children }) {
-  const { themeIdFor } = useChatTheme();
+  const { themeIdFor = () => 'graphite' } = useChatTheme() || {};
   const { theme: baseTheme, mode, preference, setThemePreference, toggle } = useTheme();
   const chatTheme = ThemeRegistry.get(themeIdFor(chatId, overrideThemeId));
   const theme = useMemo(() => resolveChatTheme(baseTheme, chatTheme), [baseTheme, chatTheme]);

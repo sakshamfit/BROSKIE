@@ -440,7 +440,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   // Typing state is rendered separately with animated dots; this is the
   // static "who's here / last seen" line used when nobody is typing.
   const subtitle = chat.type === 'group'
-    ? chat.members.map((m) => (m.id === user.id ? 'You' : m.name.split(' ')[0])).join(', ')
+    ? (chat.members || [])
+        .map((m) => (m?.id === user.id ? 'You' : String(m?.name || 'Unknown').split(' ')[0]))
+        .join(', ')
     : lastSeenText(chat.isOnline, chat.lastSeen);
 
   // Keyboard pad: keep only the bottom controls above the keyboard.
@@ -609,7 +611,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
             <View style={s.dayWrap}>
               <View style={[dashedRule(theme), { flex: 1 }]} />
               <View style={[s.tapeStrip, { backgroundColor: theme.cardAlt, borderColor: theme.graphiteLine }]}>
-                <Text style={[type.labelXs, { color: theme.graphite }]}>{item.label.toUpperCase()}</Text>
+                <Text style={[type.labelXs, { color: theme.graphite }]}>{String(item.label || '').toUpperCase()}</Text>
               </View>
               <View style={[dashedRule(theme), { flex: 1 }]} />
             </View>
@@ -988,7 +990,13 @@ class ConversationErrorBoundary extends React.Component {
 function ThemedConversation(props) {
   const chatId = props.route?.params?.chatId || null;
   const { theme: globalTheme } = useTheme();
-  const { themeIdFor, applyTheme, applyState, clearApplyError } = useChatTheme();
+  const chatThemeApi = useChatTheme();
+  const {
+    themeIdFor = () => 'graphite',
+    applyTheme = async () => false,
+    applyState = {},
+    clearApplyError = () => {},
+  } = chatThemeApi || {};
   const [previewThemeId, setPreviewThemeId] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [themeToast, setThemeToast] = useState(null); // null | 'error' | 'success'
