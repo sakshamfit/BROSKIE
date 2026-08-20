@@ -179,10 +179,48 @@ and the database to Supabase Postgres (a real refactor — `better-sqlite3` is
 synchronous, `pg` is not — but it removes the single-disk dependency
 entirely and enables multiple server instances).
 
+## Shipping app updates (Settings ▸ App Updates)
+
+The app updates itself. **Settings ▸ App Updates** shows the installed version,
+checks on demand, and its button downloads the newest release and restarts
+straight into it. The same engine (`app/src/updates.js`) also checks silently on
+launch and whenever the app returns to the foreground, and installs a waiting
+update the next time the app is reopened — a toggle on that screen turns the
+automatic part off.
+
+**Android / iOS — publish an OTA update:**
+
+```bash
+cd app
+npx eas update --channel stable --message "what changed"
+```
+
+`stable` is the channel both build profiles use (`app/eas.json`), and the update
+URL/project are already configured in `app/app.json`.
+
+Two things to know:
+
+- **Only JS/asset changes ship over the air.** Adding or upgrading a native
+  module changes the fingerprint runtime version, so old installs will *not*
+  see that update — those need a fresh build (`npm run build:android`) and a
+  reinstall. Check what a build would match with `npx eas update:list`.
+- **Publish to the channel the installed app is on.** An APK built with the
+  `preview` profile also listens on `stable`; if you publish to a different
+  channel the app will keep reporting "You're on the latest version" because,
+  for its channel, it is.
+
+**Web / PWA:** deploy as usual (`npm run build`, or push to Vercel/Cloudflare).
+The update button compares the hashed bundle in the live `index.html` with the
+one the tab is running; installing it unregisters service workers, wipes
+CacheStorage and hard-reloads, which is also the cure for a browser or installed
+PWA that stubbornly serves an old build.
+
 ## Troubleshooting
 
 | Symptom | Cause |
 |---|---|
+| Settings says "You're on the latest version" after you shipped one | The update was published to a different channel than the installed build listens on, or it needs a native rebuild (fingerprint runtime version changed) — see "Shipping app updates" above |
+| "Updates unavailable in this build" | Expo Go or a dev build — OTA updates only run in EAS builds |
 | Build fails: `npm: command not found` | No `package.json` at the repo root, or Root Directory set to `server`. Nixpacks detects the language from the root — keep the root manifest and leave Root Directory empty. |
 | Build fails: `GetEnv.NoBoolean: is not a boolean` | The host injects a `CI` env var Expo can't parse (e.g. an empty value). The build scripts already pin `CI=true` before `expo export` (see `server/package.json` / `vercel.json`), so this only reappears if the build command is overridden in the host UI — keep the repo's own `npm run build`. |
 | "Reconnecting…" in Settings | Backend asleep, or (two-host) wrong `EXPO_PUBLIC_API_URL` |

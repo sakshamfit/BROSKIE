@@ -177,6 +177,14 @@ is a genuine peer-to-peer audio/video connection; native iOS/Android media captu
 `react-native-webrtc` + a custom dev build (see Notes & limits below) so the ringing/
 history/signaling works everywhere but live audio/video is web-only for now.
 
+**Self-updating** — **Settings ▸ App Updates** shows the installed version and updates
+the app on the spot: one tap downloads the newest release and restarts straight into it.
+It also runs quietly in the background (check on launch and on every return to the
+foreground, install on the next reopen), with an *Auto-install updates* toggle to turn
+that off. Native builds pull EAS/OTA bundles; on web the same button retires stale
+service-worker/PWA caches and hard-reloads the freshly deployed bundle. See
+`DEPLOY.md` → "Shipping app updates" for how to publish one.
+
 **Polish** — full light/dark theme, deterministic colour avatars with initials,
 pull-to-refresh, empty states, connection indicator. The web app is a proper
 installable PWA (add-to-home-screen, standalone, no browser chrome) and syncs with

@@ -200,6 +200,27 @@ The chat list and conversation interface use a manga/paper visual style, includi
 
 Version 1.2 adds a once-per-day animated and spoken greeting after authentication. It uses foreground device location only to request current conditions from Open-Meteo and combines that with server-provided unread/message-request/colleague/community counts. A preferred feminine voice speaks the briefing once while the original animation embedded in `app/assets/ai-greeter.glb` loops independently through Three.js; the app does not retarget or modify the model skeleton. The overlay closes automatically after the finale. Animation and export requirements are documented in `AI_GREETER.md`. This version requires a fresh native build because it adds Expo Location, Speech, and GL modules.
 
+### App updates
+
+Settings has an **App Updates** section (`app/src/components/UpdateSection.js`,
+engine in `app/src/updates.js`). It reports the installed version/bundle, when it
+last checked, and updates the app on demand:
+
+- **Update now / Install & restart** — checks, downloads and immediately restarts
+  into the new release. Native uses `expo-updates` (EAS channel `stable`); web
+  unregisters service workers, clears CacheStorage and hard-reloads with a
+  cache-busting parameter.
+- **CHECK** — checks without installing.
+- **Auto-install updates** (default on) — silent checks on launch and on every
+  return to the foreground; a downloaded bundle is installed the next time the
+  app is reopened, never mid-session. Web only self-reloads after the tab has
+  been in the background for over five minutes.
+- Expo Go / dev builds report "Updates unavailable in this build".
+
+Publishing is documented in `DEPLOY.md` → "Shipping app updates". Note that OTA
+updates only reach installs whose fingerprint runtime version matches; native
+dependency changes still require a new build.
+
 ---
 
 ## 8. Current deployment checks

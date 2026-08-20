@@ -265,6 +265,34 @@ export function InkCheckbox({ checked, size = 20, onPress }) {
   );
 }
 
+/** Hand-drawn pill toggle — ink outline, sketch-square thumb. */
+export function HandDrawnToggle({ value, onToggle, disabled }) {
+  const { theme } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityState={{ checked: !!value, disabled: !!disabled }}
+      onPress={onToggle}
+      disabled={disabled}
+      hitSlop={8}
+      style={{
+        width: 52, height: 28, borderRadius: radius.full, padding: 3, justifyContent: 'center',
+        borderWidth: 2, borderColor: theme.ink,
+        backgroundColor: value ? theme.highlighter : theme.cardAlt,
+        opacity: disabled ? 0.45 : 1,
+      }}
+    >
+      <View
+        style={{
+          width: 20, height: 20, borderRadius: radius.full, backgroundColor: theme.ink,
+          borderWidth: 1, borderColor: theme.ink,
+          transform: [{ translateX: value ? 22 : 0 }],
+        }}
+      />
+    </Pressable>
+  );
+}
+
 /** Rough dashed rule. */
 export function Rule({ style }) {
   const { theme } = useTheme();
