@@ -11,7 +11,7 @@ import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import AffiliationPicker, { AFFILIATION_TYPES, affiliationType } from '../components/AffiliationPicker';
-import { Avatar, InkField, TapeChip, handleFor, rippleFor } from '../components/common';
+import { Avatar, InkField, TapeChip, handleFor, rippleFor, GoldTick, hasGoldTick } from '../components/common';
 import { type, inkBox, marker, dashedRule, raised } from '../theme';
 
 const FILTERS = [{ key: '', short: 'All', icon: 'globe-outline' }, ...AFFILIATION_TYPES];
@@ -294,7 +294,10 @@ export default function ColleaguesScreen({ onOpenChat }) {
                   <View style={s.requestRow}>
                     <Avatar uri={request.user.avatar} name={request.user.name} id={request.user.id} size={46} />
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <EmojiText style={[type.bodyStrong, { color: theme.text }]}>{request.user.name}</EmojiText>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <EmojiText style={[type.bodyStrong, { color: theme.text, flexShrink: 1 }]}>{request.user.name}</EmojiText>
+                        {hasGoldTick(request.user) && <GoldTick size={14} />}
+                      </View>
                       <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]} numberOfLines={1}>
                         {request.user.sharedAffiliations?.map((a) => a.name).join(' · ').toUpperCase()}
                       </Text>
@@ -338,7 +341,10 @@ export default function ColleaguesScreen({ onOpenChat }) {
                         <Avatar uri={person.avatar} name={person.name} id={person.id} size={62} online={person.isOnline} weight={index % 3 === 0 ? 'ink' : 'thin'} />
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <EmojiText style={[type.headlineSm, { color: theme.text, fontSize: 21 }]} numberOfLines={1}>{person.name}</EmojiText>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <EmojiText style={[type.headlineSm, { color: theme.text, fontSize: 21, flexShrink: 1 }]} numberOfLines={1}>{person.name}</EmojiText>
+                          {hasGoldTick(person) && <GoldTick size={16} />}
+                        </View>
                         <Text style={[type.labelXs, { color: theme.graphite, marginTop: 4 }]} numberOfLines={2}>
                           {lead?.title ? `${lead.title} @ ${lead.name}` : lead?.name || handleFor(person)}
                         </Text>

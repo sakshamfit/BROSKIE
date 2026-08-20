@@ -3,7 +3,7 @@ import { View, Text, Image, Pressable, StyleSheet, Modal } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
-import { Ticks, formatTime, PaperCard, Rule, FrostedBackdrop } from './common';
+import { Ticks, formatTime, PaperCard, Rule, FrostedBackdrop, GoldTick, hasGoldTick } from './common';
 import { mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 import VoiceNote from './VoiceNote';
@@ -21,7 +21,7 @@ export const disappearLabel = (seconds) =>
   DISAPPEAR_OPTIONS.find((o) => o.seconds === seconds)?.label || 'Off';
 
 export default function MessageBubble({
-  message, isMine, isGroup, senderName,
+  message, isMine, isGroup, senderName, senderUser,
   onReply, onReact, onDelete, onImagePress,
   onEdit, onForward, onStar, onSetTimer, onVotePoll,
 }) {
@@ -69,7 +69,10 @@ export default function MessageBubble({
           ]}
         >
           {isGroup && !isMine && (
-            <Text style={[type.labelXs, { color: theme.graphite, marginBottom: 4 }]}>{senderName.toUpperCase()}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+              <Text style={[type.labelXs, { color: theme.graphite }]}>{senderName.toUpperCase()}</Text>
+              {hasGoldTick(senderUser) && <GoldTick size={11} />}
+            </View>
           )}
 
           {message.forwarded && !message.deleted && (

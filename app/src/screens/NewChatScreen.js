@@ -6,7 +6,7 @@ import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, EmptyState, InkField, InkIconButton, InkCheckbox, handleFor, Rule } from '../components/common';
+import { Avatar, EmptyState, InkField, InkIconButton, InkCheckbox, handleFor, Rule, GoldTick, hasGoldTick } from '../components/common';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
 
 export default function NewChatScreen({ navigation, embedded = false }) {
@@ -71,7 +71,7 @@ export default function NewChatScreen({ navigation, embedded = false }) {
           <Icon name="arrow-back" size={22} color={theme.ink} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={[type.headlineMd, { color: theme.text }]}>{groupMode ? 'New group' : 'New chat'}</Text>
+          <Text style={[type.headlineMd, { color: theme.text }]}>{groupMode ? 'New group' : 'find +ones'}</Text>
           <Text style={[type.bodySm, { color: theme.subtext }]}>
             {groupMode ? `${selected.length} selected` : `${users.length} contacts`}
           </Text>
@@ -129,7 +129,10 @@ export default function NewChatScreen({ navigation, embedded = false }) {
                 {groupMode && <InkCheckbox checked={isSel} size={19} />}
                 <Avatar uri={item.avatar} name={item.name} id={item.id} online={item.isOnline} size={44} />
                 <View style={{ flex: 1 }}>
-                  <EmojiText style={[type.headlineSm, { color: theme.text }]}>{item.name}</EmojiText>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]}>{item.name}</EmojiText>
+                    {hasGoldTick(item) && <GoldTick size={15} />}
+                  </View>
                   <Text style={[type.labelXs, { color: theme.graphite, marginTop: 3 }]}>
                     {handleFor(item)}
                   </Text>

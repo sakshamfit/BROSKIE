@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Image, StyleSheet, Pressable, ActivityIndicator, Platform, Animated, Easing } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 import Icon from '../icons/Icon';
 import {
   colorFor, initials, AVATAR_INK, radius, type, tokens, stroke,
@@ -492,6 +493,39 @@ export function handleFor(nameOrUser = '', phone = '') {
   }
   const base = String(nameOrUser).toLowerCase().replace(/[^a-z0-9]+/g, '');
   return '@' + (base || String(phone).replace(/\D/g, '').slice(-6) || 'user');
+}
+
+/** Hard-reserved gold verification mark. Only username `saksham` receives it. */
+const GOLD_TICK_USERNAME = 'saksham';
+
+export function hasGoldTick(userOrUsername) {
+  if (userOrUsername == null) return false;
+  const raw = typeof userOrUsername === 'string'
+    ? userOrUsername
+    : (userOrUsername.username || '');
+  return String(raw).normalize('NFKC').trim().toLowerCase() === GOLD_TICK_USERNAME;
+}
+
+/** Gold filled circle with an ink check — shown next to the verified username only. */
+export function GoldTick({ size = 15, style }) {
+  return (
+    <View
+      accessibilityLabel="Verified"
+      style={[{ width: size, height: size, flexShrink: 0 }, style]}
+    >
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Circle cx="12" cy="12" r="11" fill="#E8B923" stroke="#8A6500" strokeWidth="1.15" />
+        <Path
+          d="M6.9 12.35 l3.15 3.2 7.15-7.45"
+          fill="none"
+          stroke="#1c1b1b"
+          strokeWidth="2.35"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

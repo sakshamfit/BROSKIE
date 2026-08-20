@@ -6,7 +6,7 @@ import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
-import { Avatar, EmptyState, handleFor } from '../components/common';
+import { Avatar, EmptyState, handleFor, GoldTick, hasGoldTick } from '../components/common';
 import { confirm } from '../hooks/confirm';
 import { type, dashedRule } from '../theme';
 
@@ -64,7 +64,10 @@ export default function BlockedUsersScreen({ navigation, embedded = false }) {
             <View style={s.row}>
               <Avatar uri={item.avatar} name={item.name} id={item.id} size={46} />
               <View style={{ flex: 1 }}>
-                <EmojiText style={[type.bodyMd, { color: theme.text }]}>{item.name}</EmojiText>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <EmojiText style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]}>{item.name}</EmojiText>
+                  {hasGoldTick(item) && <GoldTick size={14} />}
+                </View>
                 <Text style={[type.labelXs, { color: theme.graphite, marginTop: 2 }]}>{handleFor(item)}</Text>
               </View>
               <Pressable onPress={() => unblock(item)} disabled={busyId === item.id} style={s.unblockBtn}>

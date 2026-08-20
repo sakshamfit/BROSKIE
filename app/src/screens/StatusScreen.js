@@ -10,7 +10,7 @@ import { api, mediaUrl } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
-import { Avatar, formatChatTime, rippleFor, FrostedBackdrop } from '../components/common';
+import { Avatar, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import AudiencePicker, { AUDIENCE } from '../components/AudiencePicker';
 import PhotoCropPicker from '../components/PhotoCropPicker';
 import SongCard from '../components/SongCard';
@@ -250,9 +250,12 @@ export default function StatusScreen() {
             <View style={s.viewerHeader}>
               <Avatar uri={viewer.group.user.avatar} name={viewer.group.user.name} id={viewer.group.user.id} size={40} />
               <View style={{ flex: 1 }}>
-                <EmojiText style={[type.bodyStrong, { color: foregroundFor(current) }]} numberOfLines={1}>
-                  {viewer.group.user.id === user.id ? 'My status' : viewer.group.user.name}
-                </EmojiText>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <EmojiText style={[type.bodyStrong, { color: foregroundFor(current), flexShrink: 1 }]} numberOfLines={1}>
+                    {viewer.group.user.id === user.id ? 'My status' : viewer.group.user.name}
+                  </EmojiText>
+                  {viewer.group.user.id !== user.id && hasGoldTick(viewer.group.user) && <GoldTick size={14} />}
+                </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
                   <Icon name={privacyMeta(current.audience).icon} size={11} color={foregroundFor(current)} style={{ opacity: 0.68 }} />
                   <Text style={[type.labelXs, { color: foregroundFor(current), opacity: 0.68 }]}>
@@ -329,7 +332,10 @@ function StatusRow({ group, onPress, theme, viewed }) {
         <Avatar uri={group.user.avatar} name={group.user.name} id={group.user.id} size={52} />
       </View>
       <View style={{ flex: 1 }}>
-        <EmojiText style={[type.bodyStrong, { color: theme.text }]} numberOfLines={1}>{group.user.name}</EmojiText>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <EmojiText style={[type.bodyStrong, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{group.user.name}</EmojiText>
+          {hasGoldTick(group.user) && <GoldTick size={14} />}
+        </View>
         <Text style={[type.bodySm, { color: theme.subtext, marginTop: 2 }]}>
           {formatChatTime(latest.createdAt)} · {group.items.length} update{group.items.length === 1 ? '' : 's'}
         </Text>

@@ -10,7 +10,7 @@ import { api, mediaUrl } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFor, FrostedBackdrop } from '../components/common';
+import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import { AUDIENCE } from '../components/AudiencePicker';
 import SongCard from '../components/SongCard';
 import NewPostScreen from './NewPostScreen';
@@ -139,9 +139,12 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         <View style={s.noteHead}>
           <Avatar uri={item.author.avatar} name={item.author.name} id={item.author.id} size={38} />
           <View style={{ flex: 1 }}>
-            <Text style={[type.labelSm, { color: theme.ink }]} numberOfLines={1}>
-              {handleFor(item.author)}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <Text style={[type.labelSm, { color: theme.ink, flexShrink: 1 }]} numberOfLines={1}>
+                {handleFor(item.author)}
+              </Text>
+              {hasGoldTick(item.author) && <GoldTick size={13} />}
+            </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 }}>
               <Icon name={audienceMeta.icon} size={11} color={theme.muted} />
               <Text style={[type.labelXs, { color: theme.muted }]}>
@@ -407,8 +410,9 @@ function CommentsSheet({ post, onClose, onCounted }) {
                 <View style={s.comment}>
                   <Avatar uri={item.author.avatar} name={item.author.name} id={item.author.id} size={30} />
                   <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <Text style={[type.labelXs, { color: theme.ink }]}>{handleFor(item.author)}</Text>
+                      {hasGoldTick(item.author) && <GoldTick size={11} />}
                       <Text style={[type.labelXs, { color: theme.muted, fontSize: 9 }]}>{formatChatTime(item.createdAt)}</Text>
                     </View>
                     <EmojiText style={[type.bodySm, { color: theme.text, marginTop: 3 }]}>{item.body}</EmojiText>
