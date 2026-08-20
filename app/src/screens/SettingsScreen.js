@@ -8,7 +8,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
 import useResponsive from '../hooks/useResponsive';
-import { Avatar, InkButton, InkField, PaperCard, TapeChip, handleFor, MotionIn, FrostedBackdrop } from '../components/common';
+import { Avatar, InkButton, InkField, PaperCard, TapeChip, handleFor, MotionIn, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
@@ -332,7 +332,10 @@ function ProfileHero({ user, theme, joinYear, connected }) {
       </View>
 
       <View style={s.heroBody}>
-        <EmojiText style={[type.headlineLg, { fontSize: 30, color: theme.text }]}>{user?.name}</EmojiText>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <EmojiText style={[type.headlineLg, { fontSize: 30, color: theme.text }]}>{user?.name}</EmojiText>
+          {hasGoldTick(user) && <GoldTick size={22} />}
+        </View>
         <Text style={[type.labelSm, { color: theme.graphite, marginTop: 4 }]}>{handleFor(user)}</Text>
         {!!user?.about && (
           <EmojiText style={[type.bodyMd, { color: theme.subtext, marginTop: 10 }]} numberOfLines={2}>

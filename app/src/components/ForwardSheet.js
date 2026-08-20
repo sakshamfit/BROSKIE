@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, Modal, FlatList } from 'react-native
 import Icon from '../icons/Icon';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, InkCheckbox, InkButton, EmptyState, Rule, FrostedBackdrop } from './common';
+import { Avatar, InkCheckbox, InkButton, EmptyState, Rule, FrostedBackdrop, GoldTick, hasGoldTick } from './common';
 import { type, inkBox, marker, radius, raised } from '../theme';
 import { api } from '../api';
 
@@ -71,7 +71,10 @@ export default function ForwardSheet({ visible, message, onClose }) {
               return (
                 <Pressable style={({ pressed }) => [s.row, pressed ? marker(theme, 1) : null]} onPress={() => toggle(item.id)}>
                   <Avatar uri={item.avatar} name={item.name} id={item.otherUserId || item.id} group={item.type === 'group'} size={42} />
-                  <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]} numberOfLines={1}>{item.name}</Text>
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                    <Text style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{item.name}</Text>
+                    {hasGoldTick(item) && <GoldTick size={14} />}
+                  </View>
                   {item.muted && <Icon name="volume-mute" size={14} color={theme.muted} style={{ marginRight: 10 }} />}
                   <InkCheckbox checked={on} onPress={() => toggle(item.id)} size={22} />
                 </Pressable>

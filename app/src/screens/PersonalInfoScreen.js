@@ -8,7 +8,7 @@ import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
 import AffiliationPicker, { affiliationType } from '../components/AffiliationPicker';
-import { PaperCard, InkField, InkButton, TapeChip, FrostedBackdrop } from '../components/common';
+import { PaperCard, InkField, InkButton, TapeChip, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import { type, inkBox, marker } from '../theme';
 
 /** "Personal Information" — Name, Username, About, Phone. */
@@ -67,7 +67,7 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
     }
   };
 
-  const Row = ({ icon, label, value, onPress }) => (
+  const Row = ({ icon, label, value, onPress, verified = false }) => (
     <Pressable
       style={({ pressed, hovered }) => [s.row, inkBox(theme, 'thin'), (pressed || hovered) ? { backgroundColor: theme.cardAlt } : null]}
       onPress={onPress}
@@ -75,7 +75,10 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
       <Icon name={icon} size={19} color={theme.graphite} style={{ width: 26 }} />
       <View style={{ flex: 1 }}>
         <Text style={[type.bodyMd, { color: theme.text }]}>{label}</Text>
-        <Text style={[type.bodySm, { color: theme.subtext, marginTop: 2 }]} numberOfLines={1}>{value || 'Not set'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+          <Text style={[type.bodySm, { color: theme.subtext, flexShrink: 1 }]} numberOfLines={1}>{value || 'Not set'}</Text>
+          {verified && <GoldTick size={13} />}
+        </View>
       </View>
       <Icon name="chevron-forward-outline" size={16} color={theme.muted} />
     </Pressable>
@@ -94,7 +97,7 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
         <Text style={[type.labelXs, { color: theme.muted, marginBottom: 10 }]}>IDENTITY</Text>
         <View style={{ gap: 10, marginBottom: 24 }}>
           <Row icon="person-outline" label="Name" value={user?.name} onPress={() => openEdit('name')} />
-          <Row icon="id-card-outline" label="Username" value={user?.username ? `@${user.username}` : null} onPress={() => openEdit('username')} />
+          <Row icon="id-card-outline" label="Username" value={user?.username ? `@${user.username}` : null} onPress={() => openEdit('username')} verified={hasGoldTick(user)} />
           <Row icon="information-circle-outline" label="About" value={user?.about} onPress={() => openEdit('about')} />
         </View>
 

@@ -9,7 +9,7 @@ import { api } from '../api';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { confirm } from '../hooks/confirm';
-import { Avatar, EmptyState, Rule, TapeChip, formatChatTime, handleFor } from './common';
+import { Avatar, EmptyState, Rule, TapeChip, formatChatTime, handleFor, GoldTick, hasGoldTick } from './common';
 import { type, inkBox, marker, stroke } from '../theme';
 
 /** Full-height inbox for first messages from people outside accepted contacts. */
@@ -58,7 +58,10 @@ export default function MessageRequestsPanel({ visible, onClose, requests, onCha
         <View style={s.cardHead}>
           <Avatar uri={person.avatar} name={person.name} id={person.id} size={52} weight="ink" />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <EmojiText style={[type.headlineSm, { color: theme.text }]} numberOfLines={1}>{person.name || 'Unknown'}</EmojiText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{person.name || 'Unknown'}</EmojiText>
+              {hasGoldTick(person) && <GoldTick size={15} />}
+            </View>
             <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]}>{handleFor(person)}</Text>
           </View>
           <TapeChip label={formatChatTime(message?.createdAt || item.requestedAt) || 'NEW'} tone="accent" />

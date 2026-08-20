@@ -11,7 +11,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import {
   Avatar, Ticks, EmptyState, CountBead, formatChatTime, SketchDivider, InkIconButton, Rule, PaperCard, MotionIn,
-  FrostedBackdrop,
+  FrostedBackdrop, GoldTick, hasGoldTick,
 } from '../components/common';
 import { type, inkBox, marker, radius, stroke } from '../theme';
 import { api } from '../api';
@@ -170,6 +170,7 @@ export default function ChatListScreen({ navigation }) {
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginRight: 10 }}>
                 {item.pinned && <Icon name="pin" size={13} color={theme.highlighter} />}
                 <EmojiText style={s.name} numberOfLines={1}>{item.name}</EmojiText>
+                {hasGoldTick(item) && <GoldTick size={15} />}
                 {item.requestStatus === 'pending' && item.requestDirection === 'outgoing' && (
                   <Text style={[type.labelXs, s.requestSent]}>REQUEST SENT</Text>
                 )}
@@ -309,16 +310,23 @@ export default function ChatListScreen({ navigation }) {
           <EmptyState
             icon={showArchived ? 'archive-outline' : 'chatbubbles-outline'}
             title={showArchived ? 'Nothing archived' : 'Blank page'}
-            subtitle={showArchived ? 'Long-press a chat to archive it.' : 'Tap the pen to start a conversation.'}
+            subtitle={showArchived ? 'Long-press a chat to archive it.' : 'Tap find +ones to start a conversation.'}
           />
         }
       />
 
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="find +ones"
         onPress={() => navigation.navigate('NewChat')}
         style={({ pressed }) => [s.fab, inkBox(theme, 'bold'), { backgroundColor: pressed ? theme.highlighter : theme.ink }]}
       >
-        <Icon name="create-outline" size={21} color={theme.onPrimary} />
+        {({ pressed }) => (
+          <>
+            <Icon name="search" size={16} color={pressed ? theme.ink : theme.onPrimary} />
+            <Text style={[s.fabLabel, { color: pressed ? theme.ink : theme.onPrimary }]}>find +ones</Text>
+          </>
+        )}
       </Pressable>
 
       <MessageRequestsPanel
@@ -342,7 +350,10 @@ export default function ChatListScreen({ navigation }) {
                 group={sheetChat?.type === 'group'} size={44}
               />
               <View style={{ flex: 1 }}>
-                <EmojiText style={[type.headlineSm, { color: theme.text }]} numberOfLines={1}>{sheetChat?.name}</EmojiText>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{sheetChat?.name}</EmojiText>
+                  {hasGoldTick(sheetChat) && <GoldTick size={15} />}
+                </View>
                 <Text style={[type.bodySm, { color: theme.subtext }]}>
                   {sheetChat?.type === 'group' ? 'Group chat' : 'Direct chat'}
                 </Text>
@@ -499,9 +510,12 @@ const makeStyles = (t) => StyleSheet.create({
   preview: { ...type.bodyMd, color: CHAT_TILE_MUTED, flex: 1 },
 
   fab: {
-    position: 'absolute', right: 24, bottom: 26, width: 58, height: 58,
-    alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '3deg' }],
+    position: 'absolute', right: 16, bottom: 26,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingHorizontal: 16, paddingVertical: 13, minHeight: 52,
+    transform: [{ rotate: '2deg' }],
   },
+  fabLabel: { ...type.bodyStrong, fontSize: 14.5, letterSpacing: -0.2 },
   archiveRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 8, paddingVertical: 14, marginBottom: 6 },
   resultsWrap: { paddingTop: 16 },
   resultRow: { flexDirection: 'row', gap: 12, alignItems: 'center', paddingVertical: 10 },

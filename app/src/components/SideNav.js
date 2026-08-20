@@ -50,7 +50,7 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="New chat"
+        accessibilityLabel="find +ones"
         onPress={onNewChat}
         hitSlop={4}
         style={({ pressed }) => [
@@ -60,8 +60,8 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
           pressed ? marker(theme, 2) : null,
         ]}
       >
-        <Icon name="create-outline" size={17} color={theme.ink} />
-        {!railOnly && <Text style={[type.bodyStrong, { color: theme.ink }]}>New sketch</Text>}
+        <Icon name="search" size={17} color={theme.ink} />
+        {!railOnly && <Text style={[type.bodyStrong, { color: theme.ink }]}>find +ones</Text>}
       </Pressable>
 
       <View style={s.nav}>

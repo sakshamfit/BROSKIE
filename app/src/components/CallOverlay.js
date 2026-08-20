@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, rippleFor } from './common';
+import { Avatar, rippleFor, GoldTick, hasGoldTick } from './common';
 import { radius, type, inkBox } from '../theme';
 
 /**
@@ -77,9 +77,12 @@ export default function CallOverlay() {
           {!(isVideo && isOngoing) && (
             <>
               <Avatar uri={call.with?.avatar} name={call.with?.name} id={call.with?.id} size={128} />
-              <Text style={[type.headlineLg, { color: isVideo && isOngoing ? '#fff' : theme.text, marginTop: 22 }]}>
-                {call.with?.name || 'Unknown'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 22 }}>
+                <Text style={[type.headlineLg, { color: isVideo && isOngoing ? '#fff' : theme.text }]}>
+                  {call.with?.name || 'Unknown'}
+                </Text>
+                {hasGoldTick(call.with) && <GoldTick size={22} />}
+              </View>
             </>
           )}
           <Text style={[type.bodyLg, { color: isVideo && isOngoing ? 'rgba(255,255,255,0.8)' : theme.subtext, marginTop: 8 }]}>

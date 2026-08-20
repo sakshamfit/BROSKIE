@@ -66,7 +66,7 @@ function PhoneFrame({ children }) {
 function SketchGraphPaper() {
   const { theme } = useTheme();
   return (
-    <View style={[styles.paperOverlay, { pointerEvents: 'none', opacity: theme.dark ? 0.18 : 0.16 }]}>
+    <View style={[styles.paperOverlay, { pointerEvents: 'none', opacity: theme.dark ? 0.18 : 0.09 }]}>
       <Svg width="100%" height="100%">
         <Defs>
           <Pattern id="sketch-grid-minor" width="28" height="28" patternUnits="userSpaceOnUse">

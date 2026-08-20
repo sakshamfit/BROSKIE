@@ -7,7 +7,7 @@ import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, EmptyState, formatChatTime, rippleFor } from '../components/common';
+import { Avatar, EmptyState, formatChatTime, rippleFor, GoldTick, hasGoldTick } from '../components/common';
 import useResponsive from '../hooks/useResponsive';
 import { type, dashedRule, marker } from '../theme';
 
@@ -104,9 +104,12 @@ export default function CallsScreen({ navigation, embedded = false }) {
               >
                 <Avatar uri={item.with.avatar} name={item.with.name} id={item.with.id} size={48} />
                 <View style={{ flex: 1 }}>
-                  <EmojiText style={[type.headlineSm, { color: theme.text }]} numberOfLines={1}>
-                    {item.with.id === user.id ? 'You' : item.with.name}
-                  </EmojiText>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>
+                      {item.with.id === user.id ? 'You' : item.with.name}
+                    </EmojiText>
+                    {hasGoldTick(item.with) && <GoldTick size={15} />}
+                  </View>
                   <View style={s.metaRow}>
                     <Icon name={ic.name} size={13} color={missed ? theme.danger : ic.color} />
                     <Text style={[type.bodySm, { color: missed ? theme.danger : theme.subtext }]}>

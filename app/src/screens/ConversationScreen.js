@@ -17,7 +17,7 @@ import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import {
   Avatar, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor, formatTime,
-  FrostedBackdrop,
+  FrostedBackdrop, GoldTick, hasGoldTick,
 } from '../components/common';
 import EmojiPicker from '../components/EmojiPicker';
 import MessageBubble, { DISAPPEAR_OPTIONS } from '../components/MessageBubble';
@@ -333,8 +333,11 @@ function ConversationContent({ route, navigation, embedded = false }) {
           )}
           <Pressable style={s.headerInfo} onPress={() => navigation.navigate('ChatInfo', { chatId })}>
             <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={42} />
-            <View style={{ flex: 1 }}>
-              <EmojiText style={[type.headlineSm, { color: theme.text }]} numberOfLines={1}>{chat.name}</EmojiText>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{chat.name}</EmojiText>
+                {hasGoldTick(chat) && <GoldTick size={16} />}
+              </View>
               <Text style={[type.bodySm, { fontSize: 12.5, color: typers.length ? theme.primary : theme.subtext }]} numberOfLines={1}>
                 {subtitle}
               </Text>
@@ -452,6 +455,7 @@ function ConversationContent({ route, navigation, embedded = false }) {
               isMine={item.senderId === user.id}
               isGroup={chat.type === 'group'}
               senderName={nameFor(item.senderId)}
+              senderUser={chat?.members?.find((m) => m.id === item.senderId)}
               onReply={setReplyTo}
               onReact={react}
               onDelete={deleteMessage}

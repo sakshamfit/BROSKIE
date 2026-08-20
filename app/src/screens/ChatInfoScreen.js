@@ -8,7 +8,7 @@ import { EmojiText } from '../icons/Emoji';
 import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, lastSeenText, PaperCard, TapeChip, handleFor, Rule, InkButton, InkField, FrostedBackdrop } from '../components/common';
+import { Avatar, lastSeenText, PaperCard, TapeChip, handleFor, Rule, InkButton, InkField, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import { radius, type, inkBox, marker, dashedRule, raised } from '../theme';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
@@ -142,7 +142,10 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
 
         <PaperCard style={s.hero} weight="ink">
           <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={104} />
-          <EmojiText style={[type.headlineMd, { color: theme.text, marginTop: 16, textAlign: 'center' }]}>{chat.name}</EmojiText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16 }}>
+            <EmojiText style={[type.headlineMd, { color: theme.text, textAlign: 'center', flexShrink: 1 }]}>{chat.name}</EmojiText>
+            {hasGoldTick(chat) && <GoldTick size={20} />}
+          </View>
           {chat.type === 'direct' ? (
             <Text style={[type.labelSm, { color: theme.graphite, marginTop: 6 }]}>
               {handleFor(chat)}
@@ -203,9 +206,12 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
                 <View key={m.id} style={s.memberRow}>
                   <Avatar uri={m.avatar} name={m.name} id={m.id} size={46} online={m.isOnline} />
                   <View style={{ flex: 1 }}>
-                    <EmojiText style={[type.bodyMd, { color: theme.text }]}>
-                      {m.id === user.id ? 'You' : m.name}
-                    </EmojiText>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <EmojiText style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]}>
+                        {m.id === user.id ? 'You' : m.name}
+                      </EmojiText>
+                      {hasGoldTick(m) && <GoldTick size={14} />}
+                    </View>
                     <Text style={[type.labelXs, { color: theme.graphite, marginTop: 2 }]}>
                       {handleFor(m)}
                     </Text>

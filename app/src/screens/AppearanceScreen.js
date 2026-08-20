@@ -71,11 +71,15 @@ export default function AppearanceScreen({ navigation, embedded = false }) {
             split
           />
         </View>
-        {preference === 'system' && (
+        {preference === 'system' ? (
           <Text style={[type.bodySm, { color: theme.subtext, marginTop: 10 }]}>
             Follows {SYSTEM_SETTING_NAME} automatically.
           </Text>
-        )}
+        ) : preference === 'light' ? (
+          <Text style={[type.bodySm, { color: theme.subtext, marginTop: 10 }]}>
+            Light is the default — the brighter paper palette.
+          </Text>
+        ) : null}
 
         <Text style={[type.labelXs, { color: theme.muted, marginTop: 28, marginBottom: 10 }]}>TYPOGRAPHY</Text>
         <PaperCard weight="thin" style={{ gap: 16 }}>
@@ -94,7 +98,7 @@ export default function AppearanceScreen({ navigation, embedded = false }) {
         </PaperCard>
 
         <Text style={[type.bodySm, { color: theme.muted, marginTop: 20, lineHeight: 19 }]}>
-          Choose Kinetic Ink for the high-contrast cyan-and-red manga-tech palette. Theme preference is saved and applied across every screen.
+          Light is the default appearance. Choose Kinetic Ink for the high-contrast cyan-and-red manga-tech palette. Theme preference is saved and applied across every screen.
         </Text>
       </ScrollView>
     </View>

@@ -266,7 +266,7 @@ function EmptyDetail() {
       </View>
       <Text style={[type.headlineSm, { color: theme.text, marginTop: 18 }]}>Pick a page to open</Text>
       <Text style={[type.bodySm, { color: theme.subtext, marginTop: 8, textAlign: 'center', maxWidth: 280 }]}>
-        Select a conversation from the inbox, or start a new sketch.
+        Select a conversation from the inbox, or tap find +ones.
       </Text>
     </View>
   );

@@ -25,7 +25,7 @@ const TOPICS = [
     title: 'Chats',
     summary: '1:1 and group messaging, photos, voice notes, reactions',
     body: [
-      { h: 'Starting a conversation', p: 'Tap the pencil (bottom-right FAB) on the Chats tab, then pick a person to message directly, or tap the group icon in the top-right to start a group with multiple people.' },
+      { h: 'Starting a conversation', p: 'Tap find +ones (bottom-right) on the Chats tab, then pick a person to message directly, or tap the group icon in the top-right to start a group with multiple people.' },
       { h: 'Message requests', p: 'A first message from someone outside your accepted contacts appears under REQUESTS at the top-right of Chats instead of entering your main inbox. Preview it, then Accept & chat, Delete, or Block the sender.' },
       { h: 'Sending things', p: 'Type a message and hit send, or use the camera/photo icon to attach an image. Tap the mic to begin a real voice recording, tap the checkmark to upload and send it, or tap Cancel to discard it.' },
       { h: 'Replies & reactions', p: 'Swipe or long-press a message to reply to it, react with an emoji, or delete your own message. Long-press a chat in the list to archive or unarchive it.' },
@@ -70,7 +70,7 @@ const TOPICS = [
       { h: 'Deleting your One ID', p: 'Settings \u2192 Danger Zone \u2192 Delete One ID permanently removes the account after the current password is verified. Shared groups, communities and institutions transfer safely to remaining members.' },
       { h: 'Notifications', p: 'Settings \u2192 Notifications lets you control, independently: chat messages (and whether previews show the actual text), Status updates, Network posts, and community activity like join requests \u2014 plus a sound on/off switch.' },
       { h: 'Privacy', p: 'Settings \u2192 Privacy controls who can see your last-seen/online dot (Everyone, My contacts, or Nobody), whether you send & see read receipts, and your full list of blocked contacts.' },
-      { h: 'Appearance', p: 'Choose Light, Dark, or System (follows your device\u2019s OS theme automatically) \u2014 with a live preview of the exact colors and type scale before you pick.' },
+      { h: 'Appearance', p: 'Light is the default (the brighter paper palette). You can also choose Dark, Kinetic Ink, or System (follows your device\u2019s OS theme automatically) \u2014 with a live preview of the exact colors and type scale before you pick.' },
     ],
   },
 ];

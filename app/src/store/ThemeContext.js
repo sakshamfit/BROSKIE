@@ -17,7 +17,9 @@ const KEY = 'tomodachi.theme';
  */
 export function ThemeProvider({ children }) {
   const systemScheme = useColorScheme(); // 'light' | 'dark' | null, live-updates on OS change
-  const [preference, setPreference] = useState('system');
+  // Light is the default so first launch (and anyone who never picked a theme)
+  // always opens on the brighter paper palette instead of following a dark OS.
+  const [preference, setPreference] = useState('light');
 
   useEffect(() => {
     AsyncStorage.getItem(KEY).then((v) => {

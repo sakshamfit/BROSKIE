@@ -7,7 +7,7 @@ import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, PaperCard, TapeChip, handleFor, Rule, InkButton, rippleFor, FrostedBackdrop } from '../components/common';
+import { Avatar, PaperCard, TapeChip, handleFor, Rule, InkButton, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import { categoryMeta, JOIN_POLICY } from '../components/communityMeta';
 import { radius, type, inkBox, marker, raised } from '../theme';
 import { confirm } from '../hooks/confirm';
@@ -197,9 +197,12 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
               <View key={m.id} style={s.memberRow}>
                 <Avatar uri={m.avatar} name={m.name} id={m.id} size={42} />
                 <View style={{ flex: 1 }}>
-                  <EmojiText style={[type.bodyMd, { color: theme.text }]}>
-                    {m.id === user.id ? 'You' : m.name}
-                  </EmojiText>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <EmojiText style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]}>
+                      {m.id === user.id ? 'You' : m.name}
+                    </EmojiText>
+                    {hasGoldTick(m) && <GoldTick size={14} />}
+                  </View>
                   <Text style={[type.labelXs, { color: theme.graphite, marginTop: 2 }]}>{handleFor(m)}</Text>
                 </View>
                 {m.role === 'admin' && <TapeChip label="ADMIN" tone="accent" />}
@@ -238,7 +241,10 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
                 <View key={r.user.id} style={s.reqRow}>
                   <Avatar uri={r.user.avatar} name={r.user.name} id={r.user.id} size={38} />
                   <View style={{ flex: 1 }}>
-                    <EmojiText style={[type.bodyMd, { color: theme.text }]}>{r.user.name}</EmojiText>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <EmojiText style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]}>{r.user.name}</EmojiText>
+                      {hasGoldTick(r.user) && <GoldTick size={14} />}
+                    </View>
                     <Text style={[type.labelXs, { color: theme.graphite, marginTop: 2 }]}>{handleFor(r.user)}</Text>
                   </View>
                   <Pressable onPress={() => respond(r.user.id, 'decline')} style={[s.reqBtn, { borderColor: theme.graphiteLine }]}>

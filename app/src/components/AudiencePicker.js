@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, TextInput, FlatList, ActivityIndicat
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { api } from '../api';
-import { Avatar, InkCheckbox, EmptyState } from './common';
+import { Avatar, InkCheckbox, EmptyState, GoldTick, hasGoldTick } from './common';
 import { EmojiText } from '../icons/Emoji';
 import { type, inkBox, marker, dashedRule } from '../theme';
 
@@ -117,7 +117,10 @@ export default function AudiencePicker({
                   <Pressable onPress={() => toggle(item.id)} style={({ pressed }) => [s.personRow, pressed ? marker(theme, 1) : null]}>
                     <InkCheckbox checked={checked} onPress={() => toggle(item.id)} size={18} />
                     <Avatar uri={item.avatar} name={item.name} id={item.id} size={34} />
-                    <EmojiText style={[type.bodyMd, { color: theme.text, flex: 1 }]} numberOfLines={1}>{item.name}</EmojiText>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <EmojiText style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{item.name}</EmojiText>
+                      {hasGoldTick(item) && <GoldTick size={13} />}
+                    </View>
                   </Pressable>
                 );
               }}
