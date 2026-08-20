@@ -195,6 +195,14 @@ cd app
 npx eas update --channel stable --message "what changed"
 ```
 
+On Windows, `scripts\publish-update.ps1` does the whole run (pull main, verify
+the checkout, `npm ci`, print the fingerprint runtime version, publish, list
+recent updates):
+
+```powershell
+.\scripts\publish-update.ps1 -Message "what changed"
+```
+
 `stable` is the channel both build profiles use (`app/eas.json`), and the update
 URL/project are already configured in `app/app.json`.
 
