@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Pressable, StyleSheet, Platform } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Pressable, StyleSheet, Platform, Animated } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { useChat } from './store/ChatContext';
 import useResponsive from './hooks/useResponsive';
 import { Loading, CountBead } from './components/common';
 import { marker, stroke } from './theme';
+import { FadeSlide, haptic, motion, usePressScale } from './motion';
 import SplitLayout from './DesktopLayout';
 
 import AuthScreen from './screens/AuthScreen';
@@ -56,19 +57,35 @@ function HomeTabs({ navigation }) {
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.bg }}>
-        {tab === 'chats' && <ChatListScreen navigation={navigation} />}
+        {/* Each section enters with a soft fade + drift, so switching tabs
+            feels like moving through one continuous app, not separate pages.
+            Keyed by tab: only the active section mounts, so no re-animation
+            churn. Direction hints come from the tab's position. */}
+        {tab === 'chats' && (
+          <FadeSlide key="tab-chats" from="up" distance={10} duration={motion.normal} style={{ flex: 1 }}>
+            <ChatListScreen navigation={navigation} />
+          </FadeSlide>
+        )}
         {tab === 'network' && (
-          <NetworkScreen
-            navigation={navigation}
-            onOpenChat={(chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); }}
-          />
+          <FadeSlide key="tab-network" from="left" distance={14} duration={motion.normal} style={{ flex: 1 }}>
+            <NetworkScreen
+              navigation={navigation}
+              onOpenChat={(chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); }}
+            />
+          </FadeSlide>
         )}
         {tab === 'colleagues' && (
-          <ColleaguesScreen
-            onOpenChat={(chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); }}
-          />
+          <FadeSlide key="tab-colleagues" from="right" distance={14} duration={motion.normal} style={{ flex: 1 }}>
+            <ColleaguesScreen
+              onOpenChat={(chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); }}
+            />
+          </FadeSlide>
         )}
-        {tab === 'status' && <StatusScreen navigation={navigation} />}
+        {tab === 'status' && (
+          <FadeSlide key="tab-status" from="right" distance={14} duration={motion.normal} style={{ flex: 1 }}>
+            <StatusScreen navigation={navigation} />
+          </FadeSlide>
+        )}
       </SafeAreaView>
 
       {/* SafeAreaView only pads the notch/home-indicator; the bar itself owns its own padding
@@ -86,38 +103,76 @@ function HomeTabs({ navigation }) {
           {TABS.map((t) => {
             const active = tab === t.key;
             return (
-              <Pressable
+              <TabButton
                 key={t.key}
-                accessibilityRole="button"
-                accessibilityLabel={t.label}
-                onPress={() => (t.key === 'settings' ? navigation.navigate('Settings') : setTab(t.key))}
-                hitSlop={6}
-                android_ripple={{ color: theme.ripple, borderless: false, radius: 42 }}
-                style={({ pressed }) => [
-                  s.tabItem,
-                  active ? [s.tabActive, { backgroundColor: theme.tabActiveBg, borderColor: theme.ink }] : null,
-                  Platform.OS === 'ios' && pressed && !active ? marker(theme, 1) : null,
-                ]}
-              >
-                <View>
-                  <Icon
-                    name={t.outlineOnly ? t.icon : active ? t.icon : `${t.icon}-outline`}
-                    size={23}
-                    color={active ? theme.ink : theme.muted}
-                  />
-                  {!!t.badge && t.badge > 0 && (
-                    <View style={s.tabBadge}>
-                      <CountBead label={t.badge > 9 ? '9+' : String(t.badge)} small />
-                    </View>
-                  )}
-                </View>
-
-              </Pressable>
+                label={t.label}
+                active={active}
+                onPress={() => {
+                  if (t.key === 'settings') { haptic('selection'); navigation.navigate('Settings'); return; }
+                  if (!active) haptic('selection'); // acknowledge the switch, not every tap
+                  setTab(t.key);
+                }}
+                icon={t.outlineOnly ? t.icon : active ? t.icon : `${t.icon}-outline`}
+                color={active ? theme.ink : theme.muted}
+                badge={t.badge}
+                theme={theme}
+              />
             );
           })}
         </View>
       </SafeAreaView>
     </View>
+  );
+}
+
+/**
+ * Bottom-tab item with physical press feedback: the icon scales down while
+ * pressed, springs back on release, and the icon pops (outline → filled)
+ * only when the tab becomes active — leaving a tab never re-pops it.
+ */
+function TabButton({ label, active, onPress, icon, color, badge, theme }) {
+  const { scale, onPressIn, onPressOut } = usePressScale(0.9);
+  const activePop = useRef(new Animated.Value(active ? 1 : 0)).current;
+  const wasActive = useRef(active);
+  useEffect(() => {
+    if (active && !wasActive.current) {
+      wasActive.current = true;
+      Animated.sequence([
+        Animated.spring(activePop, { toValue: 1.18, friction: 4, tension: 200, useNativeDriver: true }),
+        Animated.spring(activePop, { toValue: 1, friction: 6, tension: 180, useNativeDriver: true }),
+      ]).start();
+    } else if (!active) {
+      wasActive.current = false;
+      activePop.setValue(1);
+    }
+  }, [active, activePop]);
+  const s = makeStyles(theme);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      hitSlop={6}
+      android_ripple={{ color: theme.ripple, borderless: false, radius: 42 }}
+      style={({ pressed }) => [
+        s.tabItem,
+        active ? [s.tabActive, { backgroundColor: theme.tabActiveBg, borderColor: theme.ink }] : null,
+        Platform.OS === 'ios' && pressed && !active ? marker(theme, 1) : null,
+      ]}
+    >
+      <Animated.View style={{ transform: [{ scale }, { scale: activePop }] }}>
+        <View>
+          <Icon name={icon} size={23} color={color} />
+          {!!badge && badge > 0 && (
+            <View style={s.tabBadge}>
+              <CountBead label={badge > 9 ? '9+' : String(badge)} small />
+            </View>
+          )}
+        </View>
+      </Animated.View>
+    </Pressable>
   );
 }
 

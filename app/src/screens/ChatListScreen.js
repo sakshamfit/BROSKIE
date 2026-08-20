@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Modal, Alert,
+  View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Modal, Alert, Animated, Easing,
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import Icon from '../icons/Icon';
@@ -14,6 +14,7 @@ import {
   FrostedBackdrop, GoldTick, hasGoldTick,
 } from '../components/common';
 import { type, inkBox, marker, radius, stroke } from '../theme';
+import { Skeleton, TypingDots, SheetSpringIn, SpringPressable, FadeSlide, Pop, haptic, motion } from '../motion';
 import { api } from '../api';
 import { confirm } from '../hooks/confirm';
 
@@ -30,7 +31,7 @@ const CHAT_TILE_MUTED = '#bdb9b7';
 const CHAT_TILE_LINE = '#000000';
 
 export default function ChatListScreen({ navigation }) {
-  const { chats, refreshChats, typing, markRead } = useChat();
+  const { chats, chatsLoaded, refreshChats, typing, markRead } = useChat();
   const { user } = useAuth();
   const { theme } = useTheme();
   const [query, setQuery] = useState('');
@@ -88,114 +89,18 @@ export default function ChatListScreen({ navigation }) {
     }
   };
 
-  const renderChat = ({ item, index }) => {
-    const typers = Object.values(typing[item.id] || {});
-    const lm = item.lastMessage;
-    const isMine = lm && lm.senderId === user.id;
-    const hasUnread = item.unread > 0;
-
-    let preview = 'no messages yet';
-    let senderPrefix = null;
-    if (lm) {
-      if (lm.deleted) preview = 'message deleted';
-      else if (lm.type === 'image') preview = 'Photo';
-      else if (lm.type === 'voice') preview = 'Voice message';
-      else if (lm.type === 'poll') preview = '📊 Poll';
-      else if (lm.type === 'system') preview = lm.body;
-      else preview = lm.body;
-      if (item.type === 'group' && lm.type !== 'system' && !isMine) {
-        const sender = item.members.find((m) => m.id === lm.senderId);
-        if (sender) senderPrefix = `${sender.name.split(' ')[0]}:`;
-      }
-    }
-
-    return (
-      <MotionIn delay={Math.min(index, 8) * 28} distance={10} style={s.rowWrap}>
-        {/* A hard offset plate plus a soft shadow gives the black card real
-            depth on Android, iOS and web without adding another native module. */}
-        <View pointerEvents="none" style={[s.rowDepth, hasUnread && { backgroundColor: '#8d7900' }]} />
-        <Pressable
-          onPress={() => navigation.navigate('Conversation', { chatId: item.id })}
-          onLongPress={() => setSheetChat(item)}
-          delayLongPress={280}
-          style={({ pressed }) => [
-            s.row,
-            hasUnread ? s.rowUnread : s.rowRead,
-            {
-              borderColor: hasUnread ? theme.highlighter : CHAT_TILE_LINE,
-              transform: [
-                { rotate: hasUnread ? '-0.18deg' : '0.1deg' },
-                { translateX: pressed ? 2 : 0 },
-                { translateY: pressed ? 4 : 0 },
-              ],
-            },
-            pressed ? { backgroundColor: CHAT_TILE_PRESSED } : null,
-          ]}
-        >
-          <View pointerEvents="none" style={s.rowSheen} />
-          <View pointerEvents="none" style={s.rowEdge} />
-          {hasUnread && <View style={[s.unreadMark, { backgroundColor: theme.highlighter, borderColor: CHAT_TILE }]} />}
-          <View style={[s.avatarFrame, { borderColor: hasUnread ? theme.highlighter : CHAT_TILE_TEXT }]}>
-            <Avatar
-              uri={item.avatar}
-              name={item.name}
-              id={item.otherUserId || item.id}
-              group={item.type === 'group'}
-              online={item.isOnline}
-              unread={hasUnread}
-              weight={hasUnread ? 'ink' : 'thin'}
-              size={56}
-            />
-          </View>
-
-          <View style={s.rowBody}>
-            <View style={s.rowTop}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginRight: 10 }}>
-                {item.pinned && <Icon name="pin" size={13} color={theme.highlighter} />}
-                <EmojiText style={s.name} numberOfLines={1}>{item.name}</EmojiText>
-                {hasGoldTick(item) && <GoldTick size={15} />}
-                {item.requestStatus === 'pending' && item.requestDirection === 'outgoing' && (
-                  <Text style={[type.labelXs, s.requestSent]}>REQUEST SENT</Text>
-                )}
-              </View>
-              <Text style={[s.time, hasUnread && { color: theme.highlighter }]}>
-                {formatChatTime(lm?.createdAt || item.updatedAt)}
-              </Text>
-            </View>
-
-            <View style={s.rowBottom}>
-              {typers.length > 0 ? (
-                <View style={marker(theme, 1)}>
-                  <Text style={[type.bodyMd, { color: theme.highlighter, fontStyle: 'italic', paddingHorizontal: 3 }]} numberOfLines={1}>
-                    {item.type === 'group' ? `${typers[0]} is typing…` : 'typing…'}
-                  </Text>
-                </View>
-              ) : (
-                <View style={s.previewRow}>
-                  {isMine && lm && lm.type !== 'system' && (
-                    <Ticks status={lm.status} size={13} color={lm.status === 'read' ? theme.highlighter : CHAT_TILE_MUTED} />
-                  )}
-                  {lm && (lm.type === 'image' || lm.type === 'voice') && !lm.deleted && (
-                    <Emoji char={lm.type === 'image' ? '📷' : '🎤'} size={13} />
-                  )}
-                  {!!senderPrefix && (
-                    <Text style={[s.preview, { fontFamily: type.body(700), flex: 0, color: CHAT_TILE_TEXT }]}>{senderPrefix}</Text>
-                  )}
-                  <EmojiText
-                    style={[s.preview, hasUnread && { color: CHAT_TILE_TEXT }]}
-                    numberOfLines={1}
-                  >
-                    {preview}
-                  </EmojiText>
-                </View>
-              )}
-              {item.muted && <Icon name="volume-mute" size={14} color={CHAT_TILE_MUTED} style={{ marginLeft: 8 }} />}
-            </View>
-          </View>
-        </Pressable>
-      </MotionIn>
-    );
-  };
+  const renderChat = ({ item, index }) => (
+    <ChatRow
+      item={item}
+      index={index}
+      typing={typing[item.id] || {}}
+      user={user}
+      theme={theme}
+      navigation={navigation}
+      onOpenSheet={(chat) => { haptic('selection'); setSheetChat(chat); }}
+      style={s}
+    />
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -233,6 +138,7 @@ export default function ChatListScreen({ navigation }) {
             {searchFocused && <Scribble />}
 
             {msgResults.length > 0 && (
+              <FadeSlide key={query} from="up" distance={8} duration={motion.fast}>
               <View style={s.resultsWrap}>
                 <Text style={[type.labelXs, { color: theme.muted, marginBottom: 8 }]}>MESSAGES</Text>
                 {msgResults.slice(0, 6).map((m) => (
@@ -251,6 +157,7 @@ export default function ChatListScreen({ navigation }) {
                 ))}
                 <Rule />
               </View>
+              </FadeSlide>
             )}
 
             {!showArchived && pinnedCount > 0 && (
@@ -277,15 +184,19 @@ export default function ChatListScreen({ navigation }) {
           </MotionIn>
         }
         ListEmptyComponent={
-          <EmptyState
-            icon={showArchived ? 'archive-outline' : 'chatbubbles-outline'}
-            title={showArchived ? 'Nothing archived' : 'Blank page'}
-            subtitle={showArchived ? 'Long-press a chat to archive it.' : 'Tap find +ones to start a conversation.'}
-          />
+          !chatsLoaded && !showArchived ? (
+            <ChatListSkeleton />
+          ) : (
+            <EmptyState
+              icon={showArchived ? 'archive-outline' : 'chatbubbles-outline'}
+              title={showArchived ? 'Nothing archived' : 'Blank page'}
+              subtitle={showArchived ? 'Long-press a chat to archive it.' : 'Tap find +ones to start a conversation.'}
+            />
+          )
         }
       />
 
-      <Pressable
+      <SpringPressable
         accessibilityRole="button"
         accessibilityLabel="find +ones"
         onPress={() => navigation.navigate('NewChat')}
@@ -297,13 +208,14 @@ export default function ChatListScreen({ navigation }) {
             <Text style={[s.fabLabel, { color: pressed ? theme.ink : theme.onPrimary }]}>find +ones</Text>
           </>
         )}
-      </Pressable>
+      </SpringPressable>
 
       {/* long-press action sheet */}
       <Modal visible={!!sheetChat} transparent animationType="fade" onRequestClose={() => !sheetBusy && setSheetChat(null)}>
         <View style={[s.overlay, { backgroundColor: theme.dark ? 'rgba(0,0,0,0.28)' : 'rgba(28,27,27,0.18)' }]}>
           <FrostedBackdrop intensity={65} dim={0.16} />
           <Pressable style={StyleSheet.absoluteFill} onPress={() => !sheetBusy && setSheetChat(null)} />
+          <SheetSpringIn style={{ width: '100%', maxWidth: 360 }}>
           <PaperCard weight="ink" style={[s.sheet, { backgroundColor: theme.dark ? 'rgba(31,30,30,0.96)' : 'rgba(253,248,248,0.96)' }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6 }}>
               <Avatar
@@ -356,6 +268,7 @@ export default function ChatListScreen({ navigation }) {
               onPress={() => deleteChat(sheetChat)}
             />
           </PaperCard>
+          </SheetSpringIn>
         </View>
       </Modal>
     </View>
@@ -374,6 +287,174 @@ function SheetRow({ icon, label, onPress, danger = false, disabled = false }) {
       <Icon name={icon} size={18} color={color} />
       <Text style={[type.bodyMd, { color }]}>{label}</Text>
     </Pressable>
+  );
+}
+
+/**
+ * One conversation row. New incoming messages make the row react:
+ * avatar pulses, the unread mark pops, and a brief highlight washes across
+ * the card — "something new happened here" without shaking the row.
+ */
+function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, style: s }) {
+  const pulse = useRef(new Animated.Value(0)).current;   // avatar scale pulse
+  const wash = useRef(new Animated.Value(0)).current;    // highlight wash
+  const lastActivityAt = useRef(item.lastMessage?.createdAt || item.updatedAt || 0);
+
+  useEffect(() => {
+    const at = item.lastMessage?.createdAt || item.updatedAt || 0;
+    if (at === lastActivityAt.current) return;
+    const prev = lastActivityAt.current;
+    lastActivityAt.current = at;
+    const lm = item.lastMessage;
+    const isIncoming = lm && !lm.deleted && lm.type !== 'system' && lm.senderId !== user?.id;
+    // `prev !== 0` skips the very first mount — only genuinely new arrivals react.
+    if (!isIncoming || prev === 0) return;
+    haptic('selection');
+    Animated.sequence([
+      Animated.spring(pulse, { toValue: 1, friction: 5, tension: 150, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+    ]).start();
+    Animated.sequence([
+      Animated.timing(wash, { toValue: 1, duration: 140, useNativeDriver: true }),
+      Animated.timing(wash, { toValue: 0, duration: 1100, delay: 260, useNativeDriver: true }),
+    ]).start();
+  }, [item.lastMessage?.createdAt, item.updatedAt, item.lastMessage, user?.id, pulse, wash]);
+
+  const typers = Object.values(typing || {});
+  const lm = item.lastMessage;
+  const isMine = lm && lm.senderId === user.id;
+  const hasUnread = item.unread > 0;
+  const avatarScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] });
+  const washOpacity = wash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.5] });
+
+  let preview = 'no messages yet';
+  let senderPrefix = null;
+  if (lm) {
+    if (lm.deleted) preview = 'message deleted';
+    else if (lm.type === 'image') preview = 'Photo';
+    else if (lm.type === 'voice') preview = 'Voice message';
+    else if (lm.type === 'poll') preview = '📊 Poll';
+    else if (lm.type === 'system') preview = lm.body;
+    else preview = lm.body;
+    if (item.type === 'group' && lm.type !== 'system' && !isMine) {
+      const sender = item.members.find((m) => m.id === lm.senderId);
+      if (sender) senderPrefix = `${sender.name.split(' ')[0]}:`;
+    }
+  }
+
+  return (
+    <MotionIn delay={Math.min(index, 8) * 28} distance={10} style={s.rowWrap}>
+      {/* A hard offset plate plus a soft shadow gives the black card real
+          depth on Android, iOS and web without adding another native module. */}
+      <View pointerEvents="none" style={[s.rowDepth, hasUnread && { backgroundColor: '#8d7900' }]} />
+      <Pressable
+        onPress={() => navigation.navigate('Conversation', { chatId: item.id })}
+        onLongPress={() => onOpenSheet(item)}
+        delayLongPress={280}
+        style={({ pressed }) => [
+          s.row,
+          hasUnread ? s.rowUnread : s.rowRead,
+          {
+            borderColor: hasUnread ? theme.highlighter : CHAT_TILE_LINE,
+            transform: [
+              { rotate: hasUnread ? '-0.18deg' : '0.1deg' },
+              { translateX: pressed ? 2 : 0 },
+              { translateY: pressed ? 4 : 0 },
+            ],
+          },
+          pressed ? { backgroundColor: CHAT_TILE_PRESSED } : null,
+        ]}
+      >
+        <View pointerEvents="none" style={s.rowSheen} />
+        <View pointerEvents="none" style={s.rowEdge} />
+        {/* brief "new thing happened" wash across the card */}
+        <Animated.View
+          pointerEvents="none"
+          style={[s.newWash, { opacity: washOpacity, backgroundColor: theme.highlighterWash }]}
+        />
+        {hasUnread && (
+          <Pop trigger={String(item.unread)} firstStatic style={s.unreadMark}>
+            <View style={[s.unreadMarkInner, { backgroundColor: theme.highlighter, borderColor: CHAT_TILE }]} />
+          </Pop>
+        )}
+        <Animated.View style={[s.avatarFrame, { borderColor: hasUnread ? theme.highlighter : CHAT_TILE_TEXT }, { transform: [{ scale: avatarScale }] }]}>
+          <Avatar
+            uri={item.avatar}
+            name={item.name}
+            id={item.otherUserId || item.id}
+            group={item.type === 'group'}
+            online={item.isOnline}
+            unread={hasUnread}
+            weight={hasUnread ? 'ink' : 'thin'}
+            size={56}
+          />
+        </Animated.View>
+
+        <View style={s.rowBody}>
+          <View style={s.rowTop}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginRight: 10 }}>
+              {item.pinned && <Icon name="pin" size={13} color={theme.highlighter} />}
+              <EmojiText style={s.name} numberOfLines={1}>{item.name}</EmojiText>
+              {hasGoldTick(item) && <GoldTick size={15} />}
+              {item.requestStatus === 'pending' && item.requestDirection === 'outgoing' && (
+                <Text style={[type.labelXs, s.requestSent]}>REQUEST SENT</Text>
+              )}
+            </View>
+            <Text style={[s.time, hasUnread && { color: theme.highlighter }]}>
+              {formatChatTime(lm?.createdAt || item.updatedAt)}
+            </Text>
+          </View>
+
+          <View style={s.rowBottom}>
+            {typers.length > 0 ? (
+              <View style={[marker(theme, 1), s.typingRow]}>
+                <TypingDots color={theme.highlighter} size={4} />
+                <Text style={[type.bodyMd, { color: theme.highlighter, fontStyle: 'italic' }]} numberOfLines={1}>
+                  {item.type === 'group' ? `${typers[0]} is typing` : 'typing'}
+                </Text>
+              </View>
+            ) : (
+              <View style={s.previewRow}>
+                {isMine && lm && lm.type !== 'system' && (
+                  <Ticks status={lm.status} size={13} color={lm.status === 'read' ? theme.highlighter : CHAT_TILE_MUTED} />
+                )}
+                {lm && (lm.type === 'image' || lm.type === 'voice') && !lm.deleted && (
+                  <Emoji char={lm.type === 'image' ? '📷' : '🎤'} size={13} />
+                )}
+                {!!senderPrefix && (
+                  <Text style={[s.preview, { fontFamily: type.body(700), flex: 0, color: CHAT_TILE_TEXT }]}>{senderPrefix}</Text>
+                )}
+                <EmojiText
+                  style={[s.preview, hasUnread && { color: CHAT_TILE_TEXT }]}
+                  numberOfLines={1}
+                >
+                  {preview}
+                </EmojiText>
+              </View>
+            )}
+            {item.muted && <Icon name="volume-mute" size={14} color={CHAT_TILE_MUTED} style={{ marginLeft: 8 }} />}
+          </View>
+        </View>
+      </Pressable>
+    </MotionIn>
+  );
+}
+
+/** Soft skeleton of the chat list shown before the first fetch resolves. */
+function ChatListSkeleton() {
+  const { theme } = useTheme();
+  return (
+    <View style={{ paddingHorizontal: 16, paddingTop: 4, gap: 22 }}>
+      {[0, 1, 2, 3, 4].map((i) => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <Skeleton width={60} height={60} radius={999} />
+          <View style={{ flex: 1, gap: 10 }}>
+            <Skeleton width="42%" height={15} />
+            <Skeleton width="78%" height={12} />
+          </View>
+        </View>
+      ))}
+    </View>
   );
 }
 const s2 = StyleSheet.create({
@@ -455,13 +536,18 @@ const makeStyles = (t) => StyleSheet.create({
     position: 'absolute', top: 10, right: 1, bottom: 10, width: 1,
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
+  newWash: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1,
+  },
+  typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 3 },
   rowUnread: { borderWidth: 3 },
   rowRead: { borderStyle: 'solid' },
   avatarFrame: {
     width: 66, height: 66, padding: 3, borderWidth: 2, borderRadius: radius.full,
     alignItems: 'center', justifyContent: 'center', backgroundColor: '#111111',
   },
-  unreadMark: { position: 'absolute', width: 13, height: 13, left: -7, top: '50%', marginTop: -6, transform: [{ rotate: '45deg' }], borderWidth: 2, zIndex: 2 },
+  unreadMark: { position: 'absolute', width: 13, height: 13, left: -7, top: '50%', marginTop: -6, transform: [{ rotate: '45deg' }], zIndex: 2 },
+  unreadMarkInner: { width: 13, height: 13, borderWidth: 2 },
   rowBody: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 },
   name: { ...type.headlineSm, color: CHAT_TILE_TEXT, flexShrink: 1 },

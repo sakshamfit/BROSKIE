@@ -3,6 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, Modal } from 'react-nativ
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { InkButton, InkField, Rule, FrostedBackdrop } from './common';
+import { SheetSpringIn } from '../motion';
 import { type, inkBox, marker, raised } from '../theme';
 
 const MAX_OPTIONS = 6;
@@ -44,6 +45,7 @@ export default function PollComposer({ visible, onClose, onCreate }) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
       <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={close}>
         <FrostedBackdrop />
+        <SheetSpringIn style={{ width: '100%', maxWidth: 380 }}>
         <Pressable style={[s.sheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
           <View style={s.head}>
             <View style={{ flex: 1 }}>
@@ -102,6 +104,7 @@ export default function PollComposer({ visible, onClose, onCreate }) {
           <Rule style={{ marginVertical: 4 }} />
           <InkButton label={busy ? 'Posting…' : 'Post poll'} onPress={submit} filled busy={busy} />
         </Pressable>
+        </SheetSpringIn>
       </Pressable>
     </Modal>
   );
