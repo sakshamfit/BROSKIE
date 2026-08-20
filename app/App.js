@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform, AppState } from 'react-native';
 import Svg, { Circle, Defs, Pattern, Path, Rect } from 'react-native-svg';
 import { useFonts } from 'expo-font';
+import * as Updates from 'expo-updates';
 import {
   BricolageGrotesque_600SemiBold,
   BricolageGrotesque_700Bold,
@@ -43,6 +44,46 @@ import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 
 // Changed whenever a web release needs to retire stale PWA/browser caches.
 const WEB_BUILD = '2026-08-20-auth-network-proxy-v13';
+
+/**
+ * Download native OTA updates quietly whenever the app starts or returns to
+ * the foreground. We deliberately do not reload the running app: Expo applies
+ * the downloaded update on the next cold open, avoiding interrupted chats or
+ * a surprise restart while the user is active.
+ */
+function useSilentAutoUpdates() {
+  useEffect(() => {
+    if (__DEV__ || Platform.OS === 'web' || !Updates.isEnabled) return undefined;
+
+    let checking = false;
+    let disposed = false;
+
+    const downloadAvailableUpdate = async () => {
+      if (checking || disposed) return;
+      checking = true;
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable && !disposed) {
+          await Updates.fetchUpdateAsync();
+        }
+      } catch {
+        // Connectivity and update-server failures must never block app use.
+      } finally {
+        checking = false;
+      }
+    };
+
+    downloadAvailableUpdate();
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') downloadAvailableUpdate();
+    });
+
+    return () => {
+      disposed = true;
+      subscription.remove();
+    };
+  }, []);
+}
 
 /** On web, expand to full browser — no phone frame.
  *  We still wrap in a flex View because React Navigation's container needs
@@ -190,6 +231,8 @@ class AppErrorBoundary extends React.Component {
 }
 
 export default function App() {
+  useSilentAutoUpdates();
+
   // Aliases keep theme.js font names short (Bricolage_800ExtraBold etc.)
   const [fontsLoaded, fontError] = useFonts({
     Bricolage_600SemiBold: BricolageGrotesque_600SemiBold,
