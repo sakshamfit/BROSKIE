@@ -31,12 +31,12 @@ function resolveBase() {
     // A release APK must never be pointed at cleartext/local development
     // traffic. Fall back to the stable HTTPS proxy if a bad build-time value
     // was accidentally baked into the binary.
-    if (Platform.OS !== 'web' && !isDevelopment) {
-      if (!configured.startsWith('https://')) return DEFAULT_MOBILE_API_URL;
-      // Older release builds commonly baked the Railway origin into this
-      // variable. Route that exact production value through the Vercel HTTPS
-      // proxy too, so upgrading the app fixes the device transport without
-      // requiring another EAS environment change.
+    if (Platform.OS !== 'web') {
+      if (!isDevelopment && !configured.startsWith('https://')) return DEFAULT_MOBILE_API_URL;
+      // Older release builds and some Expo Go environments commonly bake the
+      // Railway origin into this variable. Route that exact production value
+      // through the Vercel HTTPS proxy too, so the transport fix also applies
+      // while __DEV__ is true. Local/LAN URLs remain available for development.
       if (configured === DEFAULT_SERVER_URL) return DEFAULT_MOBILE_API_URL;
     }
     return configured;
