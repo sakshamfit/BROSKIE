@@ -167,9 +167,13 @@ What it needs to actually reach devices:
 iOS can follow later with APNs keys (`eas credentials -p ios`); the entire client
 and server code path is already platform-neutral.
 
-Foreground behaviour: while the app is open, pushes are suppressed (no banner) —
-the socket already updates chats, badges and the incoming-call overlay live.
-When the app is backgrounded/killed, the OS displays the notification.
+Foreground behaviour: a push banners whenever the app is open EXCEPT for the one
+conversation the user is currently reading (the socket renders that message live;
+the on-screen chat is reported via `setViewedChat()` from `ConversationScreen`).
+When the app is backgrounded/killed, the OS displays the notification. A push
+that merely arrives never navigates — deep links happen only on a notification
+tap, and `getLastNotificationResponseAsync()` is honored only during a true cold
+start so a recent notification can't hijack a normal launch into its chat.
 
 ### Phase 2 — the daily campus loop ("Today at your place")
 
@@ -207,7 +211,7 @@ every afternoon without opening Chats.
 | Piece | Status |
 |---|---|
 | **Live calls on Android** | `react-native-webrtc` (124.x) + `@config-plugins/react-native-webrtc`; a platform adapter (`app/src/webrtc/`) gives web and native one API; `CallOverlay` renders native video via `RTCView`. Camera/mic permissions added (Android `CAMERA`/`MODIFY_AUDIO_SETTINGS`, iOS usage strings). **Needs the fresh 1.4.0+ APK** — same build as push. |
-| **Web push (full parity)** | Browsers get every push Android/iOS get. Plain Web Push (VAPID), signed and sent by the +one server itself — keys auto-generate on first boot and persist on `/data` (override with `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`). Service worker (`app/public/service-worker.js`) shows notifications only when the app isn't visible, forwards taps to the page for exact-screen routing, and tags chat notifications per conversation. Register on the web app: sign in → allow notifications. |
+| **Web push (full parity)** | Browsers get every push Android/iOS get. Plain Web Push (VAPID), signed and sent by the +one server itself — keys auto-generate on first boot and persist on `/data` (override with `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`). Service worker (`app/public/service-worker.js`) shows a notification for every push except the conversation the user is focused on and actively reading (the page reports it via `plusone-viewing` messages), forwards taps to the page for exact-screen routing (a received push never navigates), and tags chat notifications per conversation. A tap that cold-opens the app carries its route in the launch URL (`/?push=…`). Register on the web app: sign in → allow notifications. |
 | **Community invite links** | 8-char code per community (admins only see it), `Share` sheet with `https://…/c/<code>`, join-by-code bypasses every join policy (the link IS the approval), long-press rotates/revokes. Web `/c/<code>` and native `plusone://c/<code>` both deep-link: join → open the community detail. |
 | **Hold-to-record voice notes** | Hold the mic button to record, release to send; quick taps cancel (never send accidents). Race-safe: a release during recorder start-up parks the stop. |
 | **Activity grouping** | Likes/comments on your posts collapse into one row per post ("7 people liked your post") with stacked avatars; latest comment as preview. 7-day window. |

@@ -1,11 +1,11 @@
 /* +one web push service worker.
  *
- * Shows push notifications for the +one PWA when the app is NOT visible
- * (hidden tab, minimized window, closed app). When a tab IS visible the
- * socket already updates the UI, so the push is forwarded to the page
- * instead of doubling up as a banner. Tapping a notification focuses the
- * app (or opens it) and hands the deep-link payload to the page, which
- * routes to the exact screen — same contract as the native apps.
+ * Shows a notification for every push — app open or closed — EXCEPT when
+ * the user is focused on the app and already reading the exact conversation
+ * the push belongs to (the socket renders that message live). Tapping a
+ * notification focuses the app (or opens it) and hands the deep-link
+ * payload to the page, which routes to the exact screen — same contract as
+ * the native apps. A push that is merely received NEVER navigates.
  */
 /* eslint-disable no-restricted-globals */
 
@@ -17,11 +17,18 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-/** Is any app tab visible right now? */
-async function hasVisibleClient() {
+/* Is any app tab FOCUSED right now? (A visible-but-unfocused tab — second
+ * monitor, another window — must still get notifications.) */
+async function hasFocusedClient() {
   const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-  return clientList.some((client) => client.visibilityState === 'visible');
+  return clientList.some((client) => client.focused);
 }
+
+/* The conversation the page currently has on screen, reported via
+ * postMessage({ type: 'plusone-viewing' }). Pushes for THIS chat are
+ * suppressed while the user is focused on the app — the socket renders
+ * them live. Everything else notifies, tab open or not. */
+let viewingChatId = null;
 
 self.addEventListener('push', (event) => {
   let payload = {};
@@ -33,15 +40,16 @@ self.addEventListener('push', (event) => {
 
   const title = payload.title || '+one';
   const silent = payload.silent === true;
+  const data = payload.data || {};
   const options = {
     body: payload.body || '',
-    tag: payload.data && payload.data.route === 'chat' ? `chat:${payload.data.chatId}` : 'plusone',
+    tag: data.route === 'chat' ? `chat:${data.chatId}` : 'plusone',
     // Chat notifications re-tag per conversation so each chat shows its own
     // entry; everything else collapses into one "+one" row.
     renotify: true,
     icon: '/icon-192.png',
     badge: '/favicon-32.png',
-    data: payload.data || {},
+    data,
     requireInteraction: payload.channel === 'calls',
   };
   if (!silent) {
@@ -52,13 +60,19 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil((async () => {
-    const visible = await hasVisibleClient();
-    if (visible) {
-      // App is open on screen — let the page's live socket state handle it.
-      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      clientList.forEach((client) => client.postMessage({ plusonePush: payload.data || {} }));
-      return;
-    }
+    // Suppress ONLY when the user is focused on the app AND already reading
+    // this exact conversation (the socket paints it live). Every other case
+    // — unfocused tab, another window, app closed, different screen — shows
+    // a real notification. Receiving a push NEVER navigates by itself:
+    // deep links happen only on notificationclick below.
+    try {
+      const focused = await hasFocusedClient();
+      const readingThisChat = focused
+        && data.route === 'chat'
+        && !!data.chatId
+        && data.chatId === viewingChatId;
+      if (readingThisChat) return;
+    } catch {}
     await self.registration.showNotification(title, options);
   })());
 });
@@ -68,17 +82,31 @@ self.addEventListener('notificationclick', (event) => {
   const data = event.notification.data || {};
   event.waitUntil((async () => {
     const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    // Hand the route to an existing app window when possible.
+    // Hand the route to an existing app window when possible. `tapped` marks
+    // this as a genuine user tap — the page only navigates on those.
     for (const client of clientList) {
       if ('focus' in client) {
-        client.postMessage({ plusonePush: data });
+        client.postMessage({ plusonePush: data, tapped: true });
         return client.focus();
       }
     }
-    return self.clients.openWindow('/');
+    // No window to hand the payload to — carry it in the launch URL so the
+    // freshly opened app can still deep-link to the tapped chat.
+    let url = '/';
+    if (data && data.route) {
+      try {
+        url = `/?push=${encodeURIComponent(btoa(encodeURIComponent(JSON.stringify(data))))}`;
+      } catch {}
+    }
+    return self.clients.openWindow(url);
   })());
 });
 
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
+  // The page reports which conversation is on screen so pushes for that
+  // chat can be suppressed while the user is actively reading it.
+  if (event.data && event.data.type === 'plusone-viewing') {
+    viewingChatId = event.data.chatId || null;
+  }
 });

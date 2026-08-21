@@ -11,14 +11,17 @@
  *   3. Read the VAPID public key from GET /api/push/web-config and
  *      pushManager.subscribe() with it.
  *   4. POST the PushSubscription to the server.
- *   5. The service worker shows notifications when the tab is hidden (the
- *      socket already drives the UI when visible) and posts tap payloads
- *      back to this page for deep-link routing.
+ *   5. The service worker shows a notification for every push except the
+ *      conversation the user is actively reading (reported via
+ *      setViewedChat below), and posts TAP payloads back to this page for
+ *      deep-link routing — a received push never navigates on its own.
  */
 import { api } from '../api';
 
 let registeredSubscription = null;
 let messageListenerAttached = false;
+let viewingSyncAttached = false;
+let lastViewedChatId = null;
 
 /** Base64url → Uint8Array for applicationServerKey. */
 function urlBase64ToUint8Array(base64String) {
@@ -35,8 +38,54 @@ function attachServiceWorkerMessages(onRoute) {
   messageListenerAttached = true;
   navigator.serviceWorker.addEventListener('message', (event) => {
     const data = event?.data?.plusonePush;
-    if (data?.route) onRoute?.(data);
+    // Route ONLY genuine notification taps. A push that merely arrives must
+    // never yank the user into a chat (the old "chat auto-opened" bug).
+    if (data?.route && event?.data?.tapped === true) onRoute?.(data);
   });
+}
+
+/* ---- which conversation is on screen (suppress its banners) ---- */
+
+function postViewingChatToServiceWorker() {
+  try {
+    navigator.serviceWorker?.controller?.postMessage({ type: 'plusone-viewing', chatId: lastViewedChatId });
+  } catch {}
+}
+
+/**
+ * Report which conversation is currently on screen (null = none). The
+ * service worker skips the notification banner for that chat while the app
+ * is focused — the socket renders its messages live — and notifies for
+ * everything else. Mirrors the native module's setViewedChat.
+ */
+export function setViewedChat(chatId) {
+  lastViewedChatId = chatId || null;
+  postViewingChatToServiceWorker();
+}
+
+function attachViewingSync() {
+  if (viewingSyncAttached || typeof window === 'undefined' || !navigator.serviceWorker) return;
+  viewingSyncAttached = true;
+  // The browser can kill and restart the service worker at any time; it
+  // then forgets which chat is on screen. Re-send whenever the page gains
+  // focus/becomes visible or a new controller takes over.
+  const resend = () => postViewingChatToServiceWorker();
+  window.addEventListener('focus', resend);
+  document.addEventListener('visibilitychange', resend);
+  navigator.serviceWorker.addEventListener('controllerchange', resend);
+}
+
+/* A notification tap that cold-opened the app (no window existed): the
+ * service worker carried the route payload in the launch URL because the
+ * new tab misses the postMessage. Consume it once, then clean the URL. */
+function consumeLaunchPushFromUrl(onRoute) {
+  try {
+    const encoded = new URLSearchParams(window.location.search).get('push');
+    if (!encoded) return;
+    window.history.replaceState({}, '', '/');
+    const data = JSON.parse(decodeURIComponent(atob(encoded)));
+    if (data?.route) onRoute?.(data);
+  } catch {}
 }
 
 /**
@@ -53,6 +102,8 @@ export async function registerPushNotifications({ onRoute }) {
   }
   try {
     attachServiceWorkerMessages(onRoute);
+    attachViewingSync();
+    consumeLaunchPushFromUrl(onRoute);
 
     let permission = Notification.permission;
     if (permission === 'default') permission = await Notification.requestPermission();
