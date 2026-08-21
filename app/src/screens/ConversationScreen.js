@@ -64,6 +64,36 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const replyMissingTimer = useRef(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  // Safety: report a message to the moderation center.
+  const [reportMsg, setReportMsg] = useState(null);
+  const [reportReason, setReportReason] = useState('');
+  const [reportNote, setReportNote] = useState('');
+  const [reportBusy, setReportBusy] = useState(false);
+
+  const openReport = (message) => {
+    setReportReason('');
+    setReportNote('');
+    setReportMsg(message);
+  };
+
+  const submitReport = async () => {
+    if (!reportReason || reportBusy) return;
+    setReportBusy(true);
+    try {
+      const r = await api.reportMessage(reportMsg.id, reportReason, reportNote.trim() || undefined);
+      setReportMsg(null);
+      Alert.alert(
+        'Report submitted',
+        r?.duplicate
+          ? 'You already reported this message — our safety team has it.'
+          : 'Thank you. Our safety team will review this privately.'
+      );
+    } catch (e) {
+      Alert.alert('Could not report', e.message || 'Please try again in a moment.');
+    } finally {
+      setReportBusy(false);
+    }
+  };
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   // Hold-to-record gesture state on the send button: when this press started
@@ -710,6 +740,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               onStar={toggleStar}
               onSetTimer={setTimerMsg}
               onVotePoll={onVote}
+              onReport={openReport}
             />
           )
         }
@@ -897,6 +928,56 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         </View>
       </View>
       </FadeSlide>
+
+      {/* -------- safety: report a message -------- */}
+      <Modal visible={!!reportMsg} transparent animationType="fade" onRequestClose={() => setReportMsg(null)}>
+        {reportMsg && (
+          <Pressable style={s.lightbox} onPress={() => setReportMsg(null)}>
+            <Pressable style={[s.reportSheet, inkBox(theme, 'ink'), { backgroundColor: theme.bg }]} onPress={() => {}}>
+              <Text style={[type.headlineSm, { color: theme.text }]}>Report this message</Text>
+              <Text style={[type.bodySm, { color: theme.muted, marginTop: 4 }]}>
+                Your report goes to the +one safety team privately. The sender is not told.
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+                {[
+                  ['harassment', 'Harassment'], ['threat', 'Threat'], ['hate', 'Hate'], ['violence', 'Violence'],
+                  ['spam', 'Spam'], ['scam', 'Scam'], ['sexual_exploitation', 'Sexual content'],
+                  ['child_safety', 'Child safety'], ['extremism', 'Terrorism'], ['other', 'Other'],
+                ].map(([k, label]) => (
+                  <Pressable
+                    key={k}
+                    onPress={() => setReportReason(k)}
+                    style={[s.reportChip, reportReason === k && { backgroundColor: theme.ink, borderColor: theme.ink }]}
+                  >
+                    <Text style={[type.labelXs, { color: reportReason === k ? theme.onPrimary : theme.ink }]}>{label.toUpperCase()}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <InkField style={{ marginTop: 12 }} focused={!!reportNote}>
+                <TextInput
+                  value={reportNote} onChangeText={setReportNote}
+                  placeholder="Anything that helps review (optional)"
+                  placeholderTextColor={theme.muted}
+                  style={{ flex: 1, fontFamily: 'Karla_400Regular', fontSize: 14, color: theme.text, paddingVertical: 6 }}
+                  maxLength={500}
+                />
+              </InkField>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+                <Pressable onPress={() => setReportMsg(null)} style={[s.reportBtn, { borderColor: theme.ink }]}>
+                  <Text style={[type.labelSm, { color: theme.ink }]}>CANCEL</Text>
+                </Pressable>
+                <Pressable
+                  onPress={submitReport}
+                  disabled={!reportReason || reportBusy}
+                  style={[s.reportBtn, { borderColor: theme.danger, opacity: !reportReason || reportBusy ? 0.4 : 1 }]}
+                >
+                  <Text style={[type.labelSm, { color: theme.danger }]}>{reportBusy ? 'SENDING…' : 'REPORT'}</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        )}
+      </Modal>
 
       <Modal visible={!!lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(null)}>
         <Pressable style={s.lightbox} onPress={() => setLightbox(null)}>
@@ -1219,6 +1300,9 @@ const makeStyles = (t) => StyleSheet.create({
   input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },
   sendBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   recDot: { width: 9, height: 9, borderRadius: radius.full },
+  reportSheet: { width: '92%', maxWidth: 460, borderRadius: radius.md, padding: 18 },
+  reportChip: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  reportBtn: { flex: 1, alignItems: 'center', borderWidth: 1.5, borderRadius: 999, paddingVertical: 10 },
   lightbox: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
   lightboxImg: { width: '92%', height: '78%' },
   lightboxClose: { position: 'absolute', top: 44, right: 22, padding: 8 },

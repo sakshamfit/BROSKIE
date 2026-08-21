@@ -438,6 +438,36 @@ function notifyIncomingCall({ calleeId, caller, call, chatId }) {
   }).catch(() => {});
 }
 
+/**
+ * Private Safety Alert to an admin device (HIGH/CRITICAL moderation events).
+ * Admin-only channel of information: never sent to the reported user.
+ * Deliberately NOT gated by the admin's personal notification toggles
+ * (safety alerts are the point of the role); quiet hours still apply as
+ * silent delivery.
+ */
+function notifySafetyAlert({ userId, title, body, caseId }) {
+  return pushToUser(userId, {
+    channel: 'activity',
+    type: 'safety_alert',
+    title: title || '🚨 Safety Alert',
+    body: String(body || '').slice(0, 240),
+    priority: 'high',
+    data: { route: 'admin', caseId },
+  });
+}
+
+/** Safety warning delivered to a user through the normal push path. */
+function notifySafetyWarning({ userId, reason }) {
+  return pushToUser(userId, {
+    settingKey: 'activity',
+    channel: 'activity',
+    type: 'safety_warning',
+    title: '+one Safety',
+    body: reason ? `You have received a safety warning: ${String(reason).slice(0, 140)}` : 'You have received a safety warning from +one Safety.',
+    data: {},
+  });
+}
+
 /** Community join request — notifies every admin. */
 function notifyCommunityRequest({ adminIds = [], requester, community }) {
   if (!requester || !community) return;
@@ -615,6 +645,8 @@ module.exports = {
   notifyAround,
   notifyPlacePost,
   notifyFollowerPost,
+  notifySafetyAlert,
+  notifySafetyWarning,
   registerToken,
   unregisterToken,
   registerWebSubscription,

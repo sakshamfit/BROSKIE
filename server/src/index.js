@@ -151,6 +151,26 @@ function getSettings(u) {
 const push = require('./push');
 push.init({ getUser: (id) => getUser(id), getSettings: (u) => getSettings(u) });
 
+/* ------------------------------------------------------------------ */
+/* Safety & Moderation Center — role-based, server-verified access    */
+/* ------------------------------------------------------------------ */
+const moderation = require('./moderation');
+
+// The initial administrator is granted the backend `admin` ROLE (never a
+// username check in the client). Extra admins: ADMIN_USERNAMES env
+// (comma-separated). Idempotent at every boot.
+const ADMIN_USERNAME_KEYS = (process.env.ADMIN_USERNAMES || 'saksham')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+db.prepare(`UPDATE users SET role = 'admin' WHERE username_key IN (${ADMIN_USERNAME_KEYS.map(() => '?').join(',')}) AND role != 'admin'`)
+  .run(...ADMIN_USERNAME_KEYS);
+
+/** Server-side authorization for EVERY admin API request. */
+function requireAdmin(req, res, next) {
+  const u = getUser(req.userId);
+  if (!u || u.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  next();
+}
+
 function areContacts(idA, idB) {
   const [userA, userB] = colleaguePair(idA, idB);
   const colleagues = !!db
@@ -280,7 +300,9 @@ function affiliationsForUser(userId) {
 }
 
 function accountUser(u) {
-  return u ? { ...publicUser(u), settings: getSettings(u), affiliations: affiliationsForUser(u.id) } : null;
+  // `role` is included ONLY in the account's own profile responses — never
+  // in publicUser, so admin identity isn't broadcast to other users.
+  return u ? { ...publicUser(u), role: u.role || 'user', moderation: u.moderation || 'active', settings: getSettings(u), affiliations: affiliationsForUser(u.id) } : null;
 }
 
 function sharedAffiliations(userId, otherId) {
@@ -877,6 +899,14 @@ app.post('/api/auth/register', (req, res) => {
      VALUES (@id, @username, @username_key, @phone, @name, @about, @avatar, @password_hash, @last_seen, @is_online, @created_at)`
   ).run(user);
 
+  // Bootstrap role: if this account's username is configured as an admin
+  // (ADMIN_USERNAMES, default "saksham") it receives the backend admin role
+  // immediately — same rule as the boot-time grant, for fresh databases.
+  if (ADMIN_USERNAME_KEYS.includes(canonicalUsername)) {
+    db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(user.id);
+    user.role = 'admin';
+  }
+
   res.json({ token: sign(user), user: accountUser(user) });
 });
 
@@ -885,6 +915,9 @@ app.post('/api/auth/login', (req, res) => {
   const user = getUserByUsername(username);
   if (!user || !bcrypt.compareSync(String(password || ''), user.password_hash))
     return res.status(401).json({ error: 'Invalid username or password' });
+  // Enforcement state is checked server-side on login.
+  const gate = moderation.moderationGate(user.id);
+  if (gate.blocked) return res.status(403).json({ error: gate.error });
   res.json({ token: sign(user), user: accountUser(user) });
 });
 
@@ -2412,6 +2445,8 @@ app.post('/api/status', requireAuth, (req, res) => {
     type = 'text', body = '', mediaUrl = null, mediaAspect = null, bg = '#075E54',
     song = null, audience = 'public', recipientIds = [],
   } = req.body || {};
+  const statusGate = moderation.moderationGate(req.userId);
+  if (statusGate.blocked) return res.status(403).json({ error: statusGate.error });
 
   const allowedAudiences = ['public', 'contacts', 'contacts_except', 'selected'];
   if (!allowedAudiences.includes(audience)) {
@@ -2726,6 +2761,8 @@ app.post('/api/posts', requireAuth, (req, res) => {
   if (!text && !mediaUrl && !song) return res.status(400).json({ error: 'Write something, or attach a photo or a song' });
   if (text.length > 2000) return res.status(400).json({ error: 'Post is too long (2000 characters max)' });
 
+  const gate = moderation.moderationGate(req.userId);
+  if (gate.blocked) return res.status(403).json({ error: gate.error });
   const aud = ['public', 'places', 'contacts', 'selected'].includes(audience) ? audience : 'public';
   if (aud === 'selected' && !recipientIds.length) {
     return res.status(400).json({ error: 'Pick at least one person for a targeted post.' });
@@ -2855,6 +2892,8 @@ app.post('/api/posts/:id/comments', requireAuth, (req, res) => {
   }
   const text = String(req.body?.body || '').trim();
   if (!text) return res.status(400).json({ error: 'Comment cannot be empty' });
+  const gate = moderation.moderationGate(req.userId);
+  if (gate.blocked) return res.status(403).json({ error: gate.error });
 
   const c = { id: nano(), post_id: post.id, user_id: req.userId, body: text.slice(0, 600), created_at: now() };
   db.prepare('INSERT INTO post_comments (id, post_id, user_id, body, created_at) VALUES (@id,@post_id,@user_id,@body,@created_at)').run(c);
@@ -3272,6 +3311,312 @@ app.delete('/api/communities/:id/members/:userId', requireAuth, (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Safety & Moderation — user reports + admin-only center             */
+/* ------------------------------------------------------------------ */
+
+/** Report a message. Reporters may only report messages in chats they
+ *  belong to (no probing arbitrary ids), are rate-limited, and duplicates
+ *  never double-count. Reports merge into the same cases as automated
+ *  detection. */
+app.post('/api/moderation/report', requireAuth, (req, res) => {
+  const { messageId, reason, note } = req.body || {};
+  if (!moderation.REPORT_REASONS[reason]) return res.status(400).json({ error: 'Pick a valid reason' });
+  const rate = moderation.checkReportRate(req.userId);
+  if (!rate.allowed) return res.status(429).json({ error: 'Too many reports — please wait a bit.', retryAfter: rate.retryAfter });
+
+  const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+  if (!message || message.deleted) return res.status(404).json({ error: 'Message not found' });
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(message.chat_id, req.userId);
+  if (!isMember) return res.status(404).json({ error: 'Message not found' });
+  if (message.sender_id === req.userId) return res.status(400).json({ error: "You can't report your own message" });
+
+  const dup = db.prepare('SELECT 1 FROM moderation_reports WHERE reporter_id = ? AND message_id = ?').get(req.userId, messageId);
+  if (dup) return res.json({ ok: true, duplicate: true });
+
+  const { caseId } = moderation.recordUserReport(
+    { reporterId: req.userId, messageRow: message, reason, note },
+    moderationIO
+  );
+  res.json({ ok: true, caseId });
+});
+
+/* ---- Admin Safety Center API — every route re-verifies the admin role ---- */
+
+function caseSummary(row) {
+  const user = getUser(row.user_id);
+  return {
+    id: row.id,
+    userId: row.user_id,
+    username: user?.username || null,
+    name: user?.name || 'Unknown',
+    category: row.category,
+    severity: row.severity,
+    confidence: row.confidence,
+    source: row.source,
+    signals: row.signals,
+    reason: row.reason,
+    snapshot: row.snapshot,
+    status: row.status,
+    chatId: row.chat_id,
+    messageId: row.message_id,
+    actionTaken: row.action_taken,
+    reviewedBy: row.reviewed_by,
+    reviewedAt: row.reviewed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    userModeration: user?.moderation || 'active',
+  };
+}
+
+app.get('/api/admin/moderation/overview', requireAuth, requireAdmin, (req, res) => {
+  moderation.retentionSweep();
+  const counts = {};
+  moderation.SEVERITIES.forEach((sev) => {
+    counts[sev.toLowerCase()] = db
+      .prepare("SELECT COUNT(*) c FROM moderation_cases WHERE severity = ? AND status IN ('OPEN','UNDER_REVIEW','ESCALATED')")
+      .get(sev).c;
+  });
+  const openCases = db.prepare("SELECT COUNT(*) c FROM moderation_cases WHERE status IN ('OPEN','UNDER_REVIEW','ESCALATED')").get().c;
+  const recent = db
+    .prepare("SELECT * FROM moderation_cases WHERE status IN ('OPEN','UNDER_REVIEW','ESCALATED') ORDER BY (CASE severity WHEN 'CRITICAL' THEN 4 WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 ELSE 1 END) DESC, updated_at DESC LIMIT 12")
+    .all()
+    .map(caseSummary);
+  res.json({ counts, openCases, recent, settings: moderation.getModerationSettings() });
+});
+
+app.get('/api/admin/moderation/cases', requireAuth, requireAdmin, (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 25, 100);
+  const { severity, category, status, source, q } = req.query;
+  const sort = String(req.query.sort || 'new');
+
+  let sql = 'SELECT * FROM moderation_cases WHERE 1=1';
+  const params = [];
+  if (severity && moderation.SEVERITIES.includes(severity.toUpperCase())) { sql += ' AND severity = ?'; params.push(severity.toUpperCase()); }
+  if (category && moderation.CATEGORIES.includes(category)) { sql += ' AND category = ?'; params.push(category); }
+  if (status && moderation.CASE_STATUSES.includes(status.toUpperCase())) { sql += ' AND status = ?'; params.push(status.toUpperCase()); }
+  if (source && ['auto', 'user', 'mixed'].includes(source)) { sql += ' AND source = ?'; params.push(source); }
+  if (sort === 'unreviewed') sql += " AND status = 'OPEN'";
+  if (q) {
+    const clean = String(q).trim().replace(/^[@#\s]+/, '');
+    const term = `%${clean}%`;
+    const like = `%${clean.toLowerCase()}%`;
+    sql += ` AND (
+      CAST(id AS TEXT) LIKE ? OR message_id LIKE ? OR (chat_id IS NOT NULL AND chat_id LIKE ?)
+      OR user_id IN (SELECT id FROM users WHERE username_key LIKE ? OR name LIKE ?)
+    )`;
+    params.push(term, term, term, like, term);
+  }
+  sql += sort === 'old'
+    ? ' ORDER BY created_at ASC'
+    : sort === 'severity'
+      ? " ORDER BY (CASE severity WHEN 'CRITICAL' THEN 4 WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 1 ELSE 0 END) DESC, updated_at DESC"
+      : sort === 'confidence'
+        ? ' ORDER BY confidence DESC, updated_at DESC'
+        : ' ORDER BY updated_at DESC';
+  sql += ` LIMIT ${Number(limit) + 1}`;
+
+  const rows = db.prepare(sql).all(...params);
+  const hasMore = rows.length > limit;
+  res.json({ cases: rows.slice(0, limit).map(caseSummary), hasMore });
+});
+
+app.get('/api/admin/moderation/cases/:id', requireAuth, requireAdmin, (req, res) => {
+  const row = db.prepare('SELECT * FROM moderation_cases WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Case not found' });
+  const user = getUser(row.user_id);
+  const reports = db
+    .prepare(`SELECT r.*, u.username reporter_username, u.name reporter_name FROM moderation_reports r
+              LEFT JOIN users u ON u.id = r.reporter_id WHERE r.case_id = ? ORDER BY r.created_at DESC LIMIT 25`)
+    .all(row.id)
+    .map((r) => ({ id: r.id, reporter: r.reporter_username ? { id: r.reporter_id, username: r.reporter_username, name: r.reporter_name } : null, reason: r.reason, note: r.note, createdAt: r.created_at }));
+  const actions = db
+    .prepare(`SELECT a.*, u.username admin_username FROM moderation_actions a
+              LEFT JOIN users u ON u.id = a.admin_id WHERE a.case_id = ? ORDER BY a.created_at DESC LIMIT 25`)
+    .all(row.id)
+    .map((a) => ({ id: a.id, admin: a.admin_username, action: a.action, reason: a.reason, createdAt: a.created_at }));
+  const message = row.message_id ? db.prepare('SELECT id, chat_id, sender_id, type, body, deleted, created_at FROM messages WHERE id = ?').get(row.message_id) : null;
+  const chat = row.chat_id ? db.prepare('SELECT id, type, name FROM chats WHERE id = ?').get(row.chat_id) : null;
+  const history = db
+    .prepare('SELECT * FROM moderation_cases WHERE user_id = ? AND id != ? ORDER BY created_at DESC LIMIT 10')
+    .all(row.user_id, row.id)
+    .map(caseSummary);
+  res.json({
+    case: caseSummary(row),
+    user: user ? { id: user.id, username: user.username, name: user.name, avatar: user.avatar, moderation: user.moderation, role: user.role, createdAt: user.created_at } : null,
+    reports,
+    actions,
+    message: message ? { id: message.id, body: message.body, type: message.type, deleted: !!message.deleted, createdAt: message.created_at } : null,
+    conversation: chat ? { id: chat.id, type: chat.type, name: chat.type === 'group' ? chat.name : 'Private Chat' } : null,
+    userHistory: history,
+  });
+});
+
+const REVIEW_ACTIONS = {
+  confirm: 'CONFIRMED',
+  dismiss: 'CLOSED',
+  escalate: 'ESCALATED',
+  false_positive: 'FALSE_POSITIVE',
+  under_review: 'UNDER_REVIEW',
+  close: 'CLOSED',
+  no_action: 'CLOSED',
+};
+
+app.post('/api/admin/moderation/cases/:id/review', requireAuth, requireAdmin, (req, res) => {
+  const row = db.prepare('SELECT * FROM moderation_cases WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Case not found' });
+  const { action, reason } = req.body || {};
+  const nextStatus = REVIEW_ACTIONS[action];
+  if (!nextStatus) return res.status(400).json({ error: 'Invalid review action' });
+  if ((action === 'ban' || action === 'remove_content') && !reason) {
+    return res.status(400).json({ error: 'A reason is required for this action' });
+  }
+
+  const t = now();
+  const admin = getUser(req.userId);
+  db.prepare('UPDATE moderation_cases SET status = ?, reviewed_by = ?, reviewed_at = ?, action_taken = ?, updated_at = ? WHERE id = ?')
+    .run(nextStatus, req.userId, t, action, t, row.id);
+  db.prepare('INSERT INTO moderation_actions (case_id, admin_id, action, target_user_id, reason, created_at) VALUES (?,?,?,?,?,?)')
+    .run(row.id, req.userId, action, row.user_id, String(reason || '').slice(0, 500) || null, t);
+  const target = getUser(row.user_id);
+  moderation.writeAudit({
+    adminId: req.userId, adminName: admin?.username,
+    action: `case:${action}`, target: target ? `@${target.username}` : row.user_id,
+    caseId: row.id, detail: reason,
+  });
+  // A confirmed false positive is feedback for the rules — recorded, never
+  // an automatic punishment, and never auto-training anything.
+  if (action === 'false_positive' && row.category !== 'other') {
+    db.prepare('INSERT OR IGNORE INTO moderation_settings (key, value) VALUES (?, ?)')
+      .run(`fp:${row.category}:${row.message_id || 'x'}`, String(t));
+  }
+  moderationIO.emitToUser(req.userId, 'moderation:update', { caseId: row.id, status: nextStatus, at: t });
+  res.json({ case: caseSummary(db.prepare('SELECT * FROM moderation_cases WHERE id = ?').get(row.id)) });
+});
+
+/** Remove the flagged content (soft-delete, like a sender's own delete). */
+app.post('/api/admin/moderation/cases/:id/remove-content', requireAuth, requireAdmin, (req, res) => {
+  const row = db.prepare('SELECT * FROM moderation_cases WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Case not found' });
+  const { reason } = req.body || {};
+  if (!row.message_id) return res.status(400).json({ error: 'No message attached to this case' });
+  const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(row.message_id);
+  if (message && !message.deleted) {
+    db.prepare('UPDATE messages SET deleted = 1 WHERE id = ?').run(message.id);
+    emitToChat(message.chat_id, 'message:updated', (viewer) => hydrateMessage(db.prepare('SELECT * FROM messages WHERE id = ?').get(message.id), viewer));
+  }
+  const t = now();
+  const admin = getUser(req.userId);
+  db.prepare('UPDATE moderation_cases SET status = ?, action_taken = ?, updated_at = ? WHERE id = ?').run('ACTION_TAKEN', 'remove_content', t, row.id);
+  db.prepare('INSERT INTO moderation_actions (case_id, admin_id, action, target_user_id, reason, created_at) VALUES (?,?,?,?,?,?)')
+    .run(row.id, req.userId, 'remove_content', row.user_id, String(reason || '').slice(0, 500) || null, t);
+  moderation.writeAudit({
+    adminId: req.userId, adminName: admin?.username,
+    action: 'content:removed', target: `@${getUser(row.user_id)?.username || row.user_id}`,
+    caseId: row.id, detail: reason,
+  });
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/moderation/users/:id', requireAuth, requireAdmin, (req, res) => {
+  const u = getUser(req.params.id);
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  const cases = db.prepare('SELECT * FROM moderation_cases WHERE user_id = ? ORDER BY created_at DESC LIMIT 25').all(u.id).map(caseSummary);
+  res.json({
+    user: { id: u.id, username: u.username, name: u.name, avatar: u.avatar, role: u.role, moderation: u.moderation, suspendedUntil: u.suspended_until, createdAt: u.created_at, lastSeen: u.last_seen, isOnline: u.is_online },
+    cases,
+    counts: {
+      total: cases.length,
+      confirmed: cases.filter((c) => c.status === 'CONFIRMED' || c.status === 'ACTION_TAKEN').length,
+      falsePositives: cases.filter((c) => c.status === 'FALSE_POSITIVE').length,
+    },
+  });
+});
+
+app.post('/api/admin/moderation/users/:id/action', requireAuth, requireAdmin, (req, res) => {
+  const { action, reason, days, caseId, confirmIrreversible } = req.body || {};
+  if (!moderation.USER_ACTIONS.includes(action)) return res.status(400).json({ error: 'Invalid action' });
+  if (['ban', 'suspend'].includes(action) && confirmIrreversible !== true) {
+    return res.status(400).json({ error: 'This action requires explicit confirmation (confirmIrreversible: true)' });
+  }
+  try {
+    const result = moderation.applyUserAction({
+      adminId: req.userId, targetId: req.params.id, action, reason, days, caseId, io: moderationIO,
+    });
+    const admin = getUser(req.userId);
+    const target = getUser(req.params.id);
+    moderation.writeAudit({
+      adminId: req.userId, adminName: admin?.username,
+      action: `user:${action}`, target: `@${target?.username || req.params.id}`,
+      caseId: caseId || null, detail: reason,
+    });
+    if (caseId) {
+      db.prepare('UPDATE moderation_cases SET status = ?, action_taken = ?, updated_at = ? WHERE id = ?')
+        .run('ACTION_TAKEN', action, now(), caseId);
+    }
+    // Enforcement takes effect immediately on live sessions.
+    if (['banned', 'suspended'].includes(result.state)) {
+      const ids = sockets.get(req.params.id);
+      ids?.forEach((socketId) => io.sockets.sockets.get(socketId)?.disconnect(true));
+      sockets.delete(req.params.id);
+    }
+    res.json({ ok: true, state: result.state });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/moderation/audit', requireAuth, requireAdmin, (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const before = Number(req.query.before) || Date.now() + 1;
+  const rows = db
+    .prepare('SELECT * FROM moderation_audit_log WHERE created_at < ? ORDER BY created_at DESC LIMIT ?')
+    .all(before, limit + 1);
+  res.json({
+    entries: rows.slice(0, limit).map((r) => ({
+      id: r.id, admin: r.admin_name || r.admin_id, action: r.action, target: r.target,
+      caseId: r.case_id, detail: r.detail, createdAt: r.created_at,
+    })),
+    hasMore: rows.length > limit,
+  });
+});
+
+app.get('/api/admin/moderation/settings', requireAuth, requireAdmin, (req, res) => {
+  res.json({ settings: moderation.getModerationSettings() });
+});
+
+app.put('/api/admin/moderation/settings', requireAuth, requireAdmin, (req, res) => {
+  const { alertPushLevel, caseLevel, lowAggregationMinutes, retentionDays } = req.body || {};
+  const changes = [];
+  const current = moderation.getModerationSettings();
+  const apply = (key, value) => {
+    if (value === undefined || value === null || String(value) === String(current[key])) return;
+    moderation.setModerationSetting(key, value);
+    changes.push(`${key}: ${current[key]} → ${value}`);
+  };
+  if (alertPushLevel !== undefined) {
+    if (!moderation.SEVERITIES.includes(alertPushLevel) && alertPushLevel !== 'NONE') return res.status(400).json({ error: 'Invalid alertPushLevel' });
+    apply('alertPushLevel', alertPushLevel);
+  }
+  if (caseLevel !== undefined) {
+    if (!['LOW', 'MEDIUM', 'HIGH'].includes(caseLevel)) return res.status(400).json({ error: 'Invalid caseLevel' });
+    apply('caseLevel', caseLevel);
+  }
+  if (lowAggregationMinutes !== undefined) {
+    const v = Math.max(5, Math.min(24 * 60, Number(lowAggregationMinutes) || 60));
+    apply('lowAggregationMinutes', v);
+  }
+  if (retentionDays !== undefined) {
+    const v = Math.max(30, Math.min(3650, Number(retentionDays) || 180));
+    apply('retentionDays', v);
+  }
+  if (changes.length) {
+    const admin = getUser(req.userId);
+    moderation.writeAudit({ adminId: req.userId, adminName: admin?.username, action: 'settings:update', detail: changes.join('; ') });
+  }
+  res.json({ settings: moderation.getModerationSettings() });
+});
+
+/* ------------------------------------------------------------------ */
 /* socket.io realtime                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -3286,6 +3631,23 @@ function emitToUser(userId, event, payload) {
   if (!set) return;
   set.forEach((sid) => io.to(sid).emit(event, payload));
 }
+
+/* Adapter the moderation engine uses for realtime + pushes (kept tiny so
+   moderation.js stays free of socket/push imports). */
+const moderationIO = {
+  emitToUser: (userId, event, payload) => emitToUser(userId, event, payload),
+  pushAdminSafety: (adminId, { severity, category, source, caseId }) => {
+    push.notifySafetyAlert({
+      userId: adminId,
+      title: severity === 'CRITICAL' ? '🚨 CRITICAL Safety Alert' : '🚨 Safety Alert',
+      body: `${severity} · ${category.replace(/_/g, ' ')} · ${source === 'user' ? 'user report' : source === 'mixed' ? 'multiple signals' : 'automated detection'} — open the Safety Center to review.`,
+      caseId,
+    }).catch(() => {});
+  },
+  pushSafetyWarning: (targetId, reason) => {
+    push.notifySafetyWarning({ userId: targetId, reason }).catch(() => {});
+  },
+};
 
 function emitToChat(chatId, event, payloadFor) {
   memberIds(chatId).forEach((uid) => {
@@ -3329,6 +3691,10 @@ io.on('connection', (socket) => {
       const { chatId, type = 'text', body = '', mediaUrl = null, duration = 0, replyTo = null, tempId, pollId = null, disappearAt = null } = data || {};
       const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
       if (!isMember) return ack?.({ error: 'Not a member' });
+
+      // Safety enforcement state is checked server-side before storing.
+      const gate = moderation.moderationGate(uid);
+      if (gate.blocked) return ack?.({ error: gate.error });
 
       // Blocking is enforced here (not just at chat-creation time) so it
       // also stops messages in an already-existing direct chat.
@@ -3393,6 +3759,24 @@ io.on('connection', (socket) => {
         push.notifyMessage({ chatId, chat, message: row, senderId: uid });
       }
       ack?.({ message: hydrateMessage(row, uid), tempId });
+
+      // Safety analysis runs AFTER delivery — messaging is never blocked or
+      // delayed by moderation. Text messages only, with a little recent
+      // context for the spam/repetition detector.
+      if (type === 'text' && body) {
+        setImmediate(() => {
+          try {
+            const recent = db
+              .prepare('SELECT sender_id, body FROM messages WHERE chat_id = ? AND type != ? ORDER BY created_at DESC LIMIT 8')
+              .all(chatId, 'system')
+              .reverse();
+            moderation.recordAutoDetection(
+              { userId: uid, chatId, messageId: row.id, text: row.body, recentMessages: recent },
+              moderationIO
+            );
+          } catch {}
+        });
+      }
     } catch (e) {
       ack?.({ error: e.message });
     }
@@ -3554,6 +3938,8 @@ io.on('connection', (socket) => {
   socket.on('call:invite', ({ chatId, calleeId, type: callType = 'audio' }, ack) => {
     try {
       if (!calleeId || !getUser(calleeId)) return ack?.({ error: 'Unknown user' });
+      const callGate = moderation.moderationGate(uid);
+      if (callGate.blocked) return ack?.({ error: callGate.error });
       if (blockedEitherWay(uid, calleeId)) return ack?.({ error: "You can't call this person" });
       if (activeCallId()) return ack?.({ error: 'You are already on a call' });
       if (activeCalls.get(calleeId)) {

@@ -113,6 +113,10 @@ export function flushPendingRoute() {
         requestHomeTab('colleagues');
         navigationRef.navigate('Home');
         break;
+      case 'admin':
+        // Safety alert tap → the Admin Safety Center.
+        navigationRef.navigate('AdminSafety');
+        break;
       case 'network':
       case 'post':
         requestHomeTab('network');

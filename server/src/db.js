@@ -351,6 +351,13 @@ addColumnIfMissing('statuses', 'media_aspect', 'media_aspect REAL');
 addColumnIfMissing('posts', 'song', 'song TEXT');
 addColumnIfMissing('posts', 'audience', "audience TEXT DEFAULT 'public'");
 addColumnIfMissing('posts', 'media_aspect', 'media_aspect REAL');
+// Safety & moderation: backend roles (user | admin) + enforcement state.
+// Access to the Admin Safety Center is role-based and verified server-side
+// on every request — never a username check in the client.
+addColumnIfMissing('users', 'role', "role TEXT DEFAULT 'user'");
+addColumnIfMissing('users', 'moderation', "moderation TEXT DEFAULT 'active'"); // active|warned|restricted|suspended|banned
+addColumnIfMissing('users', 'suspended_until', 'suspended_until INTEGER');
+
 // Phase 3: community invite links — short unique code per community; admins
 // can regenerate it. A valid code joins regardless of join_policy.
 addColumnIfMissing('communities', 'invite_code', "invite_code TEXT");
@@ -440,8 +447,6 @@ CREATE INDEX IF NOT EXISTS idx_around_expires ON around_status(expires_at);
 
 /* ---- Phase 3: web push + community invite links ---- */
 
-/* ---- Phase 3: web push + community invite links ---- */
-
 db.exec(`
 /* Browser Push API subscriptions (Chrome/Edge/Firefox, Safari 16.4+ as an
    installed PWA). The server signs sends itself with VAPID keys — unlike the
@@ -455,6 +460,75 @@ CREATE TABLE IF NOT EXISTS web_push_subscriptions (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_web_push_user ON web_push_subscriptions(user_id);
+`);
+
+db.exec(`
+/* ---- Safety & Moderation Center (admin-only) ----
+   Evidence is kept minimal: message/chat ids plus a bounded text snapshot.
+   Private conversations are never bulk-copied — the pipeline stores only
+   what a serious safety event needs for human review. */
+
+CREATE TABLE IF NOT EXISTS moderation_cases (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      TEXT NOT NULL,             -- flagged user
+  chat_id      TEXT,
+  message_id   TEXT,
+  category     TEXT NOT NULL,             -- threat|violence|hate|harassment|self_harm|sexual_exploitation|child_safety|extremism|illegal|spam|scam|doxxing|graphic_violence|weapons|dangerous|profanity|other
+  severity     TEXT NOT NULL,             -- INFO|LOW|MEDIUM|HIGH|CRITICAL
+  confidence   REAL DEFAULT 0,            -- 0..1
+  source       TEXT NOT NULL DEFAULT 'auto',  -- auto | user | mixed
+  signals      INTEGER DEFAULT 1,         -- dedup/aggregation counter
+  reason       TEXT,
+  snapshot     TEXT,                      -- bounded excerpt of the flagged message
+  status       TEXT NOT NULL DEFAULT 'OPEN', -- OPEN|UNDER_REVIEW|CONFIRMED|FALSE_POSITIVE|ACTION_TAKEN|ESCALATED|CLOSED
+  action_taken TEXT,
+  reviewed_by  TEXT,
+  reviewed_at  INTEGER,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mod_cases_status ON moderation_cases(status, severity);
+CREATE INDEX IF NOT EXISTS idx_mod_cases_user ON moderation_cases(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_mod_cases_message ON moderation_cases(message_id);
+
+CREATE TABLE IF NOT EXISTS moderation_reports (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  case_id     INTEGER,
+  reporter_id TEXT NOT NULL,
+  message_id  TEXT,
+  chat_id     TEXT,
+  reason      TEXT NOT NULL,
+  note        TEXT,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mod_reports_case ON moderation_reports(case_id);
+
+CREATE TABLE IF NOT EXISTS moderation_actions (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  case_id       INTEGER,
+  admin_id      TEXT NOT NULL,
+  action        TEXT NOT NULL,
+  target_user_id TEXT,
+  reason        TEXT,
+  created_at    INTEGER NOT NULL
+);
+
+/* Append-only from the admin UI: no endpoint ever updates or deletes rows. */
+CREATE TABLE IF NOT EXISTS moderation_audit_log (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  admin_id  TEXT NOT NULL,
+  admin_name TEXT,
+  action    TEXT NOT NULL,
+  target    TEXT,
+  case_id   INTEGER,
+  detail    TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS moderation_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `);
 
 db.exec(`

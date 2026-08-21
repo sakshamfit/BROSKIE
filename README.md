@@ -168,6 +168,17 @@ link joins instantly (the link is the approval, whatever the join policy).
 Long-press rotates the code to revoke a leaked link; the code is only ever
 visible to admins.
 
+**Safety & Moderation (admin-only)** — a private Safety Center for accounts
+with the backend `admin` role: context-aware detection (threats, violence,
+extremism, child safety, scams, harassment — quotations and educational
+discussion never alert) plus in-app user reports flow into the same reviewable
+cases; HIGH/CRITICAL events alert the admin in realtime and by push on every
+platform. Every admin action (warn/restrict/suspend/ban/remove) requires
+explicit confirmation for irreversible steps and lands in an append-only audit
+log. Automated detection prioritizes human review — it never auto-punishes —
+and moderation evidence stays minimal (message references, no conversation
+copies).
+
 **Activity that stays readable** — likes and comments on your posts group into
 one row each ("7 people liked your post") with a stack of the most recent
 faces, instead of a wall of noise.

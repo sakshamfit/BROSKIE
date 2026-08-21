@@ -221,6 +221,25 @@ admin-only visibility, activity grouping, web-push parity + 410 pruning).
 
 ---
 
+## 3c. Safety & Moderation Center (admin-only)
+
+Private to accounts with the backend `admin` **role** (initial admin: `saksham`, granted at boot/registration — extra admins via the `ADMIN_USERNAMES` env var). The Settings screen shows *Admin ▸ Safety & Moderation* only for admins, and **every** admin API request re-verifies the role server-side (`requireAdmin`) — no client check is ever trusted.
+
+| Piece | How it works |
+|---|---|
+| Detection pipeline | Runs **after** a message is stored and delivered — messaging is never blocked by analysis. Context-aware rules (threat / self-harm / violence / weapons / extremism / child-safety / sexual coercion / hate / harassment / scam / doxxing / spam / profanity) score message *shapes* (directed, future-intent), then context signals (quotation, educational/news framing, negation, questions) demote confidence: "Violence is bad." and quotes never alert; "I'm going to hurt you" does. |
+| Severities | INFO/LOW (aggregate silently — never alert), MEDIUM (reviewable case), HIGH/CRITICAL (case + realtime dashboard alert + admin push on every platform incl. web push). |
+| Dedupe/aggregation | Same message+category → signals counter, never duplicate cases. LOW events collapse per user/category in a 60-min window. User reports on an auto-flagged message mark it *mixed* with multiple signals. |
+| User reports | ⋯ menu ▸ **Report** with 10 reasons + optional note. Rate-limited (5/min, 25/h), duplicate-proof, chat-membership-verified (no probing foreign ids). Reports and automated detections land in the same cases. |
+| Admin UI | Overview (counts + recent alerts), Cases (severity/category/status/source/sort filters + search by case id/@username/message/chat id), case detail (evidence snapshot, reporters, history, actions: confirm/dismiss/escalate/false-positive/under-review; warn/restrict/suspend/ban/remove-content/no-action — irreversible ones require explicit confirmation), user review panel, append-only Audit tab, Settings tab (alert level, case level, retention). Realtime updates over the socket — no refresh. |
+| Enforcement | `users.moderation` state: warned/restricted/suspended/banned. Login + messaging + posts + statuses + calls are gated server-side; suspension auto-expires; enforcement disconnects live sessions. **Automated detection never auto-punishes** — every consequential action is a human decision, recorded in the audit log. |
+| Privacy | Minimal evidence: message/chat ids + a 280-char snapshot — never copies of private conversations. Reports, confidence scores and case data are never exposed to the reported user or normal users (separate tables, separate APIs, 403 for everyone without the role). Retention: closed cases/reports purged after the configured days (default 180), audit kept 2×. |
+| Tables | `moderation_cases`, `moderation_reports`, `moderation_actions`, `moderation_audit_log` (append-only), `moderation_settings` + `users.role/moderation/suspended_until`. |
+
+Tests: `npm run test:moderation` — **55 checks** covering the spec's acceptance flow: harmless messages create nothing; context negatives (quotes/questions/education) never alert; a real threat → case → realtime alert → admin push (Android + web) → review → restrict (server-blocked messaging) → unrestrict → audit; unauthorized users get 403 on every admin endpoint; report dedupe, probing protection and rate limits; false positives close without punishment; LOW aggregation; scam detection; settings + audit of changes.
+
+---
+
 ## 4. Authentication and account rules
 
 ### Password policy

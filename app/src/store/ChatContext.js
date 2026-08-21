@@ -369,6 +369,10 @@ export function ChatProvider({ children }) {
       });
     });
 
+    socket.on('moderation:update', (payload) => {
+      moderationListeners.current.forEach((fn) => fn(payload));
+    });
+
     ['colleague:updated', 'affiliation:updated'].forEach((ev) => {
       socket.on(ev, (payload) => {
         colleagueListeners.current.forEach((fn) => fn(ev, payload));

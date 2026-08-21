@@ -36,6 +36,7 @@ import BlockedUsersScreen from './screens/BlockedUsersScreen';
 import HelpScreen from './screens/HelpScreen';
 import CallsScreen from './screens/CallsScreen';
 import StarredMessagesScreen from './screens/StarredMessagesScreen';
+import AdminSafetyScreen from './screens/AdminSafetyScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -283,6 +284,7 @@ export default function Navigation() {
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
             <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
             <Stack.Screen name="Help" component={HelpScreen} />
+            <Stack.Screen name="AdminSafety" component={AdminSafetyScreen} />
           </>
         )}
       </Stack.Navigator>

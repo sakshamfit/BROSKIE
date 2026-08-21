@@ -339,6 +339,27 @@ export const api = {
   unregisterWebPushSubscription: (endpoint) =>
     request('/api/push/web-subscription', { method: 'DELETE', body: { endpoint }, timeoutMs: 10000, retries: 0 }),
   changePassword: (payload) => request('/api/me/password', { method: 'POST', body: payload }),
+
+  // Admin Safety Center (server re-verifies the admin role on every call).
+  adminModerationOverview: () => request('/api/admin/moderation/overview', { timeoutMs: 12000, retries: 1 }),
+  adminModerationCases: (params = {}) => {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') q.set(k, v); });
+    return request(`/api/admin/moderation/cases?${q.toString()}`, { timeoutMs: 12000, retries: 1 });
+  },
+  adminModerationCase: (id) => request(`/api/admin/moderation/cases/${id}`, { timeoutMs: 12000, retries: 1 }),
+  adminModerationReview: (id, action, reason) =>
+    request(`/api/admin/moderation/cases/${id}/review`, { method: 'POST', body: { action, reason } }),
+  adminModerationRemoveContent: (id, reason) =>
+    request(`/api/admin/moderation/cases/${id}/remove-content`, { method: 'POST', body: { reason } }),
+  adminModerationUser: (id) => request(`/api/admin/moderation/users/${id}`, { timeoutMs: 12000, retries: 1 }),
+  adminModerationUserAction: (id, body) =>
+    request(`/api/admin/moderation/users/${id}/action`, { method: 'POST', body }),
+  adminModerationAudit: (before) =>
+    request(`/api/admin/moderation/audit${before ? `?before=${Math.floor(before)}` : ''}`, { timeoutMs: 12000, retries: 1 }),
+  adminModerationSettings: () => request('/api/admin/moderation/settings'),
+  adminModerationUpdateSettings: (patch) =>
+    request('/api/admin/moderation/settings', { method: 'PUT', body: patch }),
   users: (q = '', { contactsOnly = false } = {}) =>
     request(`/api/users?q=${encodeURIComponent(q)}${contactsOnly ? '&contacts=1' : ''}`),
 
@@ -436,6 +457,10 @@ export const api = {
     const q = since ? `?since=${Math.floor(since)}` : '';
     return request(`/api/today${q}`, { timeoutMs: 15000, retries: 1 });
   },
+  // Safety & moderation — user reports (admin API below).
+  reportMessage: (messageId, reason, note) =>
+    request('/api/moderation/report', { method: 'POST', body: { messageId, reason, note: note || undefined }, timeoutMs: 12000, retries: 0 }),
+
   // Community invite links.
   joinCommunityByCode: (code) => request('/api/communities/join-by-code', { method: 'POST', body: { code } }),
   rotateInviteCode: (communityId) => request(`/api/communities/${communityId}/invite/rotate`, { method: 'POST', body: {} }),
