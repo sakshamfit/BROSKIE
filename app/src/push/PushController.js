@@ -17,6 +17,7 @@ import {
   unregisterPushNotifications,
   setAppBadge,
   clearAppBadge,
+  setViewedChat,
 } from './notifications';
 import { routeFromNotification } from './routing';
 
@@ -46,6 +47,7 @@ export default function PushController() {
     if (token || user) return undefined;
     unregisterPushNotifications();
     clearAppBadge();
+    setViewedChat(null);
     return undefined;
   }, [token, user]);
 

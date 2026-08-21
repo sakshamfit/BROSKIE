@@ -10,9 +10,11 @@
  *   4. Listen: taps route straight to the exact screen (Conversation /
  *      Activity / Colleagues) via src/push/routing.js.
  *
- * While the app is FOREGROUND we never show a banner — the socket already
- * updates the chat list, badges and the incoming-call overlay live. When the
- * app is backgrounded or killed, the OS displays the push on its own.
+ * FOREGROUND banners: a push alerts the user whenever the app is open UNLESS
+ * they are actively looking at the exact conversation it belongs to (the
+ * socket already renders that message live — a banner would echo it).
+ * ConversationScreen reports the on-screen chat via setViewedChat(). When
+ * the app is backgrounded or killed, the OS displays the push on its own.
  */
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
@@ -23,11 +25,37 @@ import { api } from '../api';
 
 const DEVICE_ID_KEY = 'plusone.deviceId';
 
-/* Suppress banners while the user is actively in the app (the socket drives
- * the UI instead); show them if the app is inactive/backgrounded. */
+/* When this JS process booted. Only a process this young can be launched
+ * BY a notification tap, so getLastNotificationResponseAsync() is only
+ * honored while the process is fresh — otherwise an old notification (or
+ * one that merely arrived while the app was killed) would hijack a normal
+ * launch and auto-open its chat. */
+const PROCESS_STARTED_AT = Date.now();
+const COLD_START_WINDOW_MS = 45000;
+
+/* Reliable app state. AppState.currentState can be stale on Android until a
+ * listener is attached — keep it current ourselves. */
+let currentAppState = AppState.currentState || 'active';
+AppState.addEventListener('change', (s) => { currentAppState = s; });
+
+/* The conversation currently on screen (null = none), reported by
+ * ConversationScreen. Foreground pushes for THIS chat are silent. */
+let viewedChatId = null;
+export function setViewedChat(chatId) {
+  viewedChatId = chatId || null;
+}
+
+/* Show a banner for every push except the one conversation the user is
+ * actively reading while the app is foregrounded. Backgrounded pushes are
+ * always shown (the handler only runs in-app anyway, but stay explicit). */
 Notifications.setNotificationHandler({
-  handleNotification: () => {
-    const show = AppState.currentState !== 'active';
+  handleNotification: ({ notification }) => {
+    const data = notification?.request?.content?.data || {};
+    const readingThisChat = currentAppState === 'active'
+      && data.route === 'chat'
+      && !!data.chatId
+      && data.chatId === viewedChatId;
+    const show = !readingThisChat;
     return {
       shouldShowBanner: show,
       shouldShowList: show,
@@ -165,13 +193,16 @@ export async function registerPushNotifications({ onRoute }) {
     });
 
     // Tap that cold-started the app: the response listener misses it because
-    // it registered too late. Only trust recent responses so an old tap
-    // doesn't hijack a later normal launch (45s covers slow session restores).
+    // it registered too late. Only a FRESH process can have been launched by
+    // the tap itself, and only trust recent notifications so an old tap (or
+    // one that merely arrived while the app was killed) doesn't hijack a
+    // later normal launch and auto-open its chat.
     Notifications.getLastNotificationResponseAsync()
       .then((response) => {
         const receivedAt = response?.notification?.date;
         const data = response?.notification?.request?.content?.data;
-        if (data?.route && typeof receivedAt === 'number' && Date.now() - receivedAt < 45000) {
+        const isColdStart = Date.now() - PROCESS_STARTED_AT < COLD_START_WINDOW_MS;
+        if (isColdStart && data?.route && typeof receivedAt === 'number' && Date.now() - receivedAt < COLD_START_WINDOW_MS) {
           onRoute?.(data);
         }
       })

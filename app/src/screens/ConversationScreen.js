@@ -30,6 +30,7 @@ import ThemePickerSheet from '../components/ThemePickerSheet';
 import { ThemeRegistry, alpha } from '../chatThemes';
 import { FadeSlide, TypingDots, FloatLoop, SheetSpringIn, SpringPressable, Pop, haptic, motion } from '../motion';
 import { api, mediaUrl } from '../api';
+import { setViewedChat } from '../push/notifications';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
 
 function ConversationContent({ route, navigation, embedded = false, themePicker = null }) {
@@ -217,6 +218,15 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     if (chatId && !chat) refreshChats().catch(() => {});
   }, [chatId, chat, refreshChats]);
   useEffect(() => { if (chatId && list.length) markRead(chatId); }, [chatId, list.length, markRead]);
+
+  // Tell the push layer this conversation is on screen: a message arriving
+  // for THIS chat never banners (it renders live above), while every other
+  // chat still notifies — foreground included.
+  useEffect(() => {
+    if (!chatId) return undefined;
+    setViewedChat(chatId);
+    return () => setViewedChat(null);
+  }, [chatId]);
 
   useEffect(() => () => {
     try {
