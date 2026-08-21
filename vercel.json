@@ -7,7 +7,7 @@
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://broskie-h.up.railway.app/api/:path*" },
     { "source": "/uploads/:path*", "destination": "https://broskie-h.up.railway.app/uploads/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!_vercel/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

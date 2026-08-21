@@ -29,8 +29,6 @@ import {
 } from '@expo-google-fonts/space-mono';
 import { HankenGrotesk_400Regular } from '@expo-google-fonts/hanken-grotesk';
 import { Caveat_600SemiBold, Caveat_700Bold } from '@expo-google-fonts/caveat';
-import { Analytics } from '@vercel/analytics/react';
-import { SpeedInsights } from '@vercel/speed-insights/react';
 
 import { AuthProvider, useAuth } from './src/store/AuthContext';
 import { ChatProvider } from './src/store/ChatContext';
@@ -42,6 +40,7 @@ import OrientationManager from './src/components/OrientationManager';
 import CallOverlay from './src/components/CallOverlay';
 import DailyAIGreeting from './src/components/DailyAIGreeting';
 import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
+import VercelObservability from './src/web/VercelObservability';
 import { WEB_BUILD, startUpdateLifecycle } from './src/updates';
 
 /**
@@ -156,15 +155,7 @@ function Root() {
     <>
       <StatusBar style={theme.dark ? 'light' : 'dark'} backgroundColor={theme.bg} />
       <OrientationManager />
-      {/* Vercel Web Analytics — page views only load the tracking script in a
-          real browser (it injects a <script> tag into document.head), so it's
-          gated to web. It silently no-ops if the app isn't served from
-          Vercel (the /_vercel/insights/script.js request just 404s quietly). */}
-      {Platform.OS === 'web' && <Analytics />}
-      {/* This is an Expo/React Native app rather than a Next.js app, so use
-          the package's React entry point. As with Analytics, Speed Insights
-          runs only in the browser and leaves iOS/Android builds untouched. */}
-      {Platform.OS === 'web' && <SpeedInsights />}
+      <VercelObservability />
       <PhoneFrame>
         <View style={styles.appCanvas}>
           <Navigation />

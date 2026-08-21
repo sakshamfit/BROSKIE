@@ -246,7 +246,12 @@ PWA that stubbornly serves an old build.
   redeploys, or migrate SQLite → Postgres
 - Move uploads to object storage — **see `SUPABASE.md`** (3-minute setup)
 - Restrict CORS to your own domain
-- **Vercel Web Analytics**: if you deploy the frontend on Vercel, page-view
-  analytics are already wired in (`<Analytics />` from `@vercel/analytics/react`
-  in `app/App.js`) — just flip it on in the Vercel dashboard under your
-  project → **Analytics** → **Enable**. It silently no-ops on any other host.
+- **Vercel Web Analytics + Speed Insights**: if you deploy the frontend on
+  Vercel, both are already wired in (`app/src/web/VercelObservability.web.js`
+  mounts `<Analytics />` from `@vercel/analytics/react` and `<SpeedInsights />`
+  from `@vercel/speed-insights/react` — this is Expo, not Next.js, so the
+  `/next` import is not used). Enable them in the Vercel dashboard under
+  **Analytics** and **Speed Insights**. They silently no-op on any other host.
+  Native iOS/Android builds never load the scripts. After enabling Speed
+  Insights, deploy once so Vercel can add `/_vercel/speed-insights/*`, then
+  visit the site (disable content blockers if you don't see data after ~30s).
