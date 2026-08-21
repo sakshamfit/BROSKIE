@@ -115,6 +115,22 @@ tapping a username never sends a request — only sending a message does.
 presence, single ✓ sent → double ✓✓ delivered → blue ✓✓ read, live unread badges,
 receipts that flush when a recipient reconnects.
 
+**Push notifications (Android first)** — when the app is closed or backgrounded, the
+server sends an Expo push for: new direct/group messages (with a "mentioned you"
+variant for @mentions), message/connect requests in Activity, colleague requests,
+likes and comments on your Network posts, community join approvals, and incoming
+calls. Tapping the notification opens the exact screen (that Conversation, Activity,
+or the Colleagues tab) via the `plusone://` deep-link route carried in the payload.
+Pushes respect everything you'd expect, server-side: per-chat mute (a muted chat
+never pings), notification preferences per type, and **quiet hours** — inside the
+window pushes are delivered silently (a low-importance Android channel) so a 3am
+message is waiting in the morning without waking anyone. The launcher badge is
+stamped on each push (unread chats + pending Activity) and kept in sync in-app.
+One-time Android setup: create a Firebase project, generate an FCM v1 service
+account key, and upload it with `eas credentials -p android` (see APP_STATUS.md).
+iOS push follows the same code path once APNs credentials are added.
+
+
 **Organisation** — chat list sorted by recency with **pinned chats pinned to the top**,
 unread counts, global message search plus **in-chat search that jumps to the match**,
 **starred messages** (save any message, browse them from Chat info or Settings),
@@ -137,6 +153,44 @@ tag; posts appear live for every connected user via Socket.IO. Photo posts provi
 Original, 1:1, 4:5, 16:9 and 9:16 framing with native crop editing, and preserve that
 chosen box in the feed. Likes toggle with optimistic UI, threaded comments in a bottom
 sheet, tag filtering, trending tags, cursor pagination, and author deletion.
+Feed lenses: **Worldwide / My places / Following** — plus **Follow** any author
+from their post and a **My places** audience so a post can target just people
+who share your college or workplace.
+
+**Calls** — real 1:1 voice/video WebRTC on every platform (browser + Android
+app), with the ink-and-paper full-screen overlay, ringing, accept/decline and
+call history. **Hold the mic button to record a voice note and release to send**
+(quick taps are ignored so nothing accidental is ever sent).
+
+**Communities with invite links** — every community has an 8-character invite
+code: admins share `https://…/c/<code>` via WhatsApp/SMS and anyone with the
+link joins instantly (the link is the approval, whatever the join policy).
+Long-press rotates the code to revoke a leaked link; the code is only ever
+visible to admins.
+
+**Safety & Moderation (admin-only)** — a private Safety Center for accounts
+with the backend `admin` role: context-aware detection (threats, violence,
+extremism, child safety, scams, harassment — quotations and educational
+discussion never alert) plus in-app user reports flow into the same reviewable
+cases; HIGH/CRITICAL events alert the admin in realtime and by push on every
+platform. Every admin action (warn/restrict/suspend/ban/remove) requires
+explicit confirmation for irreversible steps and lands in an append-only audit
+log. Automated detection prioritizes human review — it never auto-punishes —
+and moderation evidence stays minimal (message references, no conversation
+copies).
+
+**Activity that stays readable** — likes and comments on your posts group into
+one row each ("7 people liked your post") with a stack of the most recent
+faces, instead of a wall of noise.
+
+**Today at your place (the daily campus loop)** — the morning AI greeter now
+reports campus life (*"2 people from your college posted today, and 1 person is
+around now"*) and hands off with one tap into the **Today strip** on Colleagues
+and Network: who's around or online from your places right now, one-tap
+**"I'm around"** (a 12-hour presence flag, with matching pushes — *"Amit is
+around"*, *"Riya from your college posted"*), and today's posts from your
+places. Hidden for profiles without places; quiet hours, mutes and per-type
+notification settings are enforced server-side like every other push.
 
 **Colleagues** — place-based discovery inside The Network. Add a college/institution,
 organization, or workplace to your profile, join an existing registered place, search
@@ -248,15 +302,23 @@ once every other member has a read receipt — so it works identically for group
 
 ## Notes & limits
 
+- **Push notifications** reach **web browsers too** — Chrome/Edge/Firefox (and
+  Safari 16.4+ with the PWA installed). Web pushes are signed with VAPID keys
+  the server generates itself on first boot (persisted on the /data volume);
+  set `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` env vars only if
+  you want to supply your own. No third-party service, no configuration.
+- Android/iOS push needs a fresh app binary (1.4.0+, `versionCode` 6): it adds
+  the `expo-notifications` native module, so already-installed APKs cannot pick
+  it up over an OTA update. Android delivery additionally needs a one-time FCM
+  v1 service-account key uploaded via `eas credentials -p android` (or the
+  expo.dev dashboard → Credentials) — see PUSH_SETUP.md.
 - Voice notes request microphone permission, record real WebM (web) or M4A/AAC
   (Android/iOS) audio with `expo-audio`, upload it to the active storage backend,
   and render a playable waveform bubble with the recorded duration.
-- Calls are real WebRTC on web (genuine peer-to-peer audio/video via the browser's
-  native RTCPeerConnection). On native iOS/Android, actual camera/mic capture needs
-  `react-native-webrtc`, which requires a custom dev build outside the managed/Expo Go
-  workflow this app runs under — ringing, accept/decline, and call history all still
-  work for real on native, the app just shows a clear message instead of connecting
-  media if a native device tries to start/answer a call.
+- Calls are real peer-to-peer WebRTC on every platform: the browser's native
+  implementation on web, `react-native-webrtc` on Android/iOS (Phase 3; needs
+  the 1.4.0+ app build — older installs still ring and keep call history but
+  cannot connect live media).
 - Messages are not end-to-end encrypted — they travel over HTTPS to the server,
   which stores and relays them (the UI no longer claims otherwise).
 - SQLite + local disk uploads are fine for demo/dev; swap for Postgres + S3 in production.

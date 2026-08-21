@@ -14,6 +14,8 @@ import { marker, stroke } from './theme';
 import { haptic, usePressScale } from './motion';
 import SplitLayout from './DesktopLayout';
 import PageSwipePager from './components/PageSwipePager';
+import { navigationRef, onHomeTabRequest, flushPendingRoute } from './push/routing';
+import { setupDeepLinks } from './push/links';
 
 import AuthScreen from './screens/AuthScreen';
 import ChatListScreen from './screens/ChatListScreen';
@@ -34,6 +36,7 @@ import BlockedUsersScreen from './screens/BlockedUsersScreen';
 import HelpScreen from './screens/HelpScreen';
 import CallsScreen from './screens/CallsScreen';
 import StarredMessagesScreen from './screens/StarredMessagesScreen';
+import AdminSafetyScreen from './screens/AdminSafetyScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -66,6 +69,13 @@ function HomeTabs({ navigation }) {
   const swipeProgress = useRef(new Animated.Value(0)).current;
 
   const openChat = (chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); };
+
+  // Push deep links can target a Home page (e.g. a colleague request routes
+  // to the Colleagues tab). Tab state lives here, not in navigation state,
+  // so routing.js asks via this subscription.
+  useEffect(() => onHomeTabRequest((requested) => {
+    if (PAGES.some((p) => p.key === requested) && requested !== tab) setTab(requested);
+  }), [tab]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -210,6 +220,13 @@ export default function Navigation() {
   const { theme, mode } = useTheme();
   const { isSplitCapable } = useResponsive();
 
+  // Incoming links: plusone:// routes natively, and https://…/c/<code>
+  // community invites on the web (they join first, then open the detail).
+  useEffect(() => {
+    if (!user) return undefined;
+    return setupDeepLinks();
+  }, [user?.id]);
+
   if (booting) return <Loading label="STARTING +ONE" />;
 
   // Wide web viewports AND tablets (in either orientation, once there's
@@ -233,7 +250,11 @@ export default function Navigation() {
   };
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer
+      ref={navigationRef}
+      onStateChange={flushPendingRoute}
+      theme={navTheme}
+    >
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
@@ -263,6 +284,7 @@ export default function Navigation() {
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
             <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
             <Stack.Screen name="Help" component={HelpScreen} />
+            <Stack.Screen name="AdminSafety" component={AdminSafetyScreen} />
           </>
         )}
       </Stack.Navigator>

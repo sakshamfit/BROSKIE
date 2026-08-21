@@ -80,7 +80,7 @@ const FAQ = [
   { q: 'Why did a status/post disappear?', a: 'Status updates always expire after 24 hours by design. A post or status can also vanish from your feed if its author changed its visibility to Friends/Selected and you\u2019re no longer eligible to see it, or if you\u2019ve blocked \u2014 or been blocked by \u2014 that person.' },
   { q: 'Can I recover a deleted message or post?', a: 'No \u2014 deletions are permanent. A deleted chat message shows "message deleted" to other participants but the content is gone server-side.' },
   { q: 'Why can\u2019t I see someone\u2019s online status?', a: 'They\u2019ve likely set their Last Seen privacy to "My contacts" or "Nobody" in Settings \u2192 Privacy. Note that this is mutual for last-seen and fully mutual for read receipts \u2014 hiding yours also hides theirs from you.' },
-  { q: 'How do voice/video calls work?', a: '1:1 calls are real WebRTC on desktop web browsers (audio and video, signalled through the server). On the iOS/Android app, ringing, accept/decline and call history work, but live media capture needs a custom dev build with react-native-webrtc \u2014 so on phones the call connects over the network only when both sides are on a browser.' },
+  { q: 'How do voice/video calls work?', a: '1:1 calls are real peer-to-peer WebRTC on every platform \u2014 audio and video on the web app and on Android app builds 1.4.0+, signalled through the server. Older app installs ring and record the call in history but cannot connect live media; update the app to call for real.' },
   { q: 'I forgot my password.', a: 'There\u2019s no self-serve password reset yet in this build. If you forget your password, contact whoever operates your server \u2014 an admin can reset it for you.' },
 ];
 

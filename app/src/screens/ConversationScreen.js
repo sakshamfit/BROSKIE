@@ -64,8 +64,48 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const replyMissingTimer = useRef(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  // Safety: report a message to the moderation center.
+  const [reportMsg, setReportMsg] = useState(null);
+  const [reportReason, setReportReason] = useState('');
+  const [reportNote, setReportNote] = useState('');
+  const [reportBusy, setReportBusy] = useState(false);
+
+  const openReport = (message) => {
+    setReportReason('');
+    setReportNote('');
+    setReportMsg(message);
+  };
+
+  const submitReport = async () => {
+    if (!reportReason || reportBusy) return;
+    setReportBusy(true);
+    try {
+      const r = await api.reportMessage(reportMsg.id, reportReason, reportNote.trim() || undefined);
+      setReportMsg(null);
+      Alert.alert(
+        'Report submitted',
+        r?.duplicate
+          ? 'You already reported this message — our safety team has it.'
+          : 'Thank you. Our safety team will review this privately.'
+      );
+    } catch (e) {
+      Alert.alert('Could not report', e.message || 'Please try again in a moment.');
+    } finally {
+      setReportBusy(false);
+    }
+  };
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
+  // Hold-to-record gesture state on the send button: when this press started
+  // (0 = not held) and whether THIS press owns the current recording.
+  const holdStartedAt = useRef(0);
+  const pressOwnsRecording = useRef(false);
+  // startRecording is async (permission + recorder prep). If the user
+  // releases before it finishes, the stop is parked here and applied the
+  // moment the recorder is actually live — a fast hold can never leave an
+  // orphaned recording running.
+  const recordingStarting = useRef(false);
+  const stopWhileStarting = useRef(null);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const recordingStartedAt = useRef(0);
   const listRef = useRef(null);
@@ -270,8 +310,11 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   }).catch(() => {});
 
   const startRecording = async () => {
-    if (recording || voiceBusy) return;
+    if (recording || voiceBusy || recordingStarting.current) return;
+    recordingStarting.current = true;
+    stopWhileStarting.current = null;
     setVoiceBusy(true);
+    let becameLive = false;
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
@@ -288,6 +331,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       await audioRecorder.prepareToRecordAsync();
       recordingStartedAt.current = Date.now();
       audioRecorder.record();
+      becameLive = true;
       setRecording(true);
       setShowEmoji(false);
     } catch (error) {
@@ -295,11 +339,24 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       Alert.alert('Could not record', error?.message || 'The microphone could not be started.');
       await restorePlaybackAudioMode();
     } finally {
+      recordingStarting.current = false;
       setVoiceBusy(false);
+      // The button was released while the recorder was still spinning up —
+      // apply that stop now.
+      if (becameLive && stopWhileStarting.current !== null) {
+        const shouldSend = stopWhileStarting.current;
+        stopWhileStarting.current = null;
+        stopRecording(shouldSend);
+      }
     }
   };
 
   const stopRecording = async (shouldSend = true) => {
+    if (recordingStarting.current) {
+      // Recorder not live yet — park the intent; startRecording applies it.
+      stopWhileStarting.current = shouldSend;
+      return;
+    }
     if (!recording || voiceBusy) return;
     const elapsedMs = Math.max(
       audioRecorderState.durationMillis || 0,
@@ -683,6 +740,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               onStar={toggleStar}
               onSetTimer={setTimerMsg}
               onVotePoll={onVote}
+              onReport={openReport}
             />
           )
         }
@@ -819,12 +877,34 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
 
         <SpringPressable
           accessibilityRole="button"
-          accessibilityLabel={voiceBusy ? 'Sending voice note' : recording ? 'Send voice note' : text.trim() ? 'Send message' : 'Start voice recording'}
+          accessibilityLabel={voiceBusy ? 'Sending voice note' : recording ? 'Send voice note' : text.trim() ? 'Send message' : 'Hold to record a voice note'}
+          // WhatsApp-style: HOLD the mic to record — release to send. A quick
+          // tap still toggles recording (accessibility / old habit), and the
+          // existing cancel control keeps working either way.
+          delayLongPress={250}
+          onPressIn={() => {
+            holdStartedAt.current = Date.now();
+            if (!text.trim() && !editing && !recording && !voiceBusy) {
+              pressOwnsRecording.current = true;
+              startRecording();
+            }
+          }}
+          onPressOut={() => {
+            const startedAt = holdStartedAt.current;
+            holdStartedAt.current = 0;
+            if (!pressOwnsRecording.current) return;
+            pressOwnsRecording.current = false;
+            const heldMs = startedAt ? Date.now() - startedAt : 0;
+            // A real hold sends on release; a quick tap is treated as an
+            // accidental touch and cancels — nothing half-second-long ever
+            // gets sent. startRecording is async, so stopRecording handles
+            // "still starting" gracefully (it is a no-op until a file lands).
+            stopRecording(heldMs >= 500);
+          }}
           onPress={() => {
             if (text.trim()) send();
             else if (editing) { setEditing(null); setText(''); }
-            else if (recording) stopRecording(true);
-            else startRecording();
+            // Recording is fully driven by press-in/release above.
           }}
           disabled={voiceBusy}
           android_ripple={rippleFor(theme, { color: alpha(theme.onSendButton, 0.3) })}
@@ -848,6 +928,56 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         </View>
       </View>
       </FadeSlide>
+
+      {/* -------- safety: report a message -------- */}
+      <Modal visible={!!reportMsg} transparent animationType="fade" onRequestClose={() => setReportMsg(null)}>
+        {reportMsg && (
+          <Pressable style={s.lightbox} onPress={() => setReportMsg(null)}>
+            <Pressable style={[s.reportSheet, inkBox(theme, 'ink'), { backgroundColor: theme.bg }]} onPress={() => {}}>
+              <Text style={[type.headlineSm, { color: theme.text }]}>Report this message</Text>
+              <Text style={[type.bodySm, { color: theme.muted, marginTop: 4 }]}>
+                Your report goes to the +one safety team privately. The sender is not told.
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+                {[
+                  ['harassment', 'Harassment'], ['threat', 'Threat'], ['hate', 'Hate'], ['violence', 'Violence'],
+                  ['spam', 'Spam'], ['scam', 'Scam'], ['sexual_exploitation', 'Sexual content'],
+                  ['child_safety', 'Child safety'], ['extremism', 'Terrorism'], ['other', 'Other'],
+                ].map(([k, label]) => (
+                  <Pressable
+                    key={k}
+                    onPress={() => setReportReason(k)}
+                    style={[s.reportChip, reportReason === k && { backgroundColor: theme.ink, borderColor: theme.ink }]}
+                  >
+                    <Text style={[type.labelXs, { color: reportReason === k ? theme.onPrimary : theme.ink }]}>{label.toUpperCase()}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <InkField style={{ marginTop: 12 }} focused={!!reportNote}>
+                <TextInput
+                  value={reportNote} onChangeText={setReportNote}
+                  placeholder="Anything that helps review (optional)"
+                  placeholderTextColor={theme.muted}
+                  style={{ flex: 1, fontFamily: 'Karla_400Regular', fontSize: 14, color: theme.text, paddingVertical: 6 }}
+                  maxLength={500}
+                />
+              </InkField>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+                <Pressable onPress={() => setReportMsg(null)} style={[s.reportBtn, { borderColor: theme.ink }]}>
+                  <Text style={[type.labelSm, { color: theme.ink }]}>CANCEL</Text>
+                </Pressable>
+                <Pressable
+                  onPress={submitReport}
+                  disabled={!reportReason || reportBusy}
+                  style={[s.reportBtn, { borderColor: theme.danger, opacity: !reportReason || reportBusy ? 0.4 : 1 }]}
+                >
+                  <Text style={[type.labelSm, { color: theme.danger }]}>{reportBusy ? 'SENDING…' : 'REPORT'}</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        )}
+      </Modal>
 
       <Modal visible={!!lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(null)}>
         <Pressable style={s.lightbox} onPress={() => setLightbox(null)}>
@@ -1170,6 +1300,9 @@ const makeStyles = (t) => StyleSheet.create({
   input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },
   sendBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   recDot: { width: 9, height: 9, borderRadius: radius.full },
+  reportSheet: { width: '92%', maxWidth: 460, borderRadius: radius.md, padding: 18 },
+  reportChip: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  reportBtn: { flex: 1, alignItems: 'center', borderWidth: 1.5, borderRadius: 999, paddingVertical: 10 },
   lightbox: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
   lightboxImg: { width: '92%', height: '78%' },
   lightboxClose: { position: 'absolute', top: 44, right: 22, padding: 8 },

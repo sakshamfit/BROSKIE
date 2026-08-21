@@ -51,15 +51,12 @@ function mergeCachedChats(cached, current) {
   return sortChats([...byId.values()]);
 }
 
-// WebRTC needs a real device's camera/mic. On web this is the browser's
-// native RTCPeerConnection/getUserMedia — fully working. On native
-// (iOS/Android) actual audio/video capture needs `react-native-webrtc`,
-// which requires a custom dev build (not available in the managed/Expo Go
-// workflow this app runs under) — the same category of limitation already
-// noted for voice-note recording in README.md. The signaling (ringing,
-// accept/decline, call history) is real and works everywhere either way;
-// only the peer media connection itself is web-only for now.
-const RTC_SUPPORTED = Platform.OS === 'web' && typeof window !== 'undefined' && !!window.RTCPeerConnection;
+// WebRTC media comes from the platform adapter in src/webrtc: the browser's
+// native API on web, react-native-webrtc on Android/iOS (added in Phase 3 —
+// ringing/accept/decline/history were always real; now the actual
+// peer-to-peer audio/video works on every platform).
+import * as RTC from '../webrtc/rtc';
+const RTC_SUPPORTED = RTC.supported;
 
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
@@ -372,6 +369,10 @@ export function ChatProvider({ children }) {
       });
     });
 
+    socket.on('moderation:update', (payload) => {
+      moderationListeners.current.forEach((fn) => fn(payload));
+    });
+
     ['colleague:updated', 'affiliation:updated'].forEach((ev) => {
       socket.on(ev, (payload) => {
         colleagueListeners.current.forEach((fn) => fn(ev, payload));
@@ -413,7 +414,7 @@ export function ChatProvider({ children }) {
       // Callee side: caller's offer arrives once we've accepted and the
       // caller has our accept — create our own peer connection and answer.
       const pc = await ensurePeerConnection(callId, callRef.current?.type || 'audio');
-      await pc.setRemoteDescription(new window.RTCSessionDescription(sdp));
+      await pc.setRemoteDescription(RTC.SessionDescription(sdp));
       flushPendingCandidates(pc);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
@@ -424,7 +425,7 @@ export function ChatProvider({ children }) {
     socket.on('call:answer', async ({ sdp }) => {
       const pc = pcRef.current;
       if (!pc) return;
-      await pc.setRemoteDescription(new window.RTCSessionDescription(sdp));
+      await pc.setRemoteDescription(RTC.SessionDescription(sdp));
       flushPendingCandidates(pc);
       setCall((prev) => (prev ? { ...prev, status: 'ongoing' } : prev));
     });
@@ -433,7 +434,7 @@ export function ChatProvider({ children }) {
       const pc = pcRef.current;
       if (!candidate) return;
       if (pc && pc.remoteDescription && pc.remoteDescription.type) {
-        try { await pc.addIceCandidate(new window.RTCIceCandidate(candidate)); } catch {}
+        try { await pc.addIceCandidate(RTC.IceCandidate(candidate)); } catch {}
       } else {
         pendingCandidates.current.push(candidate);
       }
@@ -469,7 +470,7 @@ export function ChatProvider({ children }) {
   useEffect(() => { callRef.current = call; }, [call]);
 
   const flushPendingCandidates = (pc) => {
-    pendingCandidates.current.forEach((c) => pc.addIceCandidate(new window.RTCIceCandidate(c)).catch(() => {}));
+    pendingCandidates.current.forEach((c) => pc.addIceCandidate(RTC.IceCandidate(c)).catch(() => {}));
     pendingCandidates.current = [];
   };
 
@@ -495,9 +496,9 @@ export function ChatProvider({ children }) {
 
   const ensurePeerConnection = useCallback(async (callId, type) => {
     if (pcRef.current) return pcRef.current;
-    if (!RTC_SUPPORTED) throw new Error('Calling needs a browser with WebRTC support');
+    if (!RTC_SUPPORTED) throw new Error('Calling is not supported on this device');
 
-    const stream = await window.navigator.mediaDevices.getUserMedia({
+    const stream = await RTC.getUserMedia({
       audio: true,
       video: type === 'video',
     });
@@ -505,7 +506,7 @@ export function ChatProvider({ children }) {
     setMicOn(true);
     setCamOn(type === 'video');
 
-    const pc = new window.RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = RTC.createPeerConnection({ iceServers: ICE_SERVERS });
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
     pc.onicecandidate = (e) => {
@@ -547,7 +548,7 @@ export function ChatProvider({ children }) {
   /** Start an outgoing call to `calleeId` in `chatId`. */
   const startCall = useCallback((chatId, calleeId, type = 'audio') => {
     if (!RTC_SUPPORTED) {
-      setCall({ id: 'unsupported', chatId, type, direction: 'outgoing', status: 'ended', endedReason: 'failed', error: 'Calling needs a desktop/laptop browser (WebRTC is not available on this platform yet).' });
+      setCall({ id: 'unsupported', chatId, type, direction: 'outgoing', status: 'ended', endedReason: 'failed', error: 'Calling is not available on this device yet.' });
       setTimeout(() => setCall(null), 3500);
       return;
     }

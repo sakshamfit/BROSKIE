@@ -2,7 +2,7 @@
   "name": "tomodachi",
   "version": "1.0.0",
   "private": true,
-  "description": "+one — realtime ink-and-paper messenger. Root manifest so hosts (Railway/Render/Nixpacks) detect a Node project and delegate to server/.",
+  "description": "+one \u2014 realtime ink-and-paper messenger. Root manifest so hosts (Railway/Render/Nixpacks) detect a Node project and delegate to server/.",
   "engines": {
     "node": "20.x"
   },
@@ -15,7 +15,11 @@
     "deploy:cloudflare": "npx wrangler deploy",
     "backup": "cd server && npm run backup",
     "audit:chats": "cd server && npm run audit:chats --",
-    "test:chat-history": "cd server && npm run test:chat-history"
+    "test:chat-history": "cd server && npm run test:chat-history",
+    "test:push": "cd server && npm run test:push",
+    "test:phase2": "cd server && npm run test:phase2",
+    "test:phase3": "cd server && npm run test:phase3",
+    "test:moderation": "cd server && npm run test:moderation"
   },
   "workspaces": [],
   "license": "MIT"

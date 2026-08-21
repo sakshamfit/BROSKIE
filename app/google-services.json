@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "650319026719",
+    "project_id": "plusone-67803",
+    "storage_bucket": "plusone-67803.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:650319026719:android:e6a83b4d8923596800932a",
+        "android_client_info": {
+          "package_name": "ai.arena.tomodachi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA4U5m6xC5nZHSTZXwoaxwfiGII98E9-3I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
