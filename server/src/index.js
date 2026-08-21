@@ -2954,10 +2954,20 @@ io.on('connection', (socket) => {
       if (disappearAt && Number(disappearAt) > now()) expiresAt = Number(disappearAt);
       else if (chat.disappear_seconds) expiresAt = now() + chat.disappear_seconds * 1000;
 
+      // Swipe-to-reply, hover Reply, and the long-press menu all send the
+      // same `replyTo` id. Persist it on the existing messages.reply_to
+      // column — never a separate swipe table. Ignore ids that aren't a
+      // real message in this chat so a stale swipe can't orphan the quote.
+      let replyToId = replyTo || null;
+      if (replyToId) {
+        const quoted = db.prepare('SELECT id FROM messages WHERE id = ? AND chat_id = ?').get(replyToId, chatId);
+        if (!quoted) replyToId = null;
+      }
+
       const msg = {
         id: nano(), chat_id: chatId, sender_id: uid, type,
         body: String(body).slice(0, 5000), media_url: mediaUrl,
-        duration: Number(duration) || 0, reply_to: replyTo,
+        duration: Number(duration) || 0, reply_to: replyToId,
         expires_at: expiresAt, edited: 0, forwarded_from: null, poll_id: pollId,
         created_at: now(),
       };

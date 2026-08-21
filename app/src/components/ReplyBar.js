@@ -65,7 +65,12 @@ export default function ReplyBar({ replyTo, senderName, onClose }) {
     >
       <View style={[s.accent, { backgroundColor: theme.primary }]} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={[type.labelXs, { color: theme.graphite }]} numberOfLines={1}>{name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+          <Icon name="arrow-undo-outline" size={13} color={theme.graphite} />
+          <Text style={[type.labelXs, { color: theme.graphite, flex: 1 }]} numberOfLines={1}>
+            {`REPLYING TO ${name}`}
+          </Text>
+        </View>
         {body.type === 'image' || body.type === 'voice' ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Emoji char={body.type === 'image' ? '📷' : '🎤'} size={13} />

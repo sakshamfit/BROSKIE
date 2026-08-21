@@ -13,20 +13,25 @@ import VoiceNote from './VoiceNote';
 const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 // ---- swipe-to-reply gesture tuning (dp) ----
+// Keep travel small and physical: the bubble tracks the finger, then resists
+// near the cap so it never flies across the screen.
 const SWIPE_MAX = 72;                  // max visual travel the bubble allows
 const SWIPE_THRESHOLD = 48;            // releasing at/after this commits the reply
 const SWIPE_RESIST_START = SWIPE_MAX * 0.7; // linear tracking until here…
 const SWIPE_RESIST = 0.3;              // …then each extra pixel counts for 30%
+const SWIPE_CLAIM_DX = 8;              // ignore tiny jitters so vertical scroll wins
 
 /** Map raw finger dx to resisted, capped visual travel. */
 const visualTravel = (dx) => {
+  if (dx <= 0) return 0;
   if (dx <= SWIPE_RESIST_START) return dx;
-  return SWIPE_RESIST_START + (dx - SWIPE_RESIST_START) * SWIPE_RESIST;
+  return Math.min(SWIPE_MAX, SWIPE_RESIST_START + (dx - SWIPE_RESIST_START) * SWIPE_RESIST);
 };
 
 /** Claim only rightward, horizontal-dominant drags — vertical scroll, taps,
  * long-press and the double-tap ❤️ all keep working. */
-const shouldClaimSwipe = (g) => g.dx > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.15;
+const shouldClaimSwipe = (g) =>
+  g.dx > SWIPE_CLAIM_DX && Math.abs(g.dx) > Math.abs(g.dy) * 1.15;
 
 // Message ids that already played their entrance animation this session.
 // Keeps FlatList row recycling (scroll away + back) from re-animating old
@@ -101,33 +106,51 @@ export default function MessageBubble({
 
   // ---- swipe-to-reply (touch only). The bubble tracks the finger with a
   // native-driver translateX (no re-renders, 60fps) and reveals a themed ↩
-  // badge. Web gets a hover-reveal reply button instead. ----
+  // badge. Web gets a hover-reveal reply button + R shortcut instead. ----
   const isWeb = Platform.OS === 'web';
+  const canSwipe = !isWeb && !message.deleted;
   const translateX = useRef(new Animated.Value(0)).current;
   const badgeScale = useRef(new Animated.Value(1)).current;
   const armedRef = useRef(false);
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
+  const menuOpenRef = useRef(false);
+  menuOpenRef.current = menu;
+  const canSwipeRef = useRef(canSwipe);
+  canSwipeRef.current = canSwipe;
   const liveRef = useRef({ message, onReply });
   liveRef.current = { message, onReply };
 
+  // Progressive reveal: 0 → hidden, 25% begins, 50% clear, 75%+ solid.
   const badgeOpacity = translateX.interpolate({
-    inputRange: [0, SWIPE_MAX * 0.25, SWIPE_MAX * 0.75, SWIPE_MAX],
-    outputRange: [0, 0, 1, 1],
+    inputRange: [0, SWIPE_MAX * 0.25, SWIPE_MAX * 0.5, SWIPE_MAX * 0.75, SWIPE_MAX],
+    outputRange: [0, 0.28, 0.72, 1, 1],
+    extrapolate: 'clamp',
+  });
+  const badgeX = translateX.interpolate({
+    inputRange: [0, SWIPE_MAX],
+    outputRange: [-6, 0],
     extrapolate: 'clamp',
   });
 
   const snapBack = () => {
-    if (reducedRef.current) { translateX.setValue(0); return; }
-    Animated.spring(translateX, { toValue: 0, ...motion.springBack, useNativeDriver: true }).start();
+    armedRef.current = false;
+    if (reducedRef.current) { translateX.setValue(0); badgeScale.setValue(1); return; }
+    Animated.parallel([
+      Animated.spring(translateX, { toValue: 0, ...motion.springBack, useNativeDriver: true }),
+      Animated.spring(badgeScale, { toValue: 1, ...motion.springBack, useNativeDriver: true }),
+    ]).start();
   };
 
   const panResponder = useRef(PanResponder.create({
-    onMoveShouldSetPanResponderCapture: (e, g) => !isWeb && shouldClaimSwipe(g),
-    onMoveShouldSetPanResponder: (e, g) => !isWeb && shouldClaimSwipe(g),
-    onPanResponderGrant: () => { armedRef.current = false; translateX.setValue(0); },
+    onMoveShouldSetPanResponderCapture: (e, g) => canSwipeRef.current && !menuOpenRef.current && shouldClaimSwipe(g),
+    onMoveShouldSetPanResponder: (e, g) => canSwipeRef.current && !menuOpenRef.current && shouldClaimSwipe(g),
+    onPanResponderGrant: (e, g) => {
+      armedRef.current = false;
+      translateX.setValue(visualTravel(g.dx));
+    },
     onPanResponderMove: (e, g) => {
-      const v = Math.min(visualTravel(Math.max(0, g.dx)), SWIPE_MAX);
+      const v = visualTravel(g.dx);
       translateX.setValue(v);
       // crossing the threshold arms the reply once per drag: badge pops + haptic
       if (!armedRef.current && v >= SWIPE_THRESHOLD) {
@@ -139,15 +162,20 @@ export default function MessageBubble({
             Animated.spring(badgeScale, { toValue: 1, ...motion.springBack, useNativeDriver: true }),
           ]).start();
         }
+      } else if (armedRef.current && v < SWIPE_THRESHOLD) {
+        // pulled back under the threshold — disarm so release won't reply
+        armedRef.current = false;
       }
     },
     onPanResponderRelease: (e, g) => {
-      const committed = Math.min(visualTravel(Math.max(0, g.dx)), SWIPE_MAX) >= SWIPE_THRESHOLD;
+      const committed = visualTravel(g.dx) >= SWIPE_THRESHOLD;
       snapBack();
       if (committed) liveRef.current.onReply?.(liveRef.current.message);
     },
     onPanResponderTerminate: () => snapBack(),
-    // once the swipe is committed, don't let the FlatList steal the gesture back
+    // Once the swipe is claimed, don't let the FlatList steal it back and
+    // fight the finger. Vertical scrolls never reach this because we only
+    // claim horizontal-dominant movement.
     onPanResponderTerminationRequest: () => false,
   })).current;
 
@@ -161,6 +189,23 @@ export default function MessageBubble({
     }).start();
     return undefined;
   }, [hovered, reduced, hoverOpacity]);
+
+  // Desktop: R replies to the hovered message, matching the hover ↩ button.
+  // Ignored while typing in the composer so it never steals keystrokes.
+  useEffect(() => {
+    if (!isWeb || !hovered || message.deleted || typeof window === 'undefined') return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'r' && e.key !== 'R') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement;
+      const tag = el?.tagName;
+      if (el?.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA') return;
+      e.preventDefault();
+      liveRef.current.onReply?.(liveRef.current.message);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [hovered, isWeb, message.deleted]);
 
   // ---- brief highlighter wash when scrolled-to from a reply-quote tap ----
   const hlOpacity = useRef(new Animated.Value(0)).current;
@@ -215,21 +260,21 @@ export default function MessageBubble({
   return (
     <>
       <View
-        {...(isWeb ? {} : panResponder.panHandlers)}
+        {...(canSwipe ? panResponder.panHandlers : {})}
         style={[s.wrap, isMine ? s.wrapMine : s.wrapTheirs]}
       >
         <View style={[s.bubbleSlot, isMine ? s.slotMine : s.slotTheirs]}>
-          {!isWeb && (
+          {canSwipe && (
             <Animated.View
               pointerEvents="none"
-              style={[s.swipeBadge, { opacity: badgeOpacity, transform: [{ scale: badgeScale }] }]}
+              style={[s.swipeBadge, { opacity: badgeOpacity, transform: [{ translateX: badgeX }, { scale: badgeScale }] }]}
             >
               <View style={[s.swipeBadgeDot, { borderColor: theme.ink, backgroundColor: theme.replyPreview }]}>
                 <Icon name="arrow-undo-outline" size={17} color={theme.ink} />
               </View>
             </Animated.View>
           )}
-          {isWeb && (
+          {isWeb && !message.deleted && (
             <Animated.View pointerEvents="box-none" style={[s.hoverBadge, { opacity: hoverOpacity }]}>
               <Pressable
                 accessibilityLabel="Reply"
@@ -325,9 +370,12 @@ export default function MessageBubble({
                 pressed && { backgroundColor: alpha(ink, 0.06) },
               ]}
             >
-              <Text style={[type.labelXs, { color: isMine ? subInk : theme.graphite }]} numberOfLines={1}>
-                {String(message.replyTo.senderName || 'Unknown').toUpperCase()}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Icon name="arrow-undo-outline" size={11} color={isMine ? subInk : theme.graphite} />
+                <Text style={[type.labelXs, { color: isMine ? subInk : theme.graphite, flex: 1 }]} numberOfLines={1}>
+                  {String(message.replyTo.senderName || 'Unknown').toUpperCase()}
+                </Text>
+              </View>
               {message.replyTo.type === 'image' || message.replyTo.type === 'voice' ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
                   <Emoji char={message.replyTo.type === 'image' ? '📷' : '🎤'} size={12} />
@@ -408,10 +456,12 @@ export default function MessageBubble({
               ))}
             </View>
             <Rule style={{ marginVertical: 10 }} />
-            <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReply(message); setMenu(false); }}>
-              <Icon name="arrow-undo-outline" size={18} color={theme.ink} />
-              <Text style={[type.bodyMd, { color: theme.text }]}>Reply</Text>
-            </Pressable>
+            {!message.deleted && (
+              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReply(message); setMenu(false); }}>
+                <Icon name="arrow-undo-outline" size={18} color={theme.ink} />
+                <Text style={[type.bodyMd, { color: theme.text }]}>Reply</Text>
+              </Pressable>
+            )}
             {canForward && (
               <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onForward(message); setMenu(false); }}>
                 <Icon name="arrow-redo-outline" size={18} color={theme.ink} />
@@ -504,10 +554,10 @@ function PollBody({ messageId, poll, ink, isMine, onVotePoll }) {
 }
 
 const makeStyles = (t) => StyleSheet.create({
-  wrap: { paddingHorizontal: 20, marginVertical: 5 },
+  wrap: { paddingHorizontal: 20, marginVertical: 5, overflow: 'visible' },
   wrapMine: { alignItems: 'flex-end' },
   wrapTheirs: { alignItems: 'flex-start' },
-  bubbleSlot: { position: 'relative', maxWidth: '84%', minWidth: 88 },
+  bubbleSlot: { position: 'relative', maxWidth: '84%', minWidth: 88, overflow: 'visible' },
   slotMine: { alignSelf: 'flex-end' },
   slotTheirs: { alignSelf: 'flex-start' },
   bubble: { width: '100%', paddingHorizontal: 13, paddingTop: 9, paddingBottom: 7, marginBottom: 7 },

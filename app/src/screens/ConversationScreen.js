@@ -67,8 +67,10 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const typingTimer = useRef(null);
-  // Reply focus must not trigger the composer's usual scroll-to-bottom jump.
+  // Reply focus / quote-tap must not trigger the composer's usual
+  // scroll-to-bottom jump — keep the user on the message they swiped.
   const suppressFocusScroll = useRef(false);
+  const suppressScrollToEnd = useRef(false);
   const recSecs = Math.max(0, Math.floor((audioRecorderState.durationMillis || 0) / 1000));
 
   // in-chat search
@@ -114,7 +116,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         : 0;
       const height = Math.max(eventHeight, metricsHeight, overlapHeight);
       if (height > 0) setKeyboardHeight(height);
-      scrollToLatest(120);
+      if (!suppressFocusScroll.current) scrollToLatest(120);
     };
     const onHide = () => {
       clearTimeout(keyboardScrollTimer.current);
@@ -150,7 +152,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       const offsetTop = Number(viewport.offsetTop) || 0;
       const inset = Math.max(0, layoutHeight - visualHeight - offsetTop);
       setKeyboardHeight(inset);
-      if (inset > 0) scrollToLatest(80);
+      if (inset > 0 && !suppressFocusScroll.current) scrollToLatest(80);
     };
 
     updateWebKeyboardInset();
@@ -194,14 +196,30 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     return m ? m.name : 'Unknown';
   }, [chat, user]);
 
-  // Reply entry point (swipe, hover button, or long-press menu). Sets the
+  // Same payload used by swipe, hover, menu, and keyboard reply — always
+  // the existing `reply_to` / replyToMessage relationship, never a new table.
+  const replyPayload = (msg = replyTo) => (msg ? {
+    replyTo: msg.id,
+    replyToMessage: {
+      id: msg.id,
+      senderId: msg.senderId,
+      senderName: nameFor(msg.senderId),
+      type: msg.type,
+      body: msg.body,
+    },
+  } : {});
+
+  // Reply entry point (swipe, hover button, long-press menu, or R). Sets the
   // reply and auto-focuses the composer (opens the keyboard on mobile) while
-  // preserving scroll position — the focus→jump-to-bottom is suppressed once.
+  // preserving scroll position — the focus→jump-to-bottom is suppressed
+  // through the keyboard animation, not just the first onFocus tick.
   const handleReply = useCallback((message) => {
+    if (!message || message.deleted) return;
     setReplyTo(message);
     setShowEmoji(false);
     suppressFocusScroll.current = true;
     setTimeout(() => inputRef.current?.focus(), 180);
+    setTimeout(() => { suppressFocusScroll.current = false; }, 700);
   }, []);
 
   const send = () => {
@@ -220,10 +238,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     sendMessage(chatId, {
       type: 'text',
       body,
-      replyTo: replyTo?.id || null,
-      replyToMessage: replyTo
-        ? { id: replyTo.id, senderId: replyTo.senderId, senderName: nameFor(replyTo.senderId), type: replyTo.type, body: replyTo.body }
-        : null,
+      ...replyPayload(),
     });
     setText(''); setReplyTo(null); setShowEmoji(false); setTypingState(chatId, false);
   };
@@ -235,7 +250,8 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       setUploading(true);
       const asset = res.assets[0];
       const { url } = await api.uploadFile(asset.uri, asset.fileName || 'photo.jpg', asset.mimeType || 'image/jpeg');
-      sendMessage(chatId, { type: 'image', mediaUrl: url, body: '' });
+      sendMessage(chatId, { type: 'image', mediaUrl: url, body: '', ...replyPayload() });
+      setReplyTo(null);
     } catch (e) {
       console.warn('image upload failed', e.message);
     } finally { setUploading(false); }
@@ -269,7 +285,6 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       recordingStartedAt.current = Date.now();
       audioRecorder.record();
       setRecording(true);
-      setReplyTo(null);
       setShowEmoji(false);
     } catch (error) {
       console.warn('voice recording failed to start', error?.message);
@@ -309,7 +324,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         mediaUrl: url,
         duration: Math.max(1, Math.round(elapsedMs / 1000)),
         body: '',
+        ...replyPayload(),
       });
+      setReplyTo(null);
     } catch (error) {
       console.warn('voice note failed', error?.message);
       setRecording(false);
@@ -366,16 +383,31 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       replyMissingTimer.current = setTimeout(() => setReplyMissing(false), 2000);
       return;
     }
+    suppressScrollToEnd.current = true;
     listRef.current?.scrollToIndex({ index: idx, viewPosition: 0.4, animated: true });
     setReplyHighlightId(messageId);
     clearTimeout(replyHighlightTimer.current);
-    replyHighlightTimer.current = setTimeout(() => setReplyHighlightId(null), 1600);
+    replyHighlightTimer.current = setTimeout(() => {
+      setReplyHighlightId(null);
+      suppressScrollToEnd.current = false;
+    }, 1600);
   }, [rows]);
 
   useEffect(() => () => {
     clearTimeout(replyHighlightTimer.current);
     clearTimeout(replyMissingTimer.current);
   }, []);
+
+  // Desktop: Escape cancels reply mode without clearing typed text.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || !replyTo) return;
+      setReplyTo(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [replyTo]);
 
   const startEdit = (message) => {
     setEditing(message);
@@ -599,7 +631,10 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={{ paddingVertical: 14, flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 8 }}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+        onContentSizeChange={() => {
+          if (suppressScrollToEnd.current || suppressFocusScroll.current) return;
+          listRef.current?.scrollToEnd({ animated: false });
+        }}
         onScrollToIndexFailed={(info) => {
           // Rows vary in height; fall back to an estimated offset, then retry.
           setTimeout(() => {
@@ -719,7 +754,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               onChangeText={onChangeText}
               onFocus={() => {
                 // replying focuses the composer without jumping to the bottom
-                if (suppressFocusScroll.current) { suppressFocusScroll.current = false; return; }
+                if (suppressFocusScroll.current) return;
                 scrollToLatest(120);
               }}
               multiline
