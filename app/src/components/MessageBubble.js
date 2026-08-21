@@ -8,30 +8,16 @@ import { mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 import { alpha } from '../chatThemes';
 import { Pop, SheetSpringIn, HeartBurst, haptic, useReducedMotion, motion } from '../motion';
+import { MESSAGE_SWIPE, messageTravel, shouldClaimMessageSwipe } from '../gestures';
 import VoiceNote from './VoiceNote';
 
 const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
-// ---- swipe-to-reply gesture tuning (dp) ----
-// Keep travel small and physical: the bubble tracks the finger, then resists
-// near the cap so it never flies across the screen.
-const SWIPE_MAX = 72;                  // max visual travel the bubble allows
-const SWIPE_THRESHOLD = 48;            // releasing at/after this commits the reply
-const SWIPE_RESIST_START = SWIPE_MAX * 0.7; // linear tracking until here…
-const SWIPE_RESIST = 0.3;              // …then each extra pixel counts for 30%
-const SWIPE_CLAIM_DX = 8;              // ignore tiny jitters so vertical scroll wins
-
-/** Map raw finger dx to resisted, capped visual travel. */
-const visualTravel = (dx) => {
-  if (dx <= 0) return 0;
-  if (dx <= SWIPE_RESIST_START) return dx;
-  return Math.min(SWIPE_MAX, SWIPE_RESIST_START + (dx - SWIPE_RESIST_START) * SWIPE_RESIST);
-};
-
-/** Claim only rightward, horizontal-dominant drags — vertical scroll, taps,
- * long-press and the double-tap ❤️ all keep working. */
-const shouldClaimSwipe = (g) =>
-  g.dx > SWIPE_CLAIM_DX && Math.abs(g.dx) > Math.abs(g.dy) * 1.15;
+// ---- swipe-to-reply gesture tuning lives in ../gestures.js (the app-wide
+// gesture-priority system). Keep travel small and physical: the bubble
+// tracks the finger, then resists near the cap so it never flies across
+// the screen, and the lock zone (8dp < the page-pager's 12dp) guarantees
+// a message swipe always beats page navigation. ----
 
 // Message ids that already played their entrance animation this session.
 // Keeps FlatList row recycling (scroll away + back) from re-animating old
@@ -123,12 +109,12 @@ export default function MessageBubble({
 
   // Progressive reveal: 0 → hidden, 25% begins, 50% clear, 75%+ solid.
   const badgeOpacity = translateX.interpolate({
-    inputRange: [0, SWIPE_MAX * 0.25, SWIPE_MAX * 0.5, SWIPE_MAX * 0.75, SWIPE_MAX],
+    inputRange: [0, MESSAGE_SWIPE.MAX * 0.25, MESSAGE_SWIPE.MAX * 0.5, MESSAGE_SWIPE.MAX * 0.75, MESSAGE_SWIPE.MAX],
     outputRange: [0, 0.28, 0.72, 1, 1],
     extrapolate: 'clamp',
   });
   const badgeX = translateX.interpolate({
-    inputRange: [0, SWIPE_MAX],
+    inputRange: [0, MESSAGE_SWIPE.MAX],
     outputRange: [-6, 0],
     extrapolate: 'clamp',
   });
@@ -143,17 +129,17 @@ export default function MessageBubble({
   };
 
   const panResponder = useRef(PanResponder.create({
-    onMoveShouldSetPanResponderCapture: (e, g) => canSwipeRef.current && !menuOpenRef.current && shouldClaimSwipe(g),
-    onMoveShouldSetPanResponder: (e, g) => canSwipeRef.current && !menuOpenRef.current && shouldClaimSwipe(g),
+    onMoveShouldSetPanResponderCapture: (e, g) => canSwipeRef.current && !menuOpenRef.current && shouldClaimMessageSwipe(g.dx, g.dy),
+    onMoveShouldSetPanResponder: (e, g) => canSwipeRef.current && !menuOpenRef.current && shouldClaimMessageSwipe(g.dx, g.dy),
     onPanResponderGrant: (e, g) => {
       armedRef.current = false;
-      translateX.setValue(visualTravel(g.dx));
+      translateX.setValue(messageTravel(g.dx));
     },
     onPanResponderMove: (e, g) => {
-      const v = visualTravel(g.dx);
+      const v = messageTravel(g.dx);
       translateX.setValue(v);
       // crossing the threshold arms the reply once per drag: badge pops + haptic
-      if (!armedRef.current && v >= SWIPE_THRESHOLD) {
+      if (!armedRef.current && v >= MESSAGE_SWIPE.THRESHOLD) {
         armedRef.current = true;
         haptic('impact');
         if (!reducedRef.current) {
@@ -162,13 +148,13 @@ export default function MessageBubble({
             Animated.spring(badgeScale, { toValue: 1, ...motion.springBack, useNativeDriver: true }),
           ]).start();
         }
-      } else if (armedRef.current && v < SWIPE_THRESHOLD) {
+      } else if (armedRef.current && v < MESSAGE_SWIPE.THRESHOLD) {
         // pulled back under the threshold — disarm so release won't reply
         armedRef.current = false;
       }
     },
     onPanResponderRelease: (e, g) => {
-      const committed = visualTravel(g.dx) >= SWIPE_THRESHOLD;
+      const committed = messageTravel(g.dx) >= MESSAGE_SWIPE.THRESHOLD;
       snapBack();
       if (committed) liveRef.current.onReply?.(liveRef.current.message);
     },

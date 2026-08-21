@@ -1,6 +1,6 @@
 # BROSKIE — Application Status & Operations Guide
 
-**Last updated:** 20 August 2026**Repository:** `sakshamfit/BROSKIE`
+**Last updated:** 21 August 2026**Repository:** `sakshamfit/BROSKIE`
 **Primary production host:** Railway
 **Production API:** `https://broskie-h.up.railway.app`
 
@@ -230,7 +230,39 @@ The app supports the following appearance choices:
 
 The chat list and conversation interface use a manga/paper visual style, including hand-inked card outlines, tape-style date labels, unread markers, and a paper-panel composer. Every signed-in screen uses a lightly uneven sketch-graph background with pencil fibres and graphite smudges. Login/signup are explicitly excluded and retain their original dark manga halftone and speed lines.
 
-### Per-conversation chat themes
+### Gesture interaction system (finger-driven)
+
+The phone/tab UI (bottom-tab flow in `Navigation.js`) has Instagram-style,
+finger-driven gestures built on a centralized priority system:
+
+- **Page-to-page swipe navigation** (`app/src/components/PageSwipePager.js`):
+  the whole page tracks the finger 1:1 while dragging (transform +
+  native driver, no re-renders), the neighbouring page is always mounted so
+  it slides in pre-rendered, release commits past 30% of viewport width OR a
+  fast flick (velocity ≥ 0.55 px/ms with ≥ 40px travel), and the strip
+  settles with a momentum spring (or springs back on cancel). Page order
+  follows the existing tab architecture: Network → See → Chats → Colleagues
+  (Settings stays a pushed stack screen). The bottom tab bar stays
+  synchronized: active tab commits only when the gesture completes, and the
+  bar subtly responds to the finger mid-drag via a shared Animated progress.
+- **Message swipe-to-reply** (`MessageBubble.js`): rightward horizontal drag
+  on a bubble moves the message with the finger (resisted near a 72dp cap),
+  reveals the ↩ badge, arms once at 48dp with a haptic + badge pop, springs
+  back on release, then opens the existing reply composer (auto-focus,
+  scroll-stable). Vertical drags always scroll the chat instead.
+- **Gesture priority** (`app/src/gestures.js`): a single pure module holds
+  every tuning constant and decision (lock zones, dominance, thresholds,
+  resistance curves) plus the documented state machine. Message swipes and
+  horizontal carousels claim the responder in the capture phase (deeper),
+  so they always beat page navigation, which only claims in the bubble
+  phase after a 12px lock zone — feeds never flip pages accidentally.
+- **Platform rules:** gestures are touch-only on web (mouse drag, hover
+  reply button, R shortcut and context-menu Reply are unchanged); tablets
+  and touch-screens get gestures; `prefers-reduced-motion` cuts springs and
+  keeps the gestures functional; haptics are native-only and fire once per
+  gesture.
+
+
 
 Each conversation can have its own independent chat theme (Chat ▸ ⋯ ▸ Chat theme).
 The theme belongs to the **conversation**, not the user: it is persisted
