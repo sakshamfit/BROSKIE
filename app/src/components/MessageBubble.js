@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, Image, Pressable, StyleSheet, Modal, Animated, PanResponder, Platform } from 'react-native';
+import { View, Text, Image, Pressable, StyleSheet, Modal, Animated, PanResponder, Platform, ActivityIndicator } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
@@ -386,7 +386,20 @@ export default function MessageBubble({
             <PollBody messageId={message.id} poll={message.poll} isMine={isMine} ink={ink} onVotePoll={onVotePoll} />
           ) : message.type === 'image' ? (
             <Pressable onPress={() => onImagePress?.(mediaUrl(message.mediaUrl))}>
-              <Image source={{ uri: mediaUrl(message.mediaUrl) }} style={[s.image, { borderColor: theme.ink }]} resizeMode="cover" />
+              <View style={s.imageWrap}>
+                <Image
+                  source={{ uri: mediaUrl(message.mediaThumbUrl || message.mediaUrl) }}
+                  style={[s.image, { borderColor: theme.ink }]}
+                  resizeMode="cover"
+                />
+                {(message.status === 'sending' || message.status === 'queued') && (
+                  <View style={s.mediaProgress}>
+                    {typeof message.uploadProgress === 'number'
+                      ? <Text style={[type.labelXs, { color: '#fff' }]}>{Math.round(message.uploadProgress)}%</Text>
+                      : <ActivityIndicator size="small" color="#fff" />}
+                  </View>
+                )}
+              </View>
               {!!message.body && <EmojiText style={[type.bodyMd, { color: ink, marginTop: 7 }]}>{message.body}</EmojiText>}
             </Pressable>
           ) : message.type === 'voice' ? (
@@ -402,7 +415,7 @@ export default function MessageBubble({
             {!!message.expiresAt && !message.deleted && (
               <Icon name="timer-outline" size={11} color={subInk} />
             )}
-            <Text style={[type.labelXs, { color: subInk, fontSize: 9 }]}>{formatTime(message.createdAt)}</Text>
+            <Text style={[type.labelXs, { color: subInk, fontSize: 9 }]}>{formatTime(message.clientCreatedAt || message.createdAt)}</Text>
             {isMine && <Ticks status={message.status} size={13} color={message.status === 'read' ? theme.highlighter : subInk} />}
           </View>
 
@@ -553,7 +566,12 @@ const makeStyles = (t) => StyleSheet.create({
   hoverBtn: { width: 30, height: 30, borderRadius: 999, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   highlightWash: { ...StyleSheet.absoluteFillObject },
   deletedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  imageWrap: { width: 224, height: 224 },
   image: { width: 224, height: 224, borderWidth: 1 },
+  mediaProgress: {
+    ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(28,27,27,0.35)',
+  },
   meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 5, marginTop: 5 },
   reply: { borderLeftWidth: 2, paddingLeft: 8, paddingVertical: 2, marginBottom: 7 },
   reactions: {

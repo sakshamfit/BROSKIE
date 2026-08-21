@@ -15,7 +15,9 @@
     "deploy:cloudflare": "npx wrangler deploy",
     "backup": "cd server && npm run backup",
     "audit:chats": "cd server && npm run audit:chats --",
-    "test:chat-history": "cd server && npm run test:chat-history"
+    "test:chat-history": "cd server && npm run test:chat-history",
+    "test:offline-messaging": "cd server && npm run test:offline-messaging",
+    "test:message-state": "cd server && npm run test:message-state"
   },
   "workspaces": [],
   "license": "MIT"

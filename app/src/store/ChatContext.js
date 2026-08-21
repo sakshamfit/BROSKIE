@@ -1,55 +1,20 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState, Platform } from 'react-native';
 import { io } from 'socket.io-client';
 import { SOCKET_URL, api } from '../api';
 import { useAuth } from './AuthContext';
+import { createMessagingEngine } from '../messaging';
 
 const ChatContext = createContext(null);
 export const useChat = () => useContext(ChatContext);
-
-// Conversation summaries and already-opened message history are an offline
-// fallback, never a second source of truth. The account id in both the key and
-// payload prevents one signed-in user from ever seeing another user's cache.
-const HISTORY_CACHE_VERSION = 1;
-const HISTORY_CACHE_PREFIX = 'plusone.chat-history';
-// Keep the single AsyncStorage item comfortably below common Android limits;
-// every conversation summary is retained, while message bodies are a bounded
-// offline convenience (the server remains the complete source of truth).
-const MAX_CACHED_MESSAGE_CHATS = 12;
-const MAX_CACHED_MESSAGES_PER_CHAT = 120;
-const historyCacheKey = (userId) => `${HISTORY_CACHE_PREFIX}.v${HISTORY_CACHE_VERSION}.${userId}`;
 
 // Pinned chats float to the top; within each group, latest activity first.
 const sortChats = (list) =>
   [...list].sort((a, b) =>
     ((b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)) ||
-    ((b.lastMessage?.createdAt || b.updatedAt || 0) - (a.lastMessage?.createdAt || a.updatedAt || 0))
+    ((b.lastMessage?.createdAt || b.lastMessage?.clientCreatedAt || b.updatedAt || 0)
+      - (a.lastMessage?.createdAt || a.lastMessage?.clientCreatedAt || a.updatedAt || 0))
   );
-
-function parseHistoryCache(raw, userId) {
-  if (!raw) return null;
-  const parsed = JSON.parse(raw);
-  if (parsed?.version !== HISTORY_CACHE_VERSION || parsed?.userId !== userId || !Array.isArray(parsed?.chats)) {
-    return null;
-  }
-  const cachedMessages = parsed.messages && typeof parsed.messages === 'object' ? parsed.messages : {};
-  const messages = Object.fromEntries(
-    Object.entries(cachedMessages).filter(([, list]) => Array.isArray(list))
-  );
-  return {
-    chats: parsed.chats,
-    messages,
-    loadedMessageIds: Array.isArray(parsed.loadedMessageIds) ? parsed.loadedMessageIds : Object.keys(messages),
-  };
-}
-
-function mergeCachedChats(cached, current) {
-  const byId = new Map(cached.map((chat) => [chat.id, chat]));
-  // Live/socket state wins if it arrived while AsyncStorage was being read.
-  current.forEach((chat) => byId.set(chat.id, chat));
-  return sortChats([...byId.values()]);
-}
 
 // WebRTC needs a real device's camera/mic. On web this is the browser's
 // native RTCPeerConnection/getUserMedia — fully working. On native
@@ -76,8 +41,7 @@ export function ChatProvider({ children }) {
   const [connected, setConnected] = useState(false);
   const [activityUnread, setActivityUnread] = useState(0);
   const socketRef = useRef(null);
-  const cacheReadyForRef = useRef(null);
-  const cacheWriteTimerRef = useRef(null);
+  const engineRef = useRef(null);
   const postListeners = useRef(new Set());
   const statusListeners = useRef(new Set());
   const communityListeners = useRef(new Set());
@@ -133,6 +97,11 @@ export function ChatProvider({ children }) {
   }, []);
 
   const upsertChat = useCallback((chat) => {
+    const engine = engineRef.current;
+    if (engine) {
+      engine.store.upsertChat(chat);
+      return;
+    }
     setChats((prev) => {
       const idx = prev.findIndex((c) => c.id === chat.id);
       if (idx === -1) return sortChats([chat, ...prev]);
@@ -142,14 +111,31 @@ export function ChatProvider({ children }) {
     });
   }, []);
 
-  /* ---------------- durable local history fallback ---------------- */
+  const publishStore = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    setChats(engine.store.getChats());
+    setMessages(engine.store.getAllMessagesCopy());
+    setMessagesLoaded(engine.store.getLoaded());
+  }, []);
+
+  /* ---------------- local-first store + outbox ---------------- */
   useEffect(() => {
     const userId = user?.id;
-    if (!token || !userId) return undefined;
+    if (!token || !userId) {
+      engineRef.current?.dispose();
+      engineRef.current = null;
+      setChats([]);
+      setMessages({});
+      setChatsLoaded(false);
+      setChatsError(null);
+      setMessagesLoaded({});
+      setMessagesLoading({});
+      setMessageErrors({});
+      return undefined;
+    }
 
     let disposed = false;
-    cacheReadyForRef.current = null;
-    clearTimeout(cacheWriteTimerRef.current);
     setChats([]);
     setMessages({});
     setChatsLoaded(false);
@@ -158,32 +144,27 @@ export function ChatProvider({ children }) {
     setMessagesLoading({});
     setMessageErrors({});
 
-    (async () => {
-      let cached = null;
-      try {
-        cached = parseHistoryCache(await AsyncStorage.getItem(historyCacheKey(userId)), userId);
-      } catch {
-        // A corrupt/unavailable device cache must never block the server copy.
-      }
-      if (disposed) return;
+    const engine = createMessagingEngine({
+      userId,
+      getSocket: () => socketRef.current,
+    });
+    engineRef.current = engine;
+    const unsub = engine.store.subscribe(() => {
+      if (!disposed) publishStore();
+    });
 
-      if (cached) {
-        setChats((current) => mergeCachedChats(cached.chats, current));
-        setMessages((current) => ({ ...cached.messages, ...current }));
-        setMessagesLoaded(Object.fromEntries(cached.loadedMessageIds.map((chatId) => [chatId, true])));
-        // Cached rows are useful immediately; keep refreshing in the background.
-        setChatsLoaded(true);
-      }
-      cacheReadyForRef.current = userId;
+    (async () => {
+      await engine.store.hydrate();
+      if (disposed) return;
+      publishStore();
+      if (engine.store.getChats().length) setChatsLoaded(true);
+      engine.outbox.drain();
 
       try {
         const result = await api.chats();
         if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
         if (!disposed) {
-          // A successful server snapshot is authoritative. It removes stale
-          // cache entries after an explicit delete/leave without ever letting
-          // a failed request erase the rows already on screen.
-          setChats(sortChats(result.chats));
+          engine.store.setChats(result.chats, { fromServer: true });
           setChatsError(null);
         }
       } catch {
@@ -195,62 +176,30 @@ export function ChatProvider({ children }) {
       }
     })();
 
+    const appSub = AppState.addEventListener('change', (next) => {
+      if (next === 'active' && engineRef.current === engine) {
+        engine.connectivity.probe().finally(() => {
+          engine.outbox.drain();
+          engine.sync.reconnect().catch(() => {});
+        });
+      }
+    });
+
     return () => {
       disposed = true;
-      clearTimeout(cacheWriteTimerRef.current);
+      appSub.remove();
+      unsub();
+      engine.dispose();
+      if (engineRef.current === engine) engineRef.current = null;
     };
-  }, [token, user?.id]);
-
-  // Save only after the matching account cache has been read. This prevents
-  // the provider's initial empty arrays (or another account's prior state)
-  // from overwriting useful history during sign-in and app updates.
-  useEffect(() => {
-    const userId = user?.id;
-    if (!token || !userId || cacheReadyForRef.current !== userId) return undefined;
-
-    clearTimeout(cacheWriteTimerRef.current);
-    cacheWriteTimerRef.current = setTimeout(() => {
-      const visibleChatIds = new Set(chats.map((chat) => chat.id));
-      const cacheMessages = Object.fromEntries(
-        Object.entries(messages)
-          .filter(([chatId]) => visibleChatIds.has(chatId))
-          .sort(([, listA], [, listB]) => {
-            const lastAt = (list) => list?.[list.length - 1]?.createdAt || 0;
-            return lastAt(listB) - lastAt(listA);
-          })
-          .slice(0, MAX_CACHED_MESSAGE_CHATS)
-          .map(([chatId, list]) => [
-            chatId,
-            (Array.isArray(list) ? list : [])
-              .filter((message) => !message.pending && !String(message.id || '').startsWith('tmp_'))
-              .slice(-MAX_CACHED_MESSAGES_PER_CHAT),
-          ])
-      );
-      const payload = {
-        version: HISTORY_CACHE_VERSION,
-        userId,
-        savedAt: Date.now(),
-        chats,
-        messages: cacheMessages,
-        loadedMessageIds: Object.keys(cacheMessages).filter((chatId) => messagesLoaded[chatId]),
-      };
-      AsyncStorage.setItem(historyCacheKey(userId), JSON.stringify(payload)).catch(() => {
-        // Server data remains authoritative if device storage is unavailable.
-      });
-    }, 250);
-
-    return () => clearTimeout(cacheWriteTimerRef.current);
-  }, [token, user?.id, chats, messages, messagesLoaded]);
+  }, [token, user?.id, publishStore]);
 
   /* ---------------- socket lifecycle ---------------- */
   useEffect(() => {
     if (!token) {
       socketRef.current?.disconnect();
       socketRef.current = null;
-      cacheReadyForRef.current = null;
-      clearTimeout(cacheWriteTimerRef.current);
-      setChats([]); setMessages({}); setConnected(false); setActivityUnread(0); setChatsLoaded(false);
-      setChatsError(null); setMessagesLoaded({}); setMessagesLoading({}); setMessageErrors({});
+      setConnected(false); setActivityUnread(0);
       return;
     }
 
@@ -260,24 +209,38 @@ export function ChatProvider({ children }) {
     const socket = io(SOCKET_URL || undefined, { auth: { token }, transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
-    socket.on('connect_error', () => setConnected(false));
+    socket.on('connect', () => {
+      setConnected(true);
+      const engine = engineRef.current;
+      if (engine) {
+        engine.connectivity.setSocketConnected(true);
+        engine.outbox.drain();
+        engine.sync.reconnect().catch(() => {});
+      }
+    });
+    socket.on('disconnect', () => {
+      setConnected(false);
+      engineRef.current?.connectivity.setSocketConnected(false);
+    });
+    socket.on('connect_error', () => {
+      setConnected(false);
+      engineRef.current?.connectivity.setSocketConnected(false);
+    });
     socket.on('account:deleted', () => logout());
     socket.on('settings:updated', ({ settings }) => applySettings(settings));
 
     socket.on('message:new', ({ message, tempId }) => {
-      setMessages((prev) => {
-        const list = prev[message.chatId] || [];
-        // replace optimistic copy if present
-        const replaced = tempId ? list.find((m) => m.id === tempId) : null;
-        const withoutTemp = replaced ? list.filter((m) => m.id !== tempId) : list;
-        if (withoutTemp.some((m) => m.id === message.id)) return prev;
-        // `_new` marks genuinely new arrivals so the bubble can animate in
-        // once. A real message replacing our optimistic copy is NOT new (the
-        // optimistic bubble already animated) — no double animation.
-        return { ...prev, [message.chatId]: [...withoutTemp, { ...message, _new: !replaced }] };
-      });
+      const engine = engineRef.current;
+      if (engine) engine.repository.applyIncoming(message, tempId);
+      else {
+        setMessages((prev) => {
+          const list = prev[message.chatId] || [];
+          const replaced = tempId ? list.find((m) => m.id === tempId) : null;
+          const withoutTemp = replaced ? list.filter((m) => m.id !== tempId) : list;
+          if (withoutTemp.some((m) => m.id === message.id)) return prev;
+          return { ...prev, [message.chatId]: [...withoutTemp, { ...message, _new: !replaced }] };
+        });
+      }
       setMessagesLoaded((prev) => ({ ...prev, [message.chatId]: true }));
       setMessageErrors((prev) => {
         if (!prev[message.chatId]) return prev;
@@ -288,6 +251,11 @@ export function ChatProvider({ children }) {
     });
 
     socket.on('message:updated', (message) => {
+      const engine = engineRef.current;
+      if (engine) {
+        engine.repository.applyUpdated(message);
+        return;
+      }
       setMessages((prev) => {
         const list = prev[message.chatId];
         if (!list) return prev;
@@ -295,9 +263,12 @@ export function ChatProvider({ children }) {
       });
     });
 
-    // Disappearing messages: the server hard-deletes expired rows and tells
-    // everyone which ids vanished from which chat.
     socket.on('message:expired', ({ chatId, messageIds }) => {
+      const engine = engineRef.current;
+      if (engine) {
+        engine.repository.applyExpired(chatId, messageIds);
+        return;
+      }
       setMessages((prev) => {
         const list = prev[chatId];
         if (!list) return prev;
@@ -307,9 +278,10 @@ export function ChatProvider({ children }) {
       });
     });
 
-    // Left/removed from a chat (group leave, admin removal, community exit).
     socket.on('chat:removed', ({ chatId }) => {
-      setChats((prev) => prev.filter((c) => c.id !== chatId));
+      const engine = engineRef.current;
+      if (engine) engine.store.removeChat(chatId);
+      else setChats((prev) => prev.filter((c) => c.id !== chatId));
       setMessages((prev) => {
         if (!(chatId in prev)) return prev;
         const next = { ...prev };
@@ -334,9 +306,12 @@ export function ChatProvider({ children }) {
     // subscribed screen (the chat-theme store) so open chats re-theme
     // without waiting for the full chat:updated round-trip.
     socket.on('chat:theme', (payload) => {
-      setChats((prev) => prev.map((c) => (c.id === payload.chatId
+      const patch = (c) => (c.id === payload.chatId
         ? { ...c, themeId: payload.themeId, themeUpdatedBy: payload.themeUpdatedBy, themeUpdatedAt: payload.themeUpdatedAt }
-        : c)));
+        : c);
+      const engine = engineRef.current;
+      if (engine) engine.store.setChats(engine.store.getChats().map(patch));
+      else setChats((prev) => prev.map(patch));
       chatThemeListeners.current.forEach((fn) => fn('chat:theme', payload));
     });
 
@@ -380,7 +355,10 @@ export function ChatProvider({ children }) {
     });
 
     socket.on('presence', ({ userId, isOnline, lastSeen }) => {
-      setChats((prev) => prev.map((c) => (c.otherUserId === userId ? { ...c, isOnline, lastSeen } : c)));
+      const patch = (c) => (c.otherUserId === userId ? { ...c, isOnline, lastSeen } : c);
+      const engine = engineRef.current;
+      if (engine) engine.store.setChats(engine.store.getChats().map(patch));
+      else setChats((prev) => prev.map(patch));
     });
 
     socket.on('typing', ({ chatId, userId, name, isTyping }) => {
@@ -614,6 +592,12 @@ export function ChatProvider({ children }) {
   const refreshChats = useCallback(async () => {
     setChatsError(null);
     try {
+      const engine = engineRef.current;
+      if (engine) {
+        const chatsResult = await engine.sync.refreshChatsFromServer();
+        setChatsLoaded(true);
+        return chatsResult;
+      }
       const result = await api.chats();
       if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
       setChats(sortChats(result.chats));
@@ -637,6 +621,10 @@ export function ChatProvider({ children }) {
   }, []);
 
   const loadMessages = useCallback(async (chatId) => {
+    const engine = engineRef.current;
+    if (engine?.store.getMessages(chatId).length) {
+      engine.store.markLoaded(chatId);
+    }
     setMessagesLoading((prev) => ({ ...prev, [chatId]: true }));
     setMessageErrors((prev) => {
       if (!prev[chatId]) return prev;
@@ -645,7 +633,12 @@ export function ChatProvider({ children }) {
       return next;
     });
     try {
-      const result = await api.messages(chatId);
+      if (engine) {
+        const list = await engine.sync.pullChat(chatId);
+        setMessagesLoaded((prev) => ({ ...prev, [chatId]: true }));
+        return list;
+      }
+      const result = await api.messages(chatId, { limit: 50 });
       if (!Array.isArray(result?.messages)) throw new Error('Invalid messages response');
       setMessages((prev) => ({ ...prev, [chatId]: result.messages }));
       setMessagesLoaded((prev) => ({ ...prev, [chatId]: true }));
@@ -661,11 +654,25 @@ export function ChatProvider({ children }) {
     }
   }, []);
 
-  const sendMessage = useCallback((chatId, payload) => {
-    const socket = socketRef.current;
-    if (!socket) return;
-    const tempId = 'tmp_' + Math.random().toString(36).slice(2);
+  const loadOlderMessages = useCallback(async (chatId) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    try {
+      await engine.sync.pullOlder(chatId);
+    } catch {
+      // Keep the already-visible page; the next scroll/retry will try again.
+    }
+  }, []);
 
+  const sendMessage = useCallback((chatId, payload) => {
+    const engine = engineRef.current;
+    if (engine && user?.id) {
+      engine.repository.queueSend(chatId, payload, user);
+      return;
+    }
+    // Engine still booting — keep the bubble local and retry via REST.
+    if (!user?.id) return;
+    const tempId = payload.clientId || ('tmp_' + Math.random().toString(36).slice(2));
     const optimistic = {
       id: tempId,
       chatId,
@@ -675,26 +682,23 @@ export function ChatProvider({ children }) {
       mediaUrl: payload.mediaUrl || null,
       duration: payload.duration || 0,
       createdAt: Date.now(),
+      clientCreatedAt: Date.now(),
       status: 'sending',
       reactions: [],
       replyTo: payload.replyToMessage || null,
       pending: true,
-      _new: true, // optimistic bubble animates in like any new message
+      _new: true,
     };
     setMessages((prev) => ({ ...prev, [chatId]: [...(prev[chatId] || []), optimistic] }));
-
-    socket.emit('message:send', { ...payload, chatId, tempId }, (res) => {
-      if (res?.error) {
-        setMessages((prev) => ({
-          ...prev,
-          [chatId]: (prev[chatId] || []).map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m)),
-        }));
-      }
-    });
   }, [user]);
 
   const markRead = useCallback((chatId) => {
     socketRef.current?.emit('message:read', { chatId });
+    const engine = engineRef.current;
+    if (engine) {
+      engine.store.setChats(engine.store.getChats().map((c) => (c.id === chatId ? { ...c, unread: 0 } : c)));
+      return;
+    }
     setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c)));
   }, []);
 
@@ -743,12 +747,21 @@ export function ChatProvider({ children }) {
         chats, chatsLoaded, chatsError,
         messages, messagesLoaded, messagesLoading, messageErrors,
         typing, connected, activityUnread,
-        refreshChats, refreshActivity, loadMessages, sendMessage, markRead,
+        refreshChats, refreshActivity, loadMessages, loadOlderMessages, sendMessage, markRead,
         setTypingState, react, deleteMessage, editMessage, createPoll, votePoll,
         upsertChat, onPostEvent, onStatusEvent, onCommunityEvent, onColleagueEvent, onChatRequestEvent,
         onChatThemeEvent,
         // exposed for lightweight local patches (e.g. optimistic star/timer state)
-        setMessages,
+        setMessages: (updater) => {
+          const engine = engineRef.current;
+          if (engine) {
+            const prev = engine.store.getAllMessagesCopy();
+            const next = typeof updater === 'function' ? updater(prev) : updater;
+            engine.store.replaceMessagesMap(next);
+            return;
+          }
+          setMessages(updater);
+        },
         // Calls
         call, localStream, remoteStream, micOn, camOn, callSupported: RTC_SUPPORTED,
         startCall, acceptCall, declineCall, hangUp, toggleMic, toggleCam,

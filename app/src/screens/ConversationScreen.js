@@ -36,7 +36,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const { chatId, initialChat = null } = route.params || {};
   const {
     chats, messages, messagesLoaded, messagesLoading, messageErrors,
-    typing, refreshChats, loadMessages, sendMessage, markRead, setTypingState,
+    typing, refreshChats, loadMessages, loadOlderMessages, sendMessage, markRead, setTypingState,
     react, deleteMessage, editMessage, createPoll, votePoll, startCall, call, setMessages,
   } = useChat();
   const { user } = useAuth();
@@ -251,14 +251,19 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     try {
       const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
       if (res.canceled || !res.assets?.length) return;
-      setUploading(true);
       const asset = res.assets[0];
-      const { url } = await api.uploadFile(asset.uri, asset.fileName || 'photo.jpg', asset.mimeType || 'image/jpeg');
-      sendMessage(chatId, { type: 'image', mediaUrl: url, body: '', ...replyPayload() });
+      sendMessage(chatId, {
+        type: 'image',
+        mediaUrl: asset.uri,
+        localMediaUri: asset.uri,
+        mimeType: asset.mimeType || 'image/jpeg',
+        body: '',
+        ...replyPayload(),
+      });
       setReplyTo(null);
     } catch (e) {
-      console.warn('image upload failed', e.message);
-    } finally { setUploading(false); }
+      console.warn('image send failed', e.message);
+    }
   };
 
   const restorePlaybackAudioMode = () => setAudioModeAsync({
@@ -363,8 +368,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     const out = [];
     let lastDay = null;
     list.forEach((m) => {
-      const day = new Date(m.createdAt).toDateString();
-      if (day !== lastDay) { out.push({ _type: 'day', id: 'day_' + day, label: formatDayLabel(m.createdAt) }); lastDay = day; }
+      const ts = m.clientCreatedAt || m.createdAt;
+      const day = new Date(ts).toDateString();
+      if (day !== lastDay) { out.push({ _type: 'day', id: 'day_' + day, label: formatDayLabel(ts) }); lastDay = day; }
       out.push({ _type: 'msg', ...m });
     });
     return out;
@@ -645,6 +651,22 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={{ paddingVertical: 14, flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 8 }}
+        maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
+        onScroll={(event) => {
+          const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+          if (contentSize.height <= layoutMeasurement.height + 48) return;
+          if (contentOffset.y > 90) return;
+          if (loadingOlderRef.current || !loadOlderMessages) return;
+          loadingOlderRef.current = true;
+          suppressScrollToEnd.current = true;
+          Promise.resolve(loadOlderMessages(chatId)).finally(() => {
+            setTimeout(() => {
+              suppressScrollToEnd.current = false;
+              loadingOlderRef.current = false;
+            }, 400);
+          });
+        }}
+        scrollEventThrottle={80}
         onContentSizeChange={() => {
           if (suppressScrollToEnd.current || suppressFocusScroll.current) return;
           listRef.current?.scrollToEnd({ animated: false });

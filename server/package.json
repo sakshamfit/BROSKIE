@@ -14,7 +14,9 @@
     "postinstall": "echo 'run npm run build to bundle the web app into ./public'",
     "backup": "node src/backup.js",
     "audit:chats": "node src/chat-audit.js",
-    "test:chat-history": "node test-chat-history.js"
+    "test:chat-history": "node test-chat-history.js",
+    "test:offline-messaging": "node test-offline-messaging.js",
+    "test:message-state": "node test-message-state.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",

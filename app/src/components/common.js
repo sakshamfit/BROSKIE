@@ -421,7 +421,9 @@ export function Avatar({ uri, name, id, size = 48, group = false, online = false
 
 export function Ticks({ status, color, size = 14 }) {
   const { theme } = useTheme();
-  if (status === 'sending') return <Icon name="time-outline" size={size} color={color || theme.muted} />;
+  if (status === 'sending' || status === 'queued') {
+    return <Icon name="time-outline" size={size} color={color || theme.muted} />;
+  }
   if (status === 'failed') return <Icon name="alert-circle-outline" size={size} color={theme.danger} />;
   const tickColor = status === 'read' ? (color ? color : theme.tickRead) : color || theme.muted;
   return (

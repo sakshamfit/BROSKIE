@@ -380,6 +380,16 @@ addColumnIfMissing('messages', 'expires_at', 'expires_at INTEGER');
 addColumnIfMissing('messages', 'edited', 'edited INTEGER DEFAULT 0');
 addColumnIfMissing('messages', 'forwarded_from', 'forwarded_from TEXT');
 addColumnIfMissing('messages', 'poll_id', 'poll_id TEXT');
+addColumnIfMissing('messages', 'client_id', 'client_id TEXT');
+addColumnIfMissing('messages', 'client_created_at', 'client_created_at INTEGER');
+addColumnIfMissing('messages', 'updated_at', 'updated_at INTEGER');
+addColumnIfMissing('messages', 'media_thumb_url', 'media_thumb_url TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client_id ON messages(client_id) WHERE client_id IS NOT NULL');
+db.exec('CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id, created_at)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_messages_updated ON messages(chat_id, updated_at)');
+db.exec("UPDATE messages SET client_id = id WHERE client_id IS NULL");
+db.exec('UPDATE messages SET client_created_at = created_at WHERE client_created_at IS NULL');
+db.exec('UPDATE messages SET updated_at = created_at WHERE updated_at IS NULL');
 
 /* ---- status replies: every reply is also a chat message with a status reference (gentle update, no rebuild) ---- */
 addColumnIfMissing('messages', 'status_id', 'status_id TEXT');

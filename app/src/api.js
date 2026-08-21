@@ -366,7 +366,26 @@ export const api = {
   directChat: (userId) => request('/api/chats/direct', { method: 'POST', body: { userId } }),
   groupChat: (payload) => request('/api/chats/group', { method: 'POST', body: payload }),
   updateChat: (chatId, payload) => request(`/api/chats/${chatId}`, { method: 'PATCH', body: payload }),
-  messages: (chatId) => request(`/api/chats/${chatId}/messages`),
+  messages: (chatId, { after, afterId, before, beforeId, limit } = {}) => {
+    const q = new URLSearchParams();
+    if (after != null && after !== '') q.set('after', String(after));
+    if (afterId) q.set('afterId', afterId);
+    if (before != null && before !== '') q.set('before', String(before));
+    if (beforeId) q.set('beforeId', beforeId);
+    if (limit) q.set('limit', String(limit));
+    const qs = q.toString();
+    return request(`/api/chats/${chatId}/messages${qs ? `?${qs}` : ''}`);
+  },
+  sendChatMessage: (chatId, payload) => request(`/api/chats/${chatId}/messages`, {
+    method: 'POST', body: payload, timeoutMs: 20000, retries: 1,
+  }),
+  syncMessages: ({ after, limit } = {}) => {
+    const q = new URLSearchParams();
+    if (after) q.set('after', String(after));
+    if (limit) q.set('limit', String(limit));
+    const qs = q.toString();
+    return request(`/api/sync/messages${qs ? `?${qs}` : ''}`);
+  },
   archive: (chatId, archived) => request(`/api/chats/${chatId}/archive`, { method: 'POST', body: { archived } }),
   mute: (chatId, muted) => request(`/api/chats/${chatId}/mute`, { method: 'POST', body: { muted } }),
   pin: (chatId, pinned) => request(`/api/chats/${chatId}/pin`, { method: 'POST', body: { pinned } }),
@@ -443,6 +462,10 @@ export const api = {
   deleteCall: (id) => request(`/api/calls/${id}`, { method: 'DELETE' }),
 
   async uploadFile(uri, name = 'upload.jpg', type = 'image/jpeg') {
+    return api.uploadFileWithProgress(uri, name, type);
+  },
+
+  async uploadFileWithProgress(uri, name = 'upload.jpg', type = 'image/jpeg', onProgress) {
     const form = new FormData();
     if (Platform.OS === 'web') {
       const blob = await (await fetch(uri)).blob();
@@ -450,6 +473,52 @@ export const api = {
     } else {
       form.append('file', { uri, name, type });
     }
-    return request('/api/upload', { method: 'POST', body: form, isForm: true });
+
+    const bases = candidateBases('/api/upload');
+    let lastError = null;
+    for (let baseIdx = 0; baseIdx < bases.length; baseIdx += 1) {
+      const url = bases[baseIdx] + '/api/upload';
+      try {
+        return await uploadForm(url, form, onProgress);
+      } catch (error) {
+        lastError = error;
+        if (baseIdx + 1 < bases.length) continue;
+        throw error;
+      }
+    }
+    throw lastError || new ApiError('Unable to connect. Check your internet connection and try again.', { code: 'NETWORK_ERROR' });
   },
 };
+
+function uploadForm(url, form, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Accept', 'application/json');
+    if (authToken) xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
+    xhr.timeout = 120000;
+    if (xhr.upload && typeof onProgress === 'function') {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          onProgress(Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100))));
+        }
+      };
+    }
+    xhr.onload = () => {
+      let data = {};
+      try { data = xhr.responseText ? JSON.parse(xhr.responseText) : {}; } catch {}
+      if (xhr.status >= 200 && xhr.status < 300) {
+        if (typeof onProgress === 'function') onProgress(100);
+        resolve(data);
+        return;
+      }
+      reject(new ApiError(
+        xhr.status >= 500 ? 'Service is temporarily unavailable. Please try again shortly.' : (data.error || `Upload failed (${xhr.status})`),
+        { status: xhr.status, code: xhr.status >= 500 ? 'SERVICE_UNAVAILABLE' : 'HTTP_ERROR' },
+      ));
+    };
+    xhr.onerror = () => reject(new ApiError('Unable to connect. Check your internet connection and try again.', { code: 'NETWORK_ERROR' }));
+    xhr.ontimeout = () => reject(new ApiError('The request took too long. Check your connection and try again.', { code: 'TIMEOUT' }));
+    xhr.send(form);
+  });
+}
