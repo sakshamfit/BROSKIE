@@ -183,7 +183,8 @@ const publicUser = (u) =>
 
 const MAX_USERNAME_LENGTH = 64;
 
-/** Usernames that must never exist — wiped on boot and blocked at register. */
+/** Usernames that cannot be newly registered. Existing accounts are never
+ * mutated or deleted merely because a name later becomes reserved. */
 const RESERVED_USERNAMES = new Set(['yupp']);
 function isReservedUsername(raw) {
   return RESERVED_USERNAMES.has(usernameKey(raw));
@@ -545,18 +546,33 @@ function userChats(userId) {
        JOIN chat_members cm ON cm.chat_id = c.id
        LEFT JOIN chat_requests cr ON cr.chat_id = c.id
        WHERE cm.user_id = ?
+         /* Incoming requests stay in Activity until accepted. This is the only
+            inbox-level exclusion that is unrelated to an explicit user clear. */
          AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
          AND (
+           /* A message after an explicit per-user clear makes that same
+              conversation visible again; no replacement chat/id is created. */
            EXISTS (
              SELECT 1 FROM messages visible_message
              WHERE visible_message.chat_id = c.id
                AND visible_message.created_at > COALESCE(cm.cleared_at, 0)
            )
            OR (
-             c.type = 'direct'
-             AND c.created_by = ?
-             AND cr.chat_id IS NULL
-             AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id)
+             /* With no explicit clear, retain conversation history even when
+                it has no unread/recent messages. Groups and accepted directs
+                remain discoverable, as do legacy threads whose disappearing
+                messages have since expired (updated_at records that activity). */
+             cm.cleared_at IS NULL
+             AND (
+               c.type != 'direct'
+               OR cr.status = 'accepted'
+               OR EXISTS (SELECT 1 FROM messages history_message WHERE history_message.chat_id = c.id)
+               OR c.updated_at > c.created_at
+               /* A blank direct draft is private to its creator/sender and is
+                  not leaked into the other participant's Chats list. */
+               OR c.created_by = ?
+               OR (cr.status = 'pending' AND cr.sender_id = ?)
+             )
            )
          )
        ORDER BY c.updated_at DESC`
@@ -714,31 +730,6 @@ function deleteAccountData(userId) {
     groupChats: transaction(),
     postIds: ownedPostIds,
   };
-}
-
-/** One-shot admin wipe for reserved usernames (currently @yupp). Runs at boot. */
-function wipeReservedAccounts() {
-  RESERVED_USERNAMES.forEach((key) => {
-    const user = db.prepare('SELECT * FROM users WHERE username_key = ?').get(key);
-    if (!user) return;
-    try {
-      const result = deleteAccountData(user.id);
-      result.directPeers.forEach((peerId) => result.directChats.forEach((chatId) =>
-        emitToUser(peerId, 'chat:removed', { chatId, accountDeleted: true })
-      ));
-      result.groupChats.forEach((chatId) => memberIds(chatId).forEach((uid) =>
-        emitToUser(uid, 'chat:updated', chatSummary(chatId, uid))
-      ));
-      result.postIds.forEach((id) => io.emit('post:deleted', { id }));
-      io.emit('user:deleted', { id: user.id });
-      const ids = sockets.get(user.id);
-      ids?.forEach((socketId) => io.sockets.sockets.get(socketId)?.disconnect(true));
-      sockets.delete(user.id);
-      console.log(`[admin wipe] removed @${user.username} (${user.id})`);
-    } catch (error) {
-      console.error(`[admin wipe] failed for @${user.username}`, error);
-    }
-  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -3324,6 +3315,5 @@ server.listen(PORT, '0.0.0.0', async () => {
   console.log(`+one server listening on http://0.0.0.0:${PORT}`);
   console.log(`[storage] ${storage.describe()}`);
   await storage.ensureBucket();
-  wipeReservedAccounts();
 });
 

@@ -13,7 +13,9 @@
     "dev:app": "cd app && npx expo start",
     "build:cloudflare": "cd app && npm ci && EXPO_PUBLIC_API_URL=https://broskie-h.up.railway.app CI=true npx expo export --platform web --output-dir dist",
     "deploy:cloudflare": "npx wrangler deploy",
-    "backup": "cd server && npm run backup"
+    "backup": "cd server && npm run backup",
+    "audit:chats": "cd server && npm run audit:chats --",
+    "test:chat-history": "cd server && npm run test:chat-history"
   },
   "workspaces": [],
   "license": "MIT"

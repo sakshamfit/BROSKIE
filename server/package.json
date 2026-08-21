@@ -12,7 +12,9 @@
     "dev": "node src/index.js",
     "build": "cd ../app && npm install && CI=true npx expo export --platform web --output-dir ../server/public",
     "postinstall": "echo 'run npm run build to bundle the web app into ./public'",
-    "backup": "node src/backup.js"
+    "backup": "node src/backup.js",
+    "audit:chats": "node src/chat-audit.js",
+    "test:chat-history": "node test-chat-history.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
@@ -26,5 +28,8 @@
     "nanoid": "^3.3.7",
     "socket.io": "^4.8.1",
     "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
   }
 }

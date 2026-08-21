@@ -31,7 +31,7 @@ const CHAT_TILE_MUTED = '#bdb9b7';
 const CHAT_TILE_LINE = '#000000';
 
 export default function ChatListScreen({ navigation }) {
-  const { chats, chatsLoaded, refreshChats, typing, markRead } = useChat();
+  const { chats, chatsLoaded, chatsError, refreshChats, typing, markRead } = useChat();
   const { user } = useAuth();
   const { theme } = useTheme();
   const [query, setQuery] = useState('');
@@ -46,7 +46,7 @@ export default function ChatListScreen({ navigation }) {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await refreshChats(); } finally { setRefreshing(false); }
+    try { await refreshChats(); } catch { /* existing rows + inline retry stay visible */ } finally { setRefreshing(false); }
   }, [refreshChats]);
 
   const runSearch = useCallback(async (q) => {
@@ -137,6 +137,19 @@ export default function ChatListScreen({ navigation }) {
             {/* scribble focus indicator */}
             {searchFocused && <Scribble />}
 
+            {!!chatsError && chats.length > 0 && (
+              <View style={[s.loadError, { borderColor: theme.danger, backgroundColor: theme.dangerContainer }]}>
+                <Icon name="alert-circle-outline" size={17} color={theme.danger} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[type.bodyStrong, { color: theme.danger }]}>Unable to refresh conversations</Text>
+                  <Text style={[type.bodySm, { color: theme.subtext }]}>Showing saved chat history.</Text>
+                </View>
+                <Pressable onPress={() => refreshChats().catch(() => {})} hitSlop={7}>
+                  <Text style={[type.labelXs, { color: theme.danger }]}>RETRY</Text>
+                </Pressable>
+              </View>
+            )}
+
             {msgResults.length > 0 && (
               <FadeSlide key={query} from="up" distance={8} duration={motion.fast}>
               <View style={s.resultsWrap}>
@@ -186,11 +199,39 @@ export default function ChatListScreen({ navigation }) {
         ListEmptyComponent={
           !chatsLoaded && !showArchived ? (
             <ChatListSkeleton />
+          ) : chatsError && !chats.length && !showArchived ? (
+            <View style={s.emptyLoadError}>
+              <EmptyState
+                icon="alert-circle-outline"
+                title="Unable to load conversations"
+                subtitle="Your history was not erased. Check your connection and retry."
+              />
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => refreshChats().catch(() => {})}
+                style={({ pressed }) => [s.retryButton, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}
+              >
+                <Icon name="refresh" size={16} color={theme.ink} />
+                <Text style={[type.labelSm, { color: theme.ink }]}>RETRY</Text>
+              </Pressable>
+            </View>
           ) : (
             <EmptyState
-              icon={showArchived ? 'archive-outline' : 'chatbubbles-outline'}
-              title={showArchived ? 'Nothing archived' : 'Blank page'}
-              subtitle={showArchived ? 'Long-press a chat to archive it.' : 'Tap find +ones to start a conversation.'}
+              icon={showArchived ? 'archive-outline' : query.trim() ? 'search-outline' : 'chatbubbles-outline'}
+              title={showArchived
+                ? 'Nothing archived'
+                : query.trim()
+                  ? 'No matching chats'
+                  : chats.length
+                    ? 'All conversations archived'
+                    : 'No conversations yet'}
+              subtitle={showArchived
+                ? 'Long-press a chat to archive it.'
+                : query.trim()
+                  ? 'Try another name or clear the search.'
+                  : chats.length
+                    ? 'Open Archived above to see your history.'
+                    : 'Tap find +ones to start a conversation.'}
             />
           )
         }
@@ -565,6 +606,15 @@ const makeStyles = (t) => StyleSheet.create({
   },
   fabLabel: { ...type.bodyStrong, fontSize: 14.5, letterSpacing: -0.2 },
   archiveRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 8, paddingVertical: 14, marginBottom: 6 },
+  loadError: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14,
+  },
+  emptyLoadError: { alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
+  retryButton: {
+    minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    paddingHorizontal: 16, paddingVertical: 9, marginTop: -22, backgroundColor: t.card,
+  },
   resultsWrap: { paddingTop: 16 },
   resultRow: { flexDirection: 'row', gap: 12, alignItems: 'center', paddingVertical: 10 },
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
