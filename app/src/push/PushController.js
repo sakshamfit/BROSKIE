@@ -10,6 +10,7 @@
  * resolves to a no-op stub for the web bundle.
  */
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import {
@@ -25,19 +26,40 @@ export default function PushController() {
   const { user, token } = useAuth();
   const { chats, activityUnread } = useChat();
 
-  /* Registration lifecycle: one registration per signed-in session. */
+  /* Registration lifecycle: one registration per signed-in session.
+   *
+   * Registration can fail silently on a slow/spotty first launch (server
+   * unreachable, push service busy), which is the most common reason a phone
+   * "doesn't get notifications". If we haven't successfully registered yet,
+   * retry whenever the app returns to the foreground — no user action needed.
+   */
   useEffect(() => {
     if (!token || !user) return undefined;
     let handle = null;
     let cancelled = false;
+    let running = false;
 
-    (async () => {
-      handle = await registerPushNotifications({ onRoute: routeFromNotification });
-      if (cancelled && handle) handle.dispose();
-    })();
+    const attempt = async () => {
+      if (running || cancelled || handle) return;
+      running = true;
+      try {
+        const registered = await registerPushNotifications({ onRoute: routeFromNotification });
+        if (registered) handle = registered;
+        if (cancelled && handle) handle.dispose();
+      } finally {
+        running = false;
+      }
+    };
+
+    attempt();
+
+    const appSub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') attempt();
+    });
 
     return () => {
       cancelled = true;
+      appSub.remove();
       handle?.dispose?.();
     };
   }, [token, user?.id]);

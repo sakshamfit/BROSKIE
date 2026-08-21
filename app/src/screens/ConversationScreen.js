@@ -133,13 +133,12 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   // ⋯ overflow menu (Theme lives here, per the familiar chat-menu flow)
   const [overflowOpen, setOverflowOpen] = useState(false);
 
-  // Android's native config uses pan mode for older installed builds. Keep the
-  // composer in the React layout as well, so it stays above keyboards that do
-  // not resize the window (notably Realme/ColorOS). This also runs for the
-  // tablet split view; the old embedded guard left that composer under the IME.
-  // iOS is handled by KeyboardAvoidingView; Android and mobile web get an
-  // explicit bottom inset because pan/overlay keyboards do not resize the chat
-  // list for us.
+  // Android uses `resize` mode (app.json), so the window shrinks when the IME
+  // opens and the composer rises on its own. A few OEM builds (Realme/ColorOS)
+  // still use pan/overlay keyboards that do NOT resize the window — the
+  // keyboardHeight inset below covers those. iOS is handled by
+  // KeyboardAvoidingView; Android and mobile web get the explicit bottom inset
+  // because their keyboards may not resize the chat list for us.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const keyboardScrollTimer = useRef(null);
   const scrollToLatest = useCallback((delay = 0) => {
@@ -154,12 +153,21 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
 
     const keyboardHeightFrom = (event) => {
       const eventHeight = Number(event?.endCoordinates?.height) || 0;
-      const metricsHeight = Number(Keyboard.metrics?.()?.height) || 0;
-      const top = Number(event?.endCoordinates?.screenY ?? Keyboard.metrics?.()?.screenY);
+      const top = Number(event?.endCoordinates?.screenY);
+      // `resize` mode (our Android default) already shrinks the window by the
+      // keyboard height, so the composer rises on its own — any extra pad here
+      // would push it up twice as far and leave a gap under the IME. `pan` /
+      // overlay keyboards on some OEM builds (Realme/ColorOS) do NOT resize
+      // the window; there the overlap between the keyboard top and the
+      // still-full-height window is the true inset we must pad by.
       const overlapHeight = Number.isFinite(top) && top > 0 && windowHeight > 0
         ? Math.max(0, windowHeight - top)
         : 0;
-      const height = Math.max(eventHeight, metricsHeight, overlapHeight);
+      // When the OS reports the keyboard top we trust it fully: overlap > 0
+      // means "window did not resize" (pad by the overlap), overlap == 0 means
+      // "window already resized" (no pad needed). Only when the top is missing
+      // do we fall back to the raw event height (rare older devices).
+      const height = overlapHeight > 0 ? overlapHeight : (top > 0 ? 0 : eventHeight);
       if (height > 0) setKeyboardHeight(height);
       if (!suppressFocusScroll.current) scrollToLatest(120);
     };
@@ -299,7 +307,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
 
   const pickImage = async () => {
     try {
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
+      // Lower JPEG quality keeps image uploads light on slow/limited data
+      // plans; the web path additionally downscales to 1280px (media.js).
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.55 });
       if (res.canceled || !res.assets?.length) return;
       const asset = res.assets[0];
       sendMessage(chatId, {

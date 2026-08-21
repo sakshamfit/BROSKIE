@@ -25,6 +25,11 @@
  * and Android FCM credentials are managed by EAS (see APP_STATUS.md).
  * All sends are fire-and-forget with error logging — a push failure must
  * never fail the message/like/call that triggered it.
+ *
+ * Anti-spam: pushes for the same conversation (or post / call) share a
+ * collapse key, so a burst of messages collapses into a single notification
+ * rather than one row per message (see pushToUser). This is what keeps the
+ * OS and OEM spam filters from burying a busy chat in "spam notifications".
  */
 const db = require('./db');
 
@@ -226,6 +231,8 @@ async function sendWebPush(subscription, payload) {
  *   channel       one of 'messages' | 'calls' | 'activity' (picks the quiet twin automatically)
  *   priority      Android pre-8 urgency; channel importance owns it on 8+
  *   callSound     true for the ringing call channel
+ *   collapseKey   optional explicit collapse key; otherwise derived from
+ *                 data.callId → data.chatId → data.postId (see below)
  */
 async function pushToUser(userId, opts) {
   try {
@@ -256,6 +263,18 @@ async function pushToUser(userId, opts) {
     const badge = badgeFor(userId);
     const data = { ...(opts.data || {}), type: opts.type || 'message' };
 
+    // Collapse rapid pushes so a burst of messages never floods the shade:
+    // consecutive pushes sharing a key replace the previous one instead of
+    // stacking up. This is what stops the OS (and OEM spam filters like
+    // ColorOS/Realme) from treating a busy conversation as notification
+    // spam. One key per conversation / post / call; generic activity and
+    // safety alerts stay distinct so they are never accidentally hidden.
+    const collapseKey = opts.collapseKey
+      || (data.callId ? `call:${data.callId}`
+        : data.chatId ? `chat:${data.chatId}`
+          : data.postId ? `post:${data.postId}`
+            : null);
+
     // Android/iOS — Expo push service.
     if (tokens.length) {
       const messages = tokens.map(({ token }) => ({
@@ -267,6 +286,12 @@ async function pushToUser(userId, opts) {
         channelId,
         priority: quiet ? 'normal' : (opts.priority || 'default'),
         interruptionLevel: quiet ? 'passive' : (opts.callSound ? 'timeSensitive' : 'default'),
+        // collapseId coalesces in transit (FCM collapse_key / APNs collapse-id,
+        // and replaces displayed notifications on iOS). `tag` additionally
+        // replaces an already-displayed Android notification with the same key,
+        // so the latest message wins instead of one row per message.
+        collapseId: collapseKey || undefined,
+        tag: collapseKey || undefined,
         data,
       }));
       await sendToExpo(messages);

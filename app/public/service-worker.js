@@ -9,12 +9,62 @@
  */
 /* eslint-disable no-restricted-globals */
 
+/* ---- offline cache -------------------------------------------------
+ * Network-first with a cache fallback for same-origin GETs. This is what
+ * lets the web app (a) reload while offline and (b) keep showing a user's
+ * already-downloaded chats when the connection drops — the app's IndexedDB
+ * holds the message data, and this cache holds the shell + the last API GET
+ * responses. Socket.IO and media uploads are never cached; neither are
+ * auth/profile endpoints, so a cached login is never served to anyone. */
+const CACHE_NAME = 'plusone-shell-v2';
+
+function isCacheable(request) {
+  if (request.method !== 'GET') return false;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return false;
+  if (url.pathname.startsWith('/socket.io')) return false;
+  if (url.pathname.startsWith('/uploads')) return false;
+  if (url.pathname.startsWith('/api/auth')) return false;
+  if (url.pathname.startsWith('/api/me')) return false;
+  if (url.pathname.startsWith('/api/push')) return false;
+  return true;
+}
+
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil((async () => {
+    // Drop old cache versions so stale entries never shadow fresh ones.
+    const keys = await caches.keys();
+    await Promise.all(
+      keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+    );
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('fetch', (event) => {
+  if (!isCacheable(event.request)) return;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    try {
+      const network = await fetch(event.request);
+      if (network && network.status === 200) {
+        cache.put(event.request, network.clone());
+      }
+      return network;
+    } catch (err) {
+      const cached = await cache.match(event.request);
+      if (cached) return cached;
+      if (event.request.mode === 'navigate') {
+        const shell = await cache.match('/');
+        if (shell) return shell;
+      }
+      throw err;
+    }
+  })());
 });
 
 /* Is any app tab FOCUSED right now? (A visible-but-unfocused tab — second

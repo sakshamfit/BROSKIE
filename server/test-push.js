@@ -119,6 +119,9 @@ const emit = (s, ev, payload) =>
   ok('push shows sender + preview', pushes[0]?.title === 'Asha' && /push test/.test(pushes[0]?.body || ''));
   ok('messages channel used', pushes[0]?.channelId === 'messages');
   ok('badge counted the unread message', pushes[0]?.badge === 1, `badge=${pushes[0]?.badge}`);
+  // Anti-spam: pushes for one conversation share a collapse key so a burst
+  // of messages collapses into a single notification instead of flooding.
+  ok('message push collapses per chat', pushes[0]?.collapseId === `chat:${dm.id}` && pushes[0]?.tag === `chat:${dm.id}`, JSON.stringify(pushes[0]));
 
   // read receipts clear the badge on the next push
   const sockB = await connect(b.token);
@@ -216,6 +219,7 @@ const emit = (s, ev, payload) =>
   const callPush = sentPushes.find((p) => p.to === 'ExpoPushToken[test-b-android]');
   ok('incoming call pushes', /Incoming voice call/.test(callPush?.body || ''), JSON.stringify(callPush));
   ok('call uses the calls channel + max priority', callPush?.channelId === 'calls' && callPush?.priority === 'max');
+  ok('call push has its own collapse key', callPush?.collapseId === `call:${callRes.call.id}`, JSON.stringify(callPush));
   await emit(sockB, 'call:decline', { callId: callRes.call.id });
 
   // ---- badge math: pending requests count ----

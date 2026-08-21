@@ -2,6 +2,15 @@ import { api } from '../api';
 import { mergeMessageLists, messageTime } from './messageState';
 
 const PAGE = 50;
+// Global catch-up sync is deliberately lighter than per-chat paging: on a
+// flaky, low-bandwidth connection the socket reconnects often, and every
+// reconnect must not re-download a large backlog. A smaller page, fewer
+// pages, and a minimum interval between runs keeps reconnect sync cheap —
+// realtime messages still arrive over the socket, and per-chat history is
+// paged in on demand (loadMessages / loadOlderMessages).
+const SYNC_PAGE = 100;
+const MAX_SYNC_PAGES = 5;
+const SYNC_MIN_INTERVAL_MS = 15000;
 
 function applyCursorFromList(store, chatId, list, { hasMore } = {}) {
   if (!list?.length) {
@@ -24,6 +33,7 @@ export function createSyncManager({ store, outbox, connectivity }) {
   let pulling = false;
   let pullAgain = false;
   let disposed = false;
+  let lastSyncAt = 0;
   const chatPulls = new Set();
 
   async function refreshChatsFromServer() {
@@ -35,11 +45,21 @@ export function createSyncManager({ store, outbox, connectivity }) {
   }
 
   async function pullMissed() {
-    const after = store.getSyncAfter?.() || store.getGlobalCursor();
+    // Throttle: repeated reconnects on a flaky link must not each trigger a
+    // multi-page catch-up. Anything missed in the window arrives over the
+    // socket, or on the next (later) sync.
+    const now = Date.now();
+    if (lastSyncAt && now - lastSyncAt < SYNC_MIN_INTERVAL_MS) return;
+    lastSyncAt = now;
+
+    // The monotonic global cursor (latest updated_at we've already seen)
+    // advances every sync, so a steady connection only ever downloads
+    // genuinely new messages. Per-chat history is paged in separately.
+    const after = store.getGlobalCursor() || store.getSyncAfter?.() || 0;
     if (!after) return;
     let cursor = after;
-    for (let i = 0; i < 8; i += 1) {
-      const page = await api.syncMessages({ after: cursor, limit: 200 });
+    for (let i = 0; i < MAX_SYNC_PAGES; i += 1) {
+      const page = await api.syncMessages({ after: cursor, limit: SYNC_PAGE });
       const messages = Array.isArray(page?.messages) ? page.messages : [];
       const byChat = {};
       messages.forEach((message) => {
