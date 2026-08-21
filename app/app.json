@@ -14,7 +14,8 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "+one uses the microphone to record voice messages.",
         "NSPhotoLibraryUsageDescription": "+one needs photo access so you can share images in chats.",
-        "UIRequiresFullScreen": false
+        "UIRequiresFullScreen": false,
+        "NSCameraUsageDescription": "+one uses the camera for video calls."
       }
     },
     "android": {
@@ -30,7 +31,9 @@
       "permissions": [
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "CAMERA",
+        "MODIFY_AUDIO_SETTINGS"
       ],
       "minSdkVersion": 24
     },
@@ -53,6 +56,7 @@
       "./plugins/withAuthNetworkSecurity",
       "expo-audio",
       "expo-notifications",
+      "@config-plugins/react-native-webrtc",
       [
         "expo-location",
         {

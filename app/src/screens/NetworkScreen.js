@@ -20,7 +20,7 @@ import CommunitiesScreen from './CommunitiesScreen';
 import { type, inkBox, marker, dashedRule, stroke, radius, raised } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
-import { onNetworkFilterRequest, consumePendingNetworkFilter } from '../push/routing';
+import { onNetworkFilterRequest, consumePendingNetworkFilter, onOpenCommunity, consumePendingCommunity } from '../push/routing';
 
 /* Sticky notes alternate their tilt, like scraps pinned to a board. */
 const tiltFor = (i) => (i % 2 === 0 ? '-0.8deg' : '0.7deg');
@@ -85,6 +85,14 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
   useEffect(() => onNetworkFilterRequest((filter) => {
     if (filter) setActiveFilter(filter);
   }), []);
+
+  // Community deep links (invite links): jump to the Communities section.
+  // The detail sheet itself is opened by CommunitiesScreen.
+  useEffect(() => {
+    const pending = consumePendingCommunity();
+    if (pending) setSection('communities');
+    return onOpenCommunity(() => setSection('communities'));
+  }, []);
 
   /* live updates from other users (audience-filtered server-side) */
   useEffect(() => {

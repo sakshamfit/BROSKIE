@@ -66,6 +66,16 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const [lightbox, setLightbox] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
+  // Hold-to-record gesture state on the send button: when this press started
+  // (0 = not held) and whether THIS press owns the current recording.
+  const holdStartedAt = useRef(0);
+  const pressOwnsRecording = useRef(false);
+  // startRecording is async (permission + recorder prep). If the user
+  // releases before it finishes, the stop is parked here and applied the
+  // moment the recorder is actually live — a fast hold can never leave an
+  // orphaned recording running.
+  const recordingStarting = useRef(false);
+  const stopWhileStarting = useRef(null);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const recordingStartedAt = useRef(0);
   const listRef = useRef(null);
@@ -270,8 +280,11 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   }).catch(() => {});
 
   const startRecording = async () => {
-    if (recording || voiceBusy) return;
+    if (recording || voiceBusy || recordingStarting.current) return;
+    recordingStarting.current = true;
+    stopWhileStarting.current = null;
     setVoiceBusy(true);
+    let becameLive = false;
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
@@ -288,6 +301,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       await audioRecorder.prepareToRecordAsync();
       recordingStartedAt.current = Date.now();
       audioRecorder.record();
+      becameLive = true;
       setRecording(true);
       setShowEmoji(false);
     } catch (error) {
@@ -295,11 +309,24 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       Alert.alert('Could not record', error?.message || 'The microphone could not be started.');
       await restorePlaybackAudioMode();
     } finally {
+      recordingStarting.current = false;
       setVoiceBusy(false);
+      // The button was released while the recorder was still spinning up —
+      // apply that stop now.
+      if (becameLive && stopWhileStarting.current !== null) {
+        const shouldSend = stopWhileStarting.current;
+        stopWhileStarting.current = null;
+        stopRecording(shouldSend);
+      }
     }
   };
 
   const stopRecording = async (shouldSend = true) => {
+    if (recordingStarting.current) {
+      // Recorder not live yet — park the intent; startRecording applies it.
+      stopWhileStarting.current = shouldSend;
+      return;
+    }
     if (!recording || voiceBusy) return;
     const elapsedMs = Math.max(
       audioRecorderState.durationMillis || 0,
@@ -819,12 +846,34 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
 
         <SpringPressable
           accessibilityRole="button"
-          accessibilityLabel={voiceBusy ? 'Sending voice note' : recording ? 'Send voice note' : text.trim() ? 'Send message' : 'Start voice recording'}
+          accessibilityLabel={voiceBusy ? 'Sending voice note' : recording ? 'Send voice note' : text.trim() ? 'Send message' : 'Hold to record a voice note'}
+          // WhatsApp-style: HOLD the mic to record — release to send. A quick
+          // tap still toggles recording (accessibility / old habit), and the
+          // existing cancel control keeps working either way.
+          delayLongPress={250}
+          onPressIn={() => {
+            holdStartedAt.current = Date.now();
+            if (!text.trim() && !editing && !recording && !voiceBusy) {
+              pressOwnsRecording.current = true;
+              startRecording();
+            }
+          }}
+          onPressOut={() => {
+            const startedAt = holdStartedAt.current;
+            holdStartedAt.current = 0;
+            if (!pressOwnsRecording.current) return;
+            pressOwnsRecording.current = false;
+            const heldMs = startedAt ? Date.now() - startedAt : 0;
+            // A real hold sends on release; a quick tap is treated as an
+            // accidental touch and cancels — nothing half-second-long ever
+            // gets sent. startRecording is async, so stopRecording handles
+            // "still starting" gracefully (it is a no-op until a file lands).
+            stopRecording(heldMs >= 500);
+          }}
           onPress={() => {
             if (text.trim()) send();
             else if (editing) { setEditing(null); setText(''); }
-            else if (recording) stopRecording(true);
-            else startRecording();
+            // Recording is fully driven by press-in/release above.
           }}
           disabled={voiceBusy}
           android_ripple={rippleFor(theme, { color: alpha(theme.onSendButton, 0.3) })}

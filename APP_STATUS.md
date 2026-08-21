@@ -202,6 +202,25 @@ every afternoon without opening Chats.
 
 ---
 
+## 3b. Phase 3 — finish what exists + web push + CI
+
+| Piece | Status |
+|---|---|
+| **Live calls on Android** | `react-native-webrtc` (124.x) + `@config-plugins/react-native-webrtc`; a platform adapter (`app/src/webrtc/`) gives web and native one API; `CallOverlay` renders native video via `RTCView`. Camera/mic permissions added (Android `CAMERA`/`MODIFY_AUDIO_SETTINGS`, iOS usage strings). **Needs the fresh 1.4.0+ APK** — same build as push. |
+| **Web push (full parity)** | Browsers get every push Android/iOS get. Plain Web Push (VAPID), signed and sent by the +one server itself — keys auto-generate on first boot and persist on `/data` (override with `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`). Service worker (`app/public/service-worker.js`) shows notifications only when the app isn't visible, forwards taps to the page for exact-screen routing, and tags chat notifications per conversation. Register on the web app: sign in → allow notifications. |
+| **Community invite links** | 8-char code per community (admins only see it), `Share` sheet with `https://…/c/<code>`, join-by-code bypasses every join policy (the link IS the approval), long-press rotates/revokes. Web `/c/<code>` and native `plusone://c/<code>` both deep-link: join → open the community detail. |
+| **Hold-to-record voice notes** | Hold the mic button to record, release to send; quick taps cancel (never send accidents). Race-safe: a release during recorder start-up parks the stop. |
+| **Activity grouping** | Likes/comments on your posts collapse into one row per post ("7 people liked your post") with stacked avatars; latest comment as preview. 7-day window. |
+| Songs on See/Network | Already existed (crop + upload + Jamendo picker) — verified, no change needed. |
+| **CI** | Workflow file shipped at `docs/ci.workflow.yml` — activate once via GitHub → Add file → Create new file → name it `.github/workflows/ci.yml` → paste it in (the sandbox's git token cannot create workflow files). Every push/PR then runs all five server suites (138 checks) + web and Android bundle exports. |
+
+New endpoints: `GET /api/push/web-config`, `POST/DELETE /api/push/web-subscription`,
+`POST /api/communities/join-by-code`, `POST /api/communities/:id/invite/rotate`.
+Tests: `npm run test:phase3` — 27 checks (invite lifecycle incl. rotation +
+admin-only visibility, activity grouping, web-push parity + 410 pruning).
+
+---
+
 ## 4. Authentication and account rules
 
 ### Password policy
@@ -542,6 +561,7 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 | `20b1432` | Chat list/conversation manga-paper UI redesign. |
 | current | **Push notifications (Phase 1)**: Expo push on messages/@mentions, requests, colleague requests, likes/comments, calls; deep links to the exact screen; server-enforced per-chat mute, quiet hours and per-type toggles; badge counts; `plusone://` scheme; `test-push.js` (31 checks). |
 | current | **Phase 2 — the daily campus loop**: Today-at-your-place strip (around/online, 12h "I'm around"), greeter campus lines + one-tap handoff, Network Worldwide/My places/Following lenses, follow from posts, "My places" post audience, campus pushes; `test-phase2.js` (39 checks). |
+| current | **Phase 3**: live WebRTC calls on Android, **web push parity** (VAPID, zero-config), community invite links + deep links, hold-to-record voice notes, grouped Activity rows, GitHub Actions CI; `test-phase3.js` (27 checks). |
 | current | Per-conversation chat themes (13 themes, realtime sync, picker with live preview). |
 | current | Centralized motion system (`src/motion.js`): press springs, tab/section transitions, animated message entrances, double-tap ❤️, typing dots, skeleton chat list, story progress bars with hold-to-pause, spring sheets, reduced-motion + haptics support. |
 

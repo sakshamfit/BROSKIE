@@ -63,6 +63,29 @@ export function consumePendingNetworkFilter() {
   return filter;
 }
 
+/* Community deep links (Phase 3 invite links): open a community's detail
+ * from anywhere — Network switches to the Communities section and the
+ * detail sheet opens. Survives pager unmounts like the filter above. */
+const communityListeners = new Set();
+let pendingCommunityId = null;
+export function onOpenCommunity(fn) {
+  communityListeners.add(fn);
+  return () => communityListeners.delete(fn);
+}
+export function openCommunity(communityId) {
+  if (!communityId) return;
+  pendingCommunityId = communityId;
+  communityListeners.forEach((fn) => {
+    try { fn(communityId); } catch {}
+  });
+  requestHomeTab('network');
+}
+export function consumePendingCommunity() {
+  const id = pendingCommunityId;
+  pendingCommunityId = null;
+  return id;
+}
+
 function routeKey(data) {
   return `${data.route || ''}:${data.chatId || ''}:${data.postId || ''}:${data.messageId || ''}`;
 }
@@ -124,6 +147,7 @@ export function routeFromUrl(url) {
     case 'colleagues': return { route: 'colleagues' };
     case 'network': return { route: 'network' };
     case 'post': return id ? { route: 'post', postId: id } : null;
+    case 'c': return id ? { route: 'community', code: id } : null;
     default: return null;
   }
 }

@@ -77,6 +77,10 @@ export const SOCKET_URL = runningOnVercel || API_URL === DEFAULT_MOBILE_API_URL
   ? DEFAULT_SERVER_URL
   : API_URL;
 
+/** Public web origin — used for shareable links (community invites, profile
+ *  links) that must open in any browser, on any platform. */
+export const WEB_APP_URL = DEFAULT_MOBILE_API_URL;
+
 export function mediaUrl(u) {
   if (!u) return null;
   if (/^https?:|^data:|^file:/.test(u)) return u;
@@ -328,6 +332,12 @@ export const api = {
   unregisterPushToken: (token) =>
     request('/api/push/token', { method: 'DELETE', body: { token }, timeoutMs: 10000, retries: 0 }),
   pushInfo: () => request('/api/push/info', { timeoutMs: 10000, retries: 1 }),
+  // Web push (browser Push API, VAPID-signed by the server).
+  webPushConfig: () => request('/api/push/web-config', { timeoutMs: 10000, retries: 1 }),
+  registerWebPushSubscription: (subscription) =>
+    request('/api/push/web-subscription', { method: 'POST', body: { subscription }, timeoutMs: 10000, retries: 1 }),
+  unregisterWebPushSubscription: (endpoint) =>
+    request('/api/push/web-subscription', { method: 'DELETE', body: { endpoint }, timeoutMs: 10000, retries: 0 }),
   changePassword: (payload) => request('/api/me/password', { method: 'POST', body: payload }),
   users: (q = '', { contactsOnly = false } = {}) =>
     request(`/api/users?q=${encodeURIComponent(q)}${contactsOnly ? '&contacts=1' : ''}`),
@@ -426,6 +436,9 @@ export const api = {
     const q = since ? `?since=${Math.floor(since)}` : '';
     return request(`/api/today${q}`, { timeoutMs: 15000, retries: 1 });
   },
+  // Community invite links.
+  joinCommunityByCode: (code) => request('/api/communities/join-by-code', { method: 'POST', body: { code } }),
+  rotateInviteCode: (communityId) => request(`/api/communities/${communityId}/invite/rotate`, { method: 'POST', body: {} }),
 
   statuses: () => request('/api/status'),
   postStatus: (payload) => request('/api/status', { method: 'POST', body: payload }),

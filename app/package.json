@@ -45,6 +45,7 @@
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
     "react-native-web": "^0.21.2",
+    "react-native-webrtc": "124.0.8",
     "socket.io-client": "^4.8.3",
     "three": "^0.180.0"
   },
@@ -57,5 +58,8 @@
     "build:android": "eas build -p android --profile preview",
     "submit:ios": "eas submit -p ios --profile production"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@config-plugins/react-native-webrtc": "15.0.2"
+  }
 }

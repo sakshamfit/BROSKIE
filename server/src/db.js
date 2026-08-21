@@ -351,6 +351,13 @@ addColumnIfMissing('statuses', 'media_aspect', 'media_aspect REAL');
 addColumnIfMissing('posts', 'song', 'song TEXT');
 addColumnIfMissing('posts', 'audience', "audience TEXT DEFAULT 'public'");
 addColumnIfMissing('posts', 'media_aspect', 'media_aspect REAL');
+// Phase 3: community invite links — short unique code per community; admins
+// can regenerate it. A valid code joins regardless of join_policy.
+addColumnIfMissing('communities', 'invite_code', "invite_code TEXT");
+try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_communities_invite_code ON communities(invite_code) WHERE invite_code IS NOT NULL'); } catch {}
+// Backfill: every existing community gets a code once.
+db.exec(`UPDATE communities SET invite_code = lower(hex(randomblob(4))) WHERE invite_code IS NULL OR invite_code = ''`);
+
 // A single JSON blob for notification/privacy preferences — avoids a new
 // migration every time a toggle is added. Server validates/merges keys
 // (see DEFAULT_SETTINGS + sanitizeSettings in index.js) so bad client
@@ -431,7 +438,25 @@ CREATE TABLE IF NOT EXISTS around_status (
 CREATE INDEX IF NOT EXISTS idx_around_expires ON around_status(expires_at);
 `);
 
-/* ---- starred messages: per-user bookmarking, across all chats ---- */
+/* ---- Phase 3: web push + community invite links ---- */
+
+/* ---- Phase 3: web push + community invite links ---- */
+
+db.exec(`
+/* Browser Push API subscriptions (Chrome/Edge/Firefox, Safari 16.4+ as an
+   installed PWA). The server signs sends itself with VAPID keys — unlike the
+   Android/iOS Expo path, no third-party push service sits in the middle. */
+CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+  endpoint   TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL,
+  subscription TEXT NOT NULL,   -- full PushSubscription JSON
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_web_push_user ON web_push_subscriptions(user_id);
+`);
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS starred_messages (
   message_id TEXT NOT NULL,

@@ -31,6 +31,50 @@ const db = require('./db');
 const EXPO_PUSH_SEND_URL = 'https://exp.host/--/api/v2/push/send';
 const EXPO_CHUNK = 100; // Expo's documented max messages per request
 
+/* ------------------------------------------------------------------ */
+/* VAPID keys for web push (browser Push API)                         */
+/* ------------------------------------------------------------------ */
+/* Web pushes are signed and sent directly by this server (the web-push
+ * npm module) — no third-party service, so no uploaded credentials. Keys
+ * come from env when provided (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY /
+ * VAPID_SUBJECT); otherwise a keypair is generated once and persisted next
+ * to the database (survives redeploys on the /data volume), so web push
+ * works with zero configuration. */
+const webpush = require('web-push');
+const fs = require('fs');
+const path = require('path');
+
+function ensureVapidKeys() {
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    return {
+      publicKey: process.env.VAPID_PUBLIC_KEY,
+      privateKey: process.env.VAPID_PRIVATE_KEY,
+      subject: process.env.VAPID_SUBJECT || 'mailto:hello@plusone.app',
+    };
+  }
+  const file = path.join(db.DATA_DIR, 'vapid-keys.json');
+  try {
+    const existing = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (existing?.publicKey && existing?.privateKey) {
+      return { subject: process.env.VAPID_SUBJECT || 'mailto:hello@plusone.app', ...existing };
+    }
+  } catch {}
+  const generated = webpush.generateVAPIDKeys();
+  const keys = {
+    publicKey: generated.publicKey,
+    privateKey: generated.privateKey,
+    subject: process.env.VAPID_SUBJECT || 'mailto:hello@plusone.app',
+  };
+  try { fs.writeFileSync(file, JSON.stringify(keys, null, 2)); } catch (e) { console.warn('[push] could not persist VAPID keys:', e.message); }
+  return keys;
+}
+
+let vapidDetails = null;
+function getVapidDetails() {
+  if (!vapidDetails) vapidDetails = ensureVapidKeys();
+  return vapidDetails;
+}
+
 const now = () => Date.now();
 
 /* Injected by index.js to avoid a circular require (getSettings lives there). */
@@ -144,6 +188,34 @@ async function sendToExpo(messages) {
   }
 }
 
+/** Web Push (browser) subscriptions for this user. */
+function webSubscriptionsFor(userId) {
+  return db.prepare('SELECT subscription FROM web_push_subscriptions WHERE user_id = ?').all(userId)
+    .map((r) => {
+      try { return JSON.parse(r.subscription); } catch { return null; }
+    })
+    .filter(Boolean);
+}
+
+/** One browser push. Signed with our VAPID keys and sent straight to the
+ *  browser's push service. 404/410 = the subscription is gone (cleared
+ *  browser data, uninstalled PWA) and is pruned. */
+async function sendWebPush(subscription, payload) {
+  try {
+    await webpush.sendNotification(
+      subscription,
+      JSON.stringify(payload),
+      { vapidDetails: getVapidDetails(), TTL: 3600 }
+    );
+  } catch (e) {
+    if (e && (e.statusCode === 404 || e.statusCode === 410)) {
+      db.prepare('DELETE FROM web_push_subscriptions WHERE endpoint = ?').run(subscription.endpoint);
+    } else {
+      console.warn('[push] web send failed:', e?.statusCode || '', e?.message || e);
+    }
+  }
+}
+
 /**
  * Core fan-out. `opts`:
  *   userId        recipient (rules are evaluated per recipient)
@@ -178,21 +250,41 @@ async function pushToUser(userId, opts) {
       : (channelBase === 'calls' ? CHANNELS.calls : channelBase === 'activity' ? CHANNELS.activity : CHANNELS.messages);
 
     const tokens = db.prepare('SELECT token FROM push_tokens WHERE user_id = ?').all(userId);
-    if (!tokens.length) return;
+    const webSubs = webSubscriptionsFor(userId);
+    if (!tokens.length && !webSubs.length) return;
 
     const badge = badgeFor(userId);
-    const messages = tokens.map(({ token }) => ({
-      to: token,
-      title: String(opts.title || '+one').slice(0, 120),
-      body: String(opts.body || '').slice(0, 240),
-      sound: quiet ? null : (opts.sound === null ? null : 'default'),
-      badge: Number.isFinite(badge) ? badge : undefined,
-      channelId,
-      priority: quiet ? 'normal' : (opts.priority || 'default'),
-      interruptionLevel: quiet ? 'passive' : (opts.callSound ? 'timeSensitive' : 'default'),
-      data: { ...(opts.data || {}), type: opts.type || 'message' },
-    }));
-    await sendToExpo(messages);
+    const data = { ...(opts.data || {}), type: opts.type || 'message' };
+
+    // Android/iOS — Expo push service.
+    if (tokens.length) {
+      const messages = tokens.map(({ token }) => ({
+        to: token,
+        title: String(opts.title || '+one').slice(0, 120),
+        body: String(opts.body || '').slice(0, 240),
+        sound: quiet ? null : (opts.sound === null ? null : 'default'),
+        badge: Number.isFinite(badge) ? badge : undefined,
+        channelId,
+        priority: quiet ? 'normal' : (opts.priority || 'default'),
+        interruptionLevel: quiet ? 'passive' : (opts.callSound ? 'timeSensitive' : 'default'),
+        data,
+      }));
+      await sendToExpo(messages);
+    }
+
+    // Web — direct Web Push, same rules. Quiet hours send `silent: true`,
+    // which the service worker reads to skip the sound/vibration.
+    if (webSubs.length) {
+      const payload = {
+        title: String(opts.title || '+one').slice(0, 120),
+        body: String(opts.body || '').slice(0, 240),
+        badge: Number.isFinite(badge) ? badge : undefined,
+        silent: quiet,
+        channel: channelBase,
+        data,
+      };
+      await Promise.all(webSubs.map((sub) => sendWebPush(sub, payload)));
+    }
   } catch (e) {
     console.warn('[push] skipped:', e?.message || e);
   }
@@ -463,6 +555,43 @@ function unregisterToken(userId, token) {
   return result.changes > 0;
 }
 
+/* ---- browser (Web Push) registrations ---- */
+
+/** Store/refresh a browser PushSubscription. Reassigns to the signed-in
+ *  account, exactly like native tokens. */
+function registerWebSubscription(userId, subscription) {
+  if (!subscription || typeof subscription !== 'object' || !subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
+    throw new Error('Invalid push subscription');
+  }
+  if (String(subscription.endpoint).length > 800) throw new Error('Invalid push subscription endpoint');
+  const t = now();
+  db.prepare(
+    `INSERT INTO web_push_subscriptions (endpoint, user_id, subscription, created_at, updated_at)
+     VALUES (?,?,?,?,?)
+     ON CONFLICT(endpoint) DO UPDATE SET
+       user_id = excluded.user_id,
+       subscription = excluded.subscription,
+       updated_at = excluded.updated_at`
+  ).run(String(subscription.endpoint), userId, JSON.stringify(subscription), t, t);
+  return { endpoint: String(subscription.endpoint) };
+}
+
+function unregisterWebSubscription(userId, endpoint) {
+  if (!endpoint) return false;
+  const result = db.prepare('DELETE FROM web_push_subscriptions WHERE user_id = ? AND endpoint = ?').run(userId, String(endpoint));
+  return result.changes > 0;
+}
+
+/** VAPID public key for the browser to subscribe with (plus enabled flag). */
+function webPushConfig() {
+  try {
+    const { publicKey, subject } = getVapidDetails();
+    return { enabled: true, publicKey, subject };
+  } catch (e) {
+    return { enabled: false, publicKey: null, error: e?.message };
+  }
+}
+
 /** For the Notifications screen: which devices will ring, plus quiet hours. */
 function describeFor(userId) {
   const rows = db
@@ -488,5 +617,9 @@ module.exports = {
   notifyFollowerPost,
   registerToken,
   unregisterToken,
+  registerWebSubscription,
+  unregisterWebSubscription,
+  webPushConfig,
+  webSubscriptionsFor,
   describeFor,
 };

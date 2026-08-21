@@ -135,6 +135,18 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
     if (item.type === 'connect_request') return `${name} sent you a +one request`;
     if (item.type === 'colleague_request') return `${name} wants to connect`;
     if (item.type === 'community_request') return `${name} asked to join ${item.communityName || 'your community'}`;
+    if (item.type === 'like_group') {
+      const names = (item.users || []).map((u) => u.name).filter(Boolean);
+      const n = item.count || names.length || 1;
+      if (n <= 1) return `${name} liked your post`;
+      if (n === 2) return `${names[0] || name} and ${names[1] || 'someone'} liked your post`;
+      return `${n} people liked your post`;
+    }
+    if (item.type === 'comment_group') {
+      const n = item.count || 1;
+      if (n <= 1) return `${name} commented: ${item.preview || ''}`;
+      return `${n} people commented on your post — latest: ${item.preview || ''}`;
+    }
     if (item.type === 'like') return `${name} liked your post`;
     if (item.type === 'comment') return `${name} commented: ${item.preview || ''}`;
     if (item.type === 'call') {
@@ -146,7 +158,8 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
   };
 
   const iconFor = (item) => {
-    if (item.type === 'like') return { name: 'heart', color: INSTAGRAM_HEART };
+    if (item.type === 'like_group' || item.type === 'like') return { name: 'heart', color: INSTAGRAM_HEART };
+    if (item.type === 'comment_group') return { name: 'chatbubble', color: theme.ink };
     if (item.type === 'comment') return { name: 'chatbubble', color: theme.ink };
     if (item.type === 'call') return { name: item.callType === 'video' ? 'videocam' : 'call', color: item.status === 'missed' ? theme.danger : theme.ink };
     if (item.type === 'connect_request') return { name: 'add-circle-outline', color: theme.ink };
@@ -161,7 +174,19 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
     return (
       <View style={s.row}>
         <View style={s.avatarWrap}>
-          <Avatar uri={person.avatar} name={person.name} id={person.id} size={48} />
+          {(item.users?.length || 0) > 1 ? (
+            // A little stack of the most recent faces — the count text
+            // carries the truth ("7 people liked your post").
+            <View style={s.avatarStack}>
+              {item.users.slice(0, 3).map((u, i) => (
+                <View key={u.id || i} style={[s.avatarStackItem, { zIndex: 3 - i, marginLeft: i ? -14 : 0 }]}>
+                  <Avatar uri={u.avatar} name={u.name} id={u.id} size={i === 0 ? 44 : 38} />
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Avatar uri={person.avatar} name={person.name} id={person.id} size={48} />
+          )}
           <View style={[s.typeBadge, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
             <Icon name={ic.name} size={10} color={ic.color} />
           </View>
@@ -333,6 +358,10 @@ const makeStyles = (t) => StyleSheet.create({
   list: { width: '100%', maxWidth: 680, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 16, paddingBottom: 70 },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 10 },
   avatarWrap: { position: 'relative' },
+  avatarStack: { flexDirection: 'row', alignItems: 'center' },
+  avatarStackItem: {
+    borderWidth: 2, borderRadius: 999, borderColor: 'transparent', overflow: 'hidden',
+  },
   typeBadge: {
     position: 'absolute', right: -4, bottom: -4, width: 18, height: 18, borderRadius: 18,
     borderWidth: 1, alignItems: 'center', justifyContent: 'center',

@@ -1030,6 +1030,28 @@ app.get('/api/push/info', requireAuth, (req, res) => {
   res.json(push.describeFor(req.userId));
 });
 
+/** Browser push: VAPID public key the page subscribes with. */
+app.get('/api/push/web-config', requireAuth, (req, res) => {
+  res.json(push.webPushConfig());
+});
+
+/** Register/refresh this browser's PushSubscription (web push parity with
+ *  the Expo token flow — same rules, same events). */
+app.post('/api/push/web-subscription', requireAuth, (req, res) => {
+  try {
+    const saved = push.registerWebSubscription(req.userId, req.body?.subscription);
+    res.json({ ok: true, endpoint: saved.endpoint });
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Could not register web push' });
+  }
+});
+
+/** Remove this browser's subscription (sign out / notifications off). */
+app.delete('/api/push/web-subscription', requireAuth, (req, res) => {
+  const removed = push.unregisterWebSubscription(req.userId, req.body?.endpoint);
+  res.json({ ok: true, removed });
+});
+
 app.patch('/api/me', requireAuth, (req, res) => {
   const { name, about, avatar, username, phone } = req.body || {};
   const u = getUser(req.userId);
@@ -1730,39 +1752,71 @@ app.get('/api/activity', requireAuth, (req, res) => {
     });
   });
 
+  // Likes grouped per post ("3 people liked your post") so a popular post
+  // is one row, not forty. Users list is capped to the 5 most recent faces;
+  // count carries the truth.
+  const LIKE_WINDOW = now() - 7 * 24 * 3600 * 1000;
   db.prepare(
-    `SELECT pl.post_id, pl.user_id, pl.at, p.body, p.media_url, p.title
+    `SELECT pl.post_id, MAX(pl.at) latest_at, COUNT(*) c, p.body, p.media_url, p.title
      FROM post_likes pl
      JOIN posts p ON p.id = pl.post_id
      JOIN users u ON u.id = pl.user_id
-     WHERE p.user_id = ? AND pl.user_id != ? AND p.deleted = 0 AND ${blockedSql}
-     ORDER BY pl.at DESC LIMIT 40`
-  ).all(req.userId, req.userId, req.userId, req.userId).forEach((row) => {
+     WHERE p.user_id = ? AND pl.user_id != ? AND p.deleted = 0 AND pl.at > ? AND ${blockedSql}
+     GROUP BY pl.post_id
+     ORDER BY latest_at DESC LIMIT 12`
+  ).all(req.userId, req.userId, LIKE_WINDOW, req.userId, req.userId).forEach((row) => {
+    const users = db
+      .prepare(
+        `SELECT u.* FROM post_likes pl JOIN users u ON u.id = pl.user_id
+         WHERE pl.post_id = ? AND pl.user_id != ? ORDER BY pl.at DESC LIMIT 5`
+      )
+      .all(row.post_id, req.userId)
+      .map((u) => publicUser(u));
     items.push({
-      id: `like:${row.post_id}:${row.user_id}`,
-      type: 'like',
-      createdAt: row.at,
+      id: `like_group:${row.post_id}`,
+      type: 'like_group',
+      createdAt: row.latest_at,
       postId: row.post_id,
       preview: row.title || row.body || (row.media_url ? 'Photo' : 'your post'),
-      user: publicUser(getUser(row.user_id)),
+      users,
+      count: row.c,
+      user: users[0] || null,
     });
   });
 
+  // Comments grouped per post the same way — one row per post, latest
+  // comment as the preview, distinct commenters as the faces.
   db.prepare(
-    `SELECT pc.id, pc.post_id, pc.user_id, pc.body, pc.created_at
+    `SELECT pc.post_id, MAX(pc.created_at) latest_at, COUNT(DISTINCT pc.user_id) c, p.body, p.media_url, p.title
      FROM post_comments pc
      JOIN posts p ON p.id = pc.post_id
      JOIN users u ON u.id = pc.user_id
-     WHERE p.user_id = ? AND pc.user_id != ? AND p.deleted = 0 AND ${blockedSql}
-     ORDER BY pc.created_at DESC LIMIT 40`
-  ).all(req.userId, req.userId, req.userId, req.userId).forEach((row) => {
+     WHERE p.user_id = ? AND pc.user_id != ? AND p.deleted = 0 AND pc.created_at > ? AND ${blockedSql}
+     GROUP BY pc.post_id
+     ORDER BY latest_at DESC LIMIT 12`
+  ).all(req.userId, req.userId, LIKE_WINDOW, req.userId, req.userId).forEach((row) => {
+    const users = db
+      .prepare(
+        `SELECT u.*, MAX(pc.created_at) at2, (SELECT body FROM post_comments latest WHERE latest.post_id = pc.post_id AND latest.user_id = u.id ORDER BY latest.created_at DESC LIMIT 1) latest_body
+         FROM post_comments pc JOIN users u ON u.id = pc.user_id
+         WHERE pc.post_id = ? AND pc.user_id != ?
+         GROUP BY u.id ORDER BY at2 DESC LIMIT 5`
+      )
+      .all(row.post_id, req.userId)
+      .map((u) => publicUser(u));
+    const latest = db
+      .prepare('SELECT body FROM post_comments WHERE post_id = ? AND user_id != ? ORDER BY created_at DESC LIMIT 1')
+      .get(row.post_id, req.userId);
     items.push({
-      id: `comment:${row.id}`,
-      type: 'comment',
-      createdAt: row.created_at,
+      id: `comment_group:${row.post_id}`,
+      type: 'comment_group',
+      createdAt: row.latest_at,
       postId: row.post_id,
-      preview: row.body,
-      user: publicUser(getUser(row.user_id)),
+      preview: latest?.body || row.title || row.body || (row.media_url ? 'Photo' : 'your post'),
+      postPreview: row.title || row.body || (row.media_url ? 'Photo' : 'your post'),
+      users,
+      count: row.c,
+      user: users[0] || null,
     });
   });
 
@@ -2881,6 +2935,9 @@ function hydrateCommunity(row, viewerId) {
     isMember: !!me,
     pendingRequest,
     requestCount,
+    // Invite links: only admins see the code (so members can't leak it by
+    // just opening the detail screen).
+    inviteCode: me && me.role === 'admin' ? row.invite_code || null : null,
   };
 }
 
@@ -2940,9 +2997,9 @@ app.post('/api/communities', requireAuth, (req, res) => {
   db.prepare('INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(chatId, req.userId, 'admin', t);
 
   db.prepare(
-    `INSERT INTO communities (id, name, description, category, avatar, chat_id, created_by, join_policy, visibility, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-  ).run(id, trimmedName, String(description || '').trim(), category, avatar || null, chatId, req.userId, joinPolicy, visibility, t, t);
+    `INSERT INTO communities (id, name, description, category, avatar, chat_id, created_by, join_policy, visibility, invite_code, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(id, trimmedName, String(description || '').trim(), category, avatar || null, chatId, req.userId, joinPolicy, visibility, communityInviteCode(), t, t);
   db.prepare('INSERT INTO community_members (community_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(id, req.userId, 'admin', t);
 
   const creator = getUser(req.userId);
@@ -2989,6 +3046,56 @@ app.delete('/api/communities/:id', requireAuth, (req, res) => {
 });
 
 /** Join (or request to join) a community — behaviour depends on join_policy. */
+/** Short, unambiguous invite code (8 chars, no 0/o/1/l). */
+function communityInviteCode() {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+  let code;
+  do {
+    code = Array.from({ length: 8 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+  } while (db.prepare('SELECT 1 FROM communities WHERE invite_code = ?').get(code));
+  return code;
+}
+
+/** Join a community via invite link (`https://…/c/<code>`). A valid code
+ *  joins directly regardless of join_policy — the link IS the approval. */
+app.post('/api/communities/join-by-code', requireAuth, (req, res) => {
+  const code = String(req.body?.code || '').trim().toLowerCase();
+  if (!code) return res.status(400).json({ error: 'Missing invite code' });
+  const row = db.prepare('SELECT * FROM communities WHERE invite_code = ?').get(code);
+  if (!row) return res.status(404).json({ error: 'This invite link is not valid' });
+  if (blockedEitherWay(req.userId, row.created_by) && communityRole(row.id, req.userId) === null) {
+    return res.status(403).json({ error: 'This invite is unavailable' });
+  }
+
+  if (communityRole(row.id, req.userId)) {
+    return res.json({ community: hydrateCommunity(row, req.userId), alreadyMember: true });
+  }
+
+  const t = now();
+  db.prepare('INSERT INTO community_members (community_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(row.id, req.userId, 'member', t);
+  if (row.chat_id) {
+    db.prepare('INSERT OR IGNORE INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(row.chat_id, req.userId, 'member', t);
+    const joiner = getUser(req.userId);
+    insertSystemMessage(row.chat_id, `${joiner.name} joined via invite link`);
+    memberIds(row.chat_id).forEach((uid) => emitToUser(uid, 'chat:new', chatSummary(row.chat_id, uid)));
+  }
+  db.prepare('UPDATE communities SET updated_at = ? WHERE id = ?').run(t, row.id);
+  db.prepare('DELETE FROM community_requests WHERE community_id = ? AND user_id = ?').run(row.id, req.userId);
+  const updated = db.prepare('SELECT * FROM communities WHERE id = ?').get(row.id);
+  communityMemberIds(row.id).forEach((uid) => emitToUser(uid, 'community:updated', hydrateCommunity(updated, uid)));
+  res.json({ community: hydrateCommunity(updated, req.userId), alreadyMember: false });
+});
+
+/** Admin: rotate the invite code (revokes the old link). */
+app.post('/api/communities/:id/invite/rotate', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  if (communityRole(row.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Admins only' });
+  const code = communityInviteCode();
+  db.prepare('UPDATE communities SET invite_code = ?, updated_at = ? WHERE id = ?').run(code, now(), row.id);
+  res.json({ inviteCode: code });
+});
+
 app.post('/api/communities/:id/join', requireAuth, (req, res) => {
   const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Community not found' });

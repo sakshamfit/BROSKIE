@@ -15,6 +15,7 @@ import { haptic, usePressScale } from './motion';
 import SplitLayout from './DesktopLayout';
 import PageSwipePager from './components/PageSwipePager';
 import { navigationRef, onHomeTabRequest, flushPendingRoute } from './push/routing';
+import { setupDeepLinks } from './push/links';
 
 import AuthScreen from './screens/AuthScreen';
 import ChatListScreen from './screens/ChatListScreen';
@@ -217,6 +218,13 @@ export default function Navigation() {
   const { user, booting } = useAuth();
   const { theme, mode } = useTheme();
   const { isSplitCapable } = useResponsive();
+
+  // Incoming links: plusone:// routes natively, and https://…/c/<code>
+  // community invites on the web (they join first, then open the detail).
+  useEffect(() => {
+    if (!user) return undefined;
+    return setupDeepLinks();
+  }, [user?.id]);
 
   if (booting) return <Loading label="STARTING +ONE" />;
 

@@ -157,6 +157,21 @@ Feed lenses: **Worldwide / My places / Following** — plus **Follow** any autho
 from their post and a **My places** audience so a post can target just people
 who share your college or workplace.
 
+**Calls** — real 1:1 voice/video WebRTC on every platform (browser + Android
+app), with the ink-and-paper full-screen overlay, ringing, accept/decline and
+call history. **Hold the mic button to record a voice note and release to send**
+(quick taps are ignored so nothing accidental is ever sent).
+
+**Communities with invite links** — every community has an 8-character invite
+code: admins share `https://…/c/<code>` via WhatsApp/SMS and anyone with the
+link joins instantly (the link is the approval, whatever the join policy).
+Long-press rotates the code to revoke a leaked link; the code is only ever
+visible to admins.
+
+**Activity that stays readable** — likes and comments on your posts group into
+one row each ("7 people liked your post") with a stack of the most recent
+faces, instead of a wall of noise.
+
 **Today at your place (the daily campus loop)** — the morning AI greeter now
 reports campus life (*"2 people from your college posted today, and 1 person is
 around now"*) and hands off with one tap into the **Today strip** on Colleagues
@@ -276,22 +291,23 @@ once every other member has a read receipt — so it works identically for group
 
 ## Notes & limits
 
-- **Push notifications** need a fresh app binary (1.4.0+, `versionCode` 6): they
-  add the `expo-notifications` native module, so already-installed APKs cannot
-  pick them up over an OTA update. The server half needs no new environment
-  variables — the Expo Push API requires no server-side key. Android delivery
-  additionally needs a one-time FCM v1 service-account key uploaded via
-  `eas credentials -p android` (or the expo.dev dashboard → Credentials).
-  Until that key is set, Android tokens register fine but Expo cannot deliver.
+- **Push notifications** reach **web browsers too** — Chrome/Edge/Firefox (and
+  Safari 16.4+ with the PWA installed). Web pushes are signed with VAPID keys
+  the server generates itself on first boot (persisted on the /data volume);
+  set `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` env vars only if
+  you want to supply your own. No third-party service, no configuration.
+- Android/iOS push needs a fresh app binary (1.4.0+, `versionCode` 6): it adds
+  the `expo-notifications` native module, so already-installed APKs cannot pick
+  it up over an OTA update. Android delivery additionally needs a one-time FCM
+  v1 service-account key uploaded via `eas credentials -p android` (or the
+  expo.dev dashboard → Credentials) — see PUSH_SETUP.md.
 - Voice notes request microphone permission, record real WebM (web) or M4A/AAC
   (Android/iOS) audio with `expo-audio`, upload it to the active storage backend,
   and render a playable waveform bubble with the recorded duration.
-- Calls are real WebRTC on web (genuine peer-to-peer audio/video via the browser's
-  native RTCPeerConnection). On native iOS/Android, actual camera/mic capture needs
-  `react-native-webrtc`, which requires a custom dev build outside the managed/Expo Go
-  workflow this app runs under — ringing, accept/decline, and call history all still
-  work for real on native, the app just shows a clear message instead of connecting
-  media if a native device tries to start/answer a call.
+- Calls are real peer-to-peer WebRTC on every platform: the browser's native
+  implementation on web, `react-native-webrtc` on Android/iOS (Phase 3; needs
+  the 1.4.0+ app build — older installs still ring and keep call history but
+  cannot connect live media).
 - Messages are not end-to-end encrypted — they travel over HTTPS to the server,
   which stores and relays them (the UI no longer claims otherwise).
 - SQLite + local disk uploads are fine for demo/dev; swap for Postgres + S3 in production.
