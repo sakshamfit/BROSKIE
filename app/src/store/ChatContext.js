@@ -1,11 +1,55 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io } from 'socket.io-client';
 import { SOCKET_URL, api } from '../api';
 import { useAuth } from './AuthContext';
 
 const ChatContext = createContext(null);
 export const useChat = () => useContext(ChatContext);
+
+// Conversation summaries and already-opened message history are an offline
+// fallback, never a second source of truth. The account id in both the key and
+// payload prevents one signed-in user from ever seeing another user's cache.
+const HISTORY_CACHE_VERSION = 1;
+const HISTORY_CACHE_PREFIX = 'plusone.chat-history';
+// Keep the single AsyncStorage item comfortably below common Android limits;
+// every conversation summary is retained, while message bodies are a bounded
+// offline convenience (the server remains the complete source of truth).
+const MAX_CACHED_MESSAGE_CHATS = 12;
+const MAX_CACHED_MESSAGES_PER_CHAT = 120;
+const historyCacheKey = (userId) => `${HISTORY_CACHE_PREFIX}.v${HISTORY_CACHE_VERSION}.${userId}`;
+
+// Pinned chats float to the top; within each group, latest activity first.
+const sortChats = (list) =>
+  [...list].sort((a, b) =>
+    ((b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)) ||
+    ((b.lastMessage?.createdAt || b.updatedAt || 0) - (a.lastMessage?.createdAt || a.updatedAt || 0))
+  );
+
+function parseHistoryCache(raw, userId) {
+  if (!raw) return null;
+  const parsed = JSON.parse(raw);
+  if (parsed?.version !== HISTORY_CACHE_VERSION || parsed?.userId !== userId || !Array.isArray(parsed?.chats)) {
+    return null;
+  }
+  const cachedMessages = parsed.messages && typeof parsed.messages === 'object' ? parsed.messages : {};
+  const messages = Object.fromEntries(
+    Object.entries(cachedMessages).filter(([, list]) => Array.isArray(list))
+  );
+  return {
+    chats: parsed.chats,
+    messages,
+    loadedMessageIds: Array.isArray(parsed.loadedMessageIds) ? parsed.loadedMessageIds : Object.keys(messages),
+  };
+}
+
+function mergeCachedChats(cached, current) {
+  const byId = new Map(cached.map((chat) => [chat.id, chat]));
+  // Live/socket state wins if it arrived while AsyncStorage was being read.
+  current.forEach((chat) => byId.set(chat.id, chat));
+  return sortChats([...byId.values()]);
+}
 
 // WebRTC needs a real device's camera/mic. On web this is the browser's
 // native RTCPeerConnection/getUserMedia — fully working. On native
@@ -22,12 +66,18 @@ const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 export function ChatProvider({ children }) {
   const { token, user, logout, applySettings } = useAuth();
   const [chats, setChats] = useState([]);
-  const [chatsLoaded, setChatsLoaded] = useState(false); // first fetch done (drives skeleton UI)
+  const [chatsLoaded, setChatsLoaded] = useState(false); // cache checked / first request settled
+  const [chatsError, setChatsError] = useState(null);
   const [messages, setMessages] = useState({});   // chatId -> message[]
+  const [messagesLoaded, setMessagesLoaded] = useState({}); // chatId -> cache/server checked
+  const [messagesLoading, setMessagesLoading] = useState({});
+  const [messageErrors, setMessageErrors] = useState({});
   const [typing, setTyping] = useState({});       // chatId -> { userId: name }
   const [connected, setConnected] = useState(false);
   const [activityUnread, setActivityUnread] = useState(0);
   const socketRef = useRef(null);
+  const cacheReadyForRef = useRef(null);
+  const cacheWriteTimerRef = useRef(null);
   const postListeners = useRef(new Set());
   const statusListeners = useRef(new Set());
   const communityListeners = useRef(new Set());
@@ -82,13 +132,6 @@ export function ChatProvider({ children }) {
     return () => chatThemeListeners.current.delete(fn);
   }, []);
 
-  // Pinned chats float to the top; within each group, recency order.
-  const sortChats = (list) =>
-    [...list].sort((a, b) =>
-      ((b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)) ||
-      ((b.lastMessage?.createdAt || b.updatedAt) - (a.lastMessage?.createdAt || a.updatedAt))
-    );
-
   const upsertChat = useCallback((chat) => {
     setChats((prev) => {
       const idx = prev.findIndex((c) => c.id === chat.id);
@@ -99,12 +142,115 @@ export function ChatProvider({ children }) {
     });
   }, []);
 
+  /* ---------------- durable local history fallback ---------------- */
+  useEffect(() => {
+    const userId = user?.id;
+    if (!token || !userId) return undefined;
+
+    let disposed = false;
+    cacheReadyForRef.current = null;
+    clearTimeout(cacheWriteTimerRef.current);
+    setChats([]);
+    setMessages({});
+    setChatsLoaded(false);
+    setChatsError(null);
+    setMessagesLoaded({});
+    setMessagesLoading({});
+    setMessageErrors({});
+
+    (async () => {
+      let cached = null;
+      try {
+        cached = parseHistoryCache(await AsyncStorage.getItem(historyCacheKey(userId)), userId);
+      } catch {
+        // A corrupt/unavailable device cache must never block the server copy.
+      }
+      if (disposed) return;
+
+      if (cached) {
+        setChats((current) => mergeCachedChats(cached.chats, current));
+        setMessages((current) => ({ ...cached.messages, ...current }));
+        setMessagesLoaded(Object.fromEntries(cached.loadedMessageIds.map((chatId) => [chatId, true])));
+        // Cached rows are useful immediately; keep refreshing in the background.
+        setChatsLoaded(true);
+      }
+      cacheReadyForRef.current = userId;
+
+      try {
+        const result = await api.chats();
+        if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
+        if (!disposed) {
+          // A successful server snapshot is authoritative. It removes stale
+          // cache entries after an explicit delete/leave without ever letting
+          // a failed request erase the rows already on screen.
+          setChats(sortChats(result.chats));
+          setChatsError(null);
+        }
+      } catch {
+        if (!disposed) {
+          setChatsError('Unable to load conversations. Your saved history is still available.');
+        }
+      } finally {
+        if (!disposed) setChatsLoaded(true);
+      }
+    })();
+
+    return () => {
+      disposed = true;
+      clearTimeout(cacheWriteTimerRef.current);
+    };
+  }, [token, user?.id]);
+
+  // Save only after the matching account cache has been read. This prevents
+  // the provider's initial empty arrays (or another account's prior state)
+  // from overwriting useful history during sign-in and app updates.
+  useEffect(() => {
+    const userId = user?.id;
+    if (!token || !userId || cacheReadyForRef.current !== userId) return undefined;
+
+    clearTimeout(cacheWriteTimerRef.current);
+    cacheWriteTimerRef.current = setTimeout(() => {
+      const visibleChatIds = new Set(chats.map((chat) => chat.id));
+      const cacheMessages = Object.fromEntries(
+        Object.entries(messages)
+          .filter(([chatId]) => visibleChatIds.has(chatId))
+          .sort(([, listA], [, listB]) => {
+            const lastAt = (list) => list?.[list.length - 1]?.createdAt || 0;
+            return lastAt(listB) - lastAt(listA);
+          })
+          .slice(0, MAX_CACHED_MESSAGE_CHATS)
+          .map(([chatId, list]) => [
+            chatId,
+            (Array.isArray(list) ? list : [])
+              .filter((message) => !message.pending && !String(message.id || '').startsWith('tmp_'))
+              .slice(-MAX_CACHED_MESSAGES_PER_CHAT),
+          ])
+      );
+      const payload = {
+        version: HISTORY_CACHE_VERSION,
+        userId,
+        savedAt: Date.now(),
+        chats,
+        messages: cacheMessages,
+        loadedMessageIds: Object.keys(cacheMessages).filter((chatId) => messagesLoaded[chatId]),
+      };
+      AsyncStorage.setItem(historyCacheKey(userId), JSON.stringify(payload)).catch(() => {
+        // Server data remains authoritative if device storage is unavailable.
+      });
+    }, 250);
+
+    return () => clearTimeout(cacheWriteTimerRef.current);
+  }, [token, user?.id, chats, messages, messagesLoaded]);
+
   /* ---------------- socket lifecycle ---------------- */
   useEffect(() => {
     if (!token) {
       socketRef.current?.disconnect();
       socketRef.current = null;
+      cacheReadyForRef.current = null;
+      clearTimeout(cacheWriteTimerRef.current);
       setChats([]); setMessages({}); setConnected(false); setActivityUnread(0); setChatsLoaded(false);
+      setChatsError(null); setMessagesLoaded({}); setMessagesLoading({}); setMessageErrors({});
       return;
     }
 
@@ -131,6 +277,13 @@ export function ChatProvider({ children }) {
         // once. A real message replacing our optimistic copy is NOT new (the
         // optimistic bubble already animated) — no double animation.
         return { ...prev, [message.chatId]: [...withoutTemp, { ...message, _new: !replaced }] };
+      });
+      setMessagesLoaded((prev) => ({ ...prev, [message.chatId]: true }));
+      setMessageErrors((prev) => {
+        if (!prev[message.chatId]) return prev;
+        const next = { ...prev };
+        delete next[message.chatId];
+        return next;
       });
     });
 
@@ -162,6 +315,14 @@ export function ChatProvider({ children }) {
         const next = { ...prev };
         delete next[chatId];
         return next;
+      });
+      [setMessagesLoaded, setMessagesLoading, setMessageErrors].forEach((setState) => {
+        setState((prev) => {
+          if (!(chatId in prev)) return prev;
+          const next = { ...prev };
+          delete next[chatId];
+          return next;
+        });
       });
     });
 
@@ -286,10 +447,9 @@ export function ChatProvider({ children }) {
       api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
     });
 
-    api.chats().then(({ chats }) => { setChats(sortChats(chats)); setChatsLoaded(true); })
-      // Even a failed first fetch ends the skeleton state so the list never
-      // shimmers forever (pull-to-refresh remains available).
-      .catch(() => setChatsLoaded(true));
+    // Conversation startup hydration/refresh is handled by the durable-cache
+    // effect above. Keep activity independent so either request can fail
+    // without making the chat history appear empty.
     api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
 
     return () => {
@@ -452,8 +612,19 @@ export function ChatProvider({ children }) {
   /* ---------------- actions ---------------- */
 
   const refreshChats = useCallback(async () => {
-    const { chats } = await api.chats();
-    setChats(sortChats(chats));
+    setChatsError(null);
+    try {
+      const result = await api.chats();
+      if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
+      setChats(sortChats(result.chats));
+      setChatsLoaded(true);
+      return result.chats;
+    } catch (error) {
+      // Never replace cached/live rows with [] on a transport/backend failure.
+      setChatsError('Unable to load conversations. Your saved history is still available.');
+      setChatsLoaded(true);
+      throw error;
+    }
   }, []);
 
   const refreshActivity = useCallback(async () => {
@@ -466,8 +637,28 @@ export function ChatProvider({ children }) {
   }, []);
 
   const loadMessages = useCallback(async (chatId) => {
-    const { messages: list } = await api.messages(chatId);
-    setMessages((prev) => ({ ...prev, [chatId]: list }));
+    setMessagesLoading((prev) => ({ ...prev, [chatId]: true }));
+    setMessageErrors((prev) => {
+      if (!prev[chatId]) return prev;
+      const next = { ...prev };
+      delete next[chatId];
+      return next;
+    });
+    try {
+      const result = await api.messages(chatId);
+      if (!Array.isArray(result?.messages)) throw new Error('Invalid messages response');
+      setMessages((prev) => ({ ...prev, [chatId]: result.messages }));
+      setMessagesLoaded((prev) => ({ ...prev, [chatId]: true }));
+      return result.messages;
+    } catch (error) {
+      // Preserve any cached/already-loaded messages and expose a real error
+      // state instead of rendering "the beginning of your conversation".
+      setMessagesLoaded((prev) => ({ ...prev, [chatId]: true }));
+      setMessageErrors((prev) => ({ ...prev, [chatId]: 'Unable to load messages. Check your connection and retry.' }));
+      throw error;
+    } finally {
+      setMessagesLoading((prev) => ({ ...prev, [chatId]: false }));
+    }
   }, []);
 
   const sendMessage = useCallback((chatId, payload) => {
@@ -549,7 +740,9 @@ export function ChatProvider({ children }) {
   return (
     <ChatContext.Provider
       value={{
-        chats, chatsLoaded, messages, typing, connected, activityUnread,
+        chats, chatsLoaded, chatsError,
+        messages, messagesLoaded, messagesLoading, messageErrors,
+        typing, connected, activityUnread,
         refreshChats, refreshActivity, loadMessages, sendMessage, markRead,
         setTypingState, react, deleteMessage, editMessage, createPoll, votePoll,
         upsertChat, onPostEvent, onStatusEvent, onCommunityEvent, onColleagueEvent, onChatRequestEvent,

@@ -35,7 +35,8 @@ import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../the
 function ConversationContent({ route, navigation, embedded = false, themePicker = null }) {
   const { chatId, initialChat = null } = route.params || {};
   const {
-    chats, messages, typing, refreshChats, loadMessages, sendMessage, markRead, setTypingState,
+    chats, messages, messagesLoaded, messagesLoading, messageErrors,
+    typing, refreshChats, loadMessages, sendMessage, markRead, setTypingState,
     react, deleteMessage, editMessage, createPoll, votePoll, startCall, call, setMessages,
   } = useChat();
   const { user } = useAuth();
@@ -49,6 +50,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   // Context render before it can draw the conversation shell.
   const chat = chats.find((c) => c.id === chatId) || initialChat;
   const list = messages[chatId] || [];
+  const messageHistoryLoaded = !!messagesLoaded[chatId];
+  const messageHistoryLoading = !!messagesLoading[chatId];
+  const messageHistoryError = messageErrors[chatId] || null;
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -621,6 +625,16 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         </FadeSlide>
       )}
 
+      {!!messageHistoryError && list.length > 0 && (
+        <View style={[s.historyError, { backgroundColor: theme.dangerContainer, borderColor: theme.danger }]}>
+          <Icon name="alert-circle-outline" size={16} color={theme.danger} />
+          <Text style={[type.bodySm, { color: theme.text, flex: 1 }]}>Showing saved messages. Refresh failed.</Text>
+          <Pressable onPress={() => loadMessages(chatId).catch(() => {})} hitSlop={7}>
+            <Text style={[type.labelXs, { color: theme.danger }]}>RETRY</Text>
+          </Pressable>
+        </View>
+      )}
+
       <FlatList
         ref={listRef}
         style={s.messagesList}
@@ -673,21 +687,41 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
           )
         }
         ListEmptyComponent={
-          <View style={s.emptyChat}>
-            {/* slow, calm float so the empty state feels alive but never busy */}
-            <FloatLoop amplitude={4} duration={3600}>
-              <View style={{ alignItems: 'center', gap: 10 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-                  <Emoji char="✒️" size={15} />
-                  <Text style={[type.bodySm, { color: theme.muted }]}>This is the beginning of your conversation.</Text>
+          !messageHistoryLoaded || messageHistoryLoading ? (
+            <View style={s.emptyChat}>
+              <ActivityIndicator color={theme.primary} />
+              <Text style={[type.labelSm, { color: theme.muted, marginTop: 12 }]}>LOADING MESSAGES…</Text>
+            </View>
+          ) : messageHistoryError ? (
+            <View style={s.emptyChat}>
+              <Icon name="alert-circle-outline" size={26} color={theme.danger} />
+              <Text style={[type.bodyStrong, { color: theme.text, marginTop: 10 }]}>Unable to load messages</Text>
+              <Text style={[type.bodySm, { color: theme.muted, marginTop: 4, textAlign: 'center' }]}>Your conversation was not erased.</Text>
+              <Pressable
+                onPress={() => loadMessages(chatId).catch(() => {})}
+                style={({ pressed }) => [s.historyRetry, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}
+              >
+                <Icon name="refresh" size={15} color={theme.ink} />
+                <Text style={[type.labelSm, { color: theme.ink }]}>RETRY</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={s.emptyChat}>
+              {/* Only a successful empty response can show a true beginning. */}
+              <FloatLoop amplitude={4} duration={3600}>
+                <View style={{ alignItems: 'center', gap: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                    <Emoji char="✒️" size={15} />
+                    <Text style={[type.bodySm, { color: theme.muted }]}>This is the beginning of your conversation.</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                    <Text style={[type.bodySm, { color: theme.muted }]}>Say hello</Text>
+                    <Emoji char="👋" size={16} />
+                  </View>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-                  <Text style={[type.bodySm, { color: theme.muted }]}>Say hello</Text>
-                  <Emoji char="👋" size={16} />
-                </View>
-              </View>
-            </FloatLoop>
-          </View>
+              </FloatLoop>
+            </View>
+          )
         }
       />
 
@@ -1103,6 +1137,14 @@ const makeStyles = (t) => StyleSheet.create({
   },
   messagesList: { flex: 1, minHeight: 0 },
   emptyChat: { alignItems: 'center', justifyContent: 'center', padding: 40 },
+  historyError: {
+    flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1,
+    marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 11, paddingVertical: 8,
+  },
+  historyRetry: {
+    minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 7,
+    paddingHorizontal: 14, paddingVertical: 8, marginTop: 14,
+  },
   missingToast: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 9,
