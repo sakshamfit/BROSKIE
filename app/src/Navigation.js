@@ -11,8 +11,9 @@ import { useChat } from './store/ChatContext';
 import useResponsive from './hooks/useResponsive';
 import { Loading, CountBead } from './components/common';
 import { marker, stroke } from './theme';
-import { FadeSlide, haptic, motion, usePressScale } from './motion';
+import { haptic, usePressScale } from './motion';
 import SplitLayout from './DesktopLayout';
+import PageSwipePager from './components/PageSwipePager';
 
 import AuthScreen from './screens/AuthScreen';
 import ChatListScreen from './screens/ChatListScreen';
@@ -45,7 +46,10 @@ function HomeTabs({ navigation }) {
   const unread = chats.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
   const s = makeStyles(theme);
 
-  // Feed first, chat in the centre: Network → See → Chats → Colleagues → Settings.
+  // Feed first, chat in the centre: Network → See → Chats → Colleagues →
+  // Settings. Page-swipe navigation follows THIS order — the existing tab
+  // architecture — and covers the four in-tab sections. Settings stays a
+  // pushed stack screen, so it is not part of the swipe strip.
   const TABS = [
     { key: 'network', label: 'Network', icon: 'people' },
     { key: 'status', label: 'See', icon: 'eye' },
@@ -53,39 +57,38 @@ function HomeTabs({ navigation }) {
     { key: 'colleagues', label: 'Colleagues', icon: 'school-outline', outlineOnly: true },
     { key: 'settings', label: 'Settings', icon: 'settings' },
   ];
+  const PAGES = TABS.slice(0, 4);
+  const pageIndex = Math.max(0, PAGES.findIndex((p) => p.key === tab));
+
+  // The pager feeds this value during a drag so the tab bar responds while
+  // the finger moves (−1 → next page, +1 → previous). Animated only — the
+  // tab bar updates at 60fps without re-rendering the page strip.
+  const swipeProgress = useRef(new Animated.Value(0)).current;
+
+  const openChat = (chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.bg }}>
-        {/* Each section enters with a soft fade + drift, so switching tabs
-            feels like moving through one continuous app, not separate pages.
-            Keyed by tab: only the active section mounts, so no re-animation
-            churn. Direction hints come from the tab's position. */}
-        {tab === 'chats' && (
-          <FadeSlide key="tab-chats" from="up" distance={10} duration={motion.normal} style={{ flex: 1 }}>
-            <ChatListScreen navigation={navigation} />
-          </FadeSlide>
-        )}
-        {tab === 'network' && (
-          <FadeSlide key="tab-network" from="left" distance={14} duration={motion.normal} style={{ flex: 1 }}>
-            <NetworkScreen
-              navigation={navigation}
-              onOpenChat={(chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); }}
-            />
-          </FadeSlide>
-        )}
-        {tab === 'colleagues' && (
-          <FadeSlide key="tab-colleagues" from="right" distance={14} duration={motion.normal} style={{ flex: 1 }}>
-            <ColleaguesScreen
-              onOpenChat={(chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); }}
-            />
-          </FadeSlide>
-        )}
-        {tab === 'status' && (
-          <FadeSlide key="tab-status" from="right" distance={14} duration={motion.normal} style={{ flex: 1 }}>
-            <StatusScreen navigation={navigation} />
-          </FadeSlide>
-        )}
+        {/* Finger-driven page navigation. The active section and its two
+            neighbours stay mounted, so a swipe reveals the next page already
+            rendered — the whole page tracks the finger, then settles with a
+            spring (or returns) on release. The bottom tab bar below stays in
+            sync: navigation state commits only when the gesture completes. */}
+        <PageSwipePager
+          pages={PAGES.map((p) => ({
+            key: p.key,
+            render: () => {
+              if (p.key === 'chats') return <ChatListScreen navigation={navigation} />;
+              if (p.key === 'network') return <NetworkScreen navigation={navigation} onOpenChat={openChat} />;
+              if (p.key === 'colleagues') return <ColleaguesScreen onOpenChat={openChat} />;
+              return <StatusScreen navigation={navigation} />;
+            },
+          }))}
+          index={pageIndex}
+          onIndexChange={(i) => setTab(PAGES[i].key)}
+          progress={swipeProgress}
+        />
       </SafeAreaView>
 
       {/* SafeAreaView only pads the notch/home-indicator; the bar itself owns its own padding
@@ -102,6 +105,9 @@ function HomeTabs({ navigation }) {
         >
           {TABS.map((t) => {
             const active = tab === t.key;
+            // How far this tab sits from the current page (−1/0/+1). The
+            // settings tab is a pushed screen, outside the swipe strip.
+            const rel = t.key === 'settings' ? null : PAGES.findIndex((p) => p.key === t.key) - pageIndex;
             return (
               <TabButton
                 key={t.key}
@@ -116,6 +122,8 @@ function HomeTabs({ navigation }) {
                 color={active ? theme.ink : theme.muted}
                 badge={t.badge}
                 theme={theme}
+                progress={swipeProgress}
+                rel={rel}
               />
             );
           })}
@@ -129,8 +137,12 @@ function HomeTabs({ navigation }) {
  * Bottom-tab item with physical press feedback: the icon scales down while
  * pressed, springs back on release, and the icon pops (outline → filled)
  * only when the tab becomes active — leaving a tab never re-pops it.
+ *
+ * While a page swipe is in progress the tab bar responds to the finger:
+ * the outgoing tab's icon eases down, the incoming tab's icon rises, driven
+ * by the pager's shared Animated progress (no re-renders, 60fps).
  */
-function TabButton({ label, active, onPress, icon, color, badge, theme }) {
+function TabButton({ label, active, onPress, icon, color, badge, theme, progress, rel }) {
   const { scale, onPressIn, onPressOut } = usePressScale(0.9);
   const activePop = useRef(new Animated.Value(active ? 1 : 0)).current;
   const wasActive = useRef(active);
@@ -146,6 +158,23 @@ function TabButton({ label, active, onPress, icon, color, badge, theme }) {
       activePop.setValue(1);
     }
   }, [active, activePop]);
+  // Swipe feedback, relative to this tab's position in the page strip.
+  // rel = 0 (current): ease down as the finger pulls either way.
+  // rel = ±1 (neighbours): ease up as the finger pulls toward them.
+  const swipeScale = progress && rel !== null
+    ? progress.interpolate({
+        inputRange: [-1, 0, 1],
+        outputRange: rel === 1 ? [1.1, 1, 1] : rel === -1 ? [1, 1, 1.1] : [0.9, 1, 0.9],
+        extrapolate: 'clamp',
+      })
+    : 1;
+  const swipeOpacity = progress && rel === 0
+    ? progress.interpolate({
+        inputRange: [-1, 0, 1],
+        outputRange: [0.82, 1, 0.82],
+        extrapolate: 'clamp',
+      })
+    : 1;
   const s = makeStyles(theme);
   return (
     <Pressable
@@ -162,7 +191,7 @@ function TabButton({ label, active, onPress, icon, color, badge, theme }) {
         Platform.OS === 'ios' && pressed && !active ? marker(theme, 1) : null,
       ]}
     >
-      <Animated.View style={{ transform: [{ scale }, { scale: activePop }] }}>
+      <Animated.View style={{ transform: [{ scale }, { scale: activePop }, { scale: swipeScale }], opacity: swipeOpacity }}>
         <View>
           <Icon name={icon} size={23} color={color} />
           {!!badge && badge > 0 && (
