@@ -509,14 +509,18 @@ function hydrateMessage(m, viewerId) {
 
   return {
     id: m.id,
+    clientId: m.client_id || m.id,
     chatId: m.chat_id,
     senderId: m.sender_id,
     type: m.type,
     body: m.deleted ? '' : m.body,
     mediaUrl: m.deleted ? null : m.media_url,
+    mediaThumbUrl: m.deleted ? null : (m.media_thumb_url || null),
     duration: m.duration,
     deleted: !!m.deleted,
     createdAt: m.created_at,
+    clientCreatedAt: m.client_created_at || m.created_at,
+    updatedAt: m.updated_at || m.created_at,
     expiresAt: m.expires_at || null,
     edited: !!m.edited,
     forwarded: !!m.forwarded_from,
@@ -2183,7 +2187,7 @@ app.post('/api/messages/:id/disappear', requireAuth, (req, res) => {
   if (m.sender_id !== req.userId) return res.status(403).json({ error: 'Only the sender can set a timer on a message' });
   const seconds = clampDisappear(req.body.seconds);
   const expiresAt = seconds ? now() + seconds * 1000 : null;
-  db.prepare('UPDATE messages SET expires_at = ? WHERE id = ?').run(expiresAt, m.id);
+  db.prepare('UPDATE messages SET expires_at = ?, updated_at = ? WHERE id = ?').run(expiresAt, now(), m.id);
   const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(m.id);
   emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
   emitToChat(m.chat_id, 'chat:updated', (viewer) => chatSummary(m.chat_id, viewer));
@@ -2250,12 +2254,98 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
     return res.status(403).json({ error: 'Accept this message request before opening the chat' });
   }
 
-  const limit = Math.min(Number(req.query.limit) || 100, 300);
-  const rows = db
-    .prepare('SELECT * FROM messages WHERE chat_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT ?')
-    .all(req.params.id, membership.cleared_at || 0, limit)
-    .reverse();
-  res.json({ messages: rows.map((m) => hydrateMessage(m, req.userId)) });
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+  const clearedAt = membership.cleared_at || 0;
+  const after = req.query.after != null && req.query.after !== '' ? Number(req.query.after) : null;
+  const afterId = String(req.query.afterId || '');
+  const before = req.query.before != null && req.query.before !== '' ? Number(req.query.before) : null;
+  const beforeId = String(req.query.beforeId || '');
+
+  let rows;
+  let hasMore = false;
+  if (after != null && Number.isFinite(after)) {
+    rows = db.prepare(
+      `SELECT * FROM messages
+       WHERE chat_id = ? AND created_at > ?
+         AND (created_at > ? OR (created_at = ? AND id > ?))
+       ORDER BY created_at ASC, id ASC
+       LIMIT ?`
+    ).all(req.params.id, clearedAt, after, after, afterId, limit + 1);
+    hasMore = rows.length > limit;
+    if (hasMore) rows = rows.slice(0, limit);
+  } else if (before != null && Number.isFinite(before)) {
+    rows = db.prepare(
+      `SELECT * FROM messages
+       WHERE chat_id = ? AND created_at > ?
+         AND (created_at < ? OR (created_at = ? AND id < ?))
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?`
+    ).all(req.params.id, clearedAt, before, before, beforeId, limit + 1);
+    hasMore = rows.length > limit;
+    if (hasMore) rows = rows.slice(0, limit);
+    rows.reverse();
+  } else {
+    rows = db.prepare(
+      `SELECT * FROM messages WHERE chat_id = ? AND created_at > ?
+       ORDER BY created_at DESC, id DESC LIMIT ?`
+    ).all(req.params.id, clearedAt, limit + 1);
+    hasMore = rows.length > limit;
+    if (hasMore) rows = rows.slice(0, limit);
+    rows.reverse();
+  }
+
+  const newest = rows[rows.length - 1];
+  const oldest = rows[0];
+  res.json({
+    messages: rows.map((m) => hydrateMessage(m, req.userId)),
+    hasMore,
+    cursor: {
+      after: newest ? newest.created_at : after,
+      afterId: newest ? newest.id : afterId || null,
+      before: oldest ? oldest.created_at : before,
+      beforeId: oldest ? oldest.id : beforeId || null,
+    },
+  });
+});
+
+app.post('/api/chats/:id/messages', requireAuth, (req, res) => {
+  try {
+    const outcome = deliverUserMessage(req.userId, { ...(req.body || {}), chatId: req.params.id });
+    if (outcome.error) return res.status(outcome.status || 400).json({ error: outcome.error });
+    fanoutNewMessage(outcome, req.userId, req.body?.tempId || req.body?.clientId || null);
+    res.json({
+      message: hydrateMessage(outcome.row, req.userId),
+      duplicate: !!outcome.duplicate,
+    });
+  } catch (error) {
+    console.error('[messages send]', error);
+    res.status(500).json({ error: 'Could not send message' });
+  }
+});
+
+app.get('/api/sync/messages', requireAuth, (req, res) => {
+  const after = Number(req.query.after) || 0;
+  const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+  const rows = db.prepare(
+    `SELECT m.* FROM messages m
+     JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
+     LEFT JOIN chat_requests cr ON cr.chat_id = m.chat_id
+     WHERE COALESCE(m.updated_at, m.created_at) > ?
+       AND m.created_at > COALESCE(cm.cleared_at, 0)
+       AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
+     ORDER BY COALESCE(m.updated_at, m.created_at) ASC, m.id ASC
+     LIMIT ?`
+  ).all(req.userId, after, req.userId, limit + 1);
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const cursor = page.length
+    ? page.reduce((max, row) => Math.max(max, row.updated_at || row.created_at || 0), after)
+    : after;
+  res.json({
+    messages: page.map((m) => hydrateMessage(m, req.userId)),
+    cursor,
+    hasMore,
+  });
 });
 
 app.get('/api/search', requireAuth, (req, res) => {
@@ -2335,10 +2425,11 @@ function insertSystemMessage(chatId, body) {
  * receipt. `msg` may carry expires_at / forwarded_from / poll_id / edited.
  */
 function persistMessage(msg, chatId) {
-  db.prepare(
-    `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, duration, reply_to, expires_at, edited, forwarded_from, poll_id, status_id, status_snapshot, created_at)
-     VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @duration, @reply_to, @expires_at, @edited, @forwarded_from, @poll_id, @status_id, @status_snapshot, @created_at)`
-  ).run({
+  return persistMessageTx(msg, chatId);
+}
+
+const persistMessageTx = db.transaction((msg, chatId) => {
+  const payload = {
     ...msg,
     expires_at: msg.expires_at ?? null,
     edited: msg.edited ?? 0,
@@ -2346,11 +2437,159 @@ function persistMessage(msg, chatId) {
     poll_id: msg.poll_id ?? null,
     status_id: msg.status_id ?? null,
     status_snapshot: msg.status_snapshot ?? null,
+    media_thumb_url: msg.media_thumb_url ?? null,
+    client_id: msg.client_id ?? msg.id,
+    client_created_at: msg.client_created_at ?? msg.created_at,
+    updated_at: msg.updated_at ?? msg.created_at,
+  };
+
+  if (payload.client_id) {
+    const existing = db.prepare('SELECT * FROM messages WHERE client_id = ?').get(payload.client_id);
+    if (existing) return { duplicate: true, row: existing };
+  }
+  const existingId = db.prepare('SELECT * FROM messages WHERE id = ?').get(payload.id);
+  if (existingId) return { duplicate: true, row: existingId };
+
+  try {
+    db.prepare(
+      `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, media_thumb_url, duration, reply_to, expires_at, edited, forwarded_from, poll_id, status_id, status_snapshot, client_id, client_created_at, updated_at, created_at)
+       VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @media_thumb_url, @duration, @reply_to, @expires_at, @edited, @forwarded_from, @poll_id, @status_id, @status_snapshot, @client_id, @client_created_at, @updated_at, @created_at)`
+    ).run(payload);
+  } catch (error) {
+    if (String(error.message || '').includes('UNIQUE')) {
+      const existing = db.prepare('SELECT * FROM messages WHERE id = ? OR client_id = ?').get(payload.id, payload.client_id);
+      if (existing) return { duplicate: true, row: existing };
+    }
+    throw error;
+  }
+
+  db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(payload.created_at, chatId);
+  memberIds(chatId).filter((x) => x !== payload.sender_id && sockets.has(x)).forEach((x) => {
+    db.prepare('INSERT OR IGNORE INTO receipts (message_id, user_id, state, at) VALUES (?,?,?,?)').run(payload.id, x, 'delivered', now());
   });
-  db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(msg.created_at, chatId);
-  memberIds(chatId).filter((x) => x !== msg.sender_id && sockets.has(x)).forEach((x) => {
-    db.prepare('INSERT OR IGNORE INTO receipts (message_id, user_id, state, at) VALUES (?,?,?,?)').run(msg.id, x, 'delivered', now());
-  });
+  return { duplicate: false, row: db.prepare('SELECT * FROM messages WHERE id = ?').get(payload.id) };
+});
+
+const CLIENT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function normalizeClientId(raw) {
+  const value = String(raw || '').trim();
+  return CLIENT_ID_RE.test(value) ? value.toLowerCase() : null;
+}
+
+function touchMessage(id) {
+  db.prepare('UPDATE messages SET updated_at = ? WHERE id = ?').run(now(), id);
+}
+
+/** Shared send path for Socket.IO and REST. Idempotent on clientId. */
+function deliverUserMessage(uid, data) {
+  const {
+    chatId, type = 'text', body = '', mediaUrl = null, mediaThumbUrl = null,
+    duration = 0, replyTo = null, tempId, pollId = null, disappearAt = null,
+    clientId = null, clientCreatedAt = null,
+  } = data || {};
+  if (!chatId) return { error: 'Missing chat', status: 400 };
+
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
+  if (!isMember) return { error: 'Not a member', status: 403 };
+
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
+  if (!chat) return { error: 'Chat not found', status: 404 };
+  if (chat.type === 'direct') {
+    const otherId = memberIds(chatId).find((x) => x !== uid);
+    if (otherId && blockedEitherWay(uid, otherId)) return { error: "You can't message this person", status: 403 };
+  }
+
+  let request = pendingChatRequest(chatId);
+  if (request && request.receiver_id === uid) {
+    return { error: 'Accept this message request before replying', status: 403 };
+  }
+  if (!request && chat.type === 'direct') {
+    const otherId = memberIds(chatId).find((x) => x !== uid);
+    if (otherId && !areContacts(uid, otherId)) {
+      const tReq = now();
+      db.prepare(
+        `INSERT INTO chat_requests (chat_id, sender_id, receiver_id, status, created_at)
+         VALUES (?,?,?,?,?)`
+      ).run(chatId, uid, otherId, 'pending', tReq);
+      request = pendingChatRequest(chatId);
+    }
+  }
+
+  let expiresAt = null;
+  if (disappearAt && Number(disappearAt) > now()) expiresAt = Number(disappearAt);
+  else if (chat.disappear_seconds) expiresAt = now() + chat.disappear_seconds * 1000;
+
+  let replyToId = replyTo || null;
+  if (replyToId) {
+    const quoted = db.prepare('SELECT id FROM messages WHERE id = ? AND chat_id = ?').get(replyToId, chatId);
+    if (!quoted) replyToId = null;
+  }
+
+  const created = now();
+  const normalizedId = normalizeClientId(clientId) || normalizeClientId(tempId);
+  const id = normalizedId || nano();
+  let clientCreated = Number(clientCreatedAt);
+  if (!Number.isFinite(clientCreated) || clientCreated <= 0 || clientCreated > created + 120000) {
+    clientCreated = created;
+  }
+
+  const msg = {
+    id,
+    chat_id: chatId,
+    sender_id: uid,
+    type,
+    body: String(body || '').slice(0, 5000),
+    media_url: mediaUrl || null,
+    media_thumb_url: mediaThumbUrl || null,
+    duration: Number(duration) || 0,
+    reply_to: replyToId,
+    expires_at: expiresAt,
+    edited: 0,
+    forwarded_from: null,
+    poll_id: pollId || null,
+    client_id: normalizedId || id,
+    client_created_at: clientCreated,
+    updated_at: created,
+    created_at: created,
+  };
+
+  const persisted = persistMessage(msg, chatId);
+  return { ...persisted, chatId, request, chat };
+}
+
+function fanoutNewMessage(outcome, uid, tempId) {
+  const { row, duplicate, chatId, request, chat } = outcome;
+  if (duplicate || !row) return;
+  emitToChat(chatId, 'message:new', (viewer) => ({
+    message: hydrateMessage(row, viewer),
+    tempId: viewer === uid ? tempId : undefined,
+  }));
+  if (request) {
+    emitToUser(request.sender_id, 'chat:updated', chatSummary(chatId, request.sender_id));
+    emitToUser(request.receiver_id, 'chat:request', hydrateChatRequest(request, request.receiver_id));
+    push.notifyChatRequest({ request, senderId: uid, chatId, message: row });
+  } else {
+    emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+    push.notifyMessage({ chatId, chat, message: row, senderId: uid });
+  }
+
+  // Safety analysis runs AFTER delivery — messaging is never blocked or
+  // delayed by moderation. Text messages only, with a little recent
+  // context for the spam/repetition detector.
+  if (row.type === 'text' && row.body) {
+    setImmediate(() => {
+      try {
+        const recent = db
+          .prepare('SELECT sender_id, body FROM messages WHERE chat_id = ? AND type != ? ORDER BY created_at DESC LIMIT 8')
+          .all(chatId, 'system')
+          .reverse();
+        moderation.recordAutoDetection(
+          { userId: uid, chatId, messageId: row.id, text: row.body, recentMessages: recent },
+          moderationIO
+        );
+      } catch {}
+    });
+  }
 }
 
 /** Hard-delete a message row plus its sidecar rows (reactions/receipts/stars/poll). */
@@ -3688,95 +3927,11 @@ io.on('connection', (socket) => {
 
   socket.on('message:send', (data, ack) => {
     try {
-      const { chatId, type = 'text', body = '', mediaUrl = null, duration = 0, replyTo = null, tempId, pollId = null, disappearAt = null } = data || {};
-      const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
-      if (!isMember) return ack?.({ error: 'Not a member' });
-
-      // Safety enforcement state is checked server-side before storing.
-      const gate = moderation.moderationGate(uid);
-      if (gate.blocked) return ack?.({ error: gate.error });
-
-      // Blocking is enforced here (not just at chat-creation time) so it
-      // also stops messages in an already-existing direct chat.
-      const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
-      if (chat && chat.type === 'direct') {
-        const otherId = memberIds(chatId).find((x) => x !== uid);
-        if (otherId && blockedEitherWay(uid, otherId)) return ack?.({ error: "You can't message this person" });
-      }
-      let request = pendingChatRequest(chatId);
-      if (request && request.receiver_id === uid) {
-        return ack?.({ error: 'Accept this message request before replying' });
-      }
-      // First real message to a stranger opens the request. Tapping their
-      // user id / opening the composer never does this on its own.
-      if (!request && chat && chat.type === 'direct') {
-        const otherId = memberIds(chatId).find((x) => x !== uid);
-        if (otherId && !areContacts(uid, otherId)) {
-          const tReq = now();
-          db.prepare(
-            `INSERT INTO chat_requests (chat_id, sender_id, receiver_id, status, created_at)
-             VALUES (?,?,?,?,?)`
-          ).run(chatId, uid, otherId, 'pending', tReq);
-          request = pendingChatRequest(chatId);
-        }
-      }
-
-      // Disappearing messages: per-message override wins, otherwise the
-      // chat's default timer applies. Both are clamped to known presets.
-      let expiresAt = null;
-      if (disappearAt && Number(disappearAt) > now()) expiresAt = Number(disappearAt);
-      else if (chat.disappear_seconds) expiresAt = now() + chat.disappear_seconds * 1000;
-
-      // Swipe-to-reply, hover Reply, and the long-press menu all send the
-      // same `replyTo` id. Persist it on the existing messages.reply_to
-      // column — never a separate swipe table. Ignore ids that aren't a
-      // real message in this chat so a stale swipe can't orphan the quote.
-      let replyToId = replyTo || null;
-      if (replyToId) {
-        const quoted = db.prepare('SELECT id FROM messages WHERE id = ? AND chat_id = ?').get(replyToId, chatId);
-        if (!quoted) replyToId = null;
-      }
-
-      const msg = {
-        id: nano(), chat_id: chatId, sender_id: uid, type,
-        body: String(body).slice(0, 5000), media_url: mediaUrl,
-        duration: Number(duration) || 0, reply_to: replyToId,
-        expires_at: expiresAt, edited: 0, forwarded_from: null, poll_id: pollId,
-        created_at: now(),
-      };
-      persistMessage(msg, chatId);
-
-      const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id);
-      emitToChat(chatId, 'message:new', (viewer) => ({ message: hydrateMessage(row, viewer), tempId: viewer === uid ? tempId : undefined }));
-      if (request) {
-        // Keep the receiver's main inbox clean; update the Requests panel
-        // instead while the sender still sees normal optimistic chat updates.
-        emitToUser(request.sender_id, 'chat:updated', chatSummary(chatId, request.sender_id));
-        emitToUser(request.receiver_id, 'chat:request', hydrateChatRequest(request, request.receiver_id));
-        push.notifyChatRequest({ request, senderId: uid, chatId, message: row });
-      } else {
-        emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
-        push.notifyMessage({ chatId, chat, message: row, senderId: uid });
-      }
-      ack?.({ message: hydrateMessage(row, uid), tempId });
-
-      // Safety analysis runs AFTER delivery — messaging is never blocked or
-      // delayed by moderation. Text messages only, with a little recent
-      // context for the spam/repetition detector.
-      if (type === 'text' && body) {
-        setImmediate(() => {
-          try {
-            const recent = db
-              .prepare('SELECT sender_id, body FROM messages WHERE chat_id = ? AND type != ? ORDER BY created_at DESC LIMIT 8')
-              .all(chatId, 'system')
-              .reverse();
-            moderation.recordAutoDetection(
-              { userId: uid, chatId, messageId: row.id, text: row.body, recentMessages: recent },
-              moderationIO
-            );
-          } catch {}
-        });
-      }
+      const outcome = deliverUserMessage(uid, data || {});
+      if (outcome.error) return ack?.({ error: outcome.error });
+      const tempId = data?.tempId || data?.clientId || null;
+      fanoutNewMessage(outcome, uid, tempId);
+      ack?.({ message: hydrateMessage(outcome.row, uid), tempId, duplicate: !!outcome.duplicate });
     } catch (e) {
       ack?.({ error: e.message });
     }
@@ -3790,7 +3945,7 @@ io.on('connection', (socket) => {
       if (m.type !== 'text') return ack?.({ error: 'Only text messages can be edited' });
       const text = String(body || '').trim();
       if (!text) return ack?.({ error: 'Message cannot be empty' });
-      db.prepare('UPDATE messages SET body = ?, edited = 1 WHERE id = ?').run(text.slice(0, 5000), messageId);
+      db.prepare('UPDATE messages SET body = ?, edited = 1, updated_at = ? WHERE id = ?').run(text.slice(0, 5000), now(), messageId);
       const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
       emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
       emitToChat(m.chat_id, 'chat:updated', (viewer) => chatSummary(m.chat_id, viewer));
@@ -3905,7 +4060,7 @@ io.on('connection', (socket) => {
   socket.on('message:delete', ({ messageId }) => {
     const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
     if (!m || m.sender_id !== uid) return;
-    db.prepare('UPDATE messages SET deleted = 1 WHERE id = ?').run(messageId);
+    db.prepare('UPDATE messages SET deleted = 1, updated_at = ? WHERE id = ?').run(now(), messageId);
     // A poll "deleted for everyone" takes its votes with it.
     if (m.type === 'poll' && m.poll_id) db.prepare('DELETE FROM polls WHERE id = ?').run(m.poll_id);
     const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);

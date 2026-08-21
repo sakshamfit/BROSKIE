@@ -16,6 +16,8 @@
     "backup": "cd server && npm run backup",
     "audit:chats": "cd server && npm run audit:chats --",
     "test:chat-history": "cd server && npm run test:chat-history",
+    "test:offline-messaging": "cd server && npm run test:offline-messaging",
+    "test:message-state": "cd server && npm run test:message-state",
     "test:push": "cd server && npm run test:push",
     "test:phase2": "cd server && npm run test:phase2",
     "test:phase3": "cd server && npm run test:phase3",

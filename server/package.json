@@ -15,6 +15,8 @@
     "backup": "node src/backup.js",
     "audit:chats": "node src/chat-audit.js",
     "test:chat-history": "node test-chat-history.js",
+    "test:offline-messaging": "node test-offline-messaging.js",
+    "test:message-state": "node test-message-state.js",
     "test:push": "node test-push.js",
     "test:phase2": "node test-phase2.js",
     "test:phase3": "node test-phase3.js",
