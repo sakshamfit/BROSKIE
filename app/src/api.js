@@ -322,6 +322,12 @@ export const api = {
   deleteAccount: (password) => request('/api/me', { method: 'DELETE', body: { password } }),
   updateMe: (payload) => request('/api/me', { method: 'PATCH', body: payload }),
   updateSettings: (payload) => request('/api/me/settings', { method: 'PATCH', body: payload }),
+  // Push notifications: register this device's Expo token / remove it on logout.
+  registerPushToken: (payload) =>
+    request('/api/push/token', { method: 'POST', body: payload, timeoutMs: 10000, retries: 1 }),
+  unregisterPushToken: (token) =>
+    request('/api/push/token', { method: 'DELETE', body: { token }, timeoutMs: 10000, retries: 0 }),
+  pushInfo: () => request('/api/push/info', { timeoutMs: 10000, retries: 1 }),
   changePassword: (payload) => request('/api/me/password', { method: 'POST', body: payload }),
   users: (q = '', { contactsOnly = false } = {}) =>
     request(`/api/users?q=${encodeURIComponent(q)}${contactsOnly ? '&contacts=1' : ''}`),

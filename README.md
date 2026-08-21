@@ -115,6 +115,22 @@ tapping a username never sends a request — only sending a message does.
 presence, single ✓ sent → double ✓✓ delivered → blue ✓✓ read, live unread badges,
 receipts that flush when a recipient reconnects.
 
+**Push notifications (Android first)** — when the app is closed or backgrounded, the
+server sends an Expo push for: new direct/group messages (with a "mentioned you"
+variant for @mentions), message/connect requests in Activity, colleague requests,
+likes and comments on your Network posts, community join approvals, and incoming
+calls. Tapping the notification opens the exact screen (that Conversation, Activity,
+or the Colleagues tab) via the `plusone://` deep-link route carried in the payload.
+Pushes respect everything you'd expect, server-side: per-chat mute (a muted chat
+never pings), notification preferences per type, and **quiet hours** — inside the
+window pushes are delivered silently (a low-importance Android channel) so a 3am
+message is waiting in the morning without waking anyone. The launcher badge is
+stamped on each push (unread chats + pending Activity) and kept in sync in-app.
+One-time Android setup: create a Firebase project, generate an FCM v1 service
+account key, and upload it with `eas credentials -p android` (see APP_STATUS.md).
+iOS push follows the same code path once APNs credentials are added.
+
+
 **Organisation** — chat list sorted by recency with **pinned chats pinned to the top**,
 unread counts, global message search plus **in-chat search that jumps to the match**,
 **starred messages** (save any message, browse them from Chat info or Settings),
@@ -248,6 +264,13 @@ once every other member has a read receipt — so it works identically for group
 
 ## Notes & limits
 
+- **Push notifications** need a fresh app binary (1.4.0+, `versionCode` 6): they
+  add the `expo-notifications` native module, so already-installed APKs cannot
+  pick them up over an OTA update. The server half needs no new environment
+  variables — the Expo Push API requires no server-side key. Android delivery
+  additionally needs a one-time FCM v1 service-account key uploaded via
+  `eas credentials -p android` (or the expo.dev dashboard → Credentials).
+  Until that key is set, Android tokens register fine but Expo cannot deliver.
 - Voice notes request microphone permission, record real WebM (web) or M4A/AAC
   (Android/iOS) audio with `expo-audio`, upload it to the active storage backend,
   and render a playable waveform bubble with the recorded duration.

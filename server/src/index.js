@@ -78,10 +78,18 @@ const DEFAULT_SETTINGS = {
   notifications: {
     messages: true,        // new chat messages
     messagePreview: true,  // show text/photo preview vs "New message"
+    activity: true,        // message requests + colleague requests (push)
+    reactions: true,       // likes/comments on your Network posts (push)
+    calls: true,           // incoming call pushes (ringing)
     status: true,          // someone posted to See
     network: true,         // new Network posts from people you follow-ish (public feed)
     communityActivity: true, // join requests / approvals / added-to-community
     sound: true,
+    // Quiet hours: pushes still arrive but silently (no sound/vibration,
+    // low-importance channel) so a 3am message is there in the morning
+    // without waking anyone. Minutes are 0..1439 local wall-clock;
+    // tzOffsetMinutes is minutes EAST of UTC (client sends its offset).
+    quietHours: { enabled: false, startMinute: 22 * 60, endMinute: 7 * 60, tzOffsetMinutes: 0 },
   },
   privacy: {
     lastSeen: 'everyone',   // everyone | contacts | nobody — who sees your last-seen/online dot
@@ -89,13 +97,39 @@ const DEFAULT_SETTINGS = {
   },
 };
 
+/** Validate/normalize one quiet-hours object against `base`. */
+function sanitizeQuietHours(input, base) {
+  const out = {
+    enabled: base.enabled === true,
+    startMinute: Number(base.startMinute) || 0,
+    endMinute: Number(base.endMinute) || 0,
+    tzOffsetMinutes: Number(base.tzOffsetMinutes) || 0,
+  };
+  if (input && typeof input === 'object') {
+    if (typeof input.enabled === 'boolean') out.enabled = input.enabled;
+    ['startMinute', 'endMinute'].forEach((k) => {
+      const v = Number(input[k]);
+      if (Number.isFinite(v)) out[k] = Math.min(1439, Math.max(0, Math.round(v)));
+    });
+    if (Number.isFinite(Number(input.tzOffsetMinutes))) {
+      out.tzOffsetMinutes = Math.min(840, Math.max(-720, Math.round(Number(input.tzOffsetMinutes))));
+    }
+  }
+  return out;
+}
+
 function sanitizeSettings(input, base = DEFAULT_SETTINGS) {
   const out = { notifications: { ...base.notifications }, privacy: { ...base.privacy } };
   if (input && typeof input === 'object') {
     if (input.notifications && typeof input.notifications === 'object') {
       Object.keys(DEFAULT_SETTINGS.notifications).forEach((k) => {
+        if (k === 'quietHours') return;
         if (typeof input.notifications[k] === 'boolean') out.notifications[k] = input.notifications[k];
       });
+      out.notifications.quietHours = sanitizeQuietHours(
+        input.notifications.quietHours,
+        base.notifications.quietHours || DEFAULT_SETTINGS.notifications.quietHours
+      );
     }
     if (input.privacy && typeof input.privacy === 'object') {
       if (['everyone', 'contacts', 'nobody'].includes(input.privacy.lastSeen)) out.privacy.lastSeen = input.privacy.lastSeen;
@@ -110,6 +144,12 @@ function getSettings(u) {
   try { parsed = JSON.parse(u?.settings || '{}'); } catch { parsed = {}; }
   return sanitizeSettings(parsed);
 }
+
+// Push notifications fan out from the same events that hit Socket.IO.
+// getUser/getSettings are injected lazily (they are consts defined further
+// down) to avoid a circular require.
+const push = require('./push');
+push.init({ getUser: (id) => getUser(id), getSettings: (u) => getSettings(u) });
 
 function areContacts(idA, idB) {
   const [userA, userB] = colleaguePair(idA, idB);
@@ -888,6 +928,34 @@ app.patch('/api/me/settings', requireAuth, (req, res) => {
   res.json({ settings: merged });
 });
 
+/* ------------------------------------------------------------------ */
+/* push notification device registry                                  */
+/* ------------------------------------------------------------------ */
+
+/** Register (or re-register) this device's Expo push token. Called on sign-in
+ *  and whenever the OS rotates the token. A token belongs to exactly one
+ *  account at a time — signing in on a used device reassigns it. */
+app.post('/api/push/token', requireAuth, (req, res) => {
+  try {
+    const { token, platform, deviceId, appVersion } = req.body || {};
+    const saved = push.registerToken(req.userId, { token, platform, deviceId, appVersion });
+    res.json({ ok: true, token: saved.token });
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Could not register push token' });
+  }
+});
+
+/** Remove this device's token (log out / notifications off). */
+app.delete('/api/push/token', requireAuth, (req, res) => {
+  const removed = push.unregisterToken(req.userId, req.body?.token);
+  res.json({ ok: true, removed });
+});
+
+/** Which devices currently have push registered (for the Notifications screen). */
+app.get('/api/push/info', requireAuth, (req, res) => {
+  res.json(push.describeFor(req.userId));
+});
+
 app.patch('/api/me', requireAuth, (req, res) => {
   const { name, about, avatar, username, phone } = req.body || {};
   const u = getUser(req.userId);
@@ -1177,6 +1245,7 @@ app.post('/api/colleagues/:userId/request', requireAuth, (req, res) => {
      VALUES (?,?,?,?,?)`
   ).run(request.id, request.senderId, request.receiverId, 'pending', request.createdAt);
   emitToUser(targetId, 'colleague:updated', { type: 'request', requestId: request.id, user: publicUser(getUser(req.userId)) });
+  push.notifyColleagueRequest({ targetId, sender: getUser(req.userId) });
   res.json({ status: 'outgoing', requestId: request.id });
 });
 
@@ -1396,6 +1465,7 @@ app.post('/api/connect/:userId', requireAuth, (req, res) => {
   const request = pendingChatRequest(chatId);
   emitToUser(req.userId, 'chat:updated', chatSummary(chatId, req.userId));
   emitToUser(targetId, 'chat:request', hydrateChatRequest(request, targetId));
+  push.notifyChatRequest({ request, senderId: req.userId, chatId });
   res.json({ status: 'outgoing', chatId, requestId: chatId });
 });
 
@@ -1889,6 +1959,7 @@ app.post('/api/messages/forward', requireAuth, (req, res) => {
     const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id);
     emitToChat(chatId, 'message:new', (viewer) => ({ message: hydrateMessage(row, viewer) }));
     emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+    push.notifyMessage({ chatId, chat, message: row, senderId: req.userId });
     forwarded += 1;
   });
 
@@ -2263,6 +2334,8 @@ app.post('/api/status/:id/reply', requireAuth, (req, res) => {
     emitToUser(uid, 'message:new', { message: hydrated });
     emitToUser(uid, 'chat:updated', chatSummary(chatId, uid));
   });
+  // A status reply is a real message to the author — it pushes like one.
+  push.notifyMessage({ chatId, message: row, senderId: req.userId });
   if (isNewChat) {
     // Ensure the receiver that has never chatted before gets a chat:new too
     // (chat:updated already covers it, but belt-and-braces for older clients).
@@ -2460,7 +2533,11 @@ app.post('/api/posts/:id/like', requireAuth, (req, res) => {
 
   const existing = db.prepare('SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?').get(row.id, req.userId);
   if (existing) db.prepare('DELETE FROM post_likes WHERE post_id = ? AND user_id = ?').run(row.id, req.userId);
-  else db.prepare('INSERT INTO post_likes (post_id, user_id, at) VALUES (?,?,?)').run(row.id, req.userId, now());
+  else {
+    db.prepare('INSERT INTO post_likes (post_id, user_id, at) VALUES (?,?,?)').run(row.id, req.userId, now());
+    // Notify the author on the like itself (never the unlike).
+    push.notifyPostLike({ ownerId: row.user_id, actor: getUser(req.userId), post: row });
+  }
 
   const likes = db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id = ?').get(row.id).c;
   postAudienceIds(row.id, row.user_id, row.audience || 'public').forEach((uid) => emitToUser(uid, 'post:likes', { id: row.id, likes }));
@@ -2500,6 +2577,9 @@ app.post('/api/posts/:id/comments', requireAuth, (req, res) => {
 
   const c = { id: nano(), post_id: post.id, user_id: req.userId, body: text.slice(0, 600), created_at: now() };
   db.prepare('INSERT INTO post_comments (id, post_id, user_id, body, created_at) VALUES (@id,@post_id,@user_id,@body,@created_at)').run(c);
+  if (post.user_id !== req.userId) {
+    push.notifyPostComment({ ownerId: post.user_id, actor: getUser(req.userId), post, body: c.body });
+  }
 
   const count = db.prepare('SELECT COUNT(*) c FROM post_comments WHERE post_id = ?').get(post.id).c;
   postAudienceIds(post.id, post.user_id, post.audience || 'public').forEach((uid) => emitToUser(uid, 'post:comments', { id: post.id, comments: count }));
@@ -2696,8 +2776,9 @@ app.post('/api/communities/:id/join', requireAuth, (req, res) => {
   if (row.join_policy === 'request') {
     db.prepare('INSERT OR IGNORE INTO community_requests (community_id, user_id, requested_at) VALUES (?,?,?)').run(row.id, req.userId, t);
     const requester = getUser(req.userId);
-    db.prepare('SELECT user_id FROM community_members WHERE community_id = ? AND role = ?').all(row.id, 'admin')
-      .forEach((a) => emitToUser(a.user_id, 'community:request', { communityId: row.id, user: publicUser(requester) }));
+    const admins = db.prepare('SELECT user_id FROM community_members WHERE community_id = ? AND role = ?').all(row.id, 'admin');
+    admins.forEach((a) => emitToUser(a.user_id, 'community:request', { communityId: row.id, user: publicUser(requester) }));
+    push.notifyCommunityRequest({ adminIds: admins.map((a) => a.user_id), requester, community: row });
     return res.json({ status: 'requested' });
   }
 
@@ -2777,6 +2858,7 @@ app.post('/api/communities/:id/requests/:userId', requireAuth, (req, res) => {
     }
     db.prepare('UPDATE communities SET updated_at = ? WHERE id = ?').run(t, row.id);
     emitToUser(targetId, 'community:approved', { id: row.id });
+    push.notifyCommunityApproved({ userId: targetId, community: row });
   } else {
     emitToUser(targetId, 'community:declined', { id: row.id });
   }
@@ -2971,8 +3053,10 @@ io.on('connection', (socket) => {
         // instead while the sender still sees normal optimistic chat updates.
         emitToUser(request.sender_id, 'chat:updated', chatSummary(chatId, request.sender_id));
         emitToUser(request.receiver_id, 'chat:request', hydrateChatRequest(request, request.receiver_id));
+        push.notifyChatRequest({ request, senderId: uid, chatId, message: row });
       } else {
         emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+        push.notifyMessage({ chatId, chat, message: row, senderId: uid });
       }
       ack?.({ message: hydrateMessage(row, uid), tempId });
     } catch (e) {
@@ -3029,6 +3113,7 @@ io.on('connection', (socket) => {
       const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id);
       emitToChat(chatId, 'message:new', (viewer) => ({ message: hydrateMessage(row, viewer) }));
       emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+      push.notifyMessage({ chatId, chat, message: row, senderId: uid });
       ack?.({ message: hydrateMessage(row, uid) });
     } catch (e) {
       ack?.({ error: e.message });
@@ -3158,6 +3243,7 @@ io.on('connection', (socket) => {
       const call = db.prepare('SELECT * FROM calls WHERE id = ?').get(id);
       const caller = getUser(uid);
       emitToUser(calleeId, 'call:incoming', { ...hydrateCall(call, calleeId), caller: publicUser(caller) });
+      push.notifyIncomingCall({ calleeId, caller, call, chatId });
       ack?.({ call: hydrateCall(call, uid) });
 
       // Auto-miss after 45s of no answer, same as most messengers.

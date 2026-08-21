@@ -386,6 +386,26 @@ addColumnIfMissing('messages', 'status_id', 'status_id TEXT');
 addColumnIfMissing('messages', 'status_snapshot', 'status_snapshot TEXT');
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_messages_status_id ON messages(status_id) WHERE status_id IS NOT NULL'); } catch {}
 
+/* ---- push notifications (Expo push) ---- */
+/* One row per registered device token. The token itself is the primary key:
+   a device that signs in as a different user simply reassigns its row, so a
+   token can never ping two accounts at once. Tokens are deleted by the client
+   on logout (best-effort) and by the server whenever Expo reports the
+   registration as gone (DeviceNotRegistered). */
+db.exec(`
+CREATE TABLE IF NOT EXISTS push_tokens (
+  token       TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL,
+  platform    TEXT DEFAULT 'android',   -- android | ios | web
+  device_id   TEXT,
+  app_version TEXT,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id);
+`);
+
 /* ---- starred messages: per-user bookmarking, across all chats ---- */
 db.exec(`
 CREATE TABLE IF NOT EXISTS starred_messages (

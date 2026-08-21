@@ -35,6 +35,7 @@ import { ChatProvider } from './src/store/ChatContext';
 import { ChatThemeProvider } from './src/store/ChatThemeContext';
 import { ThemeProvider, useTheme } from './src/store/ThemeContext';
 import Navigation from './src/Navigation';
+import PushController from './src/push/PushController';
 import { Loading } from './src/components/common';
 import OrientationManager from './src/components/OrientationManager';
 import CallOverlay from './src/components/CallOverlay';
@@ -162,6 +163,9 @@ function Root() {
           {user && <SketchGraphPaper />}
         </View>
       </PhoneFrame>
+      {/* Registers this device for push, syncs the unread badge, and routes
+          notification taps to the exact screen. No-op on web. */}
+      {user && <PushController />}
       <DailyAIGreeting />
       <CallOverlay />
     </>

@@ -107,7 +107,7 @@ What makes old-device support work:
 - `expo-haptics` is optional at runtime (guarded try/catch, no-op on web and
   on devices without a haptic engine).
 
-Current release metadata: version **1.3.0**, Android `versionCode` **5**.
+Current release metadata: version **1.4.0**, Android `versionCode` **6**.
 
 ### API endpoint for native builds
 
@@ -132,6 +132,44 @@ Existing installed APK/IPA builds do not receive JavaScript source changes autom
 cd app
 npx eas build --platform android
 ```
+
+### Push notifications (new in 1.4.0 — Phase 1)
+
+Push is the "something waiting" loop: without it, nobody reopens the app. What is
+implemented and live in this repo:
+
+| Piece | Status |
+|---|---|
+| Server fan-out on real events | New message / group @mention, message & connect requests (Activity), colleague requests, likes/comments on your posts, community join approvals, incoming call |
+| Deep links | Notification tap opens the exact screen (Conversation / Activity / Colleagues tab / Network) via the `plusone://` scheme + payload route |
+| Per-chat mute | Respected server-side — a muted chat never pings |
+| Quiet hours | Settings ▸ Notifications ▸ Quiet hours; enforced server-side in the user's own timezone. Pushes still arrive but silently (`*-silent` Android channels, no sound) |
+| Per-type toggles | Messages, requests & activity, likes & comments, calls, preview text — all server-enforced |
+| Badge counts | Each push carries unread chats + pending Activity; the app keeps the badge in sync while in use |
+| Token registry | `POST/DELETE /api/push/token` (auth-scoped); dead tokens auto-pruned when Expo reports `DeviceNotRegistered` |
+| Tests | `cd server && node test-push.js` — 31 end-to-end checks against a stubbed Expo endpoint |
+
+What it needs to actually reach devices:
+
+1. **A fresh Android APK (1.4.0 / versionCode 6)** — push adds the
+   `expo-notifications` native module, so OTA updates cannot install it on
+   existing builds. Build with EAS as above.
+2. **A one-time FCM v1 credential** — Android delivery through Expo requires a
+   Firebase service-account key uploaded once:
+   - Firebase console → Project settings → Service accounts → *Generate new private key* (JSON).
+   - `cd app && npx eas credentials -p android` → Push Notifications → upload that JSON
+     (or expo.dev → project → Credentials → Android → FCM v1).
+   - Never commit the JSON or paste its contents anywhere.
+   Until this is done, devices register tokens but no push can be delivered.
+3. **No server configuration** — the Expo Push API needs no server key or env
+   var; deploy the backend as usual.
+
+iOS can follow later with APNs keys (`eas credentials -p ios`); the entire client
+and server code path is already platform-neutral.
+
+Foreground behaviour: while the app is open, pushes are suppressed (no banner) —
+the socket already updates chats, badges and the incoming-call overlay live.
+When the app is backgrounded/killed, the OS displays the notification.
 
 ---
 
@@ -442,8 +480,10 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 
 ### High priority
 
+- [ ] Upload the FCM v1 service-account key (`eas credentials -p android`) so Expo can deliver Android pushes.
+- [ ] Build and distribute the **1.4.0** Android APK (push notifications add a native module — no OTA path from 1.3.0).
+- [ ] Device test the full loop: message a locked phone → tap the notification → it opens that exact chat. Repeat for a muted chat (no push) and quiet hours (silent push).
 - [ ] Confirm Supabase Storage is active in Railway logs.
-- [ ] Build/distribute the new +one 1.2.0 Android APK (AI location, speech and GL modules require a fresh binary).
 - [ ] Test registration, login, logout, profile photo add/remove, and real-time messages on a second physical device.
 - [ ] Verify data remains after a Railway redeploy.
 
@@ -470,6 +510,7 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 | `2f8d999` | Strong password policy added. |
 | `9a59577` | Kinetic Ink appearance theme added. |
 | `20b1432` | Chat list/conversation manga-paper UI redesign. |
+| current | **Push notifications (Phase 1)**: Expo push on messages/@mentions, requests, colleague requests, likes/comments, calls; deep links to the exact screen; server-enforced per-chat mute, quiet hours and per-type toggles; badge counts; `plusone://` scheme; `test-push.js` (31 checks). |
 | current | Per-conversation chat themes (13 themes, realtime sync, picker with live preview). |
 | current | Centralized motion system (`src/motion.js`): press springs, tab/section transitions, animated message entrances, double-tap ❤️, typing dots, skeleton chat list, story progress bars with hold-to-pause, spring sheets, reduced-motion + haptics support. |
 

@@ -14,6 +14,7 @@ import { marker, stroke } from './theme';
 import { haptic, usePressScale } from './motion';
 import SplitLayout from './DesktopLayout';
 import PageSwipePager from './components/PageSwipePager';
+import { navigationRef, onHomeTabRequest, flushPendingRoute } from './push/routing';
 
 import AuthScreen from './screens/AuthScreen';
 import ChatListScreen from './screens/ChatListScreen';
@@ -66,6 +67,13 @@ function HomeTabs({ navigation }) {
   const swipeProgress = useRef(new Animated.Value(0)).current;
 
   const openChat = (chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); };
+
+  // Push deep links can target a Home page (e.g. a colleague request routes
+  // to the Colleagues tab). Tab state lives here, not in navigation state,
+  // so routing.js asks via this subscription.
+  useEffect(() => onHomeTabRequest((requested) => {
+    if (PAGES.some((p) => p.key === requested) && requested !== tab) setTab(requested);
+  }), [tab]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -233,7 +241,11 @@ export default function Navigation() {
   };
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer
+      ref={navigationRef}
+      onStateChange={flushPendingRoute}
+      theme={navTheme}
+    >
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
