@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "ai.arena.tomodachi",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",

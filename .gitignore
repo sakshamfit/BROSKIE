@@ -28,6 +28,11 @@ ios/
 .netrc
 .git-credentials
 
+# firebase: app/google-services.json holds only public identifiers and IS
+# committed (remote EAS builds only upload git-tracked files). The
+# service-account private key is a true secret — never commit one.
+*-firebase-adminsdk-*.json
+
 # logs
 *.log
 npm-debug.*

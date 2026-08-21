@@ -47,7 +47,7 @@ Two ways to think about what you're doing:
 4. Google Analytics: **disable** it (not needed for push).
 5. Click **Create project** → **Continue**. You're now inside the project.
 
-## Step 2 — Register the Android app
+## Step 2 — Register the Android app + save `google-services.json`
 
 FCM only delivers to an app that is registered in the Firebase project with the
 exact package name.
@@ -59,10 +59,32 @@ exact package name.
    (case-sensitive, no spaces). This is the #1 cause of "no push arrives".
 3. App nickname: `+one`. Debug signing certificate SHA-1: **leave empty**.
 4. Click **Register app**.
-5. Firebase now shows a `google-services.json` download screen.
-   **You can skip this file** — it's for apps that use react-native-firebase.
-   +one uses Expo push tokens, so EAS handles this automatically. Click
-   **Next → Next → Continue to console**.
+5. Firebase shows a **Download `google-services.json`** screen. **Download it
+   and save it as `app/google-services.json`** in this repo (the Expo project
+   root is the `app/` folder — next to `app.json`), then commit and push.
+   - This file contains only **public identifiers** — the Expo docs explicitly
+     say it's safe to commit, and it *must* be committed: remote `eas build`
+     uploads only git-tracked files, so a gitignored file never reaches the
+     build (classic failure: *"Default FirebaseApp is not initialized"*).
+   - `app/app.json` already points at it via
+     `expo.android.googleServicesFile: "./google-services.json"`. If the file
+     is missing, the build fails with *"Cannot copy google-services.json"* —
+     intentional, so you can't ship a silently-pushless APK.
+6. The same Firebase screen then shows **Gradle / Google-services-plugin /
+   Firebase BoM instructions — ignore them.** They're for hand-written native
+   Android apps. Expo's build does that wiring automatically (its config
+   plugin injects the `com.google.gms.google-services` classpath, applies the
+   plugin, and copies the JSON into `android/app/` during prebuild), and
+   `expo-notifications` already bundles the Firebase messaging SDK. **Do not
+   add `firebase-analytics` or any BoM dependency.** Click
+   **Next → Continue to console**.
+
+> Two different JSON files exist in this setup — don't mix them up:
+>
+> | File | From | Goes where | Secret? |
+> |---|---|---|---|
+> | `google-services.json` | Firebase ▸ Your apps ▸ download | committed at `app/google-services.json` | No (public ids) |
+> | `plusone-firebase-adminsdk-….json` | Firebase ▸ Service accounts ▸ Generate new private key | uploaded to EAS only (step 5), never in the repo | **Yes** |
 
 ## Step 3 — Make sure the FCM v1 API is enabled
 
@@ -97,17 +119,22 @@ Pick **one** of the two — the dashboard is easier the first time.
 4. Find the **Push Notifications (FCM v1)** card → **Upload** → choose the JSON
    file from step 4.
 
-### Option B — EAS CLI
+### Option B — EAS CLI (official menu path)
 
 ```bash
 cd app
-npx eas credentials -p android
+npx eas credentials
 ```
 
-- If asked, choose your app (`ai.arena.tomodachi`).
-- In the menu, pick the **Push notifications (FCM v1)** option.
-- Choose **Set up / Upload** a service account key.
-- Point it at the JSON file from step 4.
+- Select **Android** → **production** → **Google Service Account**.
+- Select **Manage your Google Service Account Key for Push Notifications
+  (FCM v1)**.
+- Select **Set up a Google Service Account Key for Push Notifications (FCM
+  v1)** → **Upload a new service account key**.
+- Point it at the `*-firebase-adminsdk-*.json` from step 4 (the CLI
+  auto-detects it if it's in the folder — but don't leave it there; it's a
+  secret, and `.gitignore` in this repo blocks `*-firebase-adminsdk-*.json`
+  just in case).
 
 **Verify:** run `npx eas credentials -p android` again — the FCM v1 credential
 should now be listed (owner + created date), with no warning.
@@ -151,7 +178,9 @@ Also worth checking once:
 | Symptom | Likely cause / fix |
 |---|---|
 | Settings ▸ Notifications says "Push isn't active on this device" | Old APK (check About: version **1.4.0**), or notification permission denied — Android Settings ▸ Apps ▸ +one ▸ Notifications ▸ allow. |
-| Device registered, but no notification ever arrives | Step 2 package name mismatch (must be `ai.arena.tomodachi`); or step 3 FCM v1 API disabled; or key uploaded to a different Expo account/project than the one that built the APK. |
+| App log: *"Default FirebaseApp is not initialized"* | `app/google-services.json` missing or not committed (remote EAS builds only see git-tracked files) — do step 2.5, then rebuild. |
+| Device registered, but no notification ever arrives | Step 2 package name mismatch (must be `ai.arena.tomodachi`); `google-services.json` from a different Firebase project than the service-account key you uploaded; or step 3 FCM v1 API disabled; or key uploaded to a different Expo account/project than the one that built the APK. |
+| `403 PERMISSION_DENIED` from Firebase Installations at token time | The API key in google-services.json is restricted — in Google Cloud Console ▸ Credentials, allow the **FCM Registration API** + **Firebase Installations API** (or leave unrestricted). |
 | Nothing sends at all for anyone | The Phase 1 server code isn't deployed yet — check `api/health` deploy and Railway logs. |
 | Railway logs show `[push] expo error: InvalidCredentials` / auth errors | The FCM v1 API is disabled (step 3) or the uploaded key is wrong/revoked — regenerate and re-upload. |
 | Worked, then stopped after you deleted the key in Firebase | Expected — delete is how you revoke. Generate a new key and upload it; no rebuild needed for a key swap. |
