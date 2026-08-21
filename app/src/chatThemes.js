@@ -440,7 +440,7 @@ export function resolveChatTheme(baseTheme, ct) {
     sendButton,
     onSendButton: readableOn(sendButton),
     inputBackground: ct.inputBackground,
-    replyPreview: ct.replyPreview,
+    replyPreview: dark ? shade(ct.replyPreview, 0.5) : ct.replyPreview,
     reactionAccent: ct.reactionAccent,
     wallpaper: ct.wallpaper || null,
     backgroundGradient: gradient,
