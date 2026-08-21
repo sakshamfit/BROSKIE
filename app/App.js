@@ -30,6 +30,7 @@ import {
 import { HankenGrotesk_400Regular } from '@expo-google-fonts/hanken-grotesk';
 import { Caveat_600SemiBold, Caveat_700Bold } from '@expo-google-fonts/caveat';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 import { AuthProvider, useAuth } from './src/store/AuthContext';
 import { ChatProvider } from './src/store/ChatContext';
@@ -160,6 +161,10 @@ function Root() {
           gated to web. It silently no-ops if the app isn't served from
           Vercel (the /_vercel/insights/script.js request just 404s quietly). */}
       {Platform.OS === 'web' && <Analytics />}
+      {/* This is an Expo/React Native app rather than a Next.js app, so use
+          the package's React entry point. As with Analytics, Speed Insights
+          runs only in the browser and leaves iOS/Android builds untouched. */}
+      {Platform.OS === 'web' && <SpeedInsights />}
       <PhoneFrame>
         <View style={styles.appCanvas}>
           <Navigation />
