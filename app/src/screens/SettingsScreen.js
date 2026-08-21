@@ -109,6 +109,18 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             subtitle="Last seen, read receipts, blocked contacts"
             onPress={() => navigation.navigate('Privacy')}
           />
+          {user?.role === 'admin' && (
+            <>
+              <Divider theme={theme} />
+              <NavRow
+                theme={theme}
+                icon="shield-outline"
+                title="Admin ▸ Safety & Moderation"
+                subtitle="Private — reports, alerts, cases, audit"
+                onPress={() => navigation.navigate('AdminSafety')}
+              />
+            </>
+          )}
         </View></MotionIn>
 
         {/* -------- Preferences -------- */}

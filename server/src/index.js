@@ -78,10 +78,18 @@ const DEFAULT_SETTINGS = {
   notifications: {
     messages: true,        // new chat messages
     messagePreview: true,  // show text/photo preview vs "New message"
+    activity: true,        // message requests + colleague requests (push)
+    reactions: true,       // likes/comments on your Network posts (push)
+    calls: true,           // incoming call pushes (ringing)
     status: true,          // someone posted to See
     network: true,         // new Network posts from people you follow-ish (public feed)
     communityActivity: true, // join requests / approvals / added-to-community
     sound: true,
+    // Quiet hours: pushes still arrive but silently (no sound/vibration,
+    // low-importance channel) so a 3am message is there in the morning
+    // without waking anyone. Minutes are 0..1439 local wall-clock;
+    // tzOffsetMinutes is minutes EAST of UTC (client sends its offset).
+    quietHours: { enabled: false, startMinute: 22 * 60, endMinute: 7 * 60, tzOffsetMinutes: 0 },
   },
   privacy: {
     lastSeen: 'everyone',   // everyone | contacts | nobody — who sees your last-seen/online dot
@@ -89,13 +97,39 @@ const DEFAULT_SETTINGS = {
   },
 };
 
+/** Validate/normalize one quiet-hours object against `base`. */
+function sanitizeQuietHours(input, base) {
+  const out = {
+    enabled: base.enabled === true,
+    startMinute: Number(base.startMinute) || 0,
+    endMinute: Number(base.endMinute) || 0,
+    tzOffsetMinutes: Number(base.tzOffsetMinutes) || 0,
+  };
+  if (input && typeof input === 'object') {
+    if (typeof input.enabled === 'boolean') out.enabled = input.enabled;
+    ['startMinute', 'endMinute'].forEach((k) => {
+      const v = Number(input[k]);
+      if (Number.isFinite(v)) out[k] = Math.min(1439, Math.max(0, Math.round(v)));
+    });
+    if (Number.isFinite(Number(input.tzOffsetMinutes))) {
+      out.tzOffsetMinutes = Math.min(840, Math.max(-720, Math.round(Number(input.tzOffsetMinutes))));
+    }
+  }
+  return out;
+}
+
 function sanitizeSettings(input, base = DEFAULT_SETTINGS) {
   const out = { notifications: { ...base.notifications }, privacy: { ...base.privacy } };
   if (input && typeof input === 'object') {
     if (input.notifications && typeof input.notifications === 'object') {
       Object.keys(DEFAULT_SETTINGS.notifications).forEach((k) => {
+        if (k === 'quietHours') return;
         if (typeof input.notifications[k] === 'boolean') out.notifications[k] = input.notifications[k];
       });
+      out.notifications.quietHours = sanitizeQuietHours(
+        input.notifications.quietHours,
+        base.notifications.quietHours || DEFAULT_SETTINGS.notifications.quietHours
+      );
     }
     if (input.privacy && typeof input.privacy === 'object') {
       if (['everyone', 'contacts', 'nobody'].includes(input.privacy.lastSeen)) out.privacy.lastSeen = input.privacy.lastSeen;
@@ -109,6 +143,32 @@ function getSettings(u) {
   let parsed = {};
   try { parsed = JSON.parse(u?.settings || '{}'); } catch { parsed = {}; }
   return sanitizeSettings(parsed);
+}
+
+// Push notifications fan out from the same events that hit Socket.IO.
+// getUser/getSettings are injected lazily (they are consts defined further
+// down) to avoid a circular require.
+const push = require('./push');
+push.init({ getUser: (id) => getUser(id), getSettings: (u) => getSettings(u) });
+
+/* ------------------------------------------------------------------ */
+/* Safety & Moderation Center — role-based, server-verified access    */
+/* ------------------------------------------------------------------ */
+const moderation = require('./moderation');
+
+// The initial administrator is granted the backend `admin` ROLE (never a
+// username check in the client). Extra admins: ADMIN_USERNAMES env
+// (comma-separated). Idempotent at every boot.
+const ADMIN_USERNAME_KEYS = (process.env.ADMIN_USERNAMES || 'saksham')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+db.prepare(`UPDATE users SET role = 'admin' WHERE username_key IN (${ADMIN_USERNAME_KEYS.map(() => '?').join(',')}) AND role != 'admin'`)
+  .run(...ADMIN_USERNAME_KEYS);
+
+/** Server-side authorization for EVERY admin API request. */
+function requireAdmin(req, res, next) {
+  const u = getUser(req.userId);
+  if (!u || u.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  next();
 }
 
 function areContacts(idA, idB) {
@@ -240,7 +300,9 @@ function affiliationsForUser(userId) {
 }
 
 function accountUser(u) {
-  return u ? { ...publicUser(u), settings: getSettings(u), affiliations: affiliationsForUser(u.id) } : null;
+  // `role` is included ONLY in the account's own profile responses — never
+  // in publicUser, so admin identity isn't broadcast to other users.
+  return u ? { ...publicUser(u), role: u.role || 'user', moderation: u.moderation || 'active', settings: getSettings(u), affiliations: affiliationsForUser(u.id) } : null;
 }
 
 function sharedAffiliations(userId, otherId) {
@@ -256,6 +318,56 @@ function sharedAffiliations(userId, otherId) {
     .all(userId, otherId)
     .map((a) => ({ id: a.id, name: a.name, type: a.type, title: a.title || '' }));
 }
+
+/* ---------------- Phase 2: the daily campus loop ---------------- */
+
+/** Every userId that shares at least one affiliation with `userId` (self and
+ *  blocked pairs excluded). This is "people from my college / workplace". */
+function usersSharingPlaces(userId) {
+  return db
+    .prepare(
+      `SELECT DISTINCT theirs.user_id id
+       FROM user_affiliations mine
+       JOIN user_affiliations theirs ON theirs.affiliation_id = mine.affiliation_id
+       WHERE mine.user_id = ? AND theirs.user_id != ?`
+    )
+    .all(userId, userId)
+    .map((r) => r.id)
+    .filter((id) => !blockedEitherWay(userId, id));
+}
+
+/** ids this user follows. */
+function followingIds(userId) {
+  return db.prepare('SELECT followed_id id FROM follows WHERE follower_id = ?').all(userId).map((r) => r.id);
+}
+
+function isFollowing(followerId, followedId) {
+  return !!db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(followerId, followedId);
+}
+
+/** "from your college" / "from your workplace" — how a place-shared event is
+ *  described in pushes and the greeter, derived from the author's first
+ *  affiliation type (institution → college, org/workplace → workplace). */
+function placeLabelFor(userId) {
+  const rows = db
+    .prepare(
+      `SELECT a.type FROM user_affiliations ua JOIN affiliations a ON a.id = ua.affiliation_id
+       WHERE ua.user_id = ? ORDER BY ua.joined_at DESC LIMIT 1`
+    )
+    .all(userId);
+  const type = rows[0]?.type;
+  if (type === 'institution') return 'college';
+  if (type === 'organization' || type === 'workplace') return 'workplace';
+  return 'place';
+}
+
+/** One person's live "around" row, sweeping expired flags as a side effect. */
+function aroundRowFor(userId) {
+  db.prepare('DELETE FROM around_status WHERE expires_at < ?').run(now());
+  return db.prepare('SELECT * FROM around_status WHERE user_id = ?').get(userId);
+}
+
+const AROUND_TTL_MS = 12 * 3600 * 1000;
 
 function colleaguePair(idA, idB) {
   return idA < idB ? [idA, idB] : [idB, idA];
@@ -397,14 +509,18 @@ function hydrateMessage(m, viewerId) {
 
   return {
     id: m.id,
+    clientId: m.client_id || m.id,
     chatId: m.chat_id,
     senderId: m.sender_id,
     type: m.type,
     body: m.deleted ? '' : m.body,
     mediaUrl: m.deleted ? null : m.media_url,
+    mediaThumbUrl: m.deleted ? null : (m.media_thumb_url || null),
     duration: m.duration,
     deleted: !!m.deleted,
     createdAt: m.created_at,
+    clientCreatedAt: m.client_created_at || m.created_at,
+    updatedAt: m.updated_at || m.created_at,
     expiresAt: m.expires_at || null,
     edited: !!m.edited,
     forwarded: !!m.forwarded_from,
@@ -787,6 +903,14 @@ app.post('/api/auth/register', (req, res) => {
      VALUES (@id, @username, @username_key, @phone, @name, @about, @avatar, @password_hash, @last_seen, @is_online, @created_at)`
   ).run(user);
 
+  // Bootstrap role: if this account's username is configured as an admin
+  // (ADMIN_USERNAMES, default "saksham") it receives the backend admin role
+  // immediately — same rule as the boot-time grant, for fresh databases.
+  if (ADMIN_USERNAME_KEYS.includes(canonicalUsername)) {
+    db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(user.id);
+    user.role = 'admin';
+  }
+
   res.json({ token: sign(user), user: accountUser(user) });
 });
 
@@ -795,6 +919,9 @@ app.post('/api/auth/login', (req, res) => {
   const user = getUserByUsername(username);
   if (!user || !bcrypt.compareSync(String(password || ''), user.password_hash))
     return res.status(401).json({ error: 'Invalid username or password' });
+  // Enforcement state is checked server-side on login.
+  const gate = moderation.moderationGate(user.id);
+  if (gate.blocked) return res.status(403).json({ error: gate.error });
   res.json({ token: sign(user), user: accountUser(user) });
 });
 
@@ -820,6 +947,28 @@ app.get('/api/greeting-summary', requireAuth, (req, res) => {
      JOIN community_members me ON me.community_id = r.community_id
      WHERE me.user_id = ? AND me.role = 'admin'`
   ).get(req.userId).c;
+
+  // Phase 2: the campus loop — "2 people from your college posted today"
+  // and "Amit is around" in the morning greeting. `since` is the client's
+  // local midnight (fallback: last 24h).
+  const since = Math.min(Number(req.query.since) || now() - 24 * 3600 * 1000, now());
+  const sharerIds = usersSharingPlaces(req.userId);
+  const placesPosters = sharerIds.length
+    ? db
+        .prepare(
+          `SELECT COUNT(DISTINCT p.user_id) c FROM posts p
+           WHERE p.deleted = 0 AND p.created_at > ? AND p.user_id IN (${sharerIds.map(() => '?').join(',')})`
+        )
+        .get(since, ...sharerIds).c
+    : 0;
+  const aroundNow = sharerIds.length
+    ? db
+        .prepare(
+          `SELECT COUNT(*) c FROM around_status a
+           WHERE a.expires_at > ? AND a.user_id IN (${sharerIds.map(() => '?').join(',')})`
+        )
+        .get(now(), ...sharerIds).c
+    : 0;
   res.json({
     summary: {
       unreadMessages,
@@ -827,6 +976,8 @@ app.get('/api/greeting-summary', requireAuth, (req, res) => {
       messageRequests,
       colleagueRequests,
       communityRequests,
+      placesPostersToday: placesPosters,
+      aroundNow,
       total: unreadMessages + messageRequests + colleagueRequests + communityRequests,
     },
   });
@@ -886,6 +1037,56 @@ app.patch('/api/me/settings', requireAuth, (req, res) => {
   // covers devices that were offline when this event was emitted.
   emitToUser(req.userId, 'settings:updated', { settings: merged });
   res.json({ settings: merged });
+});
+
+/* ------------------------------------------------------------------ */
+/* push notification device registry                                  */
+/* ------------------------------------------------------------------ */
+
+/** Register (or re-register) this device's Expo push token. Called on sign-in
+ *  and whenever the OS rotates the token. A token belongs to exactly one
+ *  account at a time — signing in on a used device reassigns it. */
+app.post('/api/push/token', requireAuth, (req, res) => {
+  try {
+    const { token, platform, deviceId, appVersion } = req.body || {};
+    const saved = push.registerToken(req.userId, { token, platform, deviceId, appVersion });
+    res.json({ ok: true, token: saved.token });
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Could not register push token' });
+  }
+});
+
+/** Remove this device's token (log out / notifications off). */
+app.delete('/api/push/token', requireAuth, (req, res) => {
+  const removed = push.unregisterToken(req.userId, req.body?.token);
+  res.json({ ok: true, removed });
+});
+
+/** Which devices currently have push registered (for the Notifications screen). */
+app.get('/api/push/info', requireAuth, (req, res) => {
+  res.json(push.describeFor(req.userId));
+});
+
+/** Browser push: VAPID public key the page subscribes with. */
+app.get('/api/push/web-config', requireAuth, (req, res) => {
+  res.json(push.webPushConfig());
+});
+
+/** Register/refresh this browser's PushSubscription (web push parity with
+ *  the Expo token flow — same rules, same events). */
+app.post('/api/push/web-subscription', requireAuth, (req, res) => {
+  try {
+    const saved = push.registerWebSubscription(req.userId, req.body?.subscription);
+    res.json({ ok: true, endpoint: saved.endpoint });
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Could not register web push' });
+  }
+});
+
+/** Remove this browser's subscription (sign out / notifications off). */
+app.delete('/api/push/web-subscription', requireAuth, (req, res) => {
+  const removed = push.unregisterWebSubscription(req.userId, req.body?.endpoint);
+  res.json({ ok: true, removed });
 });
 
 app.patch('/api/me', requireAuth, (req, res) => {
@@ -1177,6 +1378,7 @@ app.post('/api/colleagues/:userId/request', requireAuth, (req, res) => {
      VALUES (?,?,?,?,?)`
   ).run(request.id, request.senderId, request.receiverId, 'pending', request.createdAt);
   emitToUser(targetId, 'colleague:updated', { type: 'request', requestId: request.id, user: publicUser(getUser(req.userId)) });
+  push.notifyColleagueRequest({ targetId, sender: getUser(req.userId) });
   res.json({ status: 'outgoing', requestId: request.id });
 });
 
@@ -1222,6 +1424,117 @@ app.delete('/api/colleagues/:userId', requireAuth, (req, res) => {
   if (!result.changes) return res.status(404).json({ error: 'Connection not found' });
   emitToUser(req.params.userId, 'colleague:updated', { type: 'removed', userId: req.userId });
   res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ */
+/* Phase 2: follow, "I'm around", Today at your place                  */
+/* ------------------------------------------------------------------ */
+
+/** Follow someone from the Network — one-way, no approval, feeds the
+ *  "Following" filter. */
+app.post('/api/users/:id/follow', requireAuth, (req, res) => {
+  const targetId = req.params.id;
+  const target = getUser(targetId);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (targetId === req.userId) return res.status(400).json({ error: "You can't follow yourself" });
+  if (blockedEitherWay(req.userId, targetId)) return res.status(403).json({ error: 'Unavailable' });
+  const result = db
+    .prepare('INSERT OR IGNORE INTO follows (follower_id, followed_id, created_at) VALUES (?,?,?)')
+    .run(req.userId, targetId, now());
+  if (!result.changes) return res.status(409).json({ error: 'Already following' });
+  res.json({ following: true });
+});
+
+/** Unfollow. Idempotent — unfollowing someone you don't follow is fine. */
+app.delete('/api/users/:id/follow', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM follows WHERE follower_id = ? AND followed_id = ?').run(req.userId, req.params.id);
+  res.json({ following: false });
+});
+
+/** Flip the 12-hour "I'm around" flag at your shared places. Setting it
+ *  again extends the window ("still around"). Clearing it deletes the row. */
+app.post('/api/me/around', requireAuth, (req, res) => {
+  const around = req.body?.around !== false; // default true
+  if (around) {
+    const t = now();
+    db.prepare(
+      `INSERT INTO around_status (user_id, expires_at, created_at) VALUES (?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET expires_at = excluded.expires_at, created_at = excluded.created_at`
+    ).run(req.userId, t + AROUND_TTL_MS, t);
+    const sharers = usersSharingPlaces(req.userId).filter((id) => id !== req.userId);
+    push.notifyAround({ userIds: sharers.slice(0, 100), actor: getUser(req.userId) });
+  } else {
+    db.prepare('DELETE FROM around_status WHERE user_id = ?').run(req.userId);
+  }
+  const row = aroundRowFor(req.userId);
+  res.json({ around: !!row, expiresAt: row?.expires_at || null });
+});
+
+/** Today at your place — who's around / online from your places, and what
+ *  they posted today. `since` (ms) is the client's local midnight so "today"
+ *  follows the viewer's day, not UTC's. */
+app.get('/api/today', requireAuth, (req, res) => {
+  const since = Math.min(Number(req.query.since) || now() - 24 * 3600 * 1000, now());
+  aroundRowFor(req.userId); // sweep expired flags
+  const sharerIds = usersSharingPlaces(req.userId);
+
+  const aroundRows = sharerIds.length
+    ? db
+        .prepare(
+          `SELECT a.user_id, a.created_at, a.expires_at, u.is_online, u.last_seen
+           FROM around_status a JOIN users u ON u.id = a.user_id
+           WHERE a.user_id IN (${sharerIds.map(() => '?').join(',')}) AND a.expires_at > ?
+           ORDER BY a.created_at DESC LIMIT 24`
+        )
+        .all(...sharerIds, now())
+    : [];
+  const around = aroundRows.map((r) => ({
+    user: publicUser(getUser(r.user_id)),
+    since: r.created_at,
+    expiresAt: r.expires_at,
+  }));
+
+  const onlineRows = sharerIds.length
+    ? db
+        .prepare(
+          `SELECT id FROM users WHERE is_online = 1 AND id IN (${sharerIds.map(() => '?').join(',')})
+           ORDER BY last_seen DESC LIMIT 24`
+        )
+        .all(...sharerIds)
+    : [];
+  const aroundIds = new Set(around.map((a) => a.user.id));
+  const online = onlineRows.map((r) => publicUser(getUser(r.id))).filter((u) => !aroundIds.has(u.id));
+
+  // Today's posts from place-sharers, audience-filtered for this viewer.
+  const postRows = sharerIds.length
+    ? db
+        .prepare(
+          `SELECT * FROM posts WHERE deleted = 0 AND user_id IN (${sharerIds.map(() => '?').join(',')})
+           AND created_at > ? ORDER BY created_at DESC LIMIT 60`
+        )
+        .all(...sharerIds, since)
+    : [];
+  const placesPosts = [];
+  const posters = new Set();
+  postRows.forEach((r) => {
+    if (canViewPost(r.id, r.user_id, r.audience || 'public', req.userId)) {
+      if (placesPosts.length < 12) placesPosts.push(hydratePost(r, req.userId));
+      posters.add(r.user_id);
+    }
+  });
+
+  const mine = aroundRowFor(req.userId);
+  res.json({
+    places: affiliationsForUser(req.userId),
+    around,
+    online,
+    posts: placesPosts,
+    postsCount: placesPosts.length,
+    postersCount: posters.size,
+    me: { around: !!mine, expiresAt: mine?.expires_at || null },
+    placeLabel: placeLabelFor(req.userId),
+    generatedAt: now(),
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -1396,6 +1709,7 @@ app.post('/api/connect/:userId', requireAuth, (req, res) => {
   const request = pendingChatRequest(chatId);
   emitToUser(req.userId, 'chat:updated', chatSummary(chatId, req.userId));
   emitToUser(targetId, 'chat:request', hydrateChatRequest(request, targetId));
+  push.notifyChatRequest({ request, senderId: req.userId, chatId });
   res.json({ status: 'outgoing', chatId, requestId: chatId });
 });
 
@@ -1475,39 +1789,71 @@ app.get('/api/activity', requireAuth, (req, res) => {
     });
   });
 
+  // Likes grouped per post ("3 people liked your post") so a popular post
+  // is one row, not forty. Users list is capped to the 5 most recent faces;
+  // count carries the truth.
+  const LIKE_WINDOW = now() - 7 * 24 * 3600 * 1000;
   db.prepare(
-    `SELECT pl.post_id, pl.user_id, pl.at, p.body, p.media_url, p.title
+    `SELECT pl.post_id, MAX(pl.at) latest_at, COUNT(*) c, p.body, p.media_url, p.title
      FROM post_likes pl
      JOIN posts p ON p.id = pl.post_id
      JOIN users u ON u.id = pl.user_id
-     WHERE p.user_id = ? AND pl.user_id != ? AND p.deleted = 0 AND ${blockedSql}
-     ORDER BY pl.at DESC LIMIT 40`
-  ).all(req.userId, req.userId, req.userId, req.userId).forEach((row) => {
+     WHERE p.user_id = ? AND pl.user_id != ? AND p.deleted = 0 AND pl.at > ? AND ${blockedSql}
+     GROUP BY pl.post_id
+     ORDER BY latest_at DESC LIMIT 12`
+  ).all(req.userId, req.userId, LIKE_WINDOW, req.userId, req.userId).forEach((row) => {
+    const users = db
+      .prepare(
+        `SELECT u.* FROM post_likes pl JOIN users u ON u.id = pl.user_id
+         WHERE pl.post_id = ? AND pl.user_id != ? ORDER BY pl.at DESC LIMIT 5`
+      )
+      .all(row.post_id, req.userId)
+      .map((u) => publicUser(u));
     items.push({
-      id: `like:${row.post_id}:${row.user_id}`,
-      type: 'like',
-      createdAt: row.at,
+      id: `like_group:${row.post_id}`,
+      type: 'like_group',
+      createdAt: row.latest_at,
       postId: row.post_id,
       preview: row.title || row.body || (row.media_url ? 'Photo' : 'your post'),
-      user: publicUser(getUser(row.user_id)),
+      users,
+      count: row.c,
+      user: users[0] || null,
     });
   });
 
+  // Comments grouped per post the same way — one row per post, latest
+  // comment as the preview, distinct commenters as the faces.
   db.prepare(
-    `SELECT pc.id, pc.post_id, pc.user_id, pc.body, pc.created_at
+    `SELECT pc.post_id, MAX(pc.created_at) latest_at, COUNT(DISTINCT pc.user_id) c, p.body, p.media_url, p.title
      FROM post_comments pc
      JOIN posts p ON p.id = pc.post_id
      JOIN users u ON u.id = pc.user_id
-     WHERE p.user_id = ? AND pc.user_id != ? AND p.deleted = 0 AND ${blockedSql}
-     ORDER BY pc.created_at DESC LIMIT 40`
-  ).all(req.userId, req.userId, req.userId, req.userId).forEach((row) => {
+     WHERE p.user_id = ? AND pc.user_id != ? AND p.deleted = 0 AND pc.created_at > ? AND ${blockedSql}
+     GROUP BY pc.post_id
+     ORDER BY latest_at DESC LIMIT 12`
+  ).all(req.userId, req.userId, LIKE_WINDOW, req.userId, req.userId).forEach((row) => {
+    const users = db
+      .prepare(
+        `SELECT u.*, MAX(pc.created_at) at2, (SELECT body FROM post_comments latest WHERE latest.post_id = pc.post_id AND latest.user_id = u.id ORDER BY latest.created_at DESC LIMIT 1) latest_body
+         FROM post_comments pc JOIN users u ON u.id = pc.user_id
+         WHERE pc.post_id = ? AND pc.user_id != ?
+         GROUP BY u.id ORDER BY at2 DESC LIMIT 5`
+      )
+      .all(row.post_id, req.userId)
+      .map((u) => publicUser(u));
+    const latest = db
+      .prepare('SELECT body FROM post_comments WHERE post_id = ? AND user_id != ? ORDER BY created_at DESC LIMIT 1')
+      .get(row.post_id, req.userId);
     items.push({
-      id: `comment:${row.id}`,
-      type: 'comment',
-      createdAt: row.created_at,
+      id: `comment_group:${row.post_id}`,
+      type: 'comment_group',
+      createdAt: row.latest_at,
       postId: row.post_id,
-      preview: row.body,
-      user: publicUser(getUser(row.user_id)),
+      preview: latest?.body || row.title || row.body || (row.media_url ? 'Photo' : 'your post'),
+      postPreview: row.title || row.body || (row.media_url ? 'Photo' : 'your post'),
+      users,
+      count: row.c,
+      user: users[0] || null,
     });
   });
 
@@ -1889,6 +2235,7 @@ app.post('/api/messages/forward', requireAuth, (req, res) => {
     const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id);
     emitToChat(chatId, 'message:new', (viewer) => ({ message: hydrateMessage(row, viewer) }));
     emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+    push.notifyMessage({ chatId, chat, message: row, senderId: req.userId });
     forwarded += 1;
   });
 
@@ -2211,7 +2558,7 @@ function deliverUserMessage(uid, data) {
 }
 
 function fanoutNewMessage(outcome, uid, tempId) {
-  const { row, duplicate, chatId, request } = outcome;
+  const { row, duplicate, chatId, request, chat } = outcome;
   if (duplicate || !row) return;
   emitToChat(chatId, 'message:new', (viewer) => ({
     message: hydrateMessage(row, viewer),
@@ -2220,8 +2567,28 @@ function fanoutNewMessage(outcome, uid, tempId) {
   if (request) {
     emitToUser(request.sender_id, 'chat:updated', chatSummary(chatId, request.sender_id));
     emitToUser(request.receiver_id, 'chat:request', hydrateChatRequest(request, request.receiver_id));
+    push.notifyChatRequest({ request, senderId: uid, chatId, message: row });
   } else {
     emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+    push.notifyMessage({ chatId, chat, message: row, senderId: uid });
+  }
+
+  // Safety analysis runs AFTER delivery — messaging is never blocked or
+  // delayed by moderation. Text messages only, with a little recent
+  // context for the spam/repetition detector.
+  if (row.type === 'text' && row.body) {
+    setImmediate(() => {
+      try {
+        const recent = db
+          .prepare('SELECT sender_id, body FROM messages WHERE chat_id = ? AND type != ? ORDER BY created_at DESC LIMIT 8')
+          .all(chatId, 'system')
+          .reverse();
+        moderation.recordAutoDetection(
+          { userId: uid, chatId, messageId: row.id, text: row.body, recentMessages: recent },
+          moderationIO
+        );
+      } catch {}
+    });
   }
 }
 
@@ -2260,6 +2627,7 @@ function canViewPost(postId, authorId, audience, viewerId) {
   if (authorId === viewerId) return true;
   if (blockedEitherWay(authorId, viewerId)) return false;
   if (audience === 'public') return true;
+  if (audience === 'places') return usersSharingPlaces(authorId).includes(viewerId);
   if (audience === 'contacts') return contactIds(authorId).includes(viewerId);
   if (audience === 'selected') {
     return !!db.prepare('SELECT 1 FROM post_recipients WHERE post_id = ? AND user_id = ?').get(postId, viewerId);
@@ -2271,6 +2639,7 @@ function canViewPost(postId, authorId, audience, viewerId) {
 function postAudienceIds(postId, authorId, audience) {
   let ids;
   if (audience === 'public') ids = [...sockets.keys()];
+  else if (audience === 'places') ids = [authorId, ...usersSharingPlaces(authorId)];
   else if (audience === 'contacts') ids = [...new Set([authorId, ...contactIds(authorId)])];
   else if (audience === 'selected') {
     const rows = db.prepare('SELECT user_id FROM post_recipients WHERE post_id = ?').all(postId);
@@ -2315,6 +2684,8 @@ app.post('/api/status', requireAuth, (req, res) => {
     type = 'text', body = '', mediaUrl = null, mediaAspect = null, bg = '#075E54',
     song = null, audience = 'public', recipientIds = [],
   } = req.body || {};
+  const statusGate = moderation.moderationGate(req.userId);
+  if (statusGate.blocked) return res.status(403).json({ error: statusGate.error });
 
   const allowedAudiences = ['public', 'contacts', 'contacts_except', 'selected'];
   if (!allowedAudiences.includes(audience)) {
@@ -2478,6 +2849,8 @@ app.post('/api/status/:id/reply', requireAuth, (req, res) => {
     emitToUser(uid, 'message:new', { message: hydrated });
     emitToUser(uid, 'chat:updated', chatSummary(chatId, uid));
   });
+  // A status reply is a real message to the author — it pushes like one.
+  push.notifyMessage({ chatId, message: row, senderId: req.userId });
   if (isNewChat) {
     // Ensure the receiver that has never chatted before gets a chat:new too
     // (chat:updated already covers it, but belt-and-braces for older clients).
@@ -2544,6 +2917,9 @@ function hydratePost(row, viewerId) {
     comments,
     liked,
     mine: row.user_id === viewerId,
+    // Phase 2: does the viewer follow this author (for Following feed + the
+    // Follow button state)? Author's own posts never show a follow button.
+    following: viewerId && row.user_id !== viewerId ? isFollowing(viewerId, row.user_id) : undefined,
   };
 }
 
@@ -2567,11 +2943,19 @@ function hydrateCall(row, viewerId) {
   };
 }
 
-/** GET /api/posts?before=<ts>&limit=20&tag=process&userId=… */
+/** GET /api/posts?before=<ts>&limit=20&tag=process&userId=…&filter=worldwide|places|following */
 app.get('/api/posts', requireAuth, (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 20, 50);
   const { tag, userId } = req.query;
   let before = Number(req.query.before) || Date.now() + 1;
+
+  // Phase 2 feed filters: worldwide (default) | places (people who share my
+  // college/workplace) | following (people I follow). Own posts stay visible
+  // in every filter.
+  const filter = String(req.query.filter || 'worldwide');
+  let authorFilter = null;
+  if (filter === 'places') authorFilter = new Set([req.userId, ...usersSharingPlaces(req.userId)]);
+  else if (filter === 'following') authorFilter = new Set([req.userId, ...followingIds(req.userId)]);
 
   let sql = 'SELECT * FROM posts WHERE deleted = 0 AND created_at < ?';
   const baseParams = [];
@@ -2589,7 +2973,9 @@ app.get('/api/posts', requireAuth, (req, res) => {
     const rows = db.prepare(sql).all(before, ...baseParams, batchSize);
     if (!rows.length) { exhausted = true; break; }
     rows.forEach((r) => {
-      if (visible.length < limit && canViewPost(r.id, r.user_id, r.audience || 'public', req.userId)) {
+      if (visible.length >= limit) return;
+      if (authorFilter && !authorFilter.has(r.user_id)) return;
+      if (canViewPost(r.id, r.user_id, r.audience || 'public', req.userId)) {
         visible.push(r);
       }
     });
@@ -2614,9 +3000,14 @@ app.post('/api/posts', requireAuth, (req, res) => {
   if (!text && !mediaUrl && !song) return res.status(400).json({ error: 'Write something, or attach a photo or a song' });
   if (text.length > 2000) return res.status(400).json({ error: 'Post is too long (2000 characters max)' });
 
-  const aud = ['public', 'contacts', 'selected'].includes(audience) ? audience : 'public';
+  const gate = moderation.moderationGate(req.userId);
+  if (gate.blocked) return res.status(403).json({ error: gate.error });
+  const aud = ['public', 'places', 'contacts', 'selected'].includes(audience) ? audience : 'public';
   if (aud === 'selected' && !recipientIds.length) {
     return res.status(400).json({ error: 'Pick at least one person for a targeted post.' });
+  }
+  if (aud === 'places' && !affiliationsForUser(req.userId).length) {
+    return res.status(400).json({ error: 'Join a college or workplace first to post to your places.' });
   }
 
   const post = {
@@ -2648,11 +3039,35 @@ app.post('/api/posts', requireAuth, (req, res) => {
   // Only notify sockets that are allowed to see it.
   const targets = aud === 'public'
     ? [...sockets.keys()]
-    : aud === 'contacts'
-      ? contactIds(req.userId)
-      : recipientIds;
+    : aud === 'places'
+      ? postAudienceIds(row.id, req.userId, 'places')
+      : aud === 'contacts'
+        ? contactIds(req.userId)
+        : recipientIds;
   targets.forEach((uid) => emitToUser(uid, 'post:new', hydratePost(row, uid)));
   emitToUser(req.userId, 'post:new', hydratePost(row, req.userId));
+
+  // Phase 2 pushes — campus loop + followers. Capped so a viral poster can't
+  // stampede Expo; settings (notifications.network) + quiet hours are
+  // enforced inside pushToUser as for every other push.
+  const author = getUser(req.userId);
+  if (aud === 'places') {
+    push.notifyPlacePost({
+      userIds: usersSharingPlaces(req.userId).slice(0, 100),
+      actor: author,
+      post: row,
+      placeLabel: placeLabelFor(req.userId),
+    });
+  }
+  if (author) {
+    const followerTargets = db
+      .prepare('SELECT follower_id id FROM follows WHERE followed_id = ?')
+      .all(req.userId)
+      .map((r) => r.id)
+      .filter((id) => canViewPost(row.id, req.userId, aud, id))
+      .slice(0, 100);
+    push.notifyFollowerPost({ userIds: followerTargets, actor: author, post: row });
+  }
 
   res.json({ post: hydratePost(row, req.userId) });
 });
@@ -2675,7 +3090,11 @@ app.post('/api/posts/:id/like', requireAuth, (req, res) => {
 
   const existing = db.prepare('SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?').get(row.id, req.userId);
   if (existing) db.prepare('DELETE FROM post_likes WHERE post_id = ? AND user_id = ?').run(row.id, req.userId);
-  else db.prepare('INSERT INTO post_likes (post_id, user_id, at) VALUES (?,?,?)').run(row.id, req.userId, now());
+  else {
+    db.prepare('INSERT INTO post_likes (post_id, user_id, at) VALUES (?,?,?)').run(row.id, req.userId, now());
+    // Notify the author on the like itself (never the unlike).
+    push.notifyPostLike({ ownerId: row.user_id, actor: getUser(req.userId), post: row });
+  }
 
   const likes = db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id = ?').get(row.id).c;
   postAudienceIds(row.id, row.user_id, row.audience || 'public').forEach((uid) => emitToUser(uid, 'post:likes', { id: row.id, likes }));
@@ -2712,9 +3131,14 @@ app.post('/api/posts/:id/comments', requireAuth, (req, res) => {
   }
   const text = String(req.body?.body || '').trim();
   if (!text) return res.status(400).json({ error: 'Comment cannot be empty' });
+  const gate = moderation.moderationGate(req.userId);
+  if (gate.blocked) return res.status(403).json({ error: gate.error });
 
   const c = { id: nano(), post_id: post.id, user_id: req.userId, body: text.slice(0, 600), created_at: now() };
   db.prepare('INSERT INTO post_comments (id, post_id, user_id, body, created_at) VALUES (@id,@post_id,@user_id,@body,@created_at)').run(c);
+  if (post.user_id !== req.userId) {
+    push.notifyPostComment({ ownerId: post.user_id, actor: getUser(req.userId), post, body: c.body });
+  }
 
   const count = db.prepare('SELECT COUNT(*) c FROM post_comments WHERE post_id = ?').get(post.id).c;
   postAudienceIds(post.id, post.user_id, post.audience || 'public').forEach((uid) => emitToUser(uid, 'post:comments', { id: post.id, comments: count }));
@@ -2789,6 +3213,9 @@ function hydrateCommunity(row, viewerId) {
     isMember: !!me,
     pendingRequest,
     requestCount,
+    // Invite links: only admins see the code (so members can't leak it by
+    // just opening the detail screen).
+    inviteCode: me && me.role === 'admin' ? row.invite_code || null : null,
   };
 }
 
@@ -2848,9 +3275,9 @@ app.post('/api/communities', requireAuth, (req, res) => {
   db.prepare('INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(chatId, req.userId, 'admin', t);
 
   db.prepare(
-    `INSERT INTO communities (id, name, description, category, avatar, chat_id, created_by, join_policy, visibility, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-  ).run(id, trimmedName, String(description || '').trim(), category, avatar || null, chatId, req.userId, joinPolicy, visibility, t, t);
+    `INSERT INTO communities (id, name, description, category, avatar, chat_id, created_by, join_policy, visibility, invite_code, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(id, trimmedName, String(description || '').trim(), category, avatar || null, chatId, req.userId, joinPolicy, visibility, communityInviteCode(), t, t);
   db.prepare('INSERT INTO community_members (community_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(id, req.userId, 'admin', t);
 
   const creator = getUser(req.userId);
@@ -2897,6 +3324,56 @@ app.delete('/api/communities/:id', requireAuth, (req, res) => {
 });
 
 /** Join (or request to join) a community — behaviour depends on join_policy. */
+/** Short, unambiguous invite code (8 chars, no 0/o/1/l). */
+function communityInviteCode() {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+  let code;
+  do {
+    code = Array.from({ length: 8 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+  } while (db.prepare('SELECT 1 FROM communities WHERE invite_code = ?').get(code));
+  return code;
+}
+
+/** Join a community via invite link (`https://…/c/<code>`). A valid code
+ *  joins directly regardless of join_policy — the link IS the approval. */
+app.post('/api/communities/join-by-code', requireAuth, (req, res) => {
+  const code = String(req.body?.code || '').trim().toLowerCase();
+  if (!code) return res.status(400).json({ error: 'Missing invite code' });
+  const row = db.prepare('SELECT * FROM communities WHERE invite_code = ?').get(code);
+  if (!row) return res.status(404).json({ error: 'This invite link is not valid' });
+  if (blockedEitherWay(req.userId, row.created_by) && communityRole(row.id, req.userId) === null) {
+    return res.status(403).json({ error: 'This invite is unavailable' });
+  }
+
+  if (communityRole(row.id, req.userId)) {
+    return res.json({ community: hydrateCommunity(row, req.userId), alreadyMember: true });
+  }
+
+  const t = now();
+  db.prepare('INSERT INTO community_members (community_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(row.id, req.userId, 'member', t);
+  if (row.chat_id) {
+    db.prepare('INSERT OR IGNORE INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)').run(row.chat_id, req.userId, 'member', t);
+    const joiner = getUser(req.userId);
+    insertSystemMessage(row.chat_id, `${joiner.name} joined via invite link`);
+    memberIds(row.chat_id).forEach((uid) => emitToUser(uid, 'chat:new', chatSummary(row.chat_id, uid)));
+  }
+  db.prepare('UPDATE communities SET updated_at = ? WHERE id = ?').run(t, row.id);
+  db.prepare('DELETE FROM community_requests WHERE community_id = ? AND user_id = ?').run(row.id, req.userId);
+  const updated = db.prepare('SELECT * FROM communities WHERE id = ?').get(row.id);
+  communityMemberIds(row.id).forEach((uid) => emitToUser(uid, 'community:updated', hydrateCommunity(updated, uid)));
+  res.json({ community: hydrateCommunity(updated, req.userId), alreadyMember: false });
+});
+
+/** Admin: rotate the invite code (revokes the old link). */
+app.post('/api/communities/:id/invite/rotate', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Community not found' });
+  if (communityRole(row.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Admins only' });
+  const code = communityInviteCode();
+  db.prepare('UPDATE communities SET invite_code = ?, updated_at = ? WHERE id = ?').run(code, now(), row.id);
+  res.json({ inviteCode: code });
+});
+
 app.post('/api/communities/:id/join', requireAuth, (req, res) => {
   const row = db.prepare('SELECT * FROM communities WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Community not found' });
@@ -2911,8 +3388,9 @@ app.post('/api/communities/:id/join', requireAuth, (req, res) => {
   if (row.join_policy === 'request') {
     db.prepare('INSERT OR IGNORE INTO community_requests (community_id, user_id, requested_at) VALUES (?,?,?)').run(row.id, req.userId, t);
     const requester = getUser(req.userId);
-    db.prepare('SELECT user_id FROM community_members WHERE community_id = ? AND role = ?').all(row.id, 'admin')
-      .forEach((a) => emitToUser(a.user_id, 'community:request', { communityId: row.id, user: publicUser(requester) }));
+    const admins = db.prepare('SELECT user_id FROM community_members WHERE community_id = ? AND role = ?').all(row.id, 'admin');
+    admins.forEach((a) => emitToUser(a.user_id, 'community:request', { communityId: row.id, user: publicUser(requester) }));
+    push.notifyCommunityRequest({ adminIds: admins.map((a) => a.user_id), requester, community: row });
     return res.json({ status: 'requested' });
   }
 
@@ -2992,6 +3470,7 @@ app.post('/api/communities/:id/requests/:userId', requireAuth, (req, res) => {
     }
     db.prepare('UPDATE communities SET updated_at = ? WHERE id = ?').run(t, row.id);
     emitToUser(targetId, 'community:approved', { id: row.id });
+    push.notifyCommunityApproved({ userId: targetId, community: row });
   } else {
     emitToUser(targetId, 'community:declined', { id: row.id });
   }
@@ -3071,6 +3550,312 @@ app.delete('/api/communities/:id/members/:userId', requireAuth, (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Safety & Moderation — user reports + admin-only center             */
+/* ------------------------------------------------------------------ */
+
+/** Report a message. Reporters may only report messages in chats they
+ *  belong to (no probing arbitrary ids), are rate-limited, and duplicates
+ *  never double-count. Reports merge into the same cases as automated
+ *  detection. */
+app.post('/api/moderation/report', requireAuth, (req, res) => {
+  const { messageId, reason, note } = req.body || {};
+  if (!moderation.REPORT_REASONS[reason]) return res.status(400).json({ error: 'Pick a valid reason' });
+  const rate = moderation.checkReportRate(req.userId);
+  if (!rate.allowed) return res.status(429).json({ error: 'Too many reports — please wait a bit.', retryAfter: rate.retryAfter });
+
+  const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+  if (!message || message.deleted) return res.status(404).json({ error: 'Message not found' });
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(message.chat_id, req.userId);
+  if (!isMember) return res.status(404).json({ error: 'Message not found' });
+  if (message.sender_id === req.userId) return res.status(400).json({ error: "You can't report your own message" });
+
+  const dup = db.prepare('SELECT 1 FROM moderation_reports WHERE reporter_id = ? AND message_id = ?').get(req.userId, messageId);
+  if (dup) return res.json({ ok: true, duplicate: true });
+
+  const { caseId } = moderation.recordUserReport(
+    { reporterId: req.userId, messageRow: message, reason, note },
+    moderationIO
+  );
+  res.json({ ok: true, caseId });
+});
+
+/* ---- Admin Safety Center API — every route re-verifies the admin role ---- */
+
+function caseSummary(row) {
+  const user = getUser(row.user_id);
+  return {
+    id: row.id,
+    userId: row.user_id,
+    username: user?.username || null,
+    name: user?.name || 'Unknown',
+    category: row.category,
+    severity: row.severity,
+    confidence: row.confidence,
+    source: row.source,
+    signals: row.signals,
+    reason: row.reason,
+    snapshot: row.snapshot,
+    status: row.status,
+    chatId: row.chat_id,
+    messageId: row.message_id,
+    actionTaken: row.action_taken,
+    reviewedBy: row.reviewed_by,
+    reviewedAt: row.reviewed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    userModeration: user?.moderation || 'active',
+  };
+}
+
+app.get('/api/admin/moderation/overview', requireAuth, requireAdmin, (req, res) => {
+  moderation.retentionSweep();
+  const counts = {};
+  moderation.SEVERITIES.forEach((sev) => {
+    counts[sev.toLowerCase()] = db
+      .prepare("SELECT COUNT(*) c FROM moderation_cases WHERE severity = ? AND status IN ('OPEN','UNDER_REVIEW','ESCALATED')")
+      .get(sev).c;
+  });
+  const openCases = db.prepare("SELECT COUNT(*) c FROM moderation_cases WHERE status IN ('OPEN','UNDER_REVIEW','ESCALATED')").get().c;
+  const recent = db
+    .prepare("SELECT * FROM moderation_cases WHERE status IN ('OPEN','UNDER_REVIEW','ESCALATED') ORDER BY (CASE severity WHEN 'CRITICAL' THEN 4 WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 ELSE 1 END) DESC, updated_at DESC LIMIT 12")
+    .all()
+    .map(caseSummary);
+  res.json({ counts, openCases, recent, settings: moderation.getModerationSettings() });
+});
+
+app.get('/api/admin/moderation/cases', requireAuth, requireAdmin, (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 25, 100);
+  const { severity, category, status, source, q } = req.query;
+  const sort = String(req.query.sort || 'new');
+
+  let sql = 'SELECT * FROM moderation_cases WHERE 1=1';
+  const params = [];
+  if (severity && moderation.SEVERITIES.includes(severity.toUpperCase())) { sql += ' AND severity = ?'; params.push(severity.toUpperCase()); }
+  if (category && moderation.CATEGORIES.includes(category)) { sql += ' AND category = ?'; params.push(category); }
+  if (status && moderation.CASE_STATUSES.includes(status.toUpperCase())) { sql += ' AND status = ?'; params.push(status.toUpperCase()); }
+  if (source && ['auto', 'user', 'mixed'].includes(source)) { sql += ' AND source = ?'; params.push(source); }
+  if (sort === 'unreviewed') sql += " AND status = 'OPEN'";
+  if (q) {
+    const clean = String(q).trim().replace(/^[@#\s]+/, '');
+    const term = `%${clean}%`;
+    const like = `%${clean.toLowerCase()}%`;
+    sql += ` AND (
+      CAST(id AS TEXT) LIKE ? OR message_id LIKE ? OR (chat_id IS NOT NULL AND chat_id LIKE ?)
+      OR user_id IN (SELECT id FROM users WHERE username_key LIKE ? OR name LIKE ?)
+    )`;
+    params.push(term, term, term, like, term);
+  }
+  sql += sort === 'old'
+    ? ' ORDER BY created_at ASC'
+    : sort === 'severity'
+      ? " ORDER BY (CASE severity WHEN 'CRITICAL' THEN 4 WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 1 ELSE 0 END) DESC, updated_at DESC"
+      : sort === 'confidence'
+        ? ' ORDER BY confidence DESC, updated_at DESC'
+        : ' ORDER BY updated_at DESC';
+  sql += ` LIMIT ${Number(limit) + 1}`;
+
+  const rows = db.prepare(sql).all(...params);
+  const hasMore = rows.length > limit;
+  res.json({ cases: rows.slice(0, limit).map(caseSummary), hasMore });
+});
+
+app.get('/api/admin/moderation/cases/:id', requireAuth, requireAdmin, (req, res) => {
+  const row = db.prepare('SELECT * FROM moderation_cases WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Case not found' });
+  const user = getUser(row.user_id);
+  const reports = db
+    .prepare(`SELECT r.*, u.username reporter_username, u.name reporter_name FROM moderation_reports r
+              LEFT JOIN users u ON u.id = r.reporter_id WHERE r.case_id = ? ORDER BY r.created_at DESC LIMIT 25`)
+    .all(row.id)
+    .map((r) => ({ id: r.id, reporter: r.reporter_username ? { id: r.reporter_id, username: r.reporter_username, name: r.reporter_name } : null, reason: r.reason, note: r.note, createdAt: r.created_at }));
+  const actions = db
+    .prepare(`SELECT a.*, u.username admin_username FROM moderation_actions a
+              LEFT JOIN users u ON u.id = a.admin_id WHERE a.case_id = ? ORDER BY a.created_at DESC LIMIT 25`)
+    .all(row.id)
+    .map((a) => ({ id: a.id, admin: a.admin_username, action: a.action, reason: a.reason, createdAt: a.created_at }));
+  const message = row.message_id ? db.prepare('SELECT id, chat_id, sender_id, type, body, deleted, created_at FROM messages WHERE id = ?').get(row.message_id) : null;
+  const chat = row.chat_id ? db.prepare('SELECT id, type, name FROM chats WHERE id = ?').get(row.chat_id) : null;
+  const history = db
+    .prepare('SELECT * FROM moderation_cases WHERE user_id = ? AND id != ? ORDER BY created_at DESC LIMIT 10')
+    .all(row.user_id, row.id)
+    .map(caseSummary);
+  res.json({
+    case: caseSummary(row),
+    user: user ? { id: user.id, username: user.username, name: user.name, avatar: user.avatar, moderation: user.moderation, role: user.role, createdAt: user.created_at } : null,
+    reports,
+    actions,
+    message: message ? { id: message.id, body: message.body, type: message.type, deleted: !!message.deleted, createdAt: message.created_at } : null,
+    conversation: chat ? { id: chat.id, type: chat.type, name: chat.type === 'group' ? chat.name : 'Private Chat' } : null,
+    userHistory: history,
+  });
+});
+
+const REVIEW_ACTIONS = {
+  confirm: 'CONFIRMED',
+  dismiss: 'CLOSED',
+  escalate: 'ESCALATED',
+  false_positive: 'FALSE_POSITIVE',
+  under_review: 'UNDER_REVIEW',
+  close: 'CLOSED',
+  no_action: 'CLOSED',
+};
+
+app.post('/api/admin/moderation/cases/:id/review', requireAuth, requireAdmin, (req, res) => {
+  const row = db.prepare('SELECT * FROM moderation_cases WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Case not found' });
+  const { action, reason } = req.body || {};
+  const nextStatus = REVIEW_ACTIONS[action];
+  if (!nextStatus) return res.status(400).json({ error: 'Invalid review action' });
+  if ((action === 'ban' || action === 'remove_content') && !reason) {
+    return res.status(400).json({ error: 'A reason is required for this action' });
+  }
+
+  const t = now();
+  const admin = getUser(req.userId);
+  db.prepare('UPDATE moderation_cases SET status = ?, reviewed_by = ?, reviewed_at = ?, action_taken = ?, updated_at = ? WHERE id = ?')
+    .run(nextStatus, req.userId, t, action, t, row.id);
+  db.prepare('INSERT INTO moderation_actions (case_id, admin_id, action, target_user_id, reason, created_at) VALUES (?,?,?,?,?,?)')
+    .run(row.id, req.userId, action, row.user_id, String(reason || '').slice(0, 500) || null, t);
+  const target = getUser(row.user_id);
+  moderation.writeAudit({
+    adminId: req.userId, adminName: admin?.username,
+    action: `case:${action}`, target: target ? `@${target.username}` : row.user_id,
+    caseId: row.id, detail: reason,
+  });
+  // A confirmed false positive is feedback for the rules — recorded, never
+  // an automatic punishment, and never auto-training anything.
+  if (action === 'false_positive' && row.category !== 'other') {
+    db.prepare('INSERT OR IGNORE INTO moderation_settings (key, value) VALUES (?, ?)')
+      .run(`fp:${row.category}:${row.message_id || 'x'}`, String(t));
+  }
+  moderationIO.emitToUser(req.userId, 'moderation:update', { caseId: row.id, status: nextStatus, at: t });
+  res.json({ case: caseSummary(db.prepare('SELECT * FROM moderation_cases WHERE id = ?').get(row.id)) });
+});
+
+/** Remove the flagged content (soft-delete, like a sender's own delete). */
+app.post('/api/admin/moderation/cases/:id/remove-content', requireAuth, requireAdmin, (req, res) => {
+  const row = db.prepare('SELECT * FROM moderation_cases WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Case not found' });
+  const { reason } = req.body || {};
+  if (!row.message_id) return res.status(400).json({ error: 'No message attached to this case' });
+  const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(row.message_id);
+  if (message && !message.deleted) {
+    db.prepare('UPDATE messages SET deleted = 1 WHERE id = ?').run(message.id);
+    emitToChat(message.chat_id, 'message:updated', (viewer) => hydrateMessage(db.prepare('SELECT * FROM messages WHERE id = ?').get(message.id), viewer));
+  }
+  const t = now();
+  const admin = getUser(req.userId);
+  db.prepare('UPDATE moderation_cases SET status = ?, action_taken = ?, updated_at = ? WHERE id = ?').run('ACTION_TAKEN', 'remove_content', t, row.id);
+  db.prepare('INSERT INTO moderation_actions (case_id, admin_id, action, target_user_id, reason, created_at) VALUES (?,?,?,?,?,?)')
+    .run(row.id, req.userId, 'remove_content', row.user_id, String(reason || '').slice(0, 500) || null, t);
+  moderation.writeAudit({
+    adminId: req.userId, adminName: admin?.username,
+    action: 'content:removed', target: `@${getUser(row.user_id)?.username || row.user_id}`,
+    caseId: row.id, detail: reason,
+  });
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/moderation/users/:id', requireAuth, requireAdmin, (req, res) => {
+  const u = getUser(req.params.id);
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  const cases = db.prepare('SELECT * FROM moderation_cases WHERE user_id = ? ORDER BY created_at DESC LIMIT 25').all(u.id).map(caseSummary);
+  res.json({
+    user: { id: u.id, username: u.username, name: u.name, avatar: u.avatar, role: u.role, moderation: u.moderation, suspendedUntil: u.suspended_until, createdAt: u.created_at, lastSeen: u.last_seen, isOnline: u.is_online },
+    cases,
+    counts: {
+      total: cases.length,
+      confirmed: cases.filter((c) => c.status === 'CONFIRMED' || c.status === 'ACTION_TAKEN').length,
+      falsePositives: cases.filter((c) => c.status === 'FALSE_POSITIVE').length,
+    },
+  });
+});
+
+app.post('/api/admin/moderation/users/:id/action', requireAuth, requireAdmin, (req, res) => {
+  const { action, reason, days, caseId, confirmIrreversible } = req.body || {};
+  if (!moderation.USER_ACTIONS.includes(action)) return res.status(400).json({ error: 'Invalid action' });
+  if (['ban', 'suspend'].includes(action) && confirmIrreversible !== true) {
+    return res.status(400).json({ error: 'This action requires explicit confirmation (confirmIrreversible: true)' });
+  }
+  try {
+    const result = moderation.applyUserAction({
+      adminId: req.userId, targetId: req.params.id, action, reason, days, caseId, io: moderationIO,
+    });
+    const admin = getUser(req.userId);
+    const target = getUser(req.params.id);
+    moderation.writeAudit({
+      adminId: req.userId, adminName: admin?.username,
+      action: `user:${action}`, target: `@${target?.username || req.params.id}`,
+      caseId: caseId || null, detail: reason,
+    });
+    if (caseId) {
+      db.prepare('UPDATE moderation_cases SET status = ?, action_taken = ?, updated_at = ? WHERE id = ?')
+        .run('ACTION_TAKEN', action, now(), caseId);
+    }
+    // Enforcement takes effect immediately on live sessions.
+    if (['banned', 'suspended'].includes(result.state)) {
+      const ids = sockets.get(req.params.id);
+      ids?.forEach((socketId) => io.sockets.sockets.get(socketId)?.disconnect(true));
+      sockets.delete(req.params.id);
+    }
+    res.json({ ok: true, state: result.state });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/moderation/audit', requireAuth, requireAdmin, (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const before = Number(req.query.before) || Date.now() + 1;
+  const rows = db
+    .prepare('SELECT * FROM moderation_audit_log WHERE created_at < ? ORDER BY created_at DESC LIMIT ?')
+    .all(before, limit + 1);
+  res.json({
+    entries: rows.slice(0, limit).map((r) => ({
+      id: r.id, admin: r.admin_name || r.admin_id, action: r.action, target: r.target,
+      caseId: r.case_id, detail: r.detail, createdAt: r.created_at,
+    })),
+    hasMore: rows.length > limit,
+  });
+});
+
+app.get('/api/admin/moderation/settings', requireAuth, requireAdmin, (req, res) => {
+  res.json({ settings: moderation.getModerationSettings() });
+});
+
+app.put('/api/admin/moderation/settings', requireAuth, requireAdmin, (req, res) => {
+  const { alertPushLevel, caseLevel, lowAggregationMinutes, retentionDays } = req.body || {};
+  const changes = [];
+  const current = moderation.getModerationSettings();
+  const apply = (key, value) => {
+    if (value === undefined || value === null || String(value) === String(current[key])) return;
+    moderation.setModerationSetting(key, value);
+    changes.push(`${key}: ${current[key]} → ${value}`);
+  };
+  if (alertPushLevel !== undefined) {
+    if (!moderation.SEVERITIES.includes(alertPushLevel) && alertPushLevel !== 'NONE') return res.status(400).json({ error: 'Invalid alertPushLevel' });
+    apply('alertPushLevel', alertPushLevel);
+  }
+  if (caseLevel !== undefined) {
+    if (!['LOW', 'MEDIUM', 'HIGH'].includes(caseLevel)) return res.status(400).json({ error: 'Invalid caseLevel' });
+    apply('caseLevel', caseLevel);
+  }
+  if (lowAggregationMinutes !== undefined) {
+    const v = Math.max(5, Math.min(24 * 60, Number(lowAggregationMinutes) || 60));
+    apply('lowAggregationMinutes', v);
+  }
+  if (retentionDays !== undefined) {
+    const v = Math.max(30, Math.min(3650, Number(retentionDays) || 180));
+    apply('retentionDays', v);
+  }
+  if (changes.length) {
+    const admin = getUser(req.userId);
+    moderation.writeAudit({ adminId: req.userId, adminName: admin?.username, action: 'settings:update', detail: changes.join('; ') });
+  }
+  res.json({ settings: moderation.getModerationSettings() });
+});
+
+/* ------------------------------------------------------------------ */
 /* socket.io realtime                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -3085,6 +3870,23 @@ function emitToUser(userId, event, payload) {
   if (!set) return;
   set.forEach((sid) => io.to(sid).emit(event, payload));
 }
+
+/* Adapter the moderation engine uses for realtime + pushes (kept tiny so
+   moderation.js stays free of socket/push imports). */
+const moderationIO = {
+  emitToUser: (userId, event, payload) => emitToUser(userId, event, payload),
+  pushAdminSafety: (adminId, { severity, category, source, caseId }) => {
+    push.notifySafetyAlert({
+      userId: adminId,
+      title: severity === 'CRITICAL' ? '🚨 CRITICAL Safety Alert' : '🚨 Safety Alert',
+      body: `${severity} · ${category.replace(/_/g, ' ')} · ${source === 'user' ? 'user report' : source === 'mixed' ? 'multiple signals' : 'automated detection'} — open the Safety Center to review.`,
+      caseId,
+    }).catch(() => {});
+  },
+  pushSafetyWarning: (targetId, reason) => {
+    push.notifySafetyWarning({ userId: targetId, reason }).catch(() => {});
+  },
+};
 
 function emitToChat(chatId, event, payloadFor) {
   memberIds(chatId).forEach((uid) => {
@@ -3184,6 +3986,7 @@ io.on('connection', (socket) => {
       const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(msg.id);
       emitToChat(chatId, 'message:new', (viewer) => ({ message: hydrateMessage(row, viewer) }));
       emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
+      push.notifyMessage({ chatId, chat, message: row, senderId: uid });
       ack?.({ message: hydrateMessage(row, uid) });
     } catch (e) {
       ack?.({ error: e.message });
@@ -3290,6 +4093,8 @@ io.on('connection', (socket) => {
   socket.on('call:invite', ({ chatId, calleeId, type: callType = 'audio' }, ack) => {
     try {
       if (!calleeId || !getUser(calleeId)) return ack?.({ error: 'Unknown user' });
+      const callGate = moderation.moderationGate(uid);
+      if (callGate.blocked) return ack?.({ error: callGate.error });
       if (blockedEitherWay(uid, calleeId)) return ack?.({ error: "You can't call this person" });
       if (activeCallId()) return ack?.({ error: 'You are already on a call' });
       if (activeCalls.get(calleeId)) {
@@ -3313,6 +4118,7 @@ io.on('connection', (socket) => {
       const call = db.prepare('SELECT * FROM calls WHERE id = ?').get(id);
       const caller = getUser(uid);
       emitToUser(calleeId, 'call:incoming', { ...hydrateCall(call, calleeId), caller: publicUser(caller) });
+      push.notifyIncomingCall({ calleeId, caller, call, chatId });
       ack?.({ call: hydrateCall(call, uid) });
 
       // Auto-miss after 45s of no answer, same as most messengers.

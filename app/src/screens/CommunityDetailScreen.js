@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator, Modal, Share } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
-import { api } from '../api';
+import { api, WEB_APP_URL } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
@@ -31,6 +31,32 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
   const [busy, setBusy] = useState(false);
   const [requests, setRequests] = useState([]);
   const [showRequests, setShowRequests] = useState(false);
+
+  /* Invite link: share it anywhere (WhatsApp/SMS). The link IS the approval —
+     a valid code joins directly regardless of join policy. Long-press
+     rotates the code, revoking the old link. */
+  const inviteUrl = community?.inviteCode ? `${WEB_APP_URL}/c/${community.inviteCode}` : null;
+  const shareInvite = async () => {
+    if (!inviteUrl) return;
+    try {
+      await Share.share({
+        title: `Invite to ${community.name}`,
+        url: inviteUrl,
+        message: `Join me in “${community.name}” on +one — one tap and you're in: ${inviteUrl}`,
+      });
+    } catch {}
+  };
+  const rotateInvite = async () => {
+    if (!community?.inviteCode) return;
+    const ok = await confirm('Make a new invite link? The current one stops working.', {
+      title: 'Rotate invite link', confirmLabel: 'Rotate', destructive: true,
+    });
+    if (!ok) return;
+    try {
+      const { inviteCode } = await api.rotateInviteCode(community.id);
+      setCommunity((prev) => (prev ? { ...prev, inviteCode } : prev));
+    } catch {}
+  };
 
   const load = useCallback(async () => {
     if (!communityId) return;
@@ -170,6 +196,24 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
           >
             <Icon name="chatbubbles-outline" size={19} color={theme.ink} />
             <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]}>Open group chat</Text>
+            <Icon name="chevron-forward-outline" size={16} color={theme.muted} />
+          </Pressable>
+        )}
+
+        {community.role === 'admin' && inviteUrl && (
+          <Pressable
+            onPress={shareInvite}
+            onLongPress={rotateInvite}
+            android_ripple={rippleFor(theme)}
+            style={({ pressed }) => [s.chatRow, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}
+          >
+            <Icon name="share-outline" size={19} color={theme.ink} />
+            <View style={{ flex: 1 }}>
+              <Text style={[type.bodyMd, { color: theme.text }]}>Invite with a link</Text>
+              <Text style={[type.labelXs, { color: theme.muted, marginTop: 2 }]}>
+                ANYONE WITH THE LINK JOINS · HOLD TO ROTATE
+              </Text>
+            </View>
             <Icon name="chevron-forward-outline" size={16} color={theme.muted} />
           </Pressable>
         )}

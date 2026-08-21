@@ -107,7 +107,7 @@ What makes old-device support work:
 - `expo-haptics` is optional at runtime (guarded try/catch, no-op on web and
   on devices without a haptic engine).
 
-Current release metadata: version **1.3.0**, Android `versionCode` **5**.
+Current release metadata: version **1.4.0**, Android `versionCode` **6**.
 
 ### API endpoint for native builds
 
@@ -132,6 +132,111 @@ Existing installed APK/IPA builds do not receive JavaScript source changes autom
 cd app
 npx eas build --platform android
 ```
+
+### Push notifications (new in 1.4.0 — Phase 1)
+
+Push is the "something waiting" loop: without it, nobody reopens the app. What is
+implemented and live in this repo:
+
+| Piece | Status |
+|---|---|
+| Server fan-out on real events | New message / group @mention, message & connect requests (Activity), colleague requests, likes/comments on your posts, community join approvals, incoming call |
+| Deep links | Notification tap opens the exact screen (Conversation / Activity / Colleagues tab / Network) via the `plusone://` scheme + payload route |
+| Per-chat mute | Respected server-side — a muted chat never pings |
+| Quiet hours | Settings ▸ Notifications ▸ Quiet hours; enforced server-side in the user's own timezone. Pushes still arrive but silently (`*-silent` Android channels, no sound) |
+| Per-type toggles | Messages, requests & activity, likes & comments, calls, preview text — all server-enforced |
+| Badge counts | Each push carries unread chats + pending Activity; the app keeps the badge in sync while in use |
+| Token registry | `POST/DELETE /api/push/token` (auth-scoped); dead tokens auto-pruned when Expo reports `DeviceNotRegistered` |
+| Tests | `cd server && node test-push.js` — 31 end-to-end checks against a stubbed Expo endpoint |
+
+What it needs to actually reach devices:
+
+1. **A fresh Android APK (1.4.0 / versionCode 6)** — push adds the
+   `expo-notifications` native module, so OTA updates cannot install it on
+   existing builds. Build with EAS as above.
+2. **A one-time FCM v1 credential** — Android delivery through Expo requires a
+   Firebase service-account key uploaded once:
+   - Firebase console → Project settings → Service accounts → *Generate new private key* (JSON).
+   - `cd app && npx eas credentials -p android` → Push Notifications → upload that JSON
+     (or expo.dev → project → Credentials → Android → FCM v1).
+   - Never commit the JSON or paste its contents anywhere.
+   Until this is done, devices register tokens but no push can be delivered.
+3. **No server configuration** — the Expo Push API needs no server key or env
+   var; deploy the backend as usual.
+
+iOS can follow later with APNs keys (`eas credentials -p ios`); the entire client
+and server code path is already platform-neutral.
+
+Foreground behaviour: while the app is open, pushes are suppressed (no banner) —
+the socket already updates chats, badges and the incoming-call overlay live.
+When the app is backgrounded/killed, the OS displays the notification.
+
+### Phase 2 — the daily campus loop ("Today at your place")
+
+The goal: a user with a college on their profile has something new to tap every
+afternoon **without opening Chats**. All JavaScript — no new native modules, so
+unlike Phase 1 it also reaches existing installs via OTA once they carry a
+push-capable runtime.
+
+| Piece | What it does |
+|---|---|
+| Today strip (Colleagues + Network) | Who's around / online from your places, one-tap **"I'M AROUND"** (a 12-hour flag, re-upping extends it), and today's posts from your places. Hidden for profiles with no places. |
+| Greeter handoff | The morning greeting now says *"2 people from your college posted today, and 1 person is around now"* — then, instead of auto-dismissing, it holds on the last line with a **SEE TODAY AT YOUR COLLEGE** button that lands on the Colleagues tab (where the strip lives). |
+| Network filters | **Worldwide / My places / Following** chips on the feed. The Today strip and greeter can jump straight into the My-places lens from anywhere. |
+| Follow | One-way follow from any Network post (FOLLOW / FOLLOWING pill). Follows power the Following lens and its pushes. |
+| Post audience "My places" | Posts can target just people who share your college/workplace (server-enforced, like every other audience). |
+| Campus pushes | *"Riya from your college posted"* (to place-sharers when a post targets My places), *"Amit is around"*, and plain *"posted:"* to followers. All gated by Settings ▸ Notifications ▸ The Network, quiet hours, and mute rules like every other push. |
+| Photo See statuses | Already existed (crop + upload) — no change needed. |
+
+Endpoints: `POST/DELETE /api/users/:id/follow`, `POST /api/me/around`,
+`GET /api/today?since=<local midnight>`, `?filter=worldwide|places|following`
+on `GET /api/posts`, audience `places` on `POST /api/posts`, and
+`placesPostersToday`/`aroundNow` in `GET /api/greeting-summary`.
+
+Tests: `cd server && node test-phase2.js` — 39 end-to-end checks (follow rules,
+all three feed lenses, places-audience visibility/likes, around lifecycle +
+expiry sweep, Today payload scoping, greeter counts, all three campus pushes).
+
+**Done when:** a user with a college on their profile has something new to tap
+every afternoon without opening Chats.
+
+---
+
+## 3b. Phase 3 — finish what exists + web push + CI
+
+| Piece | Status |
+|---|---|
+| **Live calls on Android** | `react-native-webrtc` (124.x) + `@config-plugins/react-native-webrtc`; a platform adapter (`app/src/webrtc/`) gives web and native one API; `CallOverlay` renders native video via `RTCView`. Camera/mic permissions added (Android `CAMERA`/`MODIFY_AUDIO_SETTINGS`, iOS usage strings). **Needs the fresh 1.4.0+ APK** — same build as push. |
+| **Web push (full parity)** | Browsers get every push Android/iOS get. Plain Web Push (VAPID), signed and sent by the +one server itself — keys auto-generate on first boot and persist on `/data` (override with `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`). Service worker (`app/public/service-worker.js`) shows notifications only when the app isn't visible, forwards taps to the page for exact-screen routing, and tags chat notifications per conversation. Register on the web app: sign in → allow notifications. |
+| **Community invite links** | 8-char code per community (admins only see it), `Share` sheet with `https://…/c/<code>`, join-by-code bypasses every join policy (the link IS the approval), long-press rotates/revokes. Web `/c/<code>` and native `plusone://c/<code>` both deep-link: join → open the community detail. |
+| **Hold-to-record voice notes** | Hold the mic button to record, release to send; quick taps cancel (never send accidents). Race-safe: a release during recorder start-up parks the stop. |
+| **Activity grouping** | Likes/comments on your posts collapse into one row per post ("7 people liked your post") with stacked avatars; latest comment as preview. 7-day window. |
+| Songs on See/Network | Already existed (crop + upload + Jamendo picker) — verified, no change needed. |
+| **CI** | Workflow file shipped at `docs/ci.workflow.yml` — activate once via GitHub → Add file → Create new file → name it `.github/workflows/ci.yml` → paste it in (the sandbox's git token cannot create workflow files). Every push/PR then runs all five server suites (138 checks) + web and Android bundle exports. |
+
+New endpoints: `GET /api/push/web-config`, `POST/DELETE /api/push/web-subscription`,
+`POST /api/communities/join-by-code`, `POST /api/communities/:id/invite/rotate`.
+Tests: `npm run test:phase3` — 27 checks (invite lifecycle incl. rotation +
+admin-only visibility, activity grouping, web-push parity + 410 pruning).
+
+---
+
+## 3c. Safety & Moderation Center (admin-only)
+
+Private to accounts with the backend `admin` **role** (initial admin: `saksham`, granted at boot/registration — extra admins via the `ADMIN_USERNAMES` env var). The Settings screen shows *Admin ▸ Safety & Moderation* only for admins, and **every** admin API request re-verifies the role server-side (`requireAdmin`) — no client check is ever trusted.
+
+| Piece | How it works |
+|---|---|
+| Detection pipeline | Runs **after** a message is stored and delivered — messaging is never blocked by analysis. Context-aware rules (threat / self-harm / violence / weapons / extremism / child-safety / sexual coercion / hate / harassment / scam / doxxing / spam / profanity) score message *shapes* (directed, future-intent), then context signals (quotation, educational/news framing, negation, questions) demote confidence: "Violence is bad." and quotes never alert; "I'm going to hurt you" does. |
+| Severities | INFO/LOW (aggregate silently — never alert), MEDIUM (reviewable case), HIGH/CRITICAL (case + realtime dashboard alert + admin push on every platform incl. web push). |
+| Dedupe/aggregation | Same message+category → signals counter, never duplicate cases. LOW events collapse per user/category in a 60-min window. User reports on an auto-flagged message mark it *mixed* with multiple signals. |
+| User reports | ⋯ menu ▸ **Report** with 10 reasons + optional note. Rate-limited (5/min, 25/h), duplicate-proof, chat-membership-verified (no probing foreign ids). Reports and automated detections land in the same cases. |
+| Admin UI | Overview (counts + recent alerts), Cases (severity/category/status/source/sort filters + search by case id/@username/message/chat id), case detail (evidence snapshot, reporters, history, actions: confirm/dismiss/escalate/false-positive/under-review; warn/restrict/suspend/ban/remove-content/no-action — irreversible ones require explicit confirmation), user review panel, append-only Audit tab, Settings tab (alert level, case level, retention). Realtime updates over the socket — no refresh. |
+| Enforcement | `users.moderation` state: warned/restricted/suspended/banned. Login + messaging + posts + statuses + calls are gated server-side; suspension auto-expires; enforcement disconnects live sessions. **Automated detection never auto-punishes** — every consequential action is a human decision, recorded in the audit log. |
+| Privacy | Minimal evidence: message/chat ids + a 280-char snapshot — never copies of private conversations. Reports, confidence scores and case data are never exposed to the reported user or normal users (separate tables, separate APIs, 403 for everyone without the role). Retention: closed cases/reports purged after the configured days (default 180), audit kept 2×. |
+| Tables | `moderation_cases`, `moderation_reports`, `moderation_actions`, `moderation_audit_log` (append-only), `moderation_settings` + `users.role/moderation/suspended_until`. |
+
+Tests: `npm run test:moderation` — **55 checks** covering the spec's acceptance flow: harmless messages create nothing; context negatives (quotes/questions/education) never alert; a real threat → case → realtime alert → admin push (Android + web) → review → restrict (server-blocked messaging) → unrestrict → audit; unauthorized users get 403 on every admin endpoint; report dedupe, probing protection and rate limits; false positives close without punishment; LOW aggregation; scam detection; settings + audit of changes.
 
 ---
 
@@ -442,8 +547,11 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 
 ### High priority
 
+- [ ] Upload the FCM v1 service-account key (`eas credentials -p android`) so Expo can deliver Android pushes.
+- [ ] Build and distribute the **1.4.0** Android APK (push notifications add a native module — no OTA path from 1.3.0). Phase 2 is pure JavaScript and ships in the same build.
+- [ ] Device test the full loop: message a locked phone → tap the notification → it opens that exact chat. Repeat for a muted chat (no push) and quiet hours (silent push).
+- [ ] Device test the campus loop: two accounts sharing a college → "I'm around" → the other sees the Today strip + gets the push → greeter mentions the college activity and the handoff opens it.
 - [ ] Confirm Supabase Storage is active in Railway logs.
-- [ ] Build/distribute the new +one 1.2.0 Android APK (AI location, speech and GL modules require a fresh binary).
 - [ ] Test registration, login, logout, profile photo add/remove, and real-time messages on a second physical device.
 - [ ] Verify data remains after a Railway redeploy.
 
@@ -470,6 +578,9 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 | `2f8d999` | Strong password policy added. |
 | `9a59577` | Kinetic Ink appearance theme added. |
 | `20b1432` | Chat list/conversation manga-paper UI redesign. |
+| current | **Push notifications (Phase 1)**: Expo push on messages/@mentions, requests, colleague requests, likes/comments, calls; deep links to the exact screen; server-enforced per-chat mute, quiet hours and per-type toggles; badge counts; `plusone://` scheme; `test-push.js` (31 checks). |
+| current | **Phase 2 — the daily campus loop**: Today-at-your-place strip (around/online, 12h "I'm around"), greeter campus lines + one-tap handoff, Network Worldwide/My places/Following lenses, follow from posts, "My places" post audience, campus pushes; `test-phase2.js` (39 checks). |
+| current | **Phase 3**: live WebRTC calls on Android, **web push parity** (VAPID, zero-config), community invite links + deep links, hold-to-record voice notes, grouped Activity rows, GitHub Actions CI; `test-phase3.js` (27 checks). |
 | current | Per-conversation chat themes (13 themes, realtime sync, picker with live preview). |
 | current | Centralized motion system (`src/motion.js`): press springs, tab/section transitions, animated message entrances, double-tap ❤️, typing dots, skeleton chat list, story progress bars with hold-to-pause, spring sheets, reduced-motion + haptics support. |
 

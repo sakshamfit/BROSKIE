@@ -77,6 +77,10 @@ export const SOCKET_URL = runningOnVercel || API_URL === DEFAULT_MOBILE_API_URL
   ? DEFAULT_SERVER_URL
   : API_URL;
 
+/** Public web origin — used for shareable links (community invites, profile
+ *  links) that must open in any browser, on any platform. */
+export const WEB_APP_URL = DEFAULT_MOBILE_API_URL;
+
 export function mediaUrl(u) {
   if (!u) return null;
   if (/^https?:|^data:|^file:/.test(u)) return u;
@@ -318,11 +322,44 @@ export const api = {
   // Startup must never hold a low-end phone on a blank/loading screen for
   // multiple full retry windows. A normal refresh can still use `me()`.
   restoreSession: () => request('/api/me', { timeoutMs: 8000, retries: 0 }),
-  greetingSummary: () => request('/api/greeting-summary'),
+  greetingSummary: (since) => request(`/api/greeting-summary${since ? `?since=${Math.floor(since)}` : ''}`),
   deleteAccount: (password) => request('/api/me', { method: 'DELETE', body: { password } }),
   updateMe: (payload) => request('/api/me', { method: 'PATCH', body: payload }),
   updateSettings: (payload) => request('/api/me/settings', { method: 'PATCH', body: payload }),
+  // Push notifications: register this device's Expo token / remove it on logout.
+  registerPushToken: (payload) =>
+    request('/api/push/token', { method: 'POST', body: payload, timeoutMs: 10000, retries: 1 }),
+  unregisterPushToken: (token) =>
+    request('/api/push/token', { method: 'DELETE', body: { token }, timeoutMs: 10000, retries: 0 }),
+  pushInfo: () => request('/api/push/info', { timeoutMs: 10000, retries: 1 }),
+  // Web push (browser Push API, VAPID-signed by the server).
+  webPushConfig: () => request('/api/push/web-config', { timeoutMs: 10000, retries: 1 }),
+  registerWebPushSubscription: (subscription) =>
+    request('/api/push/web-subscription', { method: 'POST', body: { subscription }, timeoutMs: 10000, retries: 1 }),
+  unregisterWebPushSubscription: (endpoint) =>
+    request('/api/push/web-subscription', { method: 'DELETE', body: { endpoint }, timeoutMs: 10000, retries: 0 }),
   changePassword: (payload) => request('/api/me/password', { method: 'POST', body: payload }),
+
+  // Admin Safety Center (server re-verifies the admin role on every call).
+  adminModerationOverview: () => request('/api/admin/moderation/overview', { timeoutMs: 12000, retries: 1 }),
+  adminModerationCases: (params = {}) => {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') q.set(k, v); });
+    return request(`/api/admin/moderation/cases?${q.toString()}`, { timeoutMs: 12000, retries: 1 });
+  },
+  adminModerationCase: (id) => request(`/api/admin/moderation/cases/${id}`, { timeoutMs: 12000, retries: 1 }),
+  adminModerationReview: (id, action, reason) =>
+    request(`/api/admin/moderation/cases/${id}/review`, { method: 'POST', body: { action, reason } }),
+  adminModerationRemoveContent: (id, reason) =>
+    request(`/api/admin/moderation/cases/${id}/remove-content`, { method: 'POST', body: { reason } }),
+  adminModerationUser: (id) => request(`/api/admin/moderation/users/${id}`, { timeoutMs: 12000, retries: 1 }),
+  adminModerationUserAction: (id, body) =>
+    request(`/api/admin/moderation/users/${id}/action`, { method: 'POST', body }),
+  adminModerationAudit: (before) =>
+    request(`/api/admin/moderation/audit${before ? `?before=${Math.floor(before)}` : ''}`, { timeoutMs: 12000, retries: 1 }),
+  adminModerationSettings: () => request('/api/admin/moderation/settings'),
+  adminModerationUpdateSettings: (patch) =>
+    request('/api/admin/moderation/settings', { method: 'PUT', body: patch }),
   users: (q = '', { contactsOnly = false } = {}) =>
     request(`/api/users?q=${encodeURIComponent(q)}${contactsOnly ? '&contacts=1' : ''}`),
 
@@ -413,13 +450,15 @@ export const api = {
   forwardMessage: (messageId, chatIds) =>
     request('/api/messages/forward', { method: 'POST', body: { messageId, chatIds } }),
 
-  // The Network — public posts
-  posts: ({ before, limit = 20, tag, userId } = {}) => {
+  // The Network — public posts. `filter`: worldwide (default) | places (people
+  // sharing my college/workplace) | following (people I follow).
+  posts: ({ before, limit = 20, tag, userId, filter } = {}) => {
     const q = new URLSearchParams();
     if (before) q.set('before', before);
     if (limit) q.set('limit', limit);
     if (tag) q.set('tag', tag);
     if (userId) q.set('userId', userId);
+    if (filter && filter !== 'worldwide') q.set('filter', filter);
     return request(`/api/posts?${q.toString()}`);
   },
   createPost: (payload) => request('/api/posts', { method: 'POST', body: payload }),
@@ -428,6 +467,22 @@ export const api = {
   comments: (id) => request(`/api/posts/${id}/comments`),
   addComment: (id, body) => request(`/api/posts/${id}/comments`, { method: 'POST', body: { body } }),
   postTags: () => request('/api/posts-tags'),
+
+  // Phase 2 — the daily campus loop.
+  follow: (userId) => request(`/api/users/${userId}/follow`, { method: 'POST', body: {} }),
+  unfollow: (userId) => request(`/api/users/${userId}/follow`, { method: 'DELETE' }),
+  setAround: (around = true) => request('/api/me/around', { method: 'POST', body: { around } }),
+  today: (since) => {
+    const q = since ? `?since=${Math.floor(since)}` : '';
+    return request(`/api/today${q}`, { timeoutMs: 15000, retries: 1 });
+  },
+  // Safety & moderation — user reports (admin API below).
+  reportMessage: (messageId, reason, note) =>
+    request('/api/moderation/report', { method: 'POST', body: { messageId, reason, note: note || undefined }, timeoutMs: 12000, retries: 0 }),
+
+  // Community invite links.
+  joinCommunityByCode: (code) => request('/api/communities/join-by-code', { method: 'POST', body: { code } }),
+  rotateInviteCode: (communityId) => request(`/api/communities/${communityId}/invite/rotate`, { method: 'POST', body: {} }),
 
   statuses: () => request('/api/status'),
   postStatus: (payload) => request('/api/status', { method: 'POST', body: payload }),

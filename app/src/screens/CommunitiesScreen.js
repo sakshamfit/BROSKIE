@@ -10,6 +10,7 @@ import { Avatar, EmptyState, TapeChip, rippleFor } from '../components/common';
 import { CATEGORY_LIST, categoryMeta } from '../components/communityMeta';
 import NewCommunityScreen from './NewCommunityScreen';
 import CommunityDetailScreen from './CommunityDetailScreen';
+import { onOpenCommunity, consumePendingCommunity } from '../push/routing';
 import { type, inkBox, marker, radius, raised } from '../theme';
 
 const tiltFor = (i) => (i % 2 === 0 ? '-0.7deg' : '0.6deg');
@@ -35,6 +36,15 @@ export default function CommunitiesScreen({ onOpenChat }) {
   const [refreshing, setRefreshing] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [openId, setOpenId] = useState(null);
+
+  // Invite-link deep links: open this community's detail sheet. Consuming
+  // the pending id on mount covers links that arrived while this page was
+  // not mounted (the swipe pager keeps only neighbours alive).
+  useEffect(() => {
+    const pending = consumePendingCommunity();
+    if (pending) setOpenId(pending);
+    return onOpenCommunity((id) => setOpenId(id));
+  }, []);
 
   const load = useCallback(async (nextScope, nextCategory) => {
     const { communities } = await api.communities({

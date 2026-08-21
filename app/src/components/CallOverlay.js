@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { View, Text, Pressable, StyleSheet, Platform, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
+import { RemoteVideo, LocalVideo } from './CallVideo';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, rippleFor, GoldTick, hasGoldTick } from './common';
@@ -27,19 +28,6 @@ export default function CallOverlay() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const s = makeStyles(theme);
-  const localVideoRef = useRef(null);
-  const remoteVideoRef = useRef(null);
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    if (localVideoRef.current) localVideoRef.current.srcObject = localStream || null;
-  }, [localStream]);
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream || null;
-  }, [remoteStream]);
-
   if (!call) return null;
 
   const isIncoming = call.direction === 'incoming' && call.status === 'ringing';
@@ -64,12 +52,10 @@ export default function CallOverlay() {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={() => {}}>
       <View style={[s.root, { backgroundColor: isVideo && isOngoing ? '#0a0a0a' : theme.bg }]}>
-        {isVideo && isOngoing && Platform.OS === 'web' && (
+        {isVideo && isOngoing && (
           <>
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-            <video ref={remoteVideoRef} autoPlay playsInline style={webStyles.remoteVideo} />
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-            <video ref={localVideoRef} autoPlay playsInline muted style={webStyles.localVideo} />
+            <RemoteVideo stream={remoteStream} style={webStyles.remoteVideo} />
+            <LocalVideo stream={localStream} style={webStyles.localVideo} />
           </>
         )}
 
@@ -90,7 +76,7 @@ export default function CallOverlay() {
           </Text>
           {!callSupported && (isIncoming || isRingingOut) && (
             <Text style={[type.bodySm, { color: theme.danger, marginTop: 10, textAlign: 'center', maxWidth: 280 }]}>
-              Calling needs a desktop/laptop browser — audio/video capture isn't available on this device yet.
+              Calling is not available on this device yet.
             </Text>
           )}
         </View>
@@ -168,10 +154,16 @@ const buttonStyles = StyleSheet.create({
   wrap: { width: 68, height: 68, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
 });
 
-const webStyles = Platform.OS === 'web' ? {
-  remoteVideo: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' },
-  localVideo: { position: 'absolute', top: 24, right: 20, width: 110, height: 150, objectFit: 'cover', borderRadius: 12, borderWidth: 2, borderColor: '#fff' },
-} : {};
+// Works for web <video> (objectFit) and native RTCView alike (objectFit is
+// passed as a prop there; the style key is simply ignored natively).
+const webStyles = {
+  remoteVideo: Platform.OS === 'web'
+    ? { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }
+    : { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
+  localVideo: Platform.OS === 'web'
+    ? { position: 'absolute', top: 24, right: 20, width: 110, height: 150, objectFit: 'cover', borderRadius: 12, borderWidth: 2, borderColor: '#fff' }
+    : { position: 'absolute', top: 24, right: 20, width: 110, height: 150, borderRadius: 12, borderWidth: 2, borderColor: '#fff' },
+};
 
 const makeStyles = (t) => StyleSheet.create({
   root: { flex: 1, alignItems: 'center', justifyContent: 'space-between' },

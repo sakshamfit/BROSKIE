@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  server:
+    name: Server — syntax + all test suites
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Syntax check every source file
+        run: for f in src/*.js test-*.js; do node --check "$f"; done
+      - name: Push notifications suite (31 checks)
+        run: node test-push.js
+      - name: Phase 2 campus loop suite (39 checks)
+        run: node test-phase2.js
+      - name: Phase 3 suite (invite links, grouped activity, web push)
+        run: node test-phase3.js
+      - name: Chat history suite (14 checks)
+        run: node test-chat-history.js
+      - name: Feature suite (boots the server on :4000)
+        run: |
+          node src/index.js > server.log 2>&1 &
+          SERVER_PID=$!
+          for i in $(seq 1 40); do
+            curl -sf http://localhost:4000/api/health > /dev/null && break
+            sleep 1
+          done
+          node test-features.js
+          EXIT=$?
+          kill $SERVER_PID 2>/dev/null || true
+          exit $EXIT
+
+  app:
+    name: App — bundle checks (web + android)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Web bundle export
+        run: CI=true npx expo export --platform web --output-dir /tmp/web-export
+      - name: Android (Hermes) bundle export
+        run: CI=true npx expo export --platform android --output-dir /tmp/android-export

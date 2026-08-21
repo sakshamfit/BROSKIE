@@ -17,11 +17,20 @@ import { api } from '../api';
 import AIGreeterModel from './AIGreeterModel';
 import { Avatar } from './common';
 import { type } from '../theme';
+import { routeFromNotification } from '../push/routing';
 
 const EMPTY_SUMMARY = {
   unreadMessages: 0, unreadChats: 0, messageRequests: 0,
   colleagueRequests: 0, communityRequests: 0, total: 0,
+  placesPostersToday: 0, aroundNow: 0,
 };
+
+/** Local midnight in ms — "today" follows the viewer's day, not UTC's. */
+function localMidnight() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
 
 const periodFor = (hour) => hour < 5 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : hour < 22 ? 'Good evening' : 'Good night';
 
@@ -46,6 +55,20 @@ function notificationSentence(summary) {
   if (!parts.length) return "You're all caught up. There are no new notifications.";
   if (parts.length === 1) return `You have ${parts[0]}.`;
   return `You have ${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}.`;
+}
+
+/** Phase 2: the campus loop line — "2 people from your college posted
+ *  today, and 1 person is around now." Empty string when there's nothing
+ *  place-related to say. */
+function campusSentence(summary, affiliations) {
+  const places = affiliations || [];
+  const where = places.length === 1 ? places[0].name : 'your places';
+  const bits = [];
+  const n = summary.placesPostersToday || 0;
+  if (n > 0) bits.push(`${n} ${n === 1 ? 'person' : 'people'} from ${where} posted today`);
+  const a = summary.aroundNow || 0;
+  if (a > 0) bits.push(`${a} ${a === 1 ? 'person is' : 'people are'} around now`);
+  return bits.length ? `${bits.join(', and ')}.` : '';
 }
 
 function GreeterBackdrop() {
@@ -144,6 +167,7 @@ export default function DailyAIGreeting() {
   const [loading, setLoading] = useState(true);
   const [talking, setTalking] = useState(false);
   const [spokenLine, setSpokenLine] = useState('Preparing your daily signal…');
+  const [finished, setFinished] = useState(false);
   const started = useRef(false);
   const sequenceId = useRef(0);
   const timers = useRef(new Set());
@@ -185,7 +209,7 @@ export default function DailyAIGreeting() {
     let active = true;
     setLoading(true);
     Promise.all([
-      api.greetingSummary().then((result) => result.summary || EMPTY_SUMMARY).catch(() => EMPTY_SUMMARY),
+      api.greetingSummary(localMidnight()).then((result) => result.summary || EMPTY_SUMMARY).catch(() => EMPTY_SUMMARY),
       (async () => {
         try {
           const permission = await Location.requestForegroundPermissionsAsync();
@@ -220,12 +244,15 @@ export default function DailyAIGreeting() {
       ? 'Location is off, so I will skip the weather for today.'
       : 'I could not read the local weather right now.';
   const notices = notificationSentence(summary);
+  const campus = campusSentence(summary, user?.affiliations);
+  const hasCampus = !!(user?.affiliations?.length);
   const speechSegments = useMemo(() => [
     `${period}, ${firstName}.`,
     weatherSentence,
     notices,
+    ...(campus ? [campus] : []),
     "Let's find the plus ones.",
-  ], [period, firstName, weatherSentence, notices]);
+  ], [period, firstName, weatherSentence, notices, campus]);
 
   const schedule = (fn, delay) => {
     const timer = setTimeout(() => {
@@ -242,7 +269,16 @@ export default function DailyAIGreeting() {
     timers.current.clear();
     Speech.stop();
     setTalking(false);
+    setFinished(false);
     setVisible(false);
+  };
+
+  /** Phase 2 handoff: after the last spoken line, jump straight to the
+   *  Colleagues tab where "Today at your place" lives (who's around, today's
+   *  place posts) — instead of dropping the user back wherever they were. */
+  const seeToday = () => {
+    close();
+    routeFromNotification({ route: 'colleagues' });
   };
 
   const speakAutomatically = async () => {
@@ -266,7 +302,11 @@ export default function DailyAIGreeting() {
       if (run !== sequenceId.current) return;
       if (index >= speechSegments.length) {
         setTalking(false);
-        schedule(close, 850);
+        // With places on the profile, the greeting now HOLDS on the last line
+        // and offers the one-tap handoff into "Today at your place" instead
+        // of auto-dismissing into nothing.
+        if (hasCampus) setFinished(true);
+        else schedule(close, 850);
         return;
       }
 
@@ -376,6 +416,16 @@ export default function DailyAIGreeting() {
         <View style={[styles.speechLayer, { paddingBottom: Math.max(insets.bottom + 14, 20) }]}>
           <View style={[styles.speechCard, { width: Math.min(width - 28, 580) }]}>
             <Text style={styles.speechText}>{spokenLine}</Text>
+            {/* One-tap handoff: appears once the greeting finishes speaking.
+                Segment safety timers guarantee `finished` is reached even if
+                TTS is unavailable, so the handoff can never be missed. */}
+            {hasCampus && finished && (
+              <Pressable accessibilityRole="button" accessibilityLabel="See today at your place" onPress={seeToday} style={({ pressed }) => [styles.handoffButton, pressed && { opacity: 0.7 }]}>
+                <Icon name="albums-outline" size={15} color="#f4f0ef" />
+                <Text style={styles.handoffText}>SEE TODAY AT YOUR COLLEGE</Text>
+                <Icon name="arrow-forward" size={14} color="#f4f0ef" />
+              </Pressable>
+            )}
             <View style={styles.metaRow}>
               <View style={styles.metaItem}>
                 <Icon name={weather ? 'sunny-outline' : 'compass-outline'} size={14} color="#c8c6c5" />
@@ -442,6 +492,16 @@ const styles = StyleSheet.create({
   speechText: {
     ...type.bodyMd, color: '#f4f0ef', fontSize: 15,
     lineHeight: 21, textAlign: 'center',
+  },
+  handoffButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    alignSelf: 'center', marginTop: 14,
+    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999,
+    backgroundColor: 'rgba(244,240,239,0.12)',
+    borderWidth: 1, borderColor: 'rgba(244,240,239,0.34)',
+  },
+  handoffText: {
+    ...type.labelSm, color: '#f4f0ef', letterSpacing: 1.1,
   },
   metaRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

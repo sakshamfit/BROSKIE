@@ -38,7 +38,7 @@ export const disappearLabel = (seconds) =>
 export default function MessageBubble({
   message, isMine, isGroup, senderName, senderUser,
   onReply, onReact, onDelete, onImagePress,
-  onEdit, onForward, onStar, onSetTimer, onVotePoll,
+  onEdit, onForward, onStar, onSetTimer, onVotePoll, onReport,
   onOpenReply, highlighted,
 }) {
   const { theme } = useTheme();
@@ -489,6 +489,12 @@ export default function MessageBubble({
               <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onDelete(message.id); setMenu(false); }}>
                 <Icon name="trash-outline" size={18} color={theme.danger} />
                 <Text style={[type.bodyMd, { color: theme.danger }]}>Delete for everyone</Text>
+              </Pressable>
+            )}
+            {!isMine && !message.deleted && onReport && (
+              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReport(message); setMenu(false); }}>
+                <Icon name="flag-outline" size={18} color={theme.danger} />
+                <Text style={[type.bodyMd, { color: theme.danger }]}>Report</Text>
               </Pressable>
             )}
           </PaperCard>
