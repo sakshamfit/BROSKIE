@@ -171,6 +171,35 @@ Foreground behaviour: while the app is open, pushes are suppressed (no banner) �
 the socket already updates chats, badges and the incoming-call overlay live.
 When the app is backgrounded/killed, the OS displays the notification.
 
+### Phase 2 — the daily campus loop ("Today at your place")
+
+The goal: a user with a college on their profile has something new to tap every
+afternoon **without opening Chats**. All JavaScript — no new native modules, so
+unlike Phase 1 it also reaches existing installs via OTA once they carry a
+push-capable runtime.
+
+| Piece | What it does |
+|---|---|
+| Today strip (Colleagues + Network) | Who's around / online from your places, one-tap **"I'M AROUND"** (a 12-hour flag, re-upping extends it), and today's posts from your places. Hidden for profiles with no places. |
+| Greeter handoff | The morning greeting now says *"2 people from your college posted today, and 1 person is around now"* — then, instead of auto-dismissing, it holds on the last line with a **SEE TODAY AT YOUR COLLEGE** button that lands on the Colleagues tab (where the strip lives). |
+| Network filters | **Worldwide / My places / Following** chips on the feed. The Today strip and greeter can jump straight into the My-places lens from anywhere. |
+| Follow | One-way follow from any Network post (FOLLOW / FOLLOWING pill). Follows power the Following lens and its pushes. |
+| Post audience "My places" | Posts can target just people who share your college/workplace (server-enforced, like every other audience). |
+| Campus pushes | *"Riya from your college posted"* (to place-sharers when a post targets My places), *"Amit is around"*, and plain *"posted:"* to followers. All gated by Settings ▸ Notifications ▸ The Network, quiet hours, and mute rules like every other push. |
+| Photo See statuses | Already existed (crop + upload) — no change needed. |
+
+Endpoints: `POST/DELETE /api/users/:id/follow`, `POST /api/me/around`,
+`GET /api/today?since=<local midnight>`, `?filter=worldwide|places|following`
+on `GET /api/posts`, audience `places` on `POST /api/posts`, and
+`placesPostersToday`/`aroundNow` in `GET /api/greeting-summary`.
+
+Tests: `cd server && node test-phase2.js` — 39 end-to-end checks (follow rules,
+all three feed lenses, places-audience visibility/likes, around lifecycle +
+expiry sweep, Today payload scoping, greeter counts, all three campus pushes).
+
+**Done when:** a user with a college on their profile has something new to tap
+every afternoon without opening Chats.
+
 ---
 
 ## 4. Authentication and account rules
@@ -481,8 +510,9 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 ### High priority
 
 - [ ] Upload the FCM v1 service-account key (`eas credentials -p android`) so Expo can deliver Android pushes.
-- [ ] Build and distribute the **1.4.0** Android APK (push notifications add a native module — no OTA path from 1.3.0).
+- [ ] Build and distribute the **1.4.0** Android APK (push notifications add a native module — no OTA path from 1.3.0). Phase 2 is pure JavaScript and ships in the same build.
 - [ ] Device test the full loop: message a locked phone → tap the notification → it opens that exact chat. Repeat for a muted chat (no push) and quiet hours (silent push).
+- [ ] Device test the campus loop: two accounts sharing a college → "I'm around" → the other sees the Today strip + gets the push → greeter mentions the college activity and the handoff opens it.
 - [ ] Confirm Supabase Storage is active in Railway logs.
 - [ ] Test registration, login, logout, profile photo add/remove, and real-time messages on a second physical device.
 - [ ] Verify data remains after a Railway redeploy.
@@ -511,6 +541,7 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 | `9a59577` | Kinetic Ink appearance theme added. |
 | `20b1432` | Chat list/conversation manga-paper UI redesign. |
 | current | **Push notifications (Phase 1)**: Expo push on messages/@mentions, requests, colleague requests, likes/comments, calls; deep links to the exact screen; server-enforced per-chat mute, quiet hours and per-type toggles; badge counts; `plusone://` scheme; `test-push.js` (31 checks). |
+| current | **Phase 2 — the daily campus loop**: Today-at-your-place strip (around/online, 12h "I'm around"), greeter campus lines + one-tap handoff, Network Worldwide/My places/Following lenses, follow from posts, "My places" post audience, campus pushes; `test-phase2.js` (39 checks). |
 | current | Per-conversation chat themes (13 themes, realtime sync, picker with live preview). |
 | current | Centralized motion system (`src/motion.js`): press springs, tab/section transitions, animated message entrances, double-tap ❤️, typing dots, skeleton chat list, story progress bars with hold-to-pause, spring sheets, reduced-motion + haptics support. |
 

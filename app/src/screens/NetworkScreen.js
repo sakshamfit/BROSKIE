@@ -14,14 +14,24 @@ import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFo
 import { AUDIENCE } from '../components/AudiencePicker';
 import BrandHeader from '../components/BrandHeader';
 import SongCard from '../components/SongCard';
+import TodayStrip from '../components/TodayStrip';
 import NewPostScreen from './NewPostScreen';
 import CommunitiesScreen from './CommunitiesScreen';
 import { type, inkBox, marker, dashedRule, stroke, radius, raised } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
+import { onNetworkFilterRequest, consumePendingNetworkFilter } from '../push/routing';
 
 /* Sticky notes alternate their tilt, like scraps pinned to a board. */
 const tiltFor = (i) => (i % 2 === 0 ? '-0.8deg' : '0.7deg');
+
+/* Phase 2 feed lenses: the whole world, your college/workplace people, or
+ * just the authors you follow. */
+const FEED_FILTERS = [
+  { key: 'worldwide', label: 'WORLDWIDE' },
+  { key: 'places', label: 'MY PLACES' },
+  { key: 'following', label: 'FOLLOWING' },
+];
 const INSTAGRAM_HEART = '#ED4956';
 
 export default function NetworkScreen({ navigation, onOpenChat }) {
@@ -38,6 +48,11 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // A "places" jump from the Today strip or the greeter can arrive while this
+  // page is unmounted (the swipe pager only keeps neighbours alive) — the
+  // requested filter is parked in routing.js and consumed here on mount.
+  const [activeFilter, setActiveFilter] = useState(() => consumePendingNetworkFilter() || 'worldwide');
+  const [todayReload, setTodayReload] = useState(0);
 
   const [composerOpen, setComposerOpen] = useState(false);
   const [commentsFor, setCommentsFor] = useState(null);
@@ -47,16 +62,16 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
 
   /* ---------------- data ---------------- */
 
-  const load = useCallback(async (tag) => {
-    const { posts: list, nextBefore: nb } = await api.posts({ tag: tag || undefined });
+  const load = useCallback(async (tag, filter = activeFilter) => {
+    const { posts: list, nextBefore: nb } = await api.posts({ tag: tag || undefined, filter });
     setPosts(list);
     setNextBefore(nb);
-  }, []);
+  }, [activeFilter]);
 
   useEffect(() => {
     (async () => {
       try {
-        await load(activeTag);
+        await load(activeTag, activeFilter);
         setTags((await api.postTags()).tags);
       } catch (e) {
         // non-fatal — feed just starts empty
@@ -64,7 +79,12 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         setLoading(false);
       }
     })();
-  }, [load, activeTag]);
+  }, [load, activeTag, activeFilter]);
+
+  // Filter jumps requested from elsewhere (Today strip, greeter handoff).
+  useEffect(() => onNetworkFilterRequest((filter) => {
+    if (filter) setActiveFilter(filter);
+  }), []);
 
   /* live updates from other users (audience-filtered server-side) */
   useEffect(() => {
@@ -74,6 +94,12 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         setPosts((prev) => {
           if (prev.some((p) => p.id === payload.id)) return prev;
           if (activeTag && payload.tag !== activeTag) return prev;
+          // Filter lenses: only prepend posts that belong to the current
+          // lens. 'places' can't be verified from the payload (no affiliation
+          // data on the post), so it simply waits for the next refresh —
+          // never shows a post under the wrong lens.
+          if (activeFilter === 'following' && !payload.mine && !payload.following) return prev;
+          if (activeFilter === 'places' && !payload.mine) return prev;
           return [payload, ...prev];
         });
       } else if (ev === 'post:deleted') {
@@ -84,11 +110,12 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         setPosts((prev) => prev.map((p) => (p.id === payload.id ? { ...p, comments: payload.comments } : p)));
       }
     });
-  }, [onPostEvent, activeTag, user]);
+  }, [onPostEvent, activeTag, activeFilter, user]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    try { await load(activeTag); setTags((await api.postTags()).tags); }
+    setTodayReload((k) => k + 1);
+    try { await load(activeTag, activeFilter); setTags((await api.postTags()).tags); }
     catch {} finally { setRefreshing(false); }
   };
 
@@ -96,7 +123,7 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
     if (!nextBefore || loadingMore) return;
     setLoadingMore(true);
     try {
-      const { posts: more, nextBefore: nb } = await api.posts({ before: nextBefore, tag: activeTag || undefined });
+      const { posts: more, nextBefore: nb } = await api.posts({ before: nextBefore, tag: activeTag || undefined, filter: activeFilter });
       setPosts((prev) => {
         const seen = new Set(prev.map((p) => p.id));
         return [...prev, ...more.filter((p) => !seen.has(p.id))];
@@ -110,6 +137,23 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
   const onPosted = (post) => {
     setPosts((prev) => (prev.some((p) => p.id === post.id) ? prev : [post, ...prev]));
     api.postTags().then((r) => setTags(r.tags)).catch(() => {});
+    // A fresh post always belongs at the top of the worldwide lens.
+    setTodayReload((k) => k + 1);
+  };
+
+  /** Follow / unfollow an author from any of their posts — every card by the
+   *  same author updates, so the Following lens stays truthful. */
+  const toggleFollow = async (post) => {
+    if (post.mine || typeof post.following !== 'boolean') return;
+    const authorId = post.userId;
+    const next = !post.following;
+    setPosts((prev) => prev.map((p) => (p.userId === authorId && !p.mine ? { ...p, following: next } : p)));
+    try {
+      if (next) await api.follow(authorId);
+      else await api.unfollow(authorId);
+    } catch {
+      setPosts((prev) => prev.map((p) => (p.userId === authorId && !p.mine ? { ...p, following: !next } : p)));
+    }
   };
 
   const toggleLike = async (post) => {
@@ -134,6 +178,21 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
 
   /* ---------------- render ---------------- */
 
+  const emptyTitle = activeTag
+    ? `Nothing tagged #${activeTag}`
+    : activeFilter === 'places'
+      ? 'Nothing from your places yet'
+      : activeFilter === 'following'
+        ? 'You are not following anyone yet'
+        : 'Nothing pinned yet';
+  const emptySubtitle = activeTag
+    ? 'Try another tag, or clear the filter.'
+    : activeFilter === 'places'
+      ? 'Be the first — tap the pencil and post to My places.'
+      : activeFilter === 'following'
+        ? 'Tap FOLLOW on a post to build your own feed.'
+        : 'Tap the pencil to sketch the first page.';
+
   const renderPost = ({ item, index }) => {
     const audienceMeta = AUDIENCE[item.audience] || AUDIENCE.public;
     return (
@@ -154,6 +213,30 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
               </Text>
             </View>
           </View>
+          {!item.mine && typeof item.following === 'boolean' && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={item.following ? `Unfollow ${item.author.name}` : `Follow ${item.author.name}`}
+              onPress={() => toggleFollow(item)}
+              hitSlop={6}
+              style={({ pressed }) => [
+                s.followBtn,
+                {
+                  borderColor: item.following ? theme.graphiteLine : theme.ink,
+                  backgroundColor: item.following ? 'transparent' : pressed ? theme.cardAlt : theme.cardAlt,
+                },
+              ]}
+            >
+              <Icon
+                name={item.following ? 'checkmark' : 'person-add-outline'}
+                size={12}
+                color={item.following ? theme.muted : theme.ink}
+              />
+              <Text style={[type.labelXs, { color: item.following ? theme.muted : theme.ink }]}>
+                {item.following ? 'FOLLOWING' : 'FOLLOW'}
+              </Text>
+            </Pressable>
+          )}
           {item.mine && (
             <Pressable onPress={() => removePost(item)} hitSlop={8} style={{ padding: 4 }}>
               <Icon name="trash-outline" size={16} color={theme.muted} />
@@ -246,6 +329,35 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
 
       {SectionToggle}
 
+      {/* Today at your place — who's around/online from your college or
+          workplace, one-tap "I'm around", today's place posts. Hidden for
+          users with no places on their profile. */}
+      <TodayStrip
+        reloadKey={todayReload}
+        onOpenChat={async (userId) => {
+          try {
+            const { chat } = await api.directChat(userId);
+            onOpenChat?.(chat.id);
+          } catch {}
+        }}
+        onSeePosts={() => setActiveFilter('places')}
+      />
+
+      <View style={s.filterRow}>
+        {FEED_FILTERS.map((f) => (
+          <Pressable
+            key={f.key}
+            accessibilityRole="button"
+            onPress={() => setActiveFilter(f.key)}
+            style={[s.filterBtn, activeFilter === f.key && s.filterBtnActive, { borderColor: theme.ink }]}
+          >
+            <Text style={[type.labelSm, { color: activeFilter === f.key ? theme.onPrimary : theme.text }]}>
+              {f.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
       {tags.length > 0 && (
         <View style={s.tagsWrap}>
           <Pressable onPress={() => setActiveTag(null)}>
@@ -315,8 +427,8 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         ListEmptyComponent={
           <EmptyState
             icon="globe-outline"
-            title={activeTag ? `Nothing tagged #${activeTag}` : 'Nothing pinned yet'}
-            subtitle={activeTag ? 'Try another tag, or clear the filter.' : 'Tap the pencil to sketch the first page.'}
+            title={emptyTitle}
+            subtitle={emptySubtitle}
           />
         }
       />
@@ -477,6 +589,17 @@ const makeStyles = (t) => StyleSheet.create({
   headerWrap: { paddingTop: 22 },
   pageTitle: { ...type.headlineLg, color: t.text, transform: [{ rotate: '-1deg' }] },
   tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  filterRow: { flexDirection: 'row', gap: 7, marginTop: 4, marginBottom: 6 },
+  filterBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 8,
+  },
+  filterBtnActive: { backgroundColor: t.ink },
+  followBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5,
+    alignSelf: 'flex-start', marginLeft: 8,
+  },
 
   communitiesHeaderWrap: { paddingTop: 22, paddingHorizontal: 20 },
   sectionRow: { flexDirection: 'row', gap: 7, marginBottom: 4 },

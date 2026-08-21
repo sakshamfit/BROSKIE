@@ -361,6 +361,64 @@ function notifyCommunityRequest({ adminIds = [], requester, community }) {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* Phase 2: the daily campus loop                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * "Amit is around." — someone from your places flipped the 12-hour
+ * "I'm around" flag. `userIds` is pre-capped by the caller.
+ */
+function notifyAround({ userIds = [], actor }) {
+  if (!actor) return;
+  userIds.forEach((userId) => {
+    pushToUser(userId, {
+      settingKey: 'network',
+      channel: 'activity',
+      type: 'around',
+      title: actor.name,
+      body: `is around — say hi from your shared place`,
+      data: { route: 'network' },
+    }).catch(() => {});
+  });
+}
+
+/**
+ * "Riya from your college posted." — a new Network post by someone who
+ * shares a place with you (and you follow them, or they targeted My places).
+ * `placeLabel` is 'college' | 'workplace' | 'place' resolved by the caller.
+ */
+function notifyPlacePost({ userIds = [], actor, post, placeLabel = 'place' }) {
+  if (!actor || !post) return;
+  const preview = (post.title || post.body || (post.media_url ? 'a photo' : 'a post')).slice(0, 60);
+  userIds.forEach((userId) => {
+    pushToUser(userId, {
+      settingKey: 'network',
+      channel: 'activity',
+      type: 'place_post',
+      title: actor.name,
+      body: `from your ${placeLabel} posted: ${preview}`,
+      data: { route: 'network', postId: post.id },
+    }).catch(() => {});
+  });
+}
+
+/** "Riya posted: …" — plain new-post push for people who follow the author. */
+function notifyFollowerPost({ userIds = [], actor, post }) {
+  if (!actor || !post) return;
+  const preview = (post.title || post.body || (post.media_url ? 'a photo' : 'a post')).slice(0, 60);
+  userIds.forEach((userId) => {
+    pushToUser(userId, {
+      settingKey: 'network',
+      channel: 'activity',
+      type: 'following_post',
+      title: actor.name,
+      body: `posted: ${preview}`,
+      data: { route: 'network', postId: post.id },
+    }).catch(() => {});
+  });
+}
+
 /** Your community join request was approved. */
 function notifyCommunityApproved({ userId, community }) {
   if (!userId || !community) return;
@@ -425,6 +483,9 @@ module.exports = {
   notifyIncomingCall,
   notifyCommunityRequest,
   notifyCommunityApproved,
+  notifyAround,
+  notifyPlacePost,
+  notifyFollowerPost,
   registerToken,
   unregisterToken,
   describeFor,

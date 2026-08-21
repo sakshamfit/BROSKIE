@@ -11,7 +11,9 @@ import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import AffiliationPicker, { AFFILIATION_TYPES, affiliationType } from '../components/AffiliationPicker';
+import TodayStrip from '../components/TodayStrip';
 import { Avatar, InkField, TapeChip, handleFor, rippleFor, GoldTick, hasGoldTick } from '../components/common';
+import { openNetworkFeed } from '../push/routing';
 import { type, inkBox, marker, dashedRule, raised } from '../theme';
 
 const FILTERS = [{ key: '', short: 'All', icon: 'globe-outline' }, ...AFFILIATION_TYPES];
@@ -38,6 +40,7 @@ export default function ColleaguesScreen({ onOpenChat }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [todayReload, setTodayReload] = useState(0);
   const scrollY = useRef(new Animated.Value(0)).current;
   const s = makeStyles(theme);
 
@@ -75,6 +78,7 @@ export default function ColleaguesScreen({ onOpenChat }) {
 
   const refresh = async () => {
     setRefreshing(true);
+    setTodayReload((k) => k + 1);
     try { await load({ quiet: true }); } finally { setRefreshing(false); }
   };
 
@@ -102,6 +106,13 @@ export default function ColleaguesScreen({ onOpenChat }) {
 
   const openMessage = (person) => run(`message:${person.id}`, async () => {
     const { chat } = await api.directChat(person.id);
+    upsertChat(chat);
+    onOpenChat?.(chat.id);
+  });
+
+  // Today strip taps pass a bare user id (the strip only has publicUser data).
+  const openMessageById = (userId) => run(`message:${userId}`, async () => {
+    const { chat } = await api.directChat(userId);
     upsertChat(chat);
     onOpenChat?.(chat.id);
   });
@@ -169,6 +180,15 @@ export default function ColleaguesScreen({ onOpenChat }) {
             Discover people from your college, institution, organization or workplace — then send a connection request.
           </Text>
         </Animated.View>
+
+        {/* Today at your place — who's around / online from your places,
+            one-tap "I'm around", and today's place posts. The greeter's
+            handoff lands here. Hidden for users without places. */}
+        <TodayStrip
+          reloadKey={todayReload}
+          onOpenChat={openMessageById}
+          onSeePosts={() => openNetworkFeed('places')}
+        />
 
         <InkField style={s.search} focused={!!query}>
           <Icon name="search" size={19} color={theme.muted} />

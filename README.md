@@ -153,6 +153,18 @@ tag; posts appear live for every connected user via Socket.IO. Photo posts provi
 Original, 1:1, 4:5, 16:9 and 9:16 framing with native crop editing, and preserve that
 chosen box in the feed. Likes toggle with optimistic UI, threaded comments in a bottom
 sheet, tag filtering, trending tags, cursor pagination, and author deletion.
+Feed lenses: **Worldwide / My places / Following** — plus **Follow** any author
+from their post and a **My places** audience so a post can target just people
+who share your college or workplace.
+
+**Today at your place (the daily campus loop)** — the morning AI greeter now
+reports campus life (*"2 people from your college posted today, and 1 person is
+around now"*) and hands off with one tap into the **Today strip** on Colleagues
+and Network: who's around or online from your places right now, one-tap
+**"I'm around"** (a 12-hour presence flag, with matching pushes — *"Amit is
+around"*, *"Riya from your college posted"*), and today's posts from your
+places. Hidden for profiles without places; quiet hours, mutes and per-type
+notification settings are enforced server-side like every other push.
 
 **Colleagues** — place-based discovery inside The Network. Add a college/institution,
 organization, or workplace to your profile, join an existing registered place, search

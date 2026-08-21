@@ -15,7 +15,8 @@
     "backup": "node src/backup.js",
     "audit:chats": "node src/chat-audit.js",
     "test:chat-history": "node test-chat-history.js",
-    "test:push": "node test-push.js"
+    "test:push": "node test-push.js",
+    "test:phase2": "node test-phase2.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",

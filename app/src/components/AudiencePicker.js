@@ -9,12 +9,13 @@ import { type, inkBox, marker, dashedRule } from '../theme';
 
 export const AUDIENCE = {
   public: { key: 'public', label: 'Public', sub: 'Everyone on +one can see this', icon: 'earth-outline' },
+  places: { key: 'places', label: 'My places', sub: 'People who share your college or workplace', icon: 'school-outline' },
   contacts: { key: 'contacts', label: 'Friends', sub: 'Only people you already chat with', icon: 'people-outline' },
   contacts_except: { key: 'contacts_except', label: 'Friends except…', sub: 'All friends except the people you choose', icon: 'person-remove-outline' },
   selected: { key: 'selected', label: 'Private', sub: 'Only the people you choose can see it', icon: 'lock-closed-outline' },
 };
 
-const DEFAULT_OPTIONS = ['public', 'contacts', 'selected'];
+const DEFAULT_OPTIONS = ['public', 'places', 'contacts', 'selected'];
 
 /**
  * Reusable audience selector. Network uses the default Public / Friends /
@@ -138,9 +139,9 @@ export default function AudiencePicker({
 }
 
 const makeStyles = (t) => StyleSheet.create({
-  optionsRow: { flexDirection: 'row', gap: 8 },
+  optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   optionsList: { width: '100%' },
-  option: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 4 },
+  option: { flex: 1, flexBasis: '40%', minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 4 },
   optionList: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 4, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
   radio: { width: 22, height: 22, borderRadius: 999, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   radioDot: { width: 11, height: 11, borderRadius: 999 },

@@ -82,11 +82,13 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
 
   const statusLine = audience === 'public'
     ? 'Status: Global post enabled.'
-    : audience === 'contacts'
-      ? 'Status: Only your friends will see this.'
-      : recipientIds.length
-        ? `Status: Targeted at ${recipientIds.length} ${recipientIds.length === 1 ? 'person' : 'people'}.`
-        : 'Status: Pick who this reaches.';
+    : audience === 'places'
+      ? 'Status: Only people from your college or workplace will see this.'
+      : audience === 'contacts'
+        ? 'Status: Only your friends will see this.'
+        : recipientIds.length
+          ? `Status: Targeted at ${recipientIds.length} ${recipientIds.length === 1 ? 'person' : 'people'}.`
+          : 'Status: Pick who this reaches.';
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={close}>

@@ -32,6 +32,37 @@ let pendingRouteData = null;
 let lastAppliedAt = 0;
 let lastAppliedKey = '';
 
+/* Network feed filter requests (Phase 2): the Today strip and the greeter can
+ * say "show my-places posts" from anywhere; NetworkScreen subscribes. The
+ * request is also remembered as "pending" because the Network page may not be
+ * mounted when the request is made (the swipe pager keeps nearby pages
+ * alive) — NetworkScreen consumes it whenever it (re)mounts. */
+const networkFilterListeners = new Set();
+let pendingNetworkFilter = null;
+export function onNetworkFilterRequest(fn) {
+  networkFilterListeners.add(fn);
+  return () => networkFilterListeners.delete(fn);
+}
+export function requestNetworkFilter(filter) {
+  pendingNetworkFilter = filter || null;
+  networkFilterListeners.forEach((fn) => {
+    try { fn(filter); } catch {}
+  });
+}
+/** Jump to the Network feed with a filter applied ('places' | 'following' | null). */
+export function openNetworkFeed(filter) {
+  if (filter) pendingNetworkFilter = filter;
+  networkFilterListeners.forEach((fn) => {
+    try { fn(pendingNetworkFilter); } catch {}
+  });
+  requestHomeTab('network');
+}
+export function consumePendingNetworkFilter() {
+  const filter = pendingNetworkFilter;
+  pendingNetworkFilter = null;
+  return filter;
+}
+
 function routeKey(data) {
   return `${data.route || ''}:${data.chatId || ''}:${data.postId || ''}:${data.messageId || ''}`;
 }

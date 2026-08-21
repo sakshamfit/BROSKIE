@@ -404,6 +404,31 @@ CREATE TABLE IF NOT EXISTS push_tokens (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id);
+
+/* ---- Phase 2: the daily campus loop ---- */
+
+/* Follow a person from the Network so the feed can be "Following" instead of
+   a global firehose. Lightweight, one-way, no approval. */
+CREATE TABLE IF NOT EXISTS follows (
+  follower_id TEXT NOT NULL,
+  followed_id TEXT NOT NULL,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (follower_id, followed_id),
+  FOREIGN KEY (follower_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (followed_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_follows_followed ON follows(followed_id);
+
+/* "I'm around" — a 12-hour presence flag for your shared places. One row per
+   user; re-upping extends it. Row is deleted on "not around" and lazily when
+   expired (mirrors statuses' expiry sweep). */
+CREATE TABLE IF NOT EXISTS around_status (
+  user_id    TEXT PRIMARY KEY,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_around_expires ON around_status(expires_at);
 `);
 
 /* ---- starred messages: per-user bookmarking, across all chats ---- */

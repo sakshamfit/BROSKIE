@@ -297,6 +297,56 @@ function sharedAffiliations(userId, otherId) {
     .map((a) => ({ id: a.id, name: a.name, type: a.type, title: a.title || '' }));
 }
 
+/* ---------------- Phase 2: the daily campus loop ---------------- */
+
+/** Every userId that shares at least one affiliation with `userId` (self and
+ *  blocked pairs excluded). This is "people from my college / workplace". */
+function usersSharingPlaces(userId) {
+  return db
+    .prepare(
+      `SELECT DISTINCT theirs.user_id id
+       FROM user_affiliations mine
+       JOIN user_affiliations theirs ON theirs.affiliation_id = mine.affiliation_id
+       WHERE mine.user_id = ? AND theirs.user_id != ?`
+    )
+    .all(userId, userId)
+    .map((r) => r.id)
+    .filter((id) => !blockedEitherWay(userId, id));
+}
+
+/** ids this user follows. */
+function followingIds(userId) {
+  return db.prepare('SELECT followed_id id FROM follows WHERE follower_id = ?').all(userId).map((r) => r.id);
+}
+
+function isFollowing(followerId, followedId) {
+  return !!db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(followerId, followedId);
+}
+
+/** "from your college" / "from your workplace" — how a place-shared event is
+ *  described in pushes and the greeter, derived from the author's first
+ *  affiliation type (institution → college, org/workplace → workplace). */
+function placeLabelFor(userId) {
+  const rows = db
+    .prepare(
+      `SELECT a.type FROM user_affiliations ua JOIN affiliations a ON a.id = ua.affiliation_id
+       WHERE ua.user_id = ? ORDER BY ua.joined_at DESC LIMIT 1`
+    )
+    .all(userId);
+  const type = rows[0]?.type;
+  if (type === 'institution') return 'college';
+  if (type === 'organization' || type === 'workplace') return 'workplace';
+  return 'place';
+}
+
+/** One person's live "around" row, sweeping expired flags as a side effect. */
+function aroundRowFor(userId) {
+  db.prepare('DELETE FROM around_status WHERE expires_at < ?').run(now());
+  return db.prepare('SELECT * FROM around_status WHERE user_id = ?').get(userId);
+}
+
+const AROUND_TTL_MS = 12 * 3600 * 1000;
+
 function colleaguePair(idA, idB) {
   return idA < idB ? [idA, idB] : [idB, idA];
 }
@@ -860,6 +910,28 @@ app.get('/api/greeting-summary', requireAuth, (req, res) => {
      JOIN community_members me ON me.community_id = r.community_id
      WHERE me.user_id = ? AND me.role = 'admin'`
   ).get(req.userId).c;
+
+  // Phase 2: the campus loop — "2 people from your college posted today"
+  // and "Amit is around" in the morning greeting. `since` is the client's
+  // local midnight (fallback: last 24h).
+  const since = Math.min(Number(req.query.since) || now() - 24 * 3600 * 1000, now());
+  const sharerIds = usersSharingPlaces(req.userId);
+  const placesPosters = sharerIds.length
+    ? db
+        .prepare(
+          `SELECT COUNT(DISTINCT p.user_id) c FROM posts p
+           WHERE p.deleted = 0 AND p.created_at > ? AND p.user_id IN (${sharerIds.map(() => '?').join(',')})`
+        )
+        .get(since, ...sharerIds).c
+    : 0;
+  const aroundNow = sharerIds.length
+    ? db
+        .prepare(
+          `SELECT COUNT(*) c FROM around_status a
+           WHERE a.expires_at > ? AND a.user_id IN (${sharerIds.map(() => '?').join(',')})`
+        )
+        .get(now(), ...sharerIds).c
+    : 0;
   res.json({
     summary: {
       unreadMessages,
@@ -867,6 +939,8 @@ app.get('/api/greeting-summary', requireAuth, (req, res) => {
       messageRequests,
       colleagueRequests,
       communityRequests,
+      placesPostersToday: placesPosters,
+      aroundNow,
       total: unreadMessages + messageRequests + colleagueRequests + communityRequests,
     },
   });
@@ -1291,6 +1365,117 @@ app.delete('/api/colleagues/:userId', requireAuth, (req, res) => {
   if (!result.changes) return res.status(404).json({ error: 'Connection not found' });
   emitToUser(req.params.userId, 'colleague:updated', { type: 'removed', userId: req.userId });
   res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ */
+/* Phase 2: follow, "I'm around", Today at your place                  */
+/* ------------------------------------------------------------------ */
+
+/** Follow someone from the Network — one-way, no approval, feeds the
+ *  "Following" filter. */
+app.post('/api/users/:id/follow', requireAuth, (req, res) => {
+  const targetId = req.params.id;
+  const target = getUser(targetId);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (targetId === req.userId) return res.status(400).json({ error: "You can't follow yourself" });
+  if (blockedEitherWay(req.userId, targetId)) return res.status(403).json({ error: 'Unavailable' });
+  const result = db
+    .prepare('INSERT OR IGNORE INTO follows (follower_id, followed_id, created_at) VALUES (?,?,?)')
+    .run(req.userId, targetId, now());
+  if (!result.changes) return res.status(409).json({ error: 'Already following' });
+  res.json({ following: true });
+});
+
+/** Unfollow. Idempotent — unfollowing someone you don't follow is fine. */
+app.delete('/api/users/:id/follow', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM follows WHERE follower_id = ? AND followed_id = ?').run(req.userId, req.params.id);
+  res.json({ following: false });
+});
+
+/** Flip the 12-hour "I'm around" flag at your shared places. Setting it
+ *  again extends the window ("still around"). Clearing it deletes the row. */
+app.post('/api/me/around', requireAuth, (req, res) => {
+  const around = req.body?.around !== false; // default true
+  if (around) {
+    const t = now();
+    db.prepare(
+      `INSERT INTO around_status (user_id, expires_at, created_at) VALUES (?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET expires_at = excluded.expires_at, created_at = excluded.created_at`
+    ).run(req.userId, t + AROUND_TTL_MS, t);
+    const sharers = usersSharingPlaces(req.userId).filter((id) => id !== req.userId);
+    push.notifyAround({ userIds: sharers.slice(0, 100), actor: getUser(req.userId) });
+  } else {
+    db.prepare('DELETE FROM around_status WHERE user_id = ?').run(req.userId);
+  }
+  const row = aroundRowFor(req.userId);
+  res.json({ around: !!row, expiresAt: row?.expires_at || null });
+});
+
+/** Today at your place — who's around / online from your places, and what
+ *  they posted today. `since` (ms) is the client's local midnight so "today"
+ *  follows the viewer's day, not UTC's. */
+app.get('/api/today', requireAuth, (req, res) => {
+  const since = Math.min(Number(req.query.since) || now() - 24 * 3600 * 1000, now());
+  aroundRowFor(req.userId); // sweep expired flags
+  const sharerIds = usersSharingPlaces(req.userId);
+
+  const aroundRows = sharerIds.length
+    ? db
+        .prepare(
+          `SELECT a.user_id, a.created_at, a.expires_at, u.is_online, u.last_seen
+           FROM around_status a JOIN users u ON u.id = a.user_id
+           WHERE a.user_id IN (${sharerIds.map(() => '?').join(',')}) AND a.expires_at > ?
+           ORDER BY a.created_at DESC LIMIT 24`
+        )
+        .all(...sharerIds, now())
+    : [];
+  const around = aroundRows.map((r) => ({
+    user: publicUser(getUser(r.user_id)),
+    since: r.created_at,
+    expiresAt: r.expires_at,
+  }));
+
+  const onlineRows = sharerIds.length
+    ? db
+        .prepare(
+          `SELECT id FROM users WHERE is_online = 1 AND id IN (${sharerIds.map(() => '?').join(',')})
+           ORDER BY last_seen DESC LIMIT 24`
+        )
+        .all(...sharerIds)
+    : [];
+  const aroundIds = new Set(around.map((a) => a.user.id));
+  const online = onlineRows.map((r) => publicUser(getUser(r.id))).filter((u) => !aroundIds.has(u.id));
+
+  // Today's posts from place-sharers, audience-filtered for this viewer.
+  const postRows = sharerIds.length
+    ? db
+        .prepare(
+          `SELECT * FROM posts WHERE deleted = 0 AND user_id IN (${sharerIds.map(() => '?').join(',')})
+           AND created_at > ? ORDER BY created_at DESC LIMIT 60`
+        )
+        .all(...sharerIds, since)
+    : [];
+  const placesPosts = [];
+  const posters = new Set();
+  postRows.forEach((r) => {
+    if (canViewPost(r.id, r.user_id, r.audience || 'public', req.userId)) {
+      if (placesPosts.length < 12) placesPosts.push(hydratePost(r, req.userId));
+      posters.add(r.user_id);
+    }
+  });
+
+  const mine = aroundRowFor(req.userId);
+  res.json({
+    places: affiliationsForUser(req.userId),
+    around,
+    online,
+    posts: placesPosts,
+    postsCount: placesPosts.length,
+    postersCount: posters.size,
+    me: { around: !!mine, expiresAt: mine?.expires_at || null },
+    placeLabel: placeLabelFor(req.userId),
+    generatedAt: now(),
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -2116,6 +2301,7 @@ function canViewPost(postId, authorId, audience, viewerId) {
   if (authorId === viewerId) return true;
   if (blockedEitherWay(authorId, viewerId)) return false;
   if (audience === 'public') return true;
+  if (audience === 'places') return usersSharingPlaces(authorId).includes(viewerId);
   if (audience === 'contacts') return contactIds(authorId).includes(viewerId);
   if (audience === 'selected') {
     return !!db.prepare('SELECT 1 FROM post_recipients WHERE post_id = ? AND user_id = ?').get(postId, viewerId);
@@ -2127,6 +2313,7 @@ function canViewPost(postId, authorId, audience, viewerId) {
 function postAudienceIds(postId, authorId, audience) {
   let ids;
   if (audience === 'public') ids = [...sockets.keys()];
+  else if (audience === 'places') ids = [authorId, ...usersSharingPlaces(authorId)];
   else if (audience === 'contacts') ids = [...new Set([authorId, ...contactIds(authorId)])];
   else if (audience === 'selected') {
     const rows = db.prepare('SELECT user_id FROM post_recipients WHERE post_id = ?').all(postId);
@@ -2402,6 +2589,9 @@ function hydratePost(row, viewerId) {
     comments,
     liked,
     mine: row.user_id === viewerId,
+    // Phase 2: does the viewer follow this author (for Following feed + the
+    // Follow button state)? Author's own posts never show a follow button.
+    following: viewerId && row.user_id !== viewerId ? isFollowing(viewerId, row.user_id) : undefined,
   };
 }
 
@@ -2425,11 +2615,19 @@ function hydrateCall(row, viewerId) {
   };
 }
 
-/** GET /api/posts?before=<ts>&limit=20&tag=process&userId=… */
+/** GET /api/posts?before=<ts>&limit=20&tag=process&userId=…&filter=worldwide|places|following */
 app.get('/api/posts', requireAuth, (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 20, 50);
   const { tag, userId } = req.query;
   let before = Number(req.query.before) || Date.now() + 1;
+
+  // Phase 2 feed filters: worldwide (default) | places (people who share my
+  // college/workplace) | following (people I follow). Own posts stay visible
+  // in every filter.
+  const filter = String(req.query.filter || 'worldwide');
+  let authorFilter = null;
+  if (filter === 'places') authorFilter = new Set([req.userId, ...usersSharingPlaces(req.userId)]);
+  else if (filter === 'following') authorFilter = new Set([req.userId, ...followingIds(req.userId)]);
 
   let sql = 'SELECT * FROM posts WHERE deleted = 0 AND created_at < ?';
   const baseParams = [];
@@ -2447,7 +2645,9 @@ app.get('/api/posts', requireAuth, (req, res) => {
     const rows = db.prepare(sql).all(before, ...baseParams, batchSize);
     if (!rows.length) { exhausted = true; break; }
     rows.forEach((r) => {
-      if (visible.length < limit && canViewPost(r.id, r.user_id, r.audience || 'public', req.userId)) {
+      if (visible.length >= limit) return;
+      if (authorFilter && !authorFilter.has(r.user_id)) return;
+      if (canViewPost(r.id, r.user_id, r.audience || 'public', req.userId)) {
         visible.push(r);
       }
     });
@@ -2472,9 +2672,12 @@ app.post('/api/posts', requireAuth, (req, res) => {
   if (!text && !mediaUrl && !song) return res.status(400).json({ error: 'Write something, or attach a photo or a song' });
   if (text.length > 2000) return res.status(400).json({ error: 'Post is too long (2000 characters max)' });
 
-  const aud = ['public', 'contacts', 'selected'].includes(audience) ? audience : 'public';
+  const aud = ['public', 'places', 'contacts', 'selected'].includes(audience) ? audience : 'public';
   if (aud === 'selected' && !recipientIds.length) {
     return res.status(400).json({ error: 'Pick at least one person for a targeted post.' });
+  }
+  if (aud === 'places' && !affiliationsForUser(req.userId).length) {
+    return res.status(400).json({ error: 'Join a college or workplace first to post to your places.' });
   }
 
   const post = {
@@ -2506,11 +2709,35 @@ app.post('/api/posts', requireAuth, (req, res) => {
   // Only notify sockets that are allowed to see it.
   const targets = aud === 'public'
     ? [...sockets.keys()]
-    : aud === 'contacts'
-      ? contactIds(req.userId)
-      : recipientIds;
+    : aud === 'places'
+      ? postAudienceIds(row.id, req.userId, 'places')
+      : aud === 'contacts'
+        ? contactIds(req.userId)
+        : recipientIds;
   targets.forEach((uid) => emitToUser(uid, 'post:new', hydratePost(row, uid)));
   emitToUser(req.userId, 'post:new', hydratePost(row, req.userId));
+
+  // Phase 2 pushes — campus loop + followers. Capped so a viral poster can't
+  // stampede Expo; settings (notifications.network) + quiet hours are
+  // enforced inside pushToUser as for every other push.
+  const author = getUser(req.userId);
+  if (aud === 'places') {
+    push.notifyPlacePost({
+      userIds: usersSharingPlaces(req.userId).slice(0, 100),
+      actor: author,
+      post: row,
+      placeLabel: placeLabelFor(req.userId),
+    });
+  }
+  if (author) {
+    const followerTargets = db
+      .prepare('SELECT follower_id id FROM follows WHERE followed_id = ?')
+      .all(req.userId)
+      .map((r) => r.id)
+      .filter((id) => canViewPost(row.id, req.userId, aud, id))
+      .slice(0, 100);
+    push.notifyFollowerPost({ userIds: followerTargets, actor: author, post: row });
+  }
 
   res.json({ post: hydratePost(row, req.userId) });
 });

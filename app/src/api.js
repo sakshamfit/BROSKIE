@@ -318,7 +318,7 @@ export const api = {
   // Startup must never hold a low-end phone on a blank/loading screen for
   // multiple full retry windows. A normal refresh can still use `me()`.
   restoreSession: () => request('/api/me', { timeoutMs: 8000, retries: 0 }),
-  greetingSummary: () => request('/api/greeting-summary'),
+  greetingSummary: (since) => request(`/api/greeting-summary${since ? `?since=${Math.floor(since)}` : ''}`),
   deleteAccount: (password) => request('/api/me', { method: 'DELETE', body: { password } }),
   updateMe: (payload) => request('/api/me', { method: 'PATCH', body: payload }),
   updateSettings: (payload) => request('/api/me/settings', { method: 'PATCH', body: payload }),
@@ -400,13 +400,15 @@ export const api = {
   forwardMessage: (messageId, chatIds) =>
     request('/api/messages/forward', { method: 'POST', body: { messageId, chatIds } }),
 
-  // The Network — public posts
-  posts: ({ before, limit = 20, tag, userId } = {}) => {
+  // The Network — public posts. `filter`: worldwide (default) | places (people
+  // sharing my college/workplace) | following (people I follow).
+  posts: ({ before, limit = 20, tag, userId, filter } = {}) => {
     const q = new URLSearchParams();
     if (before) q.set('before', before);
     if (limit) q.set('limit', limit);
     if (tag) q.set('tag', tag);
     if (userId) q.set('userId', userId);
+    if (filter && filter !== 'worldwide') q.set('filter', filter);
     return request(`/api/posts?${q.toString()}`);
   },
   createPost: (payload) => request('/api/posts', { method: 'POST', body: payload }),
@@ -415,6 +417,15 @@ export const api = {
   comments: (id) => request(`/api/posts/${id}/comments`),
   addComment: (id, body) => request(`/api/posts/${id}/comments`, { method: 'POST', body: { body } }),
   postTags: () => request('/api/posts-tags'),
+
+  // Phase 2 — the daily campus loop.
+  follow: (userId) => request(`/api/users/${userId}/follow`, { method: 'POST', body: {} }),
+  unfollow: (userId) => request(`/api/users/${userId}/follow`, { method: 'DELETE' }),
+  setAround: (around = true) => request('/api/me/around', { method: 'POST', body: { around } }),
+  today: (since) => {
+    const q = since ? `?since=${Math.floor(since)}` : '';
+    return request(`/api/today${q}`, { timeoutMs: 15000, retries: 1 });
+  },
 
   statuses: () => request('/api/status'),
   postStatus: (payload) => request('/api/status', { method: 'POST', body: payload }),
