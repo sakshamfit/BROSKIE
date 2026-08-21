@@ -273,7 +273,7 @@ export default function MessageBubble({
             {burst && <HeartBurst onDone={() => setBurst(false)} reduced={reduced} />}
           {isGroup && !isMine && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-              <Text style={[type.labelXs, { color: theme.graphite }]}>{senderName.toUpperCase()}</Text>
+              <Text style={[type.labelXs, { color: theme.graphite }]}>{String(senderName || 'Unknown').toUpperCase()}</Text>
               {hasGoldTick(senderUser) && <GoldTick size={11} />}
             </View>
           )}
@@ -326,7 +326,7 @@ export default function MessageBubble({
               ]}
             >
               <Text style={[type.labelXs, { color: isMine ? subInk : theme.graphite }]} numberOfLines={1}>
-                {message.replyTo.senderName.toUpperCase()}
+                {String(message.replyTo.senderName || 'Unknown').toUpperCase()}
               </Text>
               {message.replyTo.type === 'image' || message.replyTo.type === 'voice' ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
@@ -453,19 +453,22 @@ export default function MessageBubble({
 /** The poll card rendered inside a 'poll' message bubble. */
 function PollBody({ messageId, poll, ink, isMine, onVotePoll }) {
   const { theme } = useTheme();
+  const s = makeStyles(theme);
+  const options = Array.isArray(poll?.options) ? poll.options : [];
+  const totalVotes = poll?.totalVotes || 0;
   return (
     <View style={{ minWidth: 230, maxWidth: 280 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
         <Icon name="bar-chart-outline" size={14} color={ink} />
         <Text style={[type.labelXs, { color: ink, letterSpacing: 0.7 }]}>
-          POLL{isMine ? ' · YOU' : ` · ${poll.createdByName.toUpperCase()}`}
+          POLL{isMine ? ' · YOU' : poll?.createdByName ? ` · ${String(poll.createdByName).toUpperCase()}` : ''}
         </Text>
       </View>
       <EmojiText style={[type.bodyStrong, { color: ink, marginBottom: 10 }]}>{poll.question}</EmojiText>
 
-      {poll.options.map((opt) => {
-        const mine = poll.myVote === opt.index;
-        const pct = poll.totalVotes ? Math.round((opt.votes / poll.totalVotes) * 100) : 0;
+      {options.map((opt) => {
+        const mine = poll?.myVote === opt.index;
+        const pct = totalVotes ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0;
         return (
           <Pressable
             key={opt.index}
@@ -494,7 +497,7 @@ function PollBody({ messageId, poll, ink, isMine, onVotePoll }) {
       })}
 
       <Text style={[type.labelXs, { color: ink, opacity: 0.75, marginTop: 8 }]}>
-        {poll.totalVotes} vote{poll.totalVotes === 1 ? '' : 's'} · tap an option to vote
+        {totalVotes} vote{totalVotes === 1 ? '' : 's'} · tap an option to vote
       </Text>
     </View>
   );

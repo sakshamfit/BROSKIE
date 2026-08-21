@@ -39,7 +39,7 @@ export default function ThemePickerSheet({
 
   const saved = ThemeRegistry.get(savedThemeId || 'graphite');
   const previewing = previewThemeId && previewThemeId !== savedThemeId;
-  const s = makeStyles(g);
+  const s = styles;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
