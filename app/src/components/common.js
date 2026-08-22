@@ -538,15 +538,22 @@ export function handleFor(nameOrUser = '', phone = '') {
   return '@' + (base || String(phone).replace(/\D/g, '').slice(-6) || 'user');
 }
 
-/** Hard-reserved gold verification mark. Only username `saksham` receives it. */
-const GOLD_TICK_USERNAME = 'saksham';
+/** Usernames always recognized as verified even before their server-side
+ *  `goldTick` flag exists (backward-compat with older databases). The badge is
+ *  otherwise driven entirely by the per-user `goldTick` flag from the server. */
+const GOLD_TICK_USERNAMES = new Set(['saksham']);
 
 export function hasGoldTick(userOrUsername) {
   if (userOrUsername == null) return false;
+  if (typeof userOrUsername === 'object') {
+    // Server-driven flag wins; the hardcoded list keeps the original owner(s)
+    // verified when the flag is still 0 on a not-yet-migrated database.
+    if (userOrUsername.goldTick === true) return true;
+  }
   const raw = typeof userOrUsername === 'string'
     ? userOrUsername
     : (userOrUsername.username || '');
-  return String(raw).normalize('NFKC').trim().toLowerCase() === GOLD_TICK_USERNAME;
+  return GOLD_TICK_USERNAMES.has(String(raw).normalize('NFKC').trim().toLowerCase());
 }
 
 /** Gold filled circle with an ink check — shown next to the verified username only. */

@@ -17,6 +17,7 @@ import { type, inkBox, marker, radius, stroke } from '../theme';
 import { Skeleton, TypingDots, SheetSpringIn, SpringPressable, FadeSlide, Pop, haptic, motion } from '../motion';
 import { api } from '../api';
 import { confirm } from '../hooks/confirm';
+import { useDebouncedCallback } from '../rateLimit';
 
 /* each divider leans a slightly different way, like a hand-ruled line */
 const TILTS = [-0.5, 0.8, -0.3, 0.6, -0.7, 0.4];
@@ -49,14 +50,30 @@ export default function ChatListScreen({ navigation }) {
     try { await refreshChats(); } catch { /* existing rows + inline retry stay visible */ } finally { setRefreshing(false); }
   }, [refreshChats]);
 
-  const runSearch = useCallback(async (q) => {
-    setQuery(q);
-    if (q.trim().length < 2) { setMsgResults([]); return; }
+  // Debounce: a fast typist fires one /api/search per pause instead of one
+  // per keystroke. `searchMessages` keeps a stable identity, so handing it
+  // to onChangeText is safe; the latest query wins. `searchSeq` discards
+  // out-of-order responses so a slow result can't resurrect itself after
+  // the box was cleared.
+  const searchSeq = useRef(0);
+  const searchMessages = useDebouncedCallback(async (q, seq) => {
     try {
       const { messages } = await api.search(q.trim());
-      setMsgResults(messages);
-    } catch { setMsgResults([]); }
-  }, []);
+      if (searchSeq.current === seq) setMsgResults(messages);
+    } catch {
+      if (searchSeq.current === seq) setMsgResults([]);
+    }
+  }, 300);
+
+  const runSearch = useCallback((q) => {
+    // Chat-name filtering below is a cheap local `useMemo`, so `query` is
+    // applied on every keystroke. The server-side message search is the
+    // expensive part, so it is debounced to one request per typing pause.
+    setQuery(q);
+    const seq = ++searchSeq.current;
+    if (q.trim().length < 2) { setMsgResults([]); searchMessages.cancel(); return; }
+    searchMessages(q, seq);
+  }, [searchMessages]);
 
   const archivedCount = chats.filter((c) => c.archived).length;
   const visible = useMemo(() => {
@@ -158,7 +175,7 @@ export default function ChatListScreen({ navigation }) {
                   <Pressable
                     key={m.id}
                     style={({ pressed }) => [s.resultRow, pressed ? marker(theme, 1) : null]}
-                    onPress={() => { setQuery(''); setMsgResults([]); navigation.navigate('Conversation', { chatId: m.chatId }); }}
+                    onPress={() => { setQuery(''); setMsgResults([]); searchMessages.cancel(); navigation.navigate('Conversation', { chatId: m.chatId }); }}
                   >
                     <Icon name="chatbubble-outline" size={15} color={theme.graphite} />
                     <View style={{ flex: 1 }}>

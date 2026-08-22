@@ -360,6 +360,8 @@ export const api = {
   adminModerationSettings: () => request('/api/admin/moderation/settings'),
   adminModerationUpdateSettings: (patch) =>
     request('/api/admin/moderation/settings', { method: 'PUT', body: patch }),
+  adminModerationGoldTick: (id, tick) =>
+    request(`/api/admin/moderation/users/${id}/gold-tick`, { method: 'POST', body: { tick } }),
   users: (q = '', { contactsOnly = false } = {}) =>
     request(`/api/users?q=${encodeURIComponent(q)}${contactsOnly ? '&contacts=1' : ''}`),
 

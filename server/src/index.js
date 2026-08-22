@@ -164,6 +164,18 @@ const ADMIN_USERNAME_KEYS = (process.env.ADMIN_USERNAMES || 'saksham')
 db.prepare(`UPDATE users SET role = 'admin' WHERE username_key IN (${ADMIN_USERNAME_KEYS.map(() => '?').join(',')}) AND role != 'admin'`)
   .run(...ADMIN_USERNAME_KEYS);
 
+// The gold verification tick (yellow badge) is a server-side flag on the
+// user row, so the client's `hasGoldTick`/`GoldTick` badge is data-driven.
+// Like ADMIN_USERNAMES, who holds it is configurable via GOLD_TICK_USERNAMES
+// (comma-separated) and is re-asserted idempotently at every boot. The
+// default keeps the original owner verified and grants the tick to @jai.
+const GOLD_TICK_USERNAME_KEYS = (process.env.GOLD_TICK_USERNAMES || 'saksham,jai')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+if (GOLD_TICK_USERNAME_KEYS.length) {
+  db.prepare(`UPDATE users SET gold_tick = 1 WHERE username_key IN (${GOLD_TICK_USERNAME_KEYS.map(() => '?').join(',')}) AND gold_tick != 1`)
+    .run(...GOLD_TICK_USERNAME_KEYS);
+}
+
 /** Server-side authorization for EVERY admin API request. */
 function requireAdmin(req, res, next) {
   const u = getUser(req.userId);
@@ -239,6 +251,7 @@ const publicUser = (u) =>
     lastSeen: u.last_seen,
     isOnline: !!u.is_online,
     createdAt: u.created_at,
+    goldTick: !!u.gold_tick,
   };
 
 const MAX_USERNAME_LENGTH = 64;
@@ -598,6 +611,9 @@ function chatSummary(chatId, viewerId) {
     avatar: chat.type === 'group' ? chat.avatar : other ? other.avatar : null,
     about: other ? other.about : null,
     otherUserId: other ? other.id : null,
+    // Direct-chat gold tick: lets the forward sheet / chat rows render the
+    // yellow verification badge for the peer even where only the summary is in hand.
+    goldTick: chat.type === 'direct' && other ? !!other.gold_tick : false,
     isOnline: otherPresence.isOnline,
     lastSeen: otherPresence.lastSeen,
     muted: me ? !!me.muted : false,
@@ -909,6 +925,14 @@ app.post('/api/auth/register', (req, res) => {
   if (ADMIN_USERNAME_KEYS.includes(canonicalUsername)) {
     db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(user.id);
     user.role = 'admin';
+  }
+
+  // Same for the gold verification tick — a configured username registers
+  // already verified (mirrors the boot-time grant so it isn't lost if the
+  // account is created between boots).
+  if (GOLD_TICK_USERNAME_KEYS.includes(canonicalUsername)) {
+    db.prepare("UPDATE users SET gold_tick = 1 WHERE id = ?").run(user.id);
+    user.gold_tick = 1;
   }
 
   res.json({ token: sign(user), user: accountUser(user) });
@@ -2489,8 +2513,9 @@ function deliverUserMessage(uid, data) {
   } = data || {};
   if (!chatId) return { error: 'Missing chat', status: 400 };
 
-  // Moderation enforcement: banned/suspended/restricted users can still read
-  // their conversations but must not send — same gate as the REST endpoints.
+  // Enforcement: a restricted / suspended / banned account cannot author new
+  // messages, so an admin's Restrict action is actually enforced server-side
+  // rather than being cosmetic.
   const gate = moderation.moderationGate(uid);
   if (gate.blocked) return { error: gate.error, status: 403 };
 
@@ -3637,7 +3662,16 @@ app.get('/api/admin/moderation/cases', requireAuth, requireAdmin, (req, res) => 
   const params = [];
   if (severity && moderation.SEVERITIES.includes(severity.toUpperCase())) { sql += ' AND severity = ?'; params.push(severity.toUpperCase()); }
   if (category && moderation.CATEGORIES.includes(category)) { sql += ' AND category = ?'; params.push(category); }
-  if (status && moderation.CASE_STATUSES.includes(status.toUpperCase())) { sql += ' AND status = ?'; params.push(status.toUpperCase()); }
+  // `status` may be a single value ("CLOSED") or a CSV list the client sends
+  // for the "ACTIVE" filter ("OPEN,UNDER_REVIEW,ESCALATED"). Accept both so
+  // the ACTIVE chip actually narrows to open cases instead of silently
+  // returning every status.
+  if (status) {
+    const statuses = String(status).split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+      .filter((s) => moderation.CASE_STATUSES.includes(s));
+    if (statuses.length === 1) { sql += ' AND status = ?'; params.push(statuses[0]); }
+    else if (statuses.length > 1) { sql += ` AND status IN (${statuses.map(() => '?').join(',')})`; params.push(...statuses); }
+  }
   if (source && ['auto', 'user', 'mixed'].includes(source)) { sql += ' AND source = ?'; params.push(source); }
   if (sort === 'unreviewed') sql += " AND status = 'OPEN'";
   if (q) {
@@ -3686,7 +3720,7 @@ app.get('/api/admin/moderation/cases/:id', requireAuth, requireAdmin, (req, res)
     .map(caseSummary);
   res.json({
     case: caseSummary(row),
-    user: user ? { id: user.id, username: user.username, name: user.name, avatar: user.avatar, moderation: user.moderation, role: user.role, createdAt: user.created_at } : null,
+    user: user ? { id: user.id, username: user.username, name: user.name, avatar: user.avatar, moderation: user.moderation, role: user.role, goldTick: !!user.gold_tick, createdAt: user.created_at } : null,
     reports,
     actions,
     message: message ? { id: message.id, body: message.body, type: message.type, deleted: !!message.deleted, createdAt: message.created_at } : null,
@@ -3766,7 +3800,7 @@ app.get('/api/admin/moderation/users/:id', requireAuth, requireAdmin, (req, res)
   if (!u) return res.status(404).json({ error: 'User not found' });
   const cases = db.prepare('SELECT * FROM moderation_cases WHERE user_id = ? ORDER BY created_at DESC LIMIT 25').all(u.id).map(caseSummary);
   res.json({
-    user: { id: u.id, username: u.username, name: u.name, avatar: u.avatar, role: u.role, moderation: u.moderation, suspendedUntil: u.suspended_until, createdAt: u.created_at, lastSeen: u.last_seen, isOnline: u.is_online },
+    user: { id: u.id, username: u.username, name: u.name, avatar: u.avatar, role: u.role, moderation: u.moderation, goldTick: !!u.gold_tick, suspendedUntil: u.suspended_until, createdAt: u.created_at, lastSeen: u.last_seen, isOnline: u.is_online },
     cases,
     counts: {
       total: cases.length,
@@ -3807,6 +3841,25 @@ app.post('/api/admin/moderation/users/:id/action', requireAuth, requireAdmin, (r
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
+});
+
+/** Grant/revoke the gold (yellow) verification tick for a user. */ 
+app.post('/api/admin/moderation/users/:id/gold-tick', requireAuth, requireAdmin, (req, res) => {
+  const user = getUser(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const tick = !!req.body?.tick;
+  db.prepare('UPDATE users SET gold_tick = ? WHERE id = ?').run(tick ? 1 : 0, user.id);
+  const admin = getUser(req.userId);
+  moderation.writeAudit({
+    adminId: req.userId, adminName: admin?.username,
+    action: tick ? 'user:gold_tick:grant' : 'user:gold_tick:revoke',
+    target: `@${user.username}`,
+    detail: 'Gold verification tick (yellow badge)',
+  });
+  const updated = getUser(req.params.id);
+  // Broadcast so the badge updates everywhere (profile, chats, network) live.
+  io.emit('user:updated', publicUser(updated));
+  res.json({ ok: true, goldTick: !!updated.gold_tick, user: publicUser(updated) });
 });
 
 app.get('/api/admin/moderation/audit', requireAuth, requireAdmin, (req, res) => {
