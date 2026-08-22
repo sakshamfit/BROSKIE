@@ -302,6 +302,10 @@ export default function GCDetailScreen({ route, navigation, embedded = false, on
               <Row icon="create-outline" label="Rename GC" onPress={() => { setRenameValue(chat.name || ''); setRenameOpen(true); }} />
               <Rule style={{ marginVertical: 4 }} />
               <Row icon="image-outline" label="Change GC photo" onPress={() => setPhotoEditor(true)} />
+              {!!chat.avatar && <>
+                <Rule style={{ marginVertical: 4 }} />
+                <Row icon="trash-outline" label="Remove GC photo" danger onPress={() => saveGCSettings({ avatar: null })} />
+              </>}
               <Rule style={{ marginVertical: 4 }} />
               <Row icon="list-outline" label="GC rules" sub={gc.rules?.length ? `${gc.rules.length} rules` : 'No rules added yet'} onPress={() => { setRulesDraft([...(gc.rules || []), '']); setRulesOpen(true); }} />
             </>
