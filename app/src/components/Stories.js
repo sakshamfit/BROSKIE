@@ -1269,18 +1269,3 @@ const makeStyles = (t) => StyleSheet.create({
   replySend: { width: 38, height: 38, borderRadius: radius.full, backgroundColor: '#FFE24D', borderWidth: 2, borderColor: '#1c1b1b', alignItems: 'center', justifyContent: 'center' },
   replyHintWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 10, zIndex: 4, alignItems: 'center' },
 });
-: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
-  reactBurst: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 8 },
-  overlayChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, marginBottom: 6 },
-  overlayChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)' },
-  toolRail: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10, paddingBottom: 6, flexWrap: 'wrap' },
-  toolBtn: { alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 10 },
-  stickerSheet: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingBottom: 8, gap: 4 },
-  stickerCell: { width: '18%', alignItems: 'center', paddingVertical: 6 },
-  styleSheet: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
-  styleChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.35)' },
-  mentionSheet: { paddingHorizontal: 16, paddingBottom: 8, gap: 6 },
-  mentionInput: { ...type.bodyMd, color: '#ffffff', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.28)', paddingVertical: 8, outlineStyle: 'none' },
-  mentionHit: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
-  locGo: { alignSelf: 'flex-start', backgroundColor: '#FFE24D', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginTop: 6 },
-});
