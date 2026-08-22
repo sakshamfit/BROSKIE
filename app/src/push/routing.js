@@ -14,7 +14,7 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef();
 
-/* Pages inside HomeTabs (Network | See | Chats | Colleagues). HomeTabs
+/* Pages inside HomeTabs (Network | Chats | Colleagues). HomeTabs
  * registers a listener so a push can switch the visible page even though
  * tab state lives in component state, not navigation state. */
 const tabListeners = new Set();

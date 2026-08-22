@@ -444,6 +444,17 @@ export const api = {
     request(`/api/chats/${chatId}/group/members/${userId}`, { method: 'DELETE' }),
   leaveGroup: (chatId) => request(`/api/chats/${chatId}/group/leave`, { method: 'POST', body: {} }),
 
+  // GCs — Instagram-style group chats (own section, never in the Chats inbox)
+  gcs: () => request('/api/gc'),
+  gcDiscover: () => request('/api/gc/discover'),
+  gcCreate: (payload) => request('/api/gc', { method: 'POST', body: payload }),
+  gcDetail: (chatId) => request(`/api/gc/${chatId}`),
+  gcJoin: (chatId) => request(`/api/gc/${chatId}/join`, { method: 'POST', body: {} }),
+  gcCancelJoin: (chatId) => request(`/api/gc/${chatId}/join`, { method: 'DELETE' }),
+  gcRequests: (chatId) => request(`/api/gc/${chatId}/requests`),
+  gcRespondRequest: (chatId, userId, action) =>
+    request(`/api/gc/${chatId}/requests/${userId}`, { method: 'POST', body: { action } }),
+
   // Starred messages
   starred: () => request('/api/starred'),
   starMessage: (messageId) => request(`/api/messages/${messageId}/star`, { method: 'POST', body: {} }),

@@ -10,8 +10,9 @@ import { openProfile } from '../push/routing';
 
 /**
  * Persistent sidebar — the "SideNavBar" from the web mockup. Logo + New-chat
- * CTA, primary nav (Chats / See / Network / Settings), and a Help / Logout
- * footer pinned to the bottom.
+ * CTA, primary nav (Chats / Network / Settings), and a Help / Logout footer
+ * pinned to the bottom. Status updates (the old See section) live at the
+ * top of the Network feed as story rings, so they need no nav entry.
  *
  * `railOnly` collapses it to an icon-only rail (labels + wordmark hidden)
  * for narrower "expanded" breakpoints — e.g. an iPad in portrait or a
@@ -31,7 +32,7 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
 
   const ITEMS = [
     { key: 'network', label: 'Network', icon: 'people' },
-    { key: 'status', label: 'See', icon: 'eye' },
+    { key: 'gc', label: 'GC', icon: 'gc', outlineOnly: true },
     { key: 'chats', label: 'Chats', icon: 'chatbubbles' },
     { key: 'colleagues', label: 'Colleagues', icon: 'school-outline', outlineOnly: true },
     { key: 'calls', label: 'Calls', icon: 'call' },

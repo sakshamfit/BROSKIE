@@ -13,6 +13,7 @@ import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import BrandHeader from '../components/BrandHeader';
 import TodayStrip from '../components/TodayStrip';
+import StoriesRow from '../components/Stories';
 import PostCard from '../components/PostCard';
 import ImageLightbox from '../components/ImageLightbox';
 import { PostSkeletonList } from '../components/PostSkeleton';
@@ -282,6 +283,11 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
       </Text>
 
       {SectionToggle}
+
+      {/* Status stories — the See section lives here now, Instagram-style.
+          Your profile circle comes first (tap to view, + to upload), then a
+          ring for everyone with a live 24-hour update. */}
+      <StoriesRow reloadKey={todayReload} />
 
       {/* Today at your place — who's around/online from your college or
           workplace, one-tap "I'm around", today's place posts. Hidden for

@@ -13,7 +13,7 @@ import { radius, type, inkBox } from '../theme';
  * "Notifications" — real, persisted preferences (server-stored on the user
  * row, PATCH /api/me/settings) controlling what fans out to this device:
  * chat messages (+ preview text), requests & activity, likes/comments on
- * your posts, incoming calls, See posts, Network posts, community activity,
+ * your posts, incoming calls, status stories, Network posts, community activity,
  * sound — plus quiet hours, which the SERVER enforces on every push
  * (delivered silently inside the window so nothing buzzes at 3am).
  *
@@ -96,7 +96,7 @@ export default function NotificationsScreen({ navigation, embedded = false }) {
 
         <Text style={[type.labelXs, { color: theme.muted, marginTop: 24, marginBottom: 10 }]}>ACTIVITY</Text>
         <PaperCard style={{ padding: 6 }} weight="thin">
-          <Row icon="eye-outline" title="See (Status)" subtitle="When someone you can see posts a status" settingKey="status" />
+          <Row icon="eye-outline" title="Status stories" subtitle="When someone you can see posts a status" settingKey="status" />
           <Row icon="people-outline" title="The Network" subtitle="New public posts on The Network" settingKey="network" />
           <Row icon="chatbubbles-outline" title="Community activity" subtitle="Join requests, approvals, being added" settingKey="communityActivity" last />
         </PaperCard>

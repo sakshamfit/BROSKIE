@@ -18,7 +18,7 @@ import { useChatTheme, ChatThemeScope } from '../store/ChatThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import {
   Avatar, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor,
-  FrostedBackdrop, GoldTick, hasGoldTick, PaperCard,
+  FrostedBackdrop, GoldTick, hasGoldTick, PaperCard, isGroupChat,
 } from '../components/common';
 import MessageBubble, { DISAPPEAR_OPTIONS } from '../components/MessageBubble';
 import ReplyBar from '../components/ReplyBar';
@@ -573,7 +573,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
 
   // Typing state is rendered separately with animated dots; this is the
   // static "who's here / last seen" line used when nobody is typing.
-  const subtitle = chat.type === 'group'
+  const subtitle = isGroupChat(chat)
     ? (chat.members || [])
         .map((m) => (m?.id === user.id ? 'You' : String(m?.name || 'Unknown').split(' ')[0]))
         .join(', ')
@@ -617,7 +617,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
             </SpringPressable>
           )}
           <Pressable style={s.headerInfo} onPress={() => navigation.navigate('ChatInfo', { chatId })}>
-            <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={42} profileId={chat.type === 'group' ? null : chat.otherUserId} />
+            <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={isGroupChat(chat)} size={42} profileId={isGroupChat(chat) ? null : chat.otherUserId} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{chat.name}</EmojiText>
@@ -627,7 +627,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
                   <TypingDots color={theme.primary} size={4} />
                   <Text style={[type.bodySm, { fontSize: 12.5, color: theme.primary }]} numberOfLines={1}>
-                    {chat.type === 'group' ? `${typers[0]} is typing` : 'typing'}
+                    {isGroupChat(chat) ? `${typers[0]} is typing` : 'typing'}
                   </Text>
                 </View>
               ) : (
@@ -643,7 +643,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
             iconSize={17}
             onPress={() => setDocsOpen(true)}
           />
-          {chat.type === 'group' && (
+          {isGroupChat(chat) && (
             <InkIconButton
               name="bar-chart-outline"
               size={36}
@@ -731,7 +731,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               message={item}
               animateIn={!!item._new}
               isMine={item.senderId === user.id}
-              isGroup={chat.type === 'group'}
+              isGroup={isGroupChat(chat)}
               senderName={nameFor(item.senderId)}
               senderUser={chat?.members?.find((m) => m.id === item.senderId)}
               onReply={handleReply}

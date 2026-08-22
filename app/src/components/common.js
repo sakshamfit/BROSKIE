@@ -700,6 +700,11 @@ export function handleFor(nameOrUser = '', phone = '') {
  *  otherwise driven entirely by the per-user `goldTick` flag from the server. */
 const GOLD_TICK_USERNAMES = new Set(['saksham']);
 
+/** Group-like chats: classic groups AND GCs (Instagram-style group chats).
+ *  Everything group-shaped (avatars, typing text, member management) applies
+ *  to both — only the inbox placement differs (GCs live in their own tab). */
+export const isGroupChat = (chat) => !!chat && chat.type !== 'direct';
+
 export function hasGoldTick(userOrUsername) {
   if (userOrUsername == null) return false;
   if (typeof userOrUsername === 'object') {

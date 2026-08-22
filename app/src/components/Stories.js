@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput, RefreshControl,
+  View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput,
   ActivityIndicator, Image, KeyboardAvoidingView, Platform, Keyboard, Animated, Easing, PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,17 +10,16 @@ import { api, mediaUrl } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
-import { Avatar, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
-import BrandHeader from '../components/BrandHeader';
-import { AUDIENCE } from '../components/audienceMeta';
-import SongCard from '../components/SongCard';
-import { radius, type, inkBox, marker, stroke, raised } from '../theme';
+import { Avatar, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from './common';
+import { AUDIENCE } from './audienceMeta';
+import SongCard from './SongCard';
+import { radius, type, marker, stroke, raised } from '../theme';
 import { FadeSlide, Skeleton, motion, SpringPressable, haptic, useReducedMotion } from '../motion';
 import { lazyComponent } from '../lazy';
 
-const AudiencePicker = lazyComponent(() => import('../components/AudiencePicker'));
-const PhotoCropPicker = lazyComponent(() => import('../components/PhotoCropPicker'));
-const SongPicker = lazyComponent(() => import('../components/SongPicker'));
+const AudiencePicker = lazyComponent(() => import('./AudiencePicker'));
+const PhotoCropPicker = lazyComponent(() => import('./PhotoCropPicker'));
+const SongPicker = lazyComponent(() => import('./SongPicker'));
 
 const BG_COLORS = ['#FFE24D', '#fdf8f8', '#e2e3de', '#5d5f5b', '#1c1b1b', '#39444c'];
 
@@ -41,16 +40,143 @@ function foregroundFor(status) {
   return ['#1c1b1b', '#5d5f5b', '#39444c'].includes(status.bg) ? '#ffffff' : '#1c1b1b';
 }
 
-export default function StatusScreen({ navigation }) {
+/**
+ * The See section, merged into the Network feed — Instagram-style story
+ * rings. A horizontal strip of avatar circles sits at the top of the feed:
+ * your own profile circle first (tap it to view your update, tap its +
+ * badge to upload a new one), then a circle for everyone with a live
+ * 24-hour update. Unseen updates wear a bold ink ring, seen ones fade to
+ * graphite. Tapping a circle opens the same full-screen story viewer the
+ * old See tab used, replies included.
+ */
+export default function StoriesRow({ reloadKey = 0 }) {
   const { user } = useAuth();
   const { theme } = useTheme();
   const { onStatusEvent } = useChat();
-  const insets = useSafeAreaInsets();
   const [data, setData] = useState({ mine: null, others: [] });
-  const [composerMode, setComposerMode] = useState(null); // choose | text | photo
-  const [viewer, setViewer] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [composerMode, setComposerMode] = useState(null); // choose | text | photo
+  const [viewerGroup, setViewerGroup] = useState(null);
+  const s = makeStyles(theme);
+
+  const load = useCallback(async () => {
+    try { setData(await api.statuses()); } catch {} finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load, reloadKey]);
+  useEffect(() => {
+    if (!onStatusEvent) return undefined;
+    return onStatusEvent(() => load());
+  }, [onStatusEvent, load]);
+
+  const closeViewer = () => {
+    setViewerGroup(null);
+    load(); // rings should dim for everything just viewed
+  };
+
+  // Unseen updates cluster first (recency order within each group), like
+  // every story rail you have ever used.
+  const others = [...data.others].sort((a, b) => Number(!!a.allViewed) - Number(!!b.allViewed));
+  const hasMine = !!data.mine?.items?.length;
+
+  return (
+    <View style={s.storiesWrap}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.storiesRow}
+      >
+        {/* Your circle — tap to view your update, tap the + to upload one. */}
+        <StoryCircle
+          accessibilityLabel={hasMine ? 'View your status update' : 'Add a status update'}
+          onPress={() => (hasMine ? setViewerGroup(data.mine) : setComposerMode('choose'))}
+          ringStyle={hasMine ? s.ringMine : s.ringEmpty}
+          avatar={user ? { uri: user.avatar, name: user.name, id: user.id } : {}}
+          label={hasMine ? 'Your story' : 'Add status'}
+          theme={theme}
+          styles={s}
+          badge={(
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add a status update"
+              onPress={() => { haptic('selection'); setComposerMode('choose'); }}
+              hitSlop={4}
+              style={[s.plusBadge, { backgroundColor: '#050505', borderColor: theme.bg }]}
+            >
+              <Icon name="add" size={13} color="#ffffff" />
+            </Pressable>
+          )}
+        />
+
+        {others.map((group) => (
+          <StoryCircle
+            key={group.user.id}
+            accessibilityLabel={`View ${group.user.name}'s status update`}
+            onPress={() => setViewerGroup(group)}
+            ringStyle={group.allViewed ? s.ringSeen : s.ringNew}
+            avatar={group.user}
+            label={group.user.name}
+            theme={theme}
+            styles={s}
+          />
+        ))}
+
+        {loading && [0, 1, 2, 3].map((i) => (
+          <View key={`sk-${i}`} style={s.circleCol}>
+            <Skeleton width={68} height={68} radius={999} />
+            <Skeleton width={44} height={9} radius={4} />
+          </View>
+        ))}
+      </ScrollView>
+
+      <StatusComposer
+        visible={!!composerMode}
+        initialMode={composerMode || 'choose'}
+        onClose={() => setComposerMode(null)}
+        onPosted={load}
+      />
+
+      <StatusViewer group={viewerGroup} onClose={closeViewer} />
+    </View>
+  );
+}
+
+/** One avatar ring in the strip. `badge` (your own +) overlays the ring. */
+function StoryCircle({ accessibilityLabel, onPress, ringStyle, avatar, label, badge, theme, styles: s }) {
+  return (
+    <View style={s.circleCol}>
+      <SpringPressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        onPress={onPress}
+        scaleTo={motion.scale.row}
+        haptic="selection"
+        style={({ pressed }) => [s.circlePress, pressed && { opacity: 0.72 }]}
+      >
+        <View style={[s.ring, ringStyle]}>
+          <Avatar uri={avatar?.uri} name={avatar?.name} id={avatar?.id} size={54} />
+        </View>
+        {badge}
+      </SpringPressable>
+      <EmojiText style={[type.labelXs, { color: theme.subtext }]} numberOfLines={1} ellipsizeMode="tail">
+        {label}
+      </EmojiText>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* full-screen story viewer (unchanged behaviour, extracted from the   */
+/* old See screen so the Network feed can host it)                     */
+/* ------------------------------------------------------------------ */
+
+export function StatusViewer({ group, startIndex = 0, onClose }) {
+  const { user } = useAuth();
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const s = makeStyles(theme);
+
+  const [index, setIndex] = useState(0);
   const [replyText, setReplyText] = useState('');
   const [replySending, setReplySending] = useState(false);
   const [replyFeedback, setReplyFeedback] = useState('');
@@ -80,46 +206,56 @@ export default function StatusScreen({ navigation }) {
       frameSub?.remove();
     };
   }, []);
-  const s = makeStyles(theme);
 
-  const load = useCallback(async () => {
-    try { setData(await api.statuses()); } catch {} finally { setLoading(false); }
-  }, []);
+  const current = group?.items[Math.min(index, (group?.items?.length || 1) - 1)];
+  const isOwnStatus = group?.user.id === user?.id;
+  const [held, setHeld] = useState(false); // story hold-to-pause
+  const reducedMotion = useReducedMotion();
+  const progress = useRef(new Animated.Value(0)).current;
+  const progressVal = useRef(0);
+  const segIdRef = useRef(null);
+  const moveRef = useRef(null);
 
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    if (!onStatusEvent) return undefined;
-    return onStatusEvent(() => load());
-  }, [onStatusEvent, load]);
-
-  const openViewer = async (group, index = 0) => {
-    if (!group?.items?.length) return;
-    const safeIndex = Math.max(0, Math.min(index, group.items.length - 1));
-    setViewer({ group, index: safeIndex });
-    try { await api.viewStatus(group.items[safeIndex].id); } catch {}
-  };
-
-  const closeViewer = () => {
-    setViewer(null);
+  const closeViewer = useCallback(() => {
     setReplyText('');
     setReplyFeedback('');
     setReplyFocused(false);
-    load();
-  };
+    onClose?.();
+  }, [onClose]);
 
   const moveStatus = async (direction) => {
-    if (!viewer) return;
-    const next = viewer.index + direction;
-    if (next >= viewer.group.items.length) { closeViewer(); return; }
+    if (!group) return;
+    const next = index + direction;
+    if (next >= group.items.length) { closeViewer(); return; }
     if (next < 0) return;
-    setViewer({ ...viewer, index: next });
-    try { await api.viewStatus(viewer.group.items[next].id); } catch {}
+    setIndex(next);
   };
+  moveRef.current = moveStatus;
+
+  // Opening a story — and landing on each next segment — marks it viewed
+  // so the ring fades to graphite for everyone afterwards.
+  useEffect(() => {
+    if (!current) return undefined;
+    api.viewStatus(current.id).catch(() => {});
+    return undefined;
+  }, [current?.id]);
+
+  // Each group opens at its first (oldest) segment, with a fresh progress
+  // bar — even when you reopen the same one-segment story you just watched.
+  useEffect(() => {
+    setIndex(group ? Math.max(0, Math.min(startIndex, group.items.length - 1)) : 0);
+    if (group) {
+      segIdRef.current = null;
+      progressVal.current = 0;
+      progress.setValue(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group?.user?.id]);
 
   const sendStatusReply = async () => {
     const text = replyText.trim();
-    if (!text || !current || !viewer) return;
-    if (viewer.group.user.id === user.id) return;
+    if (!text || !current || !group) return;
+    if (group.user.id === user.id) return;
     setReplySending(true);
     setReplyFeedback('');
     try {
@@ -134,16 +270,6 @@ export default function StatusScreen({ navigation }) {
       setReplySending(false);
     }
   };
-
-  const current = viewer?.group.items[viewer.index];
-  const isOwnStatus = viewer?.group.user.id === user?.id;
-  const [held, setHeld] = useState(false); // story hold-to-pause
-  const reducedMotion = useReducedMotion();
-  const progress = useRef(new Animated.Value(0)).current;
-  const progressVal = useRef(0);
-  const segIdRef = useRef(null);
-  const moveRef = useRef(null);
-  moveRef.current = moveStatus;
 
   // Progress-bar engine: each segment's bar animates 0 → 1 over its display
   // duration, pauses while held (finger down) or while the reply input is
@@ -194,7 +320,7 @@ export default function StatusScreen({ navigation }) {
     return () => anim.stop();
   }, [held, holdScale, reducedMotion]);
 
-  useEffect(() => { dismissY.setValue(0); }, [viewer?.group?.user?.id, dismissY]);
+  useEffect(() => { dismissY.setValue(0); }, [group?.user?.id, dismissY]);
 
   const viewerPan = useRef(
     PanResponder.create({
@@ -225,385 +351,180 @@ export default function StatusScreen({ navigation }) {
   });
   const viewerScale = Animated.multiply(holdScale, dragScale);
 
-  const recent = data.others.filter((group) => !group.allViewed);
-  const viewed = data.others.filter((group) => group.allViewed);
-  const myLatest = data.mine?.items?.[data.mine.items.length - 1];
-
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <BrandHeader navigation={navigation} />
-      <View style={[s.header, { borderBottomColor: theme.ink }]}>
-        <View>
-          <Text style={s.title}>Status</Text>
-          <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>Updates disappear after 24 hours</Text>
-        </View>
-        <SpringPressable
-          onPress={() => setComposerMode('choose')}
-          hitSlop={8}
-          style={({ pressed }) => [s.headerAdd, { borderColor: theme.ink }, pressed && marker(theme, 1)]}
-          scaleTo={motion.scale.row}
-          haptic="selection"
+    <Modal visible={!!group} animationType="fade" onRequestClose={closeViewer}>
+      {current && (
+        // Viewer opens with a soft scale/settle — the avatar's story
+        // "expands" into the full screen without a jarring pop.
+        <FadeSlide key={`story-${group.user.id}`} from="up" distance={16} scale={0.985} duration={motion.normal} style={{ flex: 1 }}>
+        {/* The story itself is draggable: pull it down and it follows the
+            finger, shrinking slightly, then lets go past ~110px. Holding
+            to pause also eases it back a touch, so "paused" is something
+            you can see as well as feel. */}
+        <Animated.View
+          {...viewerPan.panHandlers}
+          style={[
+            s.viewer,
+            {
+              backgroundColor: current.type === 'image' ? '#090909' : current.bg,
+              paddingTop: Math.max(insets.top, 14) + 14,
+              paddingBottom: Math.max(insets.bottom, 16),
+              transform: [{ translateY: dismissY }, { scale: viewerScale }],
+            },
+          ]}
         >
-          <Icon name="add" size={20} color={theme.ink} />
-        </SpringPressable>
-      </View>
-
-      {loading ? (
-        <StatusSkeleton />
-      ) : (
-        <ScrollView
-          contentContainerStyle={s.scroll}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }}
-              tintColor={theme.ink}
+          <View style={s.tapZones}>
+            <Pressable
+              style={{ flex: 0.34 }}
+              onPress={() => moveStatus(-1)}
+              onPressIn={() => setHeld(true)}
+              onPressOut={() => setHeld(false)}
             />
-          }
-        >
-          <View style={[s.myStatus, { backgroundColor: theme.card, borderColor: theme.graphiteLine }]}>
-            <SpringPressable
-              onPress={() => (data.mine ? openViewer(data.mine) : setComposerMode('choose'))}
-              style={({ pressed }) => [s.myStatusMain, pressed && { opacity: 0.72 }]}
-              scaleTo={motion.scale.row}
-              haptic="selection"
-            >
-              <View style={s.myAvatarWrap}>
-                <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={58} />
-                <View style={[s.plusBadge, { backgroundColor: '#050505', borderColor: theme.bg }]}>
-                  <Icon name="add" size={14} color="#ffffff" />
-                </View>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[type.headlineSm, { color: theme.text }]}>My status</Text>
-                <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]} numberOfLines={1}>
-                  {myLatest
-                    ? `${data.mine.items.length} update${data.mine.items.length === 1 ? '' : 's'} · ${formatChatTime(myLatest.createdAt)}`
-                    : 'Tap to add a status update'}
-                </Text>
-              </View>
-            </SpringPressable>
-            <View style={s.myQuickActions}>
-              <SpringPressable
-                accessibilityLabel="Create text status"
-                onPress={() => setComposerMode('text')}
-                style={({ pressed }) => [s.quickButton, { backgroundColor: theme.cardAlt, borderColor: theme.graphiteLine }, pressed && marker(theme, 1)]}
-                scaleTo={motion.scale.row}
-                haptic="selection"
-              >
-                <Icon name="create-outline" size={18} color={theme.ink} />
-              </SpringPressable>
-              <SpringPressable
-                accessibilityLabel="Create photo status"
-                onPress={() => setComposerMode('photo')}
-                style={({ pressed }) => [s.quickButton, { backgroundColor: '#050505', borderColor: '#000000' }, pressed && { backgroundColor: '#242321' }]}
-                scaleTo={motion.scale.row}
-                haptic="selection"
-              >
-                <Icon name="camera-outline" size={18} color="#ffffff" />
-              </SpringPressable>
-            </View>
+            <Pressable
+              style={{ flex: 0.66 }}
+              onPress={() => moveStatus(1)}
+              onPressIn={() => setHeld(true)}
+              onPressOut={() => setHeld(false)}
+            />
           </View>
 
-          {recent.length > 0 && (
-            <StatusSection
-              title="Recent updates"
-              groups={recent}
-              onPress={openViewer}
-              theme={theme}
-            />
-          )}
-
-          {viewed.length > 0 && (
-            <StatusSection
-              title="Viewed updates"
-              groups={viewed}
-              onPress={openViewer}
-              theme={theme}
-              viewed
-            />
-          )}
-
-          {!data.others.length && (
-            <View style={s.empty}>
-              <Icon name="eye-outline" size={30} color={theme.muted} />
-              <Text style={[type.headlineSm, { color: theme.text, marginTop: 12 }]}>No recent updates</Text>
-              <Text style={[type.bodySm, { color: theme.subtext, textAlign: 'center', marginTop: 5 }]}>When people share a status, it will appear here.</Text>
-            </View>
-          )}
-        </ScrollView>
-      )}
-
-      <View style={s.fabStack} pointerEvents="box-none">
-        <SpringPressable
-          accessibilityLabel="Create text status"
-          onPress={() => setComposerMode('text')}
-          style={({ pressed }) => [
-            s.fabSmall,
-            { backgroundColor: theme.cardAlt, borderColor: theme.ink },
-            pressed && marker(theme, 1),
-          ]}
-          scaleTo={motion.scale.row}
-          haptic="selection"
-        >
-          <Icon name="create-outline" size={19} color={theme.ink} />
-        </SpringPressable>
-        <SpringPressable
-          accessibilityLabel="Create photo status"
-          onPress={() => setComposerMode('photo')}
-          android_ripple={rippleFor(theme, { borderless: false, radius: 30 })}
-          style={({ pressed }) => [s.fab, { backgroundColor: pressed && Platform.OS !== 'android' ? '#242321' : '#050505' }]}
-          scaleTo={motion.scale.row}
-          haptic="selection"
-        >
-          <Icon name="camera-outline" size={22} color="#ffffff" />
-        </SpringPressable>
-      </View>
-
-      <StatusComposer
-        visible={!!composerMode}
-        initialMode={composerMode || 'choose'}
-        onClose={() => setComposerMode(null)}
-        onPosted={load}
-      />
-
-      <Modal visible={!!viewer} animationType="fade" onRequestClose={closeViewer}>
-        {current && (
-          // Viewer opens with a soft scale/settle — the avatar's story
-          // "expands" into the full screen without a jarring pop.
-          <FadeSlide key={`story-${viewer.group.user.id}`} from="up" distance={16} scale={0.985} duration={motion.normal} style={{ flex: 1 }}>
-          {/* The story itself is draggable: pull it down and it follows the
-              finger, shrinking slightly, then lets go past ~110px. Holding
-              to pause also eases it back a touch, so "paused" is something
-              you can see as well as feel. */}
-          <Animated.View
-            {...viewerPan.panHandlers}
-            style={[
-              s.viewer,
-              {
-                backgroundColor: current.type === 'image' ? '#090909' : current.bg,
-                paddingTop: Math.max(insets.top, 14) + 14,
-                paddingBottom: Math.max(insets.bottom, 16),
-                transform: [{ translateY: dismissY }, { scale: viewerScale }],
-              },
-            ]}
-          >
-            <View style={s.tapZones}>
-              <Pressable
-                style={{ flex: 0.34 }}
-                onPress={() => moveStatus(-1)}
-                onPressIn={() => setHeld(true)}
-                onPressOut={() => setHeld(false)}
-              />
-              <Pressable
-                style={{ flex: 0.66 }}
-                onPress={() => moveStatus(1)}
-                onPressIn={() => setHeld(true)}
-                onPressOut={() => setHeld(false)}
-              />
-            </View>
-
-            {/* progress bars — the active segment animates 0 → 100%, pauses
-                on hold, and resumes cleanly */}
-            <View style={s.progressRow} pointerEvents="none">
-              {viewer.group.items.map((item, index) => {
-                const done = index < viewer.index;
-                const active = index === viewer.index;
-                return (
-                  <View key={index} style={[s.progressBar, { backgroundColor: 'rgba(160,160,160,0.42)', overflow: 'hidden' }]}>
-                    {done && <View style={[StyleSheet.absoluteFill, { backgroundColor: foregroundFor(item) }]} />}
-                    {active && (
-                      <Animated.View
-                        style={[StyleSheet.absoluteFill, { backgroundColor: foregroundFor(item), transform: [{ scaleX: progressScaleX }], transformOrigin: 'left' }]}
-                      />
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-
-            <View style={s.viewerHeader}>
-              <Avatar uri={viewer.group.user.avatar} name={viewer.group.user.name} id={viewer.group.user.id} size={40} />
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <EmojiText style={[type.bodyStrong, { color: foregroundFor(current), flexShrink: 1 }]} numberOfLines={1}>
-                    {viewer.group.user.id === user.id ? 'My status' : viewer.group.user.name}
-                  </EmojiText>
-                  {viewer.group.user.id !== user.id && hasGoldTick(viewer.group.user) && <GoldTick size={14} />}
+          {/* progress bars — the active segment animates 0 → 100%, pauses
+              on hold, and resumes cleanly */}
+          <View style={s.progressRow} pointerEvents="none">
+            {group.items.map((item, itemIndex) => {
+              const done = itemIndex < index;
+              const active = itemIndex === index;
+              return (
+                <View key={itemIndex} style={[s.progressBar, { backgroundColor: 'rgba(160,160,160,0.42)', overflow: 'hidden' }]}>
+                  {done && <View style={[StyleSheet.absoluteFill, { backgroundColor: foregroundFor(item) }]} />}
+                  {active && (
+                    <Animated.View
+                      style={[StyleSheet.absoluteFill, { backgroundColor: foregroundFor(item), transform: [{ scaleX: progressScaleX }], transformOrigin: 'left' }]}
+                    />
+                  )}
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
-                  <Icon name={privacyMeta(current.audience).icon} size={11} color={foregroundFor(current)} style={{ opacity: 0.68 }} />
-                  <Text style={[type.labelXs, { color: foregroundFor(current), opacity: 0.68 }]}>
-                    {formatChatTime(current.createdAt)} · {privacyMeta(current.audience).label}
-                  </Text>
-                </View>
+              );
+            })}
+          </View>
+
+          <View style={s.viewerHeader}>
+            <Avatar uri={group.user.avatar} name={group.user.name} id={group.user.id} size={40} />
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <EmojiText style={[type.bodyStrong, { color: foregroundFor(current), flexShrink: 1 }]} numberOfLines={1}>
+                  {group.user.id === user?.id ? 'My status' : group.user.name}
+                </EmojiText>
+                {group.user.id !== user?.id && hasGoldTick(group.user) && <GoldTick size={14} />}
               </View>
-              <Pressable onPress={closeViewer} hitSlop={10} style={{ padding: 5 }}>
-                <Icon name="close" size={23} color={foregroundFor(current)} />
-              </Pressable>
-            </View>
-
-            <View style={s.viewerBody} pointerEvents="none">
-              {/* each story segment enters with a soft settle */}
-              <FadeSlide key={current.id} from="up" distance={14} scale={0.985} style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
-              {current.type === 'image' ? (
-                <View
-                  style={[
-                    s.viewerImageFrame,
-                    {
-                      aspectRatio: current.mediaAspect || 9 / 16,
-                      width: (current.mediaAspect || 9 / 16) < 0.7 ? '72%' : '100%',
-                    },
-                  ]}
-                >
-                  <Image source={{ uri: mediaUrl(current.mediaUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                </View>
-              ) : (
-                <EmojiText style={[s.viewerText, { color: foregroundFor(current) }]}>{current.body}</EmojiText>
-              )}
-
-              {!!current.song && (
-                <View style={s.viewerSong}>
-                  <SongCard song={current.song} tint={foregroundFor(current)} />
-                </View>
-              )}
-
-              {current.type === 'image' && !!current.body && (
-                <View style={s.viewerCaption}>
-                  <EmojiText style={[type.bodyMd, { color: '#ffffff', textAlign: 'center' }]}>{current.body}</EmojiText>
-                </View>
-              )}
-              </FadeSlide>
-            </View>
-
-            {/* ── gentle update: reply composer (not a rebuild) ── */}
-            {isOwnStatus ? (
-              <View style={[s.replyHintWrap, { paddingBottom: (Platform.OS === 'android' && kbHeight > 0 ? kbHeight + 10 : Math.max(insets.bottom, 12)) }]} pointerEvents="none">
-                <Text style={[type.labelXs, { color: foregroundFor(current), opacity: 0.72, textAlign: 'center' }]}>
-                  Replies to your update appear as messages in Chats
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                <Icon name={privacyMeta(current.audience).icon} size={11} color={foregroundFor(current)} style={{ opacity: 0.68 }} />
+                <Text style={[type.labelXs, { color: foregroundFor(current), opacity: 0.68 }]}>
+                  {formatChatTime(current.createdAt)} · {privacyMeta(current.audience).label}
                 </Text>
+              </View>
+            </View>
+            <Pressable onPress={closeViewer} hitSlop={10} style={{ padding: 5 }}>
+              <Icon name="close" size={23} color={foregroundFor(current)} />
+            </Pressable>
+          </View>
+
+          <View style={s.viewerBody} pointerEvents="none">
+            {/* each story segment enters with a soft settle */}
+            <FadeSlide key={current.id} from="up" distance={14} scale={0.985} style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
+            {current.type === 'image' ? (
+              <View
+                style={[
+                  s.viewerImageFrame,
+                  {
+                    aspectRatio: current.mediaAspect || 9 / 16,
+                    width: (current.mediaAspect || 9 / 16) < 0.7 ? '72%' : '100%',
+                  },
+                ]}
+              >
+                <Image source={{ uri: mediaUrl(current.mediaUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
               </View>
             ) : (
-              <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                enabled={Platform.OS === 'ios'}
-                style={[s.replyBarWrap, { paddingBottom: (Platform.OS === 'android' && kbHeight > 0 ? kbHeight + 10 : Math.max(insets.bottom, 12)) }]}
-              >
-                <View style={s.replyBar}>
-                  <TextInput
-                    value={replyText}
-                    onChangeText={setReplyText}
-                    onFocus={() => setReplyFocused(true)}
-                    onBlur={() => setReplyFocused(false)}
-                    placeholder={`Reply to ${viewer.group.user.name.split(' ')[0]}...`}
-                    placeholderTextColor="rgba(28,27,27,0.48)"
-                    style={s.replyInput}
-                    returnKeyType="send"
-                    onSubmitEditing={sendStatusReply}
-                    editable={!replySending}
-                    maxLength={700}
-                  />
-                  <SpringPressable
-                    onPress={sendStatusReply}
-                    disabled={replySending || !replyText.trim()}
-                    style={({ pressed }) => [
-                      s.replySend,
-                      (replySending || !replyText.trim()) && { opacity: 0.42 },
-                      pressed && { opacity: 0.82 },
-                    ]}
-                    scaleTo={motion.scale.row}
-                    haptic="selection"
-                  >
-                    {replySending ? (
-                      <ActivityIndicator color="#050505" size="small" />
-                    ) : (
-                      <Icon name="send" size={18} color="#050505" />
-                    )}
-                  </SpringPressable>
-                </View>
-                {!!replyFeedback && (
-                  <Text style={[type.labelXs, { color: '#ffffff', textAlign: 'center', marginTop: 7, opacity: 0.94 }]}>
-                    {replyFeedback}
-                  </Text>
-                )}
-              </KeyboardAvoidingView>
+              <EmojiText style={[s.viewerText, { color: foregroundFor(current) }]}>{current.body}</EmojiText>
             )}
-          </Animated.View>
-          </FadeSlide>
-        )}
-      </Modal>
-    </View>
-  );
-}
 
-/** Soft skeleton while the status feed loads — avatar rings + text bars. */
-function StatusSkeleton() {
-  const { theme } = useTheme();
-  return (
-    <View style={{ paddingHorizontal: 22, paddingTop: 18, gap: 24 }}>
-      {[0, 1, 2, 3].map((i) => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <Skeleton width={54} height={54} radius={999} />
-          <View style={{ flex: 1, gap: 9 }}>
-            <Skeleton width="38%" height={13} />
-            <Skeleton width="62%" height={11} />
+            {!!current.song && (
+              <View style={s.viewerSong}>
+                <SongCard song={current.song} tint={foregroundFor(current)} />
+              </View>
+            )}
+
+            {current.type === 'image' && !!current.body && (
+              <View style={s.viewerCaption}>
+                <EmojiText style={[type.bodyMd, { color: '#ffffff', textAlign: 'center' }]}>{current.body}</EmojiText>
+              </View>
+            )}
+            </FadeSlide>
           </View>
-        </View>
-      ))}
-      <View style={{ marginTop: 6, gap: 12 }}>
-        <Skeleton width="30%" height={12} />
-        <Skeleton width="92%" height={120} radius={10} />
-      </View>
-    </View>
+
+          {/* ── gentle update: reply composer (not a rebuild) ── */}
+          {isOwnStatus ? (
+            <View style={[s.replyHintWrap, { paddingBottom: (Platform.OS === 'android' && kbHeight > 0 ? kbHeight + 10 : Math.max(insets.bottom, 12)) }]} pointerEvents="none">
+              <Text style={[type.labelXs, { color: foregroundFor(current), opacity: 0.72, textAlign: 'center' }]}>
+                Replies to your update appear as messages in Chats
+              </Text>
+            </View>
+          ) : (
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              enabled={Platform.OS === 'ios'}
+              style={[s.replyBarWrap, { paddingBottom: (Platform.OS === 'android' && kbHeight > 0 ? kbHeight + 10 : Math.max(insets.bottom, 12)) }]}
+            >
+              <View style={s.replyBar}>
+                <TextInput
+                  value={replyText}
+                  onChangeText={setReplyText}
+                  onFocus={() => setReplyFocused(true)}
+                  onBlur={() => setReplyFocused(false)}
+                  placeholder={`Reply to ${group.user.name.split(' ')[0]}...`}
+                  placeholderTextColor="rgba(28,27,27,0.48)"
+                  style={s.replyInput}
+                  returnKeyType="send"
+                  onSubmitEditing={sendStatusReply}
+                  editable={!replySending}
+                  maxLength={700}
+                />
+                <SpringPressable
+                  onPress={sendStatusReply}
+                  disabled={replySending || !replyText.trim()}
+                  style={({ pressed }) => [
+                    s.replySend,
+                    (replySending || !replyText.trim()) && { opacity: 0.42 },
+                    pressed && { opacity: 0.82 },
+                  ]}
+                  scaleTo={motion.scale.row}
+                  haptic="selection"
+                >
+                  {replySending ? (
+                    <ActivityIndicator color="#050505" size="small" />
+                  ) : (
+                    <Icon name="send" size={18} color="#050505" />
+                  )}
+                </SpringPressable>
+              </View>
+              {!!replyFeedback && (
+                <Text style={[type.labelXs, { color: '#ffffff', textAlign: 'center', marginTop: 7, opacity: 0.94 }]}>
+                  {replyFeedback}
+                </Text>
+              )}
+            </KeyboardAvoidingView>
+          )}
+        </Animated.View>
+        </FadeSlide>
+      )}
+    </Modal>
   );
 }
 
-function StatusSection({ title, groups, onPress, theme, viewed = false }) {
-  return (
-    <View style={{ marginTop: 24 }}>
-      <Text style={[type.labelSm, { color: theme.subtext, marginBottom: 8, paddingHorizontal: 4 }]}>{title.toUpperCase()}</Text>
-      <View style={{ gap: 3 }}>
-        {groups.map((group) => (
-          <StatusRow key={group.user.id} group={group} onPress={() => onPress(group)} theme={theme} viewed={viewed} />
-        ))}
-      </View>
-    </View>
-  );
-}
+/* ------------------------------------------------------------------ */
+/* composer                                                            */
+/* ------------------------------------------------------------------ */
 
-function StatusRow({ group, onPress, theme, viewed }) {
-  const latest = group.items[group.items.length - 1];
-  const ringColor = viewed ? theme.graphiteLine : theme.ink;
-  return (
-    <SpringPressable
-      accessibilityRole="button"
-      accessibilityLabel={`View ${group.user.name}'s status`}
-      onPress={onPress}
-      scaleTo={motion.scale.row}
-      haptic="selection"
-      style={({ pressed }) => [
-        stylesStatic.statusRow,
-        { backgroundColor: pressed ? theme.cardAlt : theme.card, borderBottomColor: theme.graphiteLine },
-      ]}
-    >
-      <View style={[stylesStatic.statusRing, { borderColor: ringColor, borderWidth: viewed ? 2 : 3 }]}>
-        <Avatar uri={group.user.avatar} name={group.user.name} id={group.user.id} size={52} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <EmojiText style={[type.bodyStrong, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{group.user.name}</EmojiText>
-          {hasGoldTick(group.user) && <GoldTick size={14} />}
-        </View>
-        <Text style={[type.bodySm, { color: theme.subtext, marginTop: 2 }]}>
-          {formatChatTime(latest.createdAt)} · {group.items.length} update{group.items.length === 1 ? '' : 's'}
-        </Text>
-      </View>
-      <Icon name={privacyMeta(latest.audience).icon} size={16} color={theme.muted} />
-    </SpringPressable>
-  );
-}
-
-function StatusComposer({ visible, initialMode, onClose, onPosted }) {
+export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const s = makeStyles(theme);
@@ -941,34 +862,21 @@ function StatusComposer({ visible, initialMode, onClose, onPosted }) {
   );
 }
 
-const stylesStatic = StyleSheet.create({
-  statusRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingHorizontal: 12, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  statusRing: {
-    width: 60, height: 60, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center',
-  },
-});
-
 const makeStyles = (t) => StyleSheet.create({
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14, borderBottomWidth: stroke.ink,
+  /* story ring strip */
+  storiesWrap: { marginTop: 14 },
+  storiesRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 2 },
+  circleCol: { alignItems: 'center', width: 70 },
+  circlePress: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  ring: { width: 68, height: 68, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  ringNew: { borderWidth: 3, borderColor: t.ink },
+  ringSeen: { borderWidth: 2, borderColor: t.graphiteLine },
+  ringMine: { borderWidth: 3, borderColor: t.ink },
+  ringEmpty: { borderWidth: 2, borderColor: t.ink, borderStyle: 'dashed' },
+  plusBadge: {
+    position: 'absolute', right: -1, bottom: -1, width: 22, height: 22,
+    borderRadius: radius.full, borderWidth: 2, alignItems: 'center', justifyContent: 'center',
   },
-  title: { ...type.headlineLg, color: t.text },
-  headerAdd: { width: 40, height: 40, borderWidth: 2, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  scroll: { width: '100%', maxWidth: 680, alignSelf: 'center', padding: 18, paddingBottom: 140 },
-  myStatus: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, overflow: 'hidden' },
-  myStatusMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 14, padding: 13 },
-  myAvatarWrap: { position: 'relative' },
-  plusBadge: { position: 'absolute', right: -3, bottom: -3, width: 23, height: 23, borderRadius: radius.full, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  myQuickActions: { flexDirection: 'row', gap: 7, paddingRight: 12 },
-  quickButton: { width: 38, height: 38, borderWidth: 1, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  empty: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30, paddingVertical: 66 },
-  fabStack: { position: 'absolute', right: 24, bottom: 26, alignItems: 'center', gap: 13 },
-  fabSmall: { width: 44, height: 44, borderWidth: 2, borderRadius: 13, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  fab: { width: 58, height: 58, borderWidth: 3, borderColor: '#000000', borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
 
   viewer: { flex: 1 },
   tapZones: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', zIndex: 1 },

@@ -246,6 +246,32 @@ CREATE TABLE IF NOT EXISTS community_requests (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+/* ---- GCs: Instagram-style group chats (chats.type = 'gc') ----
+   A GC is a real chat (messages/receipts/sockets all reused) that lives in
+   the dedicated GC section instead of the main Chats inbox. Anyone can
+   discover one and join — instantly when privacy = 'open', or via an
+   admin-approved request when privacy = 'request'. */
+CREATE TABLE IF NOT EXISTS gcs (
+  chat_id     TEXT PRIMARY KEY,
+  description TEXT DEFAULT '',
+  privacy     TEXT NOT NULL DEFAULT 'request',   -- open | request
+  created_at  INTEGER NOT NULL,
+  FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS gc_requests (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  chat_id      TEXT NOT NULL,
+  user_id      TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'pending',  -- pending (rows are removed once handled)
+  created_at   INTEGER NOT NULL,
+  UNIQUE (chat_id, user_id),
+  FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_gc_requests_chat ON gc_requests(chat_id, status);
+
+
 /* ---- Colleagues: discover people through shared places ---- */
 CREATE TABLE IF NOT EXISTS affiliations (
   id              TEXT PRIMARY KEY,

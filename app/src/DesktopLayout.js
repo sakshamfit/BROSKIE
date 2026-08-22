@@ -18,8 +18,8 @@ const NewChatScreen = lazyScreen(() => import('./screens/NewChatScreen'), { labe
 const SettingsScreen = lazyScreen(() => import('./screens/SettingsScreen'), { label: 'Settings' });
 const ChatInfoScreen = lazyScreen(() => import('./screens/ChatInfoScreen'), { label: 'Chat Info' });
 const NetworkScreen = lazyScreen(() => import('./screens/NetworkScreen'), { label: 'Network' });
+const GCScreen = lazyScreen(() => import('./screens/GCScreen'), { label: 'GC' });
 const ColleaguesScreen = lazyScreen(() => import('./screens/ColleaguesScreen'), { label: 'Colleagues' });
-const StatusScreen = lazyScreen(() => import('./screens/StatusScreen'), { label: 'See' });
 const PersonalInfoScreen = lazyScreen(() => import('./screens/PersonalInfoScreen'), { label: 'Personal Info' });
 const SecurityScreen = lazyScreen(() => import('./screens/SecurityScreen'), { label: 'Security' });
 const AppearanceScreen = lazyScreen(() => import('./screens/AppearanceScreen'), { label: 'Appearance' });
@@ -67,8 +67,8 @@ export default function SplitLayout() {
   useEffect(() => onOpenProfileRequest((userId) => setOverlay({ name: 'UserProfile', params: { userId } })), []);
   useEffect(() => onOpenPostRequest((postId) => setOverlay({ name: 'PostDetail', params: { postId } })), []);
 
-  // Settings is a full-screen top-level section here (like Chats/See/
-  // Network) — NOT a popup — with its own little navigation stack for the
+  // Settings is a full-screen top-level section here (like Chats/Network) —
+  // NOT a popup — with its own little navigation stack for the
   // Personal Information / Security / Privacy / Notifications / Appearance
   // / Blocked Contacts drill-downs.
   const SETTINGS_SUBSCREENS = ['PersonalInfo', 'Security', 'Privacy', 'Notifications', 'Appearance', 'BlockedUsers', 'Starred', 'AdminSafety'];
@@ -210,12 +210,6 @@ export default function SplitLayout() {
           </>
         )}
 
-        {tab === 'status' && (
-          <View style={s.fullPane}>
-            <StatusScreen navigation={listNav} />
-          </View>
-        )}
-
         {tab === 'network' && (
           <View style={[s.fullPane, s.centeredPane]}>
             <NetworkScreen
@@ -223,6 +217,18 @@ export default function SplitLayout() {
                 navigate: (name) => { if (name === 'Activity') openOverlay('Activity'); },
                 goBack: () => {},
               }}
+              onOpenChat={(chatId) => { setTab('chats'); setSelectedChatId(chatId); }}
+            />
+          </View>
+        )}
+
+        {/* GCs — Instagram-style group chats. Opening one drops the user
+            into the conversation in the split pane (the Chats inbox itself
+            never lists GC conversations). */}
+        {tab === 'gc' && (
+          <View style={[s.fullPane, s.centeredPane]}>
+            <GCScreen
+              navigation={listNav}
               onOpenChat={(chatId) => { setTab('chats'); setSelectedChatId(chatId); }}
             />
           </View>
@@ -243,7 +249,7 @@ export default function SplitLayout() {
           </View>
         )}
 
-        {/* Settings is a full-screen section, same as Chats/See/Network —
+        {/* Settings is a full-screen section, same as Chats/Network —
             not a centered popup — matching the mockup's own full-page layout. */}
         {tab === 'settings' && (
           <View style={s.fullPane}>
