@@ -501,6 +501,13 @@ function hydrateMessage(m, viewerId) {
   // viewer. The row still exists for everyone else (and for "delete for
   // everyone", which uses the separate `deleted` flag).
   if (isHiddenForMe(m, viewerId)) return null;
+  // Explicit conversation type on EVERY hydrated message, so clients can
+  // unambiguously route direct vs GC traffic without a second lookup:
+  //   conversationType: 'direct' | 'group' | 'gc'
+  // `gcId` is set (equal to chat_id — a GC's id IS its chat id) only for
+  // GC messages; it is null for every direct/group message.
+  const messageChat = db.prepare('SELECT type FROM chats WHERE id = ?').get(m.chat_id);
+  const conversationType = messageChat?.type || 'direct';
   const reactions = db.prepare('SELECT user_id, emoji FROM reactions WHERE message_id = ?').all(m.id);
   const receipts = db.prepare('SELECT user_id, state FROM receipts WHERE message_id = ?').all(m.id);
   const others = memberIds(m.chat_id).filter((id) => id !== m.sender_id);
@@ -566,6 +573,8 @@ function hydrateMessage(m, viewerId) {
     chatId: m.chat_id,
     senderId: m.sender_id,
     type: m.type,
+    conversationType,
+    gcId: conversationType === 'gc' ? m.chat_id : null,
     body: m.deleted ? '' : m.body,
     mediaUrl: m.deleted ? null : m.media_url,
     mediaThumbUrl: m.deleted ? null : (m.media_thumb_url || null),
@@ -2365,6 +2374,13 @@ app.delete('/api/chats/:id/group/members/:userId', requireAuth, (req, res) => {
   const targetUser = getUser(target.user_id);
   insertSystemMessage(chat.id, `${targetUser.name} was removed by ${getUser(req.userId).name}`);
   emitToUser(target.user_id, 'chat:removed', { chatId: chat.id });
+  // GC-specific removal: the removed member's GC environment tears down and
+  // leaves the gc:{id} room immediately (normal chats are untouched). The
+  // client leaves its room on gc:removed; server-side the removed user is no
+  // longer in memberIds so no further gc:* event can reach them anyway.
+  if (chat.type === 'gc') {
+    emitToUser(target.user_id, 'gc:removed', { chatId: chat.id });
+  }
   memberIds(chat.id).forEach((uid) => emitToUser(uid, 'chat:updated', chatSummary(chat.id, uid)));
   res.json({ ok: true });
 });
@@ -2384,6 +2400,11 @@ app.post('/api/chats/:id/group/leave', requireAuth, (req, res) => {
   const meUser = getUser(req.userId);
   insertSystemMessage(chat.id, `${meUser.name} left the group`);
   emitToUser(req.userId, 'chat:removed', { chatId: chat.id });
+  // Leaving a GC removes it from the leaver's GC environment exclusively —
+  // their direct chats are never affected.
+  if (chat.type === 'gc') {
+    emitToUser(req.userId, 'gc:removed', { chatId: chat.id });
+  }
   memberIds(chat.id).forEach((uid) => emitToUser(uid, 'chat:updated', chatSummary(chat.id, uid)));
   res.json({ ok: true });
 });
@@ -2602,6 +2623,42 @@ app.post('/api/gc/:id/requests/:userId', requireAuth, (req, res) => {
   res.json({ ok: true, gc: hydrateGC(chat, req.userId) });
 });
 
+/* ---- GC messages — dedicated, membership-enforced chat API ----------
+   GC conversations are real chats underneath (shared messaging machinery:
+   receipts, reactions, edits, polls, disappearing messages all still work),
+   but they are fetched/stored/updated through GC-only endpoints and events
+   so a GC message can NEVER be confused with, or merged into, a direct
+   chat. `GET /api/chats` and `/api/sync/messages` exclude type='gc' rows. */
+
+/** Paginated GC messages. Membership verified on every page — a removed
+ *  member instantly loses read access even while a stale client is open. */
+app.get('/api/gc/:id/messages', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat || chat.type !== 'gc') return res.status(404).json({ error: 'GC not found' });
+  const page = chatMessagesPage(chat.id, req.userId, req.query);
+  if (page.error) return res.status(page.status).json({ error: page.error });
+  res.json(page);
+});
+
+/** Send a message into a GC. Same idempotent send path as direct chats
+ *  (clientId dedupe), but only after a GC + membership check. */
+app.post('/api/gc/:id/messages', requireAuth, (req, res) => {
+  try {
+    const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+    if (!chat || chat.type !== 'gc') return res.status(404).json({ error: 'GC not found' });
+    const outcome = deliverUserMessage(req.userId, { ...(req.body || {}), chatId: chat.id });
+    if (outcome.error) return res.status(outcome.status || 400).json({ error: outcome.error });
+    fanoutNewMessage(outcome, req.userId, req.body?.tempId || req.body?.clientId || null);
+    res.json({
+      message: hydrateMessage(outcome.row, req.userId),
+      duplicate: !!outcome.duplicate,
+    });
+  } catch (error) {
+    console.error('[gc messages send]', error);
+    res.status(500).json({ error: 'Could not send message' });
+  }
+});
+
 /* ---- starred messages ---- */
 
 /** All starred messages across the user's chats, newest first. */
@@ -2707,22 +2764,25 @@ app.post('/api/messages/forward', requireAuth, (req, res) => {
 /* messages                                                            */
 /* ------------------------------------------------------------------ */
 
-app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
-  const membership = db.prepare('SELECT cleared_at FROM chat_members WHERE chat_id = ? AND user_id = ?').get(req.params.id, req.userId);
-  if (!membership) return res.status(403).json({ error: 'Not a member of this chat' });
-  const request = pendingChatRequest(req.params.id);
-  if (request && request.receiver_id === req.userId) {
-    return res.status(403).json({ error: 'Accept this message request before opening the chat' });
+/** Shared paginated page of `chatId` for `viewerId` (membership + message
+ *  request rules enforced). Used by BOTH the normal chat endpoint and the
+ *  GC chat endpoint so direct and GC pages behave identically. */
+function chatMessagesPage(chatId, viewerId, query = {}) {
+  const membership = db.prepare('SELECT cleared_at FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, viewerId);
+  if (!membership) return { error: 'Not a member of this chat', status: 403 };
+  const request = pendingChatRequest(chatId);
+  if (request && request.receiver_id === viewerId) {
+    return { error: 'Accept this message request before opening the chat', status: 403 };
   }
 
-  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+  const limit = Math.min(Math.max(Number(query.limit) || 50, 1), 200);
   const clearedAt = membership.cleared_at || 0;
-  const after = req.query.after != null && req.query.after !== '' ? Number(req.query.after) : null;
-  const afterId = String(req.query.afterId || '');
-  const before = req.query.before != null && req.query.before !== '' ? Number(req.query.before) : null;
-  const beforeId = String(req.query.beforeId || '');
+  const after = query.after != null && query.after !== '' ? Number(query.after) : null;
+  const afterId = String(query.afterId || '');
+  const before = query.before != null && query.before !== '' ? Number(query.before) : null;
+  const beforeId = String(query.beforeId || '');
   // Hide messages this user removed via "Delete for me" (row stays for everyone else).
-  const [notHiddenSql, notHiddenParam] = notHiddenFor(req.userId, 'messages');
+  const [notHiddenSql, notHiddenParam] = notHiddenFor(viewerId, 'messages');
 
   let rows;
   let hasMore = false;
@@ -2734,7 +2794,7 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
          AND ${notHiddenSql}
        ORDER BY created_at ASC, id ASC
        LIMIT ?`
-    ).all(req.params.id, clearedAt, after, after, afterId, notHiddenParam, limit + 1);
+    ).all(chatId, clearedAt, after, after, afterId, notHiddenParam, limit + 1);
     hasMore = rows.length > limit;
     if (hasMore) rows = rows.slice(0, limit);
   } else if (before != null && Number.isFinite(before)) {
@@ -2745,7 +2805,7 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
          AND ${notHiddenSql}
        ORDER BY created_at DESC, id DESC
        LIMIT ?`
-    ).all(req.params.id, clearedAt, before, before, beforeId, notHiddenParam, limit + 1);
+    ).all(chatId, clearedAt, before, before, beforeId, notHiddenParam, limit + 1);
     hasMore = rows.length > limit;
     if (hasMore) rows = rows.slice(0, limit);
     rows.reverse();
@@ -2754,7 +2814,7 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
       `SELECT * FROM messages WHERE chat_id = ? AND created_at > ?
          AND ${notHiddenSql}
        ORDER BY created_at DESC, id DESC LIMIT ?`
-    ).all(req.params.id, clearedAt, notHiddenParam, limit + 1);
+    ).all(chatId, clearedAt, notHiddenParam, limit + 1);
     hasMore = rows.length > limit;
     if (hasMore) rows = rows.slice(0, limit);
     rows.reverse();
@@ -2762,8 +2822,8 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
 
   const newest = rows[rows.length - 1];
   const oldest = rows[0];
-  res.json({
-    messages: rows.map((m) => hydrateMessage(m, req.userId)).filter(Boolean),
+  return {
+    messages: rows.map((m) => hydrateMessage(m, viewerId)).filter(Boolean),
     hasMore,
     cursor: {
       after: newest ? newest.created_at : after,
@@ -2771,7 +2831,13 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
       before: oldest ? oldest.created_at : before,
       beforeId: oldest ? oldest.id : beforeId || null,
     },
-  });
+  };
+}
+
+app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
+  const page = chatMessagesPage(req.params.id, req.userId, req.query);
+  if (page.error) return res.status(page.status).json({ error: page.error });
+  res.json(page);
 });
 
 app.post('/api/chats/:id/messages', requireAuth, (req, res) => {
@@ -2796,14 +2862,18 @@ app.get('/api/sync/messages', requireAuth, (req, res) => {
   const rows = db.prepare(
     `SELECT m.* FROM messages m
      JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
+     JOIN chats sync_chat ON sync_chat.id = m.chat_id
      LEFT JOIN chat_requests cr ON cr.chat_id = m.chat_id
-     WHERE COALESCE(m.updated_at, m.created_at) > ?
+     WHERE ${notHiddenSql}
+       AND COALESCE(m.updated_at, m.created_at) > ?
        AND m.created_at > COALESCE(cm.cleared_at, 0)
-       AND ${notHiddenSql}
+       /* GCs have their own environment/endpoints/events — they never ride
+          the direct-chat catch-up sync. */
+       AND sync_chat.type != 'gc'
        AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
      ORDER BY COALESCE(m.updated_at, m.created_at) ASC, m.id ASC
      LIMIT ?`
-  ).all(req.userId, after, notHiddenParam, req.userId, limit + 1);
+  ).all(req.userId, notHiddenParam, after, req.userId, limit + 1);
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const cursor = page.length
@@ -2839,10 +2909,13 @@ app.get('/api/search', requireAuth, (req, res) => {
        ORDER BY m.created_at DESC LIMIT 100`
     : `SELECT m.* FROM messages m
        JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
+       JOIN chats search_chat ON search_chat.id = m.chat_id
        LEFT JOIN chat_requests cr ON cr.chat_id = m.chat_id
        WHERE m.deleted = 0 AND m.body LIKE ?
          AND m.created_at > COALESCE(cm.cleared_at, 0)
          AND ${notHiddenSql}
+         /* GC messages are searched inside GC chat only. */
+         AND search_chat.type != 'gc'
          AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
        ORDER BY m.created_at DESC LIMIT 50`;
   const rows = chatId
@@ -3037,6 +3110,23 @@ function deliverUserMessage(uid, data) {
 function fanoutNewMessage(outcome, uid, tempId) {
   const { row, duplicate, chatId, request, chat } = outcome;
   if (duplicate || !row) return;
+
+  if (chat?.type === 'gc') {
+    // Dedicated GC realtime path: gc:message + gc:updated touch ONLY the
+    // GC environment. The legacy message:new/chat:updated are still emitted
+    // below for older clients, but every client routes type='gc' payloads
+    // into the GC store — never the direct chat store.
+    memberIds(chatId).forEach((memberId) => {
+      const hydrated = hydrateMessage(row, memberId);
+      if (!hydrated) return;
+      emitToUser(memberId, 'gc:message', {
+        message: hydrated,
+        tempId: memberId === uid ? tempId : undefined,
+      });
+      emitToUser(memberId, 'gc:updated', { chat: chatSummary(chatId, memberId) });
+    });
+  }
+
   emitToChat(chatId, 'message:new', (viewer) => {
     const hydrated = hydrateMessage(row, viewer);
     if (!hydrated) return null;
@@ -4750,6 +4840,58 @@ io.on('connection', (socket) => {
     memberIds(chatId).filter((x) => x !== uid).forEach((x) =>
       emitToUser(x, 'typing', { chatId, userId: uid, name: me?.name, isTyping: !!isTyping })
     );
+  });
+
+  /* ---------------- GC rooms + GC-scoped realtime events ------------
+     Each GC owns a dedicated socket room (gc:{id}). A client joins only
+     after the server re-validates GC membership, and leaves when its chat
+     closes. GC messages/typing use gc:message / gc:typing and never touch
+     the direct-chat path on the receiving client. */
+  socket.on('gc:join', ({ gcId }, ack) => {
+    try {
+      const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(String(gcId || ''));
+      if (!chat || chat.type !== 'gc') return ack?.({ error: 'GC not found' });
+      const membership = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, uid);
+      if (!membership) return ack?.({ error: 'You are not a member of this GC' });
+      socket.join('gc:' + chat.id);
+      ack?.({ ok: true, chat: chatSummary(chat.id, uid) });
+    } catch (e) {
+      ack?.(socketFailure(e));
+    }
+  });
+
+  socket.on('gc:leave', ({ gcId }, ack) => {
+    try {
+      socket.leave('gc:' + String(gcId || ''));
+      ack?.({ ok: true });
+    } catch (e) {
+      ack?.(socketFailure(e));
+    }
+  });
+
+  socket.on('gc:send', (data, ack) => {
+    try {
+      const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(String(data?.gcId || data?.chatId || ''));
+      if (!chat || chat.type !== 'gc') return ack?.({ error: 'GC not found' });
+      const outcome = deliverUserMessage(uid, { ...(data || {}), chatId: chat.id });
+      if (outcome.error) return ack?.({ error: outcome.error });
+      const tempId = data?.tempId || data?.clientId || null;
+      fanoutNewMessage(outcome, uid, tempId);
+      ack?.({ message: hydrateMessage(outcome.row, uid), tempId, duplicate: !!outcome.duplicate });
+    } catch (e) {
+      ack?.(socketFailure(e));
+    }
+  });
+
+  socket.on('gc:typing', ({ gcId, isTyping }) => {
+    try {
+      const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(String(gcId || ''));
+      if (!chat || chat.type !== 'gc') return;
+      const me = getUser(uid);
+      memberIds(chat.id).filter((x) => x !== uid).forEach((x) =>
+        emitToUser(x, 'gc:typing', { gcId: chat.id, userId: uid, name: me?.name, isTyping: !!isTyping })
+      );
+    } catch { /* presence events are best-effort */ }
   });
 
   socket.on('message:react', ({ messageId, emoji }) => {

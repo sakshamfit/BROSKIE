@@ -45,6 +45,10 @@ export function setupDeepLinks() {
         // Strip the path so a refresh doesn't re-join; history stays clean.
         window.history.replaceState({}, '', '/');
         if (code) joinCommunityByCode(code.toLowerCase());
+      } else if (/^\/gc\/[0-9a-z]+\/?$/i.test(path)) {
+        const gcId = path.split('/')[2];
+        window.history.replaceState({}, '', '/');
+        if (gcId) handleDeepLink(`plusone://gc/${gcId}`);
       }
     } catch {}
     return () => {};

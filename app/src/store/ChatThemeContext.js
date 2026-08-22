@@ -23,17 +23,18 @@ export const useChatTheme = () => useContext(ChatThemeContext);
  * notice. Unknown ids always fall back to `graphite`.
  */
 export function ChatThemeProvider({ children }) {
-  const { chats, onChatThemeEvent } = useChat();
+  const { chats, gcChats, onChatThemeEvent } = useChat();
   const [live, setLive] = useState({});        // chatId -> { themeId, updatedBy, updatedAt, optimistic? }
   const [applyState, setApplyState] = useState({}); // chatId -> { saving?, error? }
 
-  // Sync from chat summaries (initial fetch + chat:updated/new). Entries
-  // marked optimistic are left alone until the server confirms.
+  // Sync from chat summaries — direct chats AND GC chats (separate store,
+  // same per-conversation themes). Entries marked optimistic are left alone
+  // until the server confirms.
   useEffect(() => {
     setLive((prev) => {
       let changed = false;
       const next = { ...prev };
-      chats.forEach((c) => {
+      [...chats, ...(gcChats || [])].forEach((c) => {
         if (!c.themeId) return;
         const local = next[c.id];
         if (local?.optimistic) return;
@@ -44,7 +45,7 @@ export function ChatThemeProvider({ children }) {
       });
       return changed ? next : prev;
     });
-  }, [chats]);
+  }, [chats, gcChats]);
 
   // Realtime: someone else (or another tab) changed this chat's theme.
   useEffect(() => onChatThemeEvent((ev, payload) => {

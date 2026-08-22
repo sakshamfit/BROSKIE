@@ -60,6 +60,44 @@ const messages = (chatId) => [0, 1, 2].map((i) => ({
   senderId: i % 2 ? 'u2' : 'u1',
   body: i === 1 ? 'Try long-pressing this bubble.' : `Message ${i} in ${chatId}.`,
   type: 'text',
+  conversationType: chatId.startsWith('gc') ? 'gc' : 'direct',
+  gcId: chatId.startsWith('gc') ? chatId : null,
+  createdAt: now - (3 - i) * 60_000,
+  status: 'read',
+  reactions: [],
+  starred: false,
+  deleted: false,
+}));
+
+/** A GC chat summary — same shape as /api/gc returns, type 'gc'. */
+const gcChat = (i) => ({
+  id: `gc${i}`,
+  type: 'gc',
+  name: i === 0 ? 'Gaming Hub' : 'College Friends',
+  avatar: null,
+  members: [me, other, { id: 'u3', username: 'katherine', name: 'Katherine Johnson', avatar: null, role: 'member' }],
+  unread: i === 0 ? 2 : 0,
+  pinned: false,
+  muted: false,
+  archived: false,
+  updatedAt: now - i * 300_000,
+  gc: { description: i === 0 ? 'Everyone plays here' : 'College squad', privacy: 'open', requestCount: 0 },
+  lastMessage: {
+    id: `gc${i}-last`, chatId: `gc${i}`, senderId: 'u2', type: 'text',
+    body: i === 0 ? 'Anyone up for a match tonight?' : 'See you all at the canteen',
+    conversationType: 'gc', gcId: `gc${i}`,
+    createdAt: now - i * 300_000, status: 'read',
+  },
+});
+
+const gcMessages = (gcId) => [0, 1, 2].map((i) => ({
+  id: `${gcId}-gm${i}`,
+  chatId: gcId,
+  gcId,
+  conversationType: 'gc',
+  senderId: i % 2 ? 'u2' : 'u1',
+  body: i === 1 ? 'GC-only message check.' : `GC message ${i} in ${gcId}.`,
+  type: 'text',
   createdAt: now - (3 - i) * 60_000,
   status: 'read',
   reactions: [],
@@ -87,13 +125,19 @@ const ROUTES = {
   'GET /api/greeting-summary': () => ({ summary: null }),
   'GET /api/push/info': () => ({ enabled: false }),
   'GET /api/push/web-config': () => ({ publicKey: null }),
+  // GC environment — must NEVER appear in /api/chats.
+  'GET /api/gc': () => ({ chats: [gcChat(0), gcChat(1)] }),
+  'GET /api/gc/discover': () => ({ gcs: [] }),
 };
 
-/** /api/chats/<id>/messages and other id-bearing paths. */
+/** /api/chats/<id>/messages, /api/gc/<id>/messages and other id-bearing paths. */
 function dynamicRoute(method, pathname) {
   let m = pathname.match(/^\/api\/chats\/([^/]+)\/messages$/);
   if (m && method === 'GET') return { messages: messages(m[1]) };
   if (m && method === 'POST') return { message: messages(m[1])[0] };
+  m = pathname.match(/^\/api\/gc\/([^/]+)\/messages$/);
+  if (m && method === 'GET') return { messages: gcMessages(m[1]), hasMore: false };
+  if (m && method === 'POST') return { message: gcMessages(m[1])[0] };
   m = pathname.match(/^\/api\/chats\/([^/]+)$/);
   if (m && method === 'GET') return { chat: chat(0) };
   return null;

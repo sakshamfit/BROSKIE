@@ -368,10 +368,12 @@ function notifyMessage({ chatId, chat, message, senderId, excludeIds = [] }) {
     if (settings.notifications?.messages === false) return;
     if (m.muted) return;
 
-    const mentioned = chatRow.type === 'group' && mentionsUser(message.body, m.username);
+    const isGC = chatRow.type === 'gc';
+    const mentioned = !isGC && chatRow.type === 'group' && mentionsUser(message.body, m.username);
     const preview = messagePreview(message, settings);
-    const title = chatRow.type === 'group' ? (chatRow.name || 'Group chat') : sender.name;
-    const body = chatRow.type === 'group'
+    const title = isGC ? (chatRow.name || 'GC')
+      : chatRow.type === 'group' ? (chatRow.name || 'Group chat') : sender.name;
+    const body = isGC || chatRow.type === 'group'
       ? (mentioned ? `${sender.name} mentioned you: ${preview}` : `${sender.name}: ${preview}`)
       : preview;
 
@@ -383,7 +385,8 @@ function notifyMessage({ chatId, chat, message, senderId, excludeIds = [] }) {
       type: mentioned ? 'mention' : 'message',
       title,
       body,
-      data: { route: 'chat', chatId },
+      // GC notifications route into the GC environment — never the Chats tab.
+      data: { route: isGC ? 'gc' : 'chat', chatId },
     }).catch(() => {});
   });
 }

@@ -454,6 +454,22 @@ export const api = {
   gcRequests: (chatId) => request(`/api/gc/${chatId}/requests`),
   gcRespondRequest: (chatId, userId, action) =>
     request(`/api/gc/${chatId}/requests/${userId}`, { method: 'POST', body: { action } }),
+  // GC messages: a dedicated, membership-enforced API. GC message traffic
+  // never uses the direct-chat endpoints, so a GC can never masquerade as
+  // (or overwrite) a direct conversation.
+  gcMessages: (gcId, { after, afterId, before, beforeId, limit } = {}) => {
+    const q = new URLSearchParams();
+    if (after != null && after !== '') q.set('after', String(after));
+    if (afterId) q.set('afterId', afterId);
+    if (before != null && before !== '') q.set('before', String(before));
+    if (beforeId) q.set('beforeId', beforeId);
+    if (limit) q.set('limit', String(limit));
+    const qs = q.toString();
+    return request(`/api/gc/${gcId}/messages${qs ? `?${qs}` : ''}`);
+  },
+  sendGCMessage: (gcId, payload) => request(`/api/gc/${gcId}/messages`, {
+    method: 'POST', body: payload, timeoutMs: 20000, retries: 1,
+  }),
 
   // Starred messages
   starred: () => request('/api/starred'),

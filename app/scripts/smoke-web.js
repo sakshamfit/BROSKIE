@@ -207,6 +207,54 @@ async function getBundle(argPath) {
     }
   }
 
+  // ---- GC isolation: GC tab → GC detail → GC chat → back, and the normal
+  // Chats inbox must remain exactly as it was (no GC rows, no GC messages).
+  if (byLabel('GC')) {
+    press(byLabel('GC'));
+    const gcListShown = await waitFor(() => /Gaming Hub/.test(bodyText()));
+    check('GC tab shows GC list', gcListShown);
+
+    const gcRow = [...window.document.querySelectorAll('[aria-label^="Open GC "]')][0]
+      || [...window.document.querySelectorAll('[role="button"], button')]
+        .find((el) => /Gaming Hub/.test(el.textContent || ''));
+    if (gcRow) {
+      press(gcRow);
+      const detailShown = await waitFor(() => /GC ·|MEMBERS|Open chat/i.test(bodyText()));
+      check('GC row opens GC DETAIL (not Chats)', detailShown);
+
+      const openChatBtn = [...window.document.querySelectorAll('[role="button"], button')]
+        .find((el) => /Open chat/i.test(el.textContent || ''));
+      if (openChatBtn) {
+        press(openChatBtn);
+        const gcChatShown = await waitFor(() => /GC-only message check\./.test(bodyText()));
+        check('GC detail opens the GC chat', gcChatShown);
+        check('GC chat header identifies the group', /members/i.test(bodyText()));
+        check('GC chat shows no direct-chat content', !/Try long-pressing this bubble/.test(bodyText()));
+
+        const backToDetail = byLabel('Back to GC');
+        if (backToDetail) {
+          press(backToDetail);
+          check('GC chat back returns to GC details', await waitFor(() => /GC ·|MEMBERS|Open chat/i.test(bodyText())));
+          const backToGcList = byLabel('Back to GCs') || byLabel('Back to GC');
+          if (backToGcList) {
+            press(backToGcList);
+            check('GC details back returns to GC list', await waitFor(() => /Gaming Hub/.test(bodyText())));
+          }
+        }
+      }
+    }
+
+    // Back to Chats: the three direct chats must still be listed. (Strict
+    // "GC rows never enter /api/chats / Chats state" assertions live in the
+    // server-side gc-isolation suite; the page pager keeps neighbour pages
+    // in the DOM, so whole-body text here would see the GC pane too.)
+    press(byLabel('Chats'));
+    check('Chats still lists the direct chats after GC flow',
+      await waitFor(() => /Grace Hopper/.test(bodyText()) && /Katherine Johnson/.test(bodyText())));
+    check('Chats tab shows a real direct chat thread list',
+      !!byLabel('Open chat with Grace Hopper') || [...window.document.querySelectorAll('[aria-label^="Open chat with"]')].length >= 3);
+  }
+
   // press everything else that is still on screen; nothing may throw
   for (const el of clickable.slice(0, 20)) {
     try { press(el); } catch (e) { note('interaction', [e]); }

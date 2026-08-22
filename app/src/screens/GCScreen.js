@@ -12,7 +12,7 @@ import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import {
   Avatar, EmptyState, TapeChip, Rule, InkButton, InkField, FrostedBackdrop,
-  GoldTick, hasGoldTick, formatChatTime, rippleFor, CountBead, isGroupChat,
+  GoldTick, hasGoldTick, formatChatTime, rippleFor, CountBead,
 } from '../components/common';
 import BrandHeader from '../components/BrandHeader';
 import { SpringPressable, motion, haptic, FadeSlide } from '../motion';
@@ -29,7 +29,7 @@ import useResponsive from '../hooks/useResponsive';
 export default function GCScreen({ navigation, onOpenChat }) {
   const { user } = useAuth();
   const { theme } = useTheme();
-  const { chats, refreshChats, typing, onGCEvent } = useChat();
+  const { gcChats, refreshGCs, gcTyping: typing, onGCEvent } = useChat();
   const { isTablet } = useResponsive();
   const [section, setSection] = useState('mine'); // mine | discover
   const [discover, setDiscover] = useState([]);
@@ -41,47 +41,51 @@ export default function GCScreen({ navigation, onOpenChat }) {
   const [requestsFor, setRequestsFor] = useState(null);
   const s = makeStyles(theme);
 
-  // My GC chats ride the same live chat store as everything else — filtered
-  // to type 'gc' here (and filtered OUT of the Chats inbox there).
+  // My GCs come from the GC-only store (gcChats). The direct Chat store
+  // never contains GC rows, so nothing here can move or hide a direct chat.
   const myGCs = useMemo(
-    () => chats.filter((c) => c.type === 'gc' && !c.archived).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)),
-    [chats]
+    () => gcChats.filter((c) => !c.archived).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)),
+    [gcChats]
   );
 
   const loadAll = useCallback(async () => {
     try {
-      const [mine, disc] = await Promise.all([
-        api.gcs().catch(() => ({ chats: [] })),
+      const [, disc] = await Promise.all([
+        refreshGCs().catch(() => []),
         api.gcDiscover().catch(() => ({ gcs: [] })),
       ]);
-      setGcMeta(Object.fromEntries((mine.chats || []).map((c) => [c.id, c.gc || {}])));
-      setDiscover(disc.gcs || []);
+      setDiscover(Array.isArray(disc) ? disc : disc.gcs || []);
     } finally {
       setDiscoverLoading(false);
     }
-  }, []);
+  }, [refreshGCs]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => {
+    // Keep `gcMeta` (description/privacy/request counts) in step with the
+    // GC store summaries.
+    setGcMeta(Object.fromEntries(gcChats.map((c) => [c.id, c.gc || {}])));
+  }, [gcChats]);
 
   // Join requests arriving / being answered elsewhere — keep badges fresh.
   useEffect(() => {
     if (!onGCEvent) return undefined;
     return onGCEvent((ev) => {
       loadAll();
-      if (ev === 'gc:requestUpdate') refreshChats().catch(() => {});
+      if (ev === 'gc:requestUpdate') refreshGCs().catch(() => {});
     });
-  }, [onGCEvent, loadAll, refreshChats]);
+  }, [onGCEvent, loadAll, refreshGCs]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    try { await Promise.all([refreshChats(), loadAll()]); } catch {}
+    try { await loadAll(); } catch {}
     finally { setRefreshing(false); }
   };
 
   const openChat = (chat) => {
     haptic('selection');
     if (onOpenChat) onOpenChat(chat.id);
-    else navigation?.navigate?.('Conversation', { chatId: chat.id, initialChat: chat });
+    else navigation?.navigate?.('GCDetail', { chatId: chat.id });
   };
 
   const [joinError, setJoinError] = useState('');
@@ -93,7 +97,7 @@ export default function GCScreen({ navigation, onOpenChat }) {
     try {
       const r = await api.gcJoin(gc.id);
       if (r.joined) {
-        await refreshChats().catch(() => {});
+        await refreshGCs().catch(() => {});
         setSection('mine');
       }
       await loadAll();
@@ -113,7 +117,7 @@ export default function GCScreen({ navigation, onOpenChat }) {
   };
 
   const onCreated = async () => {
-    await refreshChats().catch(() => {});
+    await refreshGCs().catch(() => {});
     await loadAll();
     setSection('mine');
   };
@@ -308,7 +312,7 @@ export default function GCScreen({ navigation, onOpenChat }) {
       <GCRequests
         chatId={requestsFor}
         onClose={() => setRequestsFor(null)}
-        onHandled={() => { loadAll(); refreshChats().catch(() => {}); }}
+        onHandled={() => { loadAll(); refreshGCs().catch(() => {}); }}
       />
     </View>
   );

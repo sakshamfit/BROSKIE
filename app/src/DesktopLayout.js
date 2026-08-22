@@ -19,6 +19,8 @@ const SettingsScreen = lazyScreen(() => import('./screens/SettingsScreen'), { la
 const ChatInfoScreen = lazyScreen(() => import('./screens/ChatInfoScreen'), { label: 'Chat Info' });
 const NetworkScreen = lazyScreen(() => import('./screens/NetworkScreen'), { label: 'Network' });
 const GCScreen = lazyScreen(() => import('./screens/GCScreen'), { label: 'GC' });
+const GCDetailScreen = lazyScreen(() => import('./screens/GCDetailScreen'), { label: 'GC Details' });
+const GCChatScreen = lazyScreen(() => import('./screens/GCChatScreen'), { label: 'GC Chat' });
 const ColleaguesScreen = lazyScreen(() => import('./screens/ColleaguesScreen'), { label: 'Colleagues' });
 const PersonalInfoScreen = lazyScreen(() => import('./screens/PersonalInfoScreen'), { label: 'Personal Info' });
 const SecurityScreen = lazyScreen(() => import('./screens/SecurityScreen'), { label: 'Security' });
@@ -49,6 +51,10 @@ export default function SplitLayout() {
   const { insets, isWeb } = useResponsive();
   const [tab, setTab] = useState('network');
   const [selectedChatId, setSelectedChatId] = useState(null);
+  // GC environment lives INSIDE the GC pane: list → detail → chat. It never
+  // switches the pane to Chats, so direct chats are untouched.
+  const [gcSelectedId, setGcSelectedId] = useState(null);
+  const [gcSub, setGcSub] = useState(null); // null | 'detail' | 'chat'
   const [overlay, setOverlay] = useState(null); // { name, params }
 
   // On native tablets the sidebar sits inside the device's safe area
@@ -117,6 +123,20 @@ export default function SplitLayout() {
     replace(name, params) { this.navigate(name, params); },
   };
 
+  // GC sub-navigation: GC list → GCDetail → GCChat, always inside tab 'gc'.
+  const gcNav = {
+    navigate: (name, params) => {
+      if (name === 'GCDetail') { setGcSelectedId(params.chatId); setGcSub('detail'); }
+      else if (name === 'GCChat') { setGcSelectedId(params.chatId); setGcSub('chat'); }
+    },
+    // Chat → detail → list (never Chats).
+    goBack: () => setGcSub((sub) => (sub === 'chat' ? 'detail' : null)),
+    replace: (name, params) => {
+      if (name === 'GCDetail') { setGcSelectedId(params.chatId); setGcSub('detail'); }
+      else if (name === 'GCChat') { setGcSelectedId(params.chatId); setGcSub('chat'); }
+    },
+  };
+
   const convNav = {
     navigate: (name, params) => {
       if (name === 'ChatInfo') openOverlay('ChatInfo', params);
@@ -164,6 +184,14 @@ export default function SplitLayout() {
         setTab('network');
         return true;
       }
+      if (tab === 'gc' && gcSub === 'chat') {
+        setGcSub('detail');
+        return true;
+      }
+      if (tab === 'gc' && gcSub === 'detail') {
+        setGcSub(null);
+        return true;
+      }
       if (selectedChatId) {
         setSelectedChatId(null);
         return true;
@@ -171,7 +199,7 @@ export default function SplitLayout() {
       return false;
     });
     return () => sub.remove();
-  }, [overlay, tab, settingsSub, selectedChatId]);
+  }, [overlay, tab, settingsSub, selectedChatId, gcSub]);
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
@@ -181,6 +209,7 @@ export default function SplitLayout() {
         onNavigate={(key) => {
           if (key === 'activity') { openOverlay('Activity'); return; }
           setSettingsSub(null);
+          if (key !== 'gc') { setGcSub(null); setGcSelectedId(null); }
           setTab(key);
         }}
         onNewChat={() => openOverlay('NewChat')}
@@ -222,15 +251,29 @@ export default function SplitLayout() {
           </View>
         )}
 
-        {/* GCs — Instagram-style group chats. Opening one drops the user
-            into the conversation in the split pane (the Chats inbox itself
-            never lists GC conversations). */}
+        {/* GCs — Instagram-style group chats, kept entirely inside the GC
+            pane: list → GC detail → GC chat. Opening or messaging a GC never
+            switches to the Chats pane and never touches direct chats. */}
         {tab === 'gc' && (
           <View style={[s.fullPane, s.centeredPane]}>
-            <GCScreen
-              navigation={listNav}
-              onOpenChat={(chatId) => { setTab('chats'); setSelectedChatId(chatId); }}
-            />
+            {gcSub === 'chat' && gcSelectedId ? (
+              <GCChatScreen
+                navigation={gcNav}
+                route={{ params: { chatId: gcSelectedId } }}
+                embedded
+              />
+            ) : gcSub === 'detail' && gcSelectedId ? (
+              <GCDetailScreen
+                navigation={gcNav}
+                route={{ params: { chatId: gcSelectedId } }}
+                embedded
+              />
+            ) : (
+              <GCScreen
+                navigation={gcNav}
+                onOpenChat={(chatId) => { setGcSelectedId(chatId); setGcSub('detail'); }}
+              />
+            )}
           </View>
         )}
 
