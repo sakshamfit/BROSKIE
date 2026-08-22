@@ -222,11 +222,44 @@ export function InkIconButton({
 }
 
 /** Input treatment: a single ink line, no box. */
+/**
+ * Input treatment: a single ink line, no box.
+ *
+ * Focus used to swap the border width, which snapped between two thicknesses.
+ * Now the base line stays put and a heavier line is *drawn over* it — fading
+ * in while it widens from 88% — so focusing a field reads as a pen stroke
+ * landing rather than a value flipping. Native driver, no layout work.
+ */
 export function InkField({ children, style, focused }) {
   const { theme } = useTheme();
+  const reduced = useReducedMotion();
+  const v = useRef(new Animated.Value(focused ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (reduced) { v.setValue(focused ? 1 : 0); return undefined; }
+    const anim = Animated.timing(v, {
+      toValue: focused ? 1 : 0,
+      duration: focused ? motion.fast : motion.micro,
+      easing: motion.easing.out,
+      useNativeDriver: true,
+    });
+    anim.start();
+    return () => anim.stop();
+  }, [focused, reduced, v]);
+
   return (
-    <View style={[styles.field, inkUnderline(theme, focused ? 'bold' : 'ink'), style]}>
+    <View style={[styles.field, inkUnderline(theme, 'ink'), style]}>
       {children}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute', left: 0, right: 0, bottom: -stroke.bold,
+          height: stroke.bold,
+          backgroundColor: theme.ink,
+          opacity: v,
+          transform: [{ scaleX: v.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
+        }}
+      />
     </View>
   );
 }
