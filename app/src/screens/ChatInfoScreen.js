@@ -149,7 +149,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
 
         <FadeSlide from="down" distance={12} scale={0.97} duration={280}>
         <PaperCard style={s.hero} weight="ink">
-          <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={104} />
+          <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={104} profileId={chat.type === 'group' ? null : chat.otherUserId} />
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16 }}>
             <EmojiText style={[type.headlineMd, { color: theme.text, textAlign: 'center', flexShrink: 1 }]}>{chat.name}</EmojiText>
             {hasGoldTick(chat) && <GoldTick size={20} />}
@@ -214,7 +214,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
             <View style={{ gap: 16 }}>
               {chat.members.map((m) => (
                 <View key={m.id} style={s.memberRow}>
-                  <Avatar uri={m.avatar} name={m.name} id={m.id} size={46} online={m.isOnline} />
+                  <Avatar uri={m.avatar} name={m.name} id={m.id} size={46} online={m.isOnline} profileId={m.id} />
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <EmojiText style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]}>

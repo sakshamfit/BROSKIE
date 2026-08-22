@@ -28,6 +28,9 @@ import BlockedUsersScreen from './screens/BlockedUsersScreen';
 import HelpScreen from './screens/HelpScreen';
 import CallsScreen from './screens/CallsScreen';
 import StarredMessagesScreen from './screens/StarredMessagesScreen';
+import UserProfileScreen from './screens/UserProfileScreen';
+import PostDetailScreen from './screens/PostDetailScreen';
+import { onOpenProfileRequest, onOpenPostRequest } from './push/routing';
 
 /**
  * Split shell for wide viewports — desktop web AND real tablets/foldables
@@ -55,6 +58,12 @@ export default function SplitLayout() {
 
   const openOverlay = (name, params) => setOverlay({ name, params });
   const closeOverlay = () => setOverlay(null);
+
+  // Tapping an avatar circle (or a "liked your post" activity row) anywhere
+  // in the split shell opens the profile / post as an overlay panel — the
+  // phone flow pushes real stack screens instead (see push/routing.js).
+  useEffect(() => onOpenProfileRequest((userId) => setOverlay({ name: 'UserProfile', params: { userId } })), []);
+  useEffect(() => onOpenPostRequest((postId) => setOverlay({ name: 'PostDetail', params: { postId } })), []);
 
   // Settings is a full-screen top-level section here (like Chats/See/
   // Network) — NOT a popup — with its own little navigation stack for the
@@ -270,6 +279,33 @@ export default function SplitLayout() {
           navigation={{ goBack: closeOverlay }}
           onOpenChat={(chatId) => { closeOverlay(); setTab('chats'); setSelectedChatId(chatId); }}
         />
+      </OverlayPanel>
+
+      <OverlayPanel visible={overlay?.name === 'UserProfile'} onClose={closeOverlay} width={560}>
+        {overlay?.name === 'UserProfile' && (
+          <UserProfileScreen
+            embedded
+            route={{ params: overlay.params }}
+            navigation={{
+              goBack: closeOverlay,
+              navigate: (name, params) => {
+                if (name === 'Conversation') { closeOverlay(); setTab('chats'); setSelectedChatId(params.chatId); }
+                else if (name === 'PersonalInfo') { closeOverlay(); setTab('settings'); setSettingsSub('PersonalInfo'); }
+              },
+            }}
+            onOpenChat={(chatId) => { closeOverlay(); setTab('chats'); setSelectedChatId(chatId); }}
+          />
+        )}
+      </OverlayPanel>
+
+      <OverlayPanel visible={overlay?.name === 'PostDetail'} onClose={closeOverlay} width={600}>
+        {overlay?.name === 'PostDetail' && (
+          <PostDetailScreen
+            embedded
+            route={{ params: overlay.params }}
+            navigation={{ goBack: closeOverlay }}
+          />
+        )}
       </OverlayPanel>
     </View>
   );
