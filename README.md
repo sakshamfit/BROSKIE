@@ -102,7 +102,9 @@ optional, for display only), bcrypt hashing, JWT sessions persisted via AsyncSto
 editable name/username/about, auto-login on relaunch, and password-confirmed permanent
 One ID deletion with safe cleanup/transfer of shared resources.
 
-**Messaging** — 1:1 and group chats, optimistic sending, swipe-free reply threading,
+**Messaging** — 1:1 and group chats, optimistic sending, **swipe-to-reply** on every
+touch surface (slide a bubble right — native app, mobile web and the Median shell;
+desktop keeps hover ↩ + R), reply quotes that jump to the original message,
 emoji reactions, delete-for-everyone, **edit sent messages**, **forward to one or many
 chats** (with a FORWARDED tag), image sharing with lightbox, voice-note UI with
 waveform, 32-emoji picker, day separators, and per-user **Delete chat** that clears

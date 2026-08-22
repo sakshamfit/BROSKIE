@@ -341,26 +341,28 @@ export const api = {
   changePassword: (payload) => request('/api/me/password', { method: 'POST', body: payload }),
 
   // Admin Safety Center (server re-verifies the admin role on every call).
-  adminModerationOverview: () => request('/api/admin/moderation/overview', { timeoutMs: 12000, retries: 1 }),
+  // Admin reads fail fast instead of retrying for ~24s: the Safety Center
+  // shows a clear loading/error state and the admin can retry from the UI.
+  adminModerationOverview: () => request('/api/admin/moderation/overview', { timeoutMs: 10000, retries: 0 }),
   adminModerationCases: (params = {}) => {
     const q = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') q.set(k, v); });
-    return request(`/api/admin/moderation/cases?${q.toString()}`, { timeoutMs: 12000, retries: 1 });
+    return request(`/api/admin/moderation/cases?${q.toString()}`, { timeoutMs: 10000, retries: 0 });
   },
-  adminModerationCase: (id) => request(`/api/admin/moderation/cases/${id}`, { timeoutMs: 12000, retries: 1 }),
+  adminModerationCase: (id) => request(`/api/admin/moderation/cases/${id}`, { timeoutMs: 10000, retries: 0 }),
   adminModerationReview: (id, action, reason) =>
     request(`/api/admin/moderation/cases/${id}/review`, { method: 'POST', body: { action, reason } }),
   adminModerationRemoveContent: (id, reason) =>
     request(`/api/admin/moderation/cases/${id}/remove-content`, { method: 'POST', body: { reason } }),
-  adminModerationUsers: (q) => request(`/api/admin/moderation/users?q=${encodeURIComponent(q)}`, { timeoutMs: 12000, retries: 1 }),
-  adminModerationUser: (id) => request(`/api/admin/moderation/users/${id}`, { timeoutMs: 12000, retries: 1 }),
+  adminModerationUsers: (q) => request(`/api/admin/moderation/users?q=${encodeURIComponent(q)}`, { timeoutMs: 10000, retries: 0 }),
+  adminModerationUser: (id) => request(`/api/admin/moderation/users/${id}`, { timeoutMs: 10000, retries: 0 }),
   adminModerationGoldTick: (id, enabled) =>
     request(`/api/admin/moderation/users/${id}/gold-tick`, { method: 'PUT', body: { enabled } }),
   adminModerationUserAction: (id, body) =>
     request(`/api/admin/moderation/users/${id}/action`, { method: 'POST', body }),
   adminModerationAudit: (before) =>
-    request(`/api/admin/moderation/audit${before ? `?before=${Math.floor(before)}` : ''}`, { timeoutMs: 12000, retries: 1 }),
-  adminModerationSettings: () => request('/api/admin/moderation/settings'),
+    request(`/api/admin/moderation/audit${before ? `?before=${Math.floor(before)}` : ''}`, { timeoutMs: 10000, retries: 0 }),
+  adminModerationSettings: () => request('/api/admin/moderation/settings', { timeoutMs: 10000, retries: 0 }),
   adminModerationUpdateSettings: (patch) =>
     request('/api/admin/moderation/settings', { method: 'PUT', body: patch }),
   users: (q = '', { contactsOnly = false } = {}) =>

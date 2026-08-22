@@ -247,6 +247,8 @@ export default function AdminSafetyScreen({ navigation }) {
         )}
       </View>
 
+      {/* A horizontal ScrollView can otherwise grow to fill the whole
+          remaining height on web, leaving the actual tab body off-screen. */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -262,7 +264,7 @@ export default function AdminSafetyScreen({ navigation }) {
       </ScrollView>
 
       {tab === 'overview' && (
-        <OverviewTab theme={theme} s={s} overview={overview} loading={loading} onOpenCase={openCaseDetail} onGoCases={() => setTab('cases')} />
+        <OverviewTab theme={theme} s={s} overview={overview} loading={loading} onOpenCase={openCaseDetail} onGoCases={() => setTab('cases')} onRetry={refreshAll} />
       )}
       {tab === 'cases' && (
         <CasesTab
@@ -305,9 +307,28 @@ export default function AdminSafetyScreen({ navigation }) {
 
 /* ------------------------------------------------------------------ */
 
-function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases }) {
-  if (loading && !overview) return <View style={s.center}><ActivityIndicator color={theme.ink} /></View>;
-  if (!overview) return <View style={s.center}><Text style={[type.bodySm, { color: theme.muted }]}>Could not load the Safety Center.</Text></View>;
+function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases, onRetry }) {
+  if (loading && !overview) {
+    return (
+      <View style={s.center}>
+        <ActivityIndicator color={theme.ink} />
+        <Text style={[type.labelSm, { color: theme.muted, marginTop: 12 }]}>LOADING SAFETY CENTER…</Text>
+      </View>
+    );
+  }
+  if (!overview) {
+    return (
+      <View style={s.center}>
+        <Icon name="cloud-offline-outline" size={34} color={theme.muted} />
+        <Text style={[type.bodySm, { color: theme.muted, marginTop: 12, textAlign: 'center' }]}>
+          Could not load the Safety Center.
+        </Text>
+        <Pressable onPress={onRetry} style={({ pressed }) => [s.retryBtn, pressed && { opacity: 0.7 }]} hitSlop={8}>
+          <Text style={[type.labelSm, { color: theme.ink }]}>RETRY</Text>
+        </Pressable>
+      </View>
+    );
+  }
   const cards = [
     ['Critical', overview.counts.critical, '#d13c3c'],
     ['High', overview.counts.high, '#e07a2e'],
@@ -315,7 +336,7 @@ function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases }) {
     ['Open cases', overview.openCases, theme.ink],
   ];
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+    <ScrollView style={s.main} contentContainerStyle={[s.scrollContent, { padding: 16, gap: 14 }]}>
       <View style={s.statRow}>
         {cards.map(([label, value, color]) => (
           <View key={label} style={[s.statCard, inkBox(theme, 'thin')]}>
@@ -366,7 +387,7 @@ function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases }) {
 function CasesTab(props) {
   const { theme, s, cases, severity, setSeverity, category, setCategory, status, setStatus, source, setSource, sort, setSort, q, setQ, onOpenCase, onRefresh } = props;
   return (
-    <View style={{ flex: 1 }}>
+    <View style={s.main}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.hugRow} contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 8, gap: 6 }}>
         {SEV_FILTERS.map((sv) => (
           <Pressable key={sv} onPress={() => setSeverity(sv)}>
@@ -413,7 +434,8 @@ function CasesTab(props) {
       <FlatList
         data={cases}
         keyExtractor={(c) => String(c.id)}
-        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 30 }}
+        style={s.main}
+        contentContainerStyle={[s.scrollContent, { paddingHorizontal: 14, paddingBottom: 30 }]}
         refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={theme.ink} />}
         renderItem={({ item }) => {
           const tone = SEVERITY_TONE[item.severity] || SEVERITY_TONE.LOW;
@@ -662,7 +684,7 @@ function UserPanel({ theme, s, userId, onClose, onAction }) {
 function PeopleTab({ theme, s, query, setQuery, people, loading, onSearch, onOpen }) {
   const changeQuery = (value) => { setQuery(value); onSearch(value); };
   return (
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 12 }}>
+    <ScrollView keyboardShouldPersistTaps="handled" style={s.main} contentContainerStyle={[s.scrollContent, { padding: 16, gap: 12 }]}>
       <Text style={[type.bodySm, { color: theme.muted, lineHeight: 19 }]}>Find any account by name or @username. Open the person to grant or revoke the yellow verification tick and use all moderation controls.</Text>
       <InkField style={s.search} focused={!!query}>
         <Icon name="search-outline" size={17} color={theme.muted} />
@@ -699,7 +721,8 @@ function AuditTab({ theme, s }) {
     <FlatList
       data={entries}
       keyExtractor={(e) => String(e.id)}
-      contentContainerStyle={{ padding: 16, gap: 10 }}
+      style={s.main}
+      contentContainerStyle={[s.scrollContent, { padding: 16, gap: 10 }]}
       refreshControl={<RefreshControl refreshing={false} onRefresh={load} tintColor={theme.ink} />}
       renderItem={({ item }) => (
         <View style={[s.alertRow, inkBox(theme, 'thin')]}>
@@ -741,7 +764,7 @@ function SettingsTab({ theme, s, onChanged }) {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+    <ScrollView style={s.main} contentContainerStyle={[s.scrollContent, { padding: 16, gap: 14 }]}>
       <PaperCard style={{ padding: 14 }} weight="thin">
         <Text style={[type.labelXs, { color: theme.muted, marginBottom: 10 }]}>ALERT PUSH LEVEL — only these create immediate admin notifications</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -797,7 +820,10 @@ const makeStyles = (t) => StyleSheet.create({
   statRow: { flexDirection: 'row', gap: 10 },
   statCard: { flex: 1, alignItems: 'center', paddingVertical: 16, borderRadius: radius.md },
   alertRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius.md, backgroundColor: t.card },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  retryBtn: { borderWidth: 1.5, borderColor: t.ink, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 8, marginTop: 16 },
+  main: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
   search: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
   searchInput: { flex: 1, fontFamily: 'Karla_400Regular', fontSize: 14, color: t.text, padding: 0 },
   sevBadge: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },

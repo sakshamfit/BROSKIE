@@ -57,6 +57,37 @@
  */
 
 /* ------------------------------------------------------------------ */
+/* input modality (shared by every gesture surface)                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * True when a gesture/press event came from a finger (not mouse or pen).
+ * `nativeEvent` is the raw event payload react-native(-web) attaches:
+ *   - Pointer Events builds (react-native-web) expose `pointerType`;
+ *   - Touch Events builds expose a live `touches` array.
+ * Pure — no react-native imports, safe to unit test.
+ */
+export const isTouchInput = (nativeEvent) => {
+  if (!nativeEvent) return false;
+  if (nativeEvent.pointerType) return nativeEvent.pointerType === 'touch';
+  return !!(nativeEvent.touches && nativeEvent.touches.length > 0);
+};
+
+/**
+ * True when the environment has a real touch screen — phones/tablets in a
+ * browser, WebView app shells (Median), and touch laptops. Mouse-only
+ * desktops stay swipe-free (they keep click/hover semantics untouched).
+ * `win` is injectable for tests; falls back to the global `window`.
+ */
+export const hasTouchScreen = (win) => {
+  const w = win || (typeof window !== 'undefined' ? window : undefined);
+  if (!w) return false;
+  if ('ontouchstart' in w) return true;
+  const nav = w.navigator || {};
+  return typeof nav.maxTouchPoints === 'number' && nav.maxTouchPoints > 0;
+};
+
+/* ------------------------------------------------------------------ */
 /* direction lock zone                                                 */
 /* ------------------------------------------------------------------ */
 

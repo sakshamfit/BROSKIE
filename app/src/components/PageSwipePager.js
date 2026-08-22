@@ -2,20 +2,16 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Keyboard, PanResponder, Platform, StyleSheet, View } from 'react-native';
 import { useTheme } from '../store/ThemeContext';
 import { haptic, useReducedMotion } from '../motion';
-import { PAGE_SWIPE, resolveGesture, rubberBand, shouldCommitPageSwipe } from '../gestures';
+import { PAGE_SWIPE, resolveGesture, rubberBand, shouldCommitPageSwipe, isTouchInput } from '../gestures';
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
 /**
  * Touch-only on web: mouse drag stays click/hover navigation (desktop keeps
  * its mouse behaviour untouched); touch screens/tablets get the gesture.
+ * Shared finger detection lives in ../gestures (isTouchInput).
  */
-const isTouchEvent = (e) => {
-  if (Platform.OS !== 'web') return true;
-  const ne = e?.nativeEvent || {};
-  if (ne.pointerType) return ne.pointerType === 'touch';
-  return !!(ne.touches && ne.touches.length > 0);
-};
+const isTouchEvent = (e) => Platform.OS !== 'web' || isTouchInput(e?.nativeEvent);
 
 /**
  * PageSwipePager — finger-driven horizontal navigation between major +one
