@@ -193,6 +193,68 @@ console.log('\nOT - Message edit history transformation');
   assertEqual('message edit OT converges', body, 'Hello Brave World!');
 })();
 
+// ---------------------------------------------------------------------
+// Client ⇄ server parity: the app ships an ESM copy of TextOperation
+// (app/src/ot/TextOperation.js) that MUST behave identically to this CJS
+// implementation — selections and operations cross the wire, so divergent
+// tie-breaks or transforms show different cursors on different devices
+// (and can break convergence). Load the real app source (ESM → CJS via
+// module-syntax strip; pure code, no bundler needed) and compare.
+// ---------------------------------------------------------------------
+console.log('\nClient ⇄ server OT parity');
+(() => {
+  const fs = require('fs');
+  const path = require('path');
+  function loadAppEsm(filePath) {
+    let src = fs.readFileSync(path.resolve(filePath), 'utf8');
+    const mod = { exports: {} };
+    const exported = [];
+    src = src.replace(/export\s+default\s+([A-Za-z0-9_]+);?/g, (_, n) => {
+      exported.push(`module.exports.default = ${n};`);
+      return '';
+    });
+    src = src.replace(/export\s+(class|function|const|let|var)\s+([A-Za-z0-9_]+)/g, (_, kind, n) => {
+      exported.push(`module.exports.${n} = ${n};`);
+      return `${kind} ${n}`;
+    });
+    const fn = new Function('module', 'exports', `${src}\n${exported.join('\n')}\nreturn module.exports;`);
+    fn(mod, mod.exports);
+    return mod.exports;
+  }
+  const ClientTextOperation = loadAppEsm('../app/src/ot/TextOperation.js').default;
+
+  const mk = (TO) => (spec) => TO.fromJSON(spec);
+  const specs = [
+    [{ retain: 2 }, { insert: 'XY' }, { retain: 3 }],
+    [{ retain: 0 }, { insert: '!' }, { retain: 5 }],
+    [{ retain: 3 }, { delete: 2 }, { retain: 2 }],
+    [{ retain: 5 }, { insert: 'AB' }, { retain: 1 }, { delete: 1 }, { retain: 1 }],
+  ];
+  let parityOK = true;
+  for (const spec of specs) {
+    const cOp = ClientTextOperation.fromJSON(spec);
+    const sOp = TextOperation.fromJSON(spec);
+    for (let cursor = 0; cursor <= 8; cursor += 1) {
+      const c = ClientTextOperation.transformCursor(cursor, cOp);
+      const s = TextOperation.transformCursor(cursor, sOp);
+      if (c !== s) {
+        parityOK = false;
+        assert('transformCursor parity', false, `spec=${JSON.stringify(spec)} cursor=${cursor} client=${c} server=${s}`);
+      }
+    }
+  }
+  assert('transformCursor parity across ties', parityOK);
+
+  // transform() parity on a concurrent pair
+  const a = ClientTextOperation.fromDiff('Hello World', 'Hello Brave World');
+  const b = ClientTextOperation.fromDiff('Hello World', 'Hello World!');
+  const [cA, cB] = ClientTextOperation.transform(ClientTextOperation.fromJSON(a.toJSON()), ClientTextOperation.fromJSON(b.toJSON()));
+  const [sA, sB] = TextOperation.transform(TextOperation.fromJSON(a.toJSON()), TextOperation.fromJSON(b.toJSON()));
+  assert('transform() parity',
+    JSON.stringify(cA.toJSON()) === JSON.stringify(sA.toJSON())
+    && JSON.stringify(cB.toJSON()) === JSON.stringify(sB.toJSON()));
+})();
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
 else console.log('All OT checks passed.');

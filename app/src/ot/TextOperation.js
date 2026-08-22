@@ -313,7 +313,12 @@ export class TextOperation {
       if (typeof op.retain === 'number') {
         index += op.retain;
       } else if (typeof op.insert === 'string') {
-        if (index < cursor) {
+        // Tie-break (index === cursor): an insertion at exactly the cursor
+        // belongs BEFORE it unless the op explicitly says otherwise. This
+        // must match server/src/ot/textOperation.js exactly — selections are
+        // exchanged over the wire, so divergent tie-breaks show different
+        // cursors on different devices for the same event.
+        if (index < cursor || (index === cursor && operation.insertionIsBeforeCursor !== false)) {
           newIndex += op.insert.length;
         }
       } else if (op.delete != null) {

@@ -147,7 +147,7 @@ implemented and live in this repo:
 | Per-type toggles | Messages, requests & activity, likes & comments, calls, preview text — all server-enforced |
 | Badge counts | Each push carries unread chats + pending Activity; the app keeps the badge in sync while in use |
 | Token registry | `POST/DELETE /api/push/token` (auth-scoped); dead tokens auto-pruned when Expo reports `DeviceNotRegistered` |
-| Tests | `cd server && node test-push.js` — 31 end-to-end checks against a stubbed Expo endpoint |
+| Tests | `cd server && node test-push.js` — 33 end-to-end checks against a stubbed Expo endpoint |
 
 What it needs to actually reach devices:
 
@@ -216,7 +216,7 @@ every afternoon without opening Chats.
 | **Hold-to-record voice notes** | Hold the mic button to record, release to send; quick taps cancel (never send accidents). Race-safe: a release during recorder start-up parks the stop. |
 | **Activity grouping** | Likes/comments on your posts collapse into one row per post ("7 people liked your post") with stacked avatars; latest comment as preview. 7-day window. |
 | Songs on See/Network | Already existed (crop + upload + Jamendo picker) — verified, no change needed. |
-| **CI** | Workflow file shipped at `docs/ci.workflow.yml` — activate once via GitHub → Add file → Create new file → name it `.github/workflows/ci.yml` → paste it in (the sandbox's git token cannot create workflow files). Every push/PR then runs all five server suites (138 checks) + web and Android bundle exports. |
+| **CI** | Workflow file shipped at `docs/ci.workflow.yml` — activate once via GitHub → Add file → Create new file → name it `.github/workflows/ci.yml` → paste it in (the sandbox's git token cannot create workflow files). CI runs every server suite (chat history 14, offline messaging 14, message state 15, push 33, phase 2 39, phase 3 27, moderation 61, OT 33, features 27 — 263 checks) + web and Android bundle exports. |
 
 New endpoints: `GET /api/push/web-config`, `POST/DELETE /api/push/web-subscription`,
 `POST /api/communities/join-by-code`, `POST /api/communities/:id/invite/rotate`.
@@ -240,7 +240,7 @@ Private to accounts with the backend `admin` **role** (initial admin: `saksham`,
 | Privacy | Minimal evidence: message/chat ids + a 280-char snapshot — never copies of private conversations. Reports, confidence scores and case data are never exposed to the reported user or normal users (separate tables, separate APIs, 403 for everyone without the role). Retention: closed cases/reports purged after the configured days (default 180), audit kept 2×. |
 | Tables | `moderation_cases`, `moderation_reports`, `moderation_actions`, `moderation_audit_log` (append-only), `moderation_settings` + `users.role/moderation/suspended_until`. |
 
-Tests: `npm run test:moderation` — **55 checks** covering the spec's acceptance flow: harmless messages create nothing; context negatives (quotes/questions/education) never alert; a real threat → case → realtime alert → admin push (Android + web) → review → restrict (server-blocked messaging) → unrestrict → audit; unauthorized users get 403 on every admin endpoint; report dedupe, probing protection and rate limits; false positives close without punishment; LOW aggregation; scam detection; settings + audit of changes.
+Tests: `npm run test:moderation` — **61 checks** covering the spec's acceptance flow: harmless messages create nothing; context negatives (quotes/questions/education) never alert; a real threat → case → realtime alert → admin push (Android + web) → review → restrict (server-blocked messaging) → unrestrict → audit; unauthorized users get 403 on every admin endpoint; report dedupe, probing protection and rate limits; false positives close without punishment; LOW aggregation; scam detection; settings + audit of changes; and **all five message-content side doors** (REST send, socket send, edit + OT edit, poll create, forward, status reply) are server-gated while a user is restricted.
 
 ---
 
@@ -321,7 +321,7 @@ Existing direct chats remain accepted for backward compatibility.
 
 ## 7. Theme and UI status
 
-The public app name is **+one**, version **1.2.0**. The supplied black-and-white
+The public app name is **+one**, version **1.4.0**. The supplied black-and-white
 brush logo is used for the Android/iOS launcher icon, adaptive and monochrome
 Android icons, native splash, browser favicon, PWA icons, and Median assets.
 The Android package, iOS bundle identifier, Expo project ID, session keys,
@@ -582,7 +582,7 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 | `2f8d999` | Strong password policy added. |
 | `9a59577` | Kinetic Ink appearance theme added. |
 | `20b1432` | Chat list/conversation manga-paper UI redesign. |
-| current | **Push notifications (Phase 1)**: Expo push on messages/@mentions, requests, colleague requests, likes/comments, calls; deep links to the exact screen; server-enforced per-chat mute, quiet hours and per-type toggles; badge counts; `plusone://` scheme; `test-push.js` (31 checks). |
+| current | **Push notifications (Phase 1)**: Expo push on messages/@mentions, requests, colleague requests, likes/comments, calls; deep links to the exact screen; server-enforced per-chat mute, quiet hours and per-type toggles; badge counts; `plusone://` scheme; `test-push.js` (33 checks). |
 | current | **Phase 2 — the daily campus loop**: Today-at-your-place strip (around/online, 12h "I'm around"), greeter campus lines + one-tap handoff, Network Worldwide/My places/Following lenses, follow from posts, "My places" post audience, campus pushes; `test-phase2.js` (39 checks). |
 | current | **Phase 3**: live WebRTC calls on Android, **web push parity** (VAPID, zero-config), community invite links + deep links, hold-to-record voice notes, grouped Activity rows, GitHub Actions CI; `test-phase3.js` (27 checks). |
 | current | Per-conversation chat themes (13 themes, realtime sync, picker with live preview). |

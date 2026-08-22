@@ -2402,6 +2402,8 @@ app.post('/api/messages/:id/disappear', requireAuth, (req, res) => {
 
 /** Copy a message into one or more of the user's chats. */
 app.post('/api/messages/forward', requireAuth, (req, res) => {
+  const gate = moderation.moderationGate(req.userId);
+  if (gate.blocked) return res.status(403).json({ error: gate.error });
   const { messageId, chatIds = [] } = req.body || {};
   const src = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
   if (!src || src.deleted) return res.status(404).json({ error: 'Message not found' });
@@ -2693,6 +2695,12 @@ function deliverUserMessage(uid, data) {
   } = data || {};
   if (!chatId) return { error: 'Missing chat', status: 400 };
 
+  // Moderation enforcement applies to all message content paths (sending
+  // via socket or REST, edits, polls, forwards, status replies) — not just
+  // to login. Restricted/suspended/banned users cannot write messages.
+  const gate = moderation.moderationGate(uid);
+  if (gate.blocked) return { error: gate.error, status: 403 };
+
   const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
   if (!isMember) return { error: 'Not a member', status: 403 };
 
@@ -2962,6 +2970,8 @@ app.post('/api/status/:id/view', requireAuth, (req, res) => {
 // existing chat inbox, push/socket plumbing and disappearing-message
 // machinery handle it without a new standalone inbox or a native rebuild.
 app.post('/api/status/:id/reply', requireAuth, (req, res) => {
+  const statusGate = moderation.moderationGate(req.userId);
+  if (statusGate.blocked) return res.status(403).json({ error: statusGate.error });
   const statusId = String(req.params.id || '');
   const s = db.prepare('SELECT * FROM statuses WHERE id = ?').get(statusId);
   if (!s) return res.status(404).json({ error: 'Status not found' });
@@ -4141,6 +4151,18 @@ io.use((socket, next) => {
   next();
 });
 
+/** Map an unexpected socket-handler exception to a user-safe ack.
+ *  Deliberate validation errors are short human phrases and pass through;
+ *  system/technical failures are logged and replaced so the UI never shows
+ *  raw SQL/SQLite/stack text. */
+function socketFailure(e) {
+  const msg = String(e?.message || '');
+  if (msg) console.error('[socket handler]', msg);
+  const technical = /SQLITE|database|ECONN|ETIMEDOUT|ENOTFOUND|EHOSTUNREACH|at .*\.js:|Operation apply failed|Cannot read|is not a function|undefined is not/i.test(msg);
+  if (msg && !technical && msg.length <= 120 && !/^\s*\{/.test(msg)) return { error: msg };
+  return { error: 'Something went wrong. Please try again.' };
+}
+
 io.on('connection', (socket) => {
   const uid = socket.userId;
   if (!sockets.has(uid)) sockets.set(uid, new Set());
@@ -4172,13 +4194,15 @@ io.on('connection', (socket) => {
       fanoutNewMessage(outcome, uid, tempId);
       ack?.({ message: hydrateMessage(outcome.row, uid), tempId, duplicate: !!outcome.duplicate });
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
   // Legacy edit (full body replacement) — now converted to OT operation for consistency
   socket.on('message:edit', ({ messageId, body, baseVersion, operation }, ack) => {
     try {
+      const gate = moderation.moderationGate(uid);
+      if (gate.blocked) return ack?.({ error: gate.error });
       const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
       if (!m || m.deleted) return ack?.({ error: 'Message not found' });
       if (m.sender_id !== uid) return ack?.({ error: "You can only edit your own messages" });
@@ -4206,13 +4230,15 @@ io.on('connection', (socket) => {
       emitToChat(m.chat_id, 'chat:updated', (viewer) => chatSummary(m.chat_id, viewer));
       ack?.({ message: hydrateMessage(fresh, uid), version: result.version, operation: result.operation.toJSON() });
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
   // New OT-specific message edit event (explicit OT)
   socket.on('message:edit:ot', ({ messageId, operation, baseVersion, body }, ack) => {
     try {
+      const gate = moderation.moderationGate(uid);
+      if (gate.blocked) return ack?.({ error: gate.error });
       const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
       if (!m || m.deleted) return ack?.({ error: 'Message not found' });
       if (m.sender_id !== uid) return ack?.({ error: "Only sender can edit" });
@@ -4243,7 +4269,7 @@ io.on('connection', (socket) => {
       }));
       ack?.({ message: hydrateMessage(fresh, uid), version: result.version, operation: result.operation.toJSON(), body: result.body });
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
@@ -4280,7 +4306,7 @@ io.on('connection', (socket) => {
         });
       }
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
@@ -4321,7 +4347,7 @@ io.on('connection', (socket) => {
       // Update doc updated_at for ordering
       db.prepare('UPDATE documents SET updated_at = ? WHERE id = ?').run(now(), documentId);
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
@@ -4359,6 +4385,8 @@ io.on('connection', (socket) => {
 
   socket.on('poll:create', (data, ack) => {
     try {
+      const gate = moderation.moderationGate(uid);
+      if (gate.blocked) return ack?.({ error: gate.error });
       const { chatId, question, options = [] } = data || {};
       const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
       if (!isMember) return ack?.({ error: 'Not a member' });
@@ -4391,7 +4419,7 @@ io.on('connection', (socket) => {
       push.notifyMessage({ chatId, chat, message: row, senderId: uid });
       ack?.({ message: hydrateMessage(row, uid) });
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
@@ -4411,7 +4439,7 @@ io.on('connection', (socket) => {
       emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
       ack?.({ message: hydrateMessage(fresh, uid) });
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
@@ -4529,7 +4557,7 @@ io.on('connection', (socket) => {
         if (c && c.status === 'ringing') endCall(id, 'missed');
       }, 45000);
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 

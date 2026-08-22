@@ -6,8 +6,8 @@
  *   server/src/push.js) so the app and the tray always agree.
  * - Routes notification taps (see src/push/routing.js).
  *
- * On web this renders nothing and does nothing — the notifications module
- * resolves to a no-op stub for the web bundle.
+ * On web the same controller drives the browser Push API + service worker
+ * (VAPID, no Expo shim); on native it registers an Expo push token.
  */
 import { useEffect } from 'react';
 import { AppState } from 'react-native';

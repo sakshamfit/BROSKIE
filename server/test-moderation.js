@@ -222,6 +222,33 @@ const connect = (token) => new Promise((resolve, reject) => {
   ok('user restricted', restricted.state === 'restricted');
   const gated = await emit(sockA, 'message:send', { chatId: dm.id, body: 'can i still talk?' });
   ok('restricted user cannot send messages (server-side)', !!gated?.error && /restricted/i.test(gated.error), JSON.stringify(gated));
+
+  // Every other message-content path must be gated the same way — no
+  // restricted user can write via a side door (REST send, forward, poll,
+  // message edit, status reply).
+  const restSend = await req(`/api/chats/${dm.id}/messages`, {
+    method: 'POST', token: a.token, body: { body: 'rest send?' },
+  }).then(() => null, (e) => e);
+  ok('restricted user cannot send via REST', !!restSend && restSend.status === 403 && /restricted/i.test(restSend.message), String(restSend?.status));
+  const aMsg = db.prepare('SELECT id FROM messages WHERE chat_id = ? AND sender_id = ? ORDER BY created_at DESC LIMIT 1').get(dm.id, a.user.id);
+  const editGate = aMsg ? await emit(sockA, 'message:edit', { messageId: aMsg.id, body: 'nope' }) : { error: 'no message' };
+  ok('restricted user cannot edit messages', !!editGate?.error && /restricted/i.test(editGate.error), JSON.stringify(editGate));
+  const editOtGate = aMsg ? await emit(sockA, 'message:edit:ot', { messageId: aMsg.id, body: 'nope' }) : { error: 'no message' };
+  ok('restricted user cannot edit messages (OT path)', !!editOtGate?.error && /restricted/i.test(editOtGate.error), JSON.stringify(editOtGate));
+  const pollGate = await emit(sockA, 'poll:create', { chatId: group.id, question: 'q?', options: ['a', 'b'] });
+  ok('restricted user cannot create polls', !!pollGate?.error && /restricted/i.test(pollGate.error), JSON.stringify(pollGate));
+  const fwdGate = await req('/api/messages/forward', {
+    method: 'POST', token: a.token, body: { messageId: aMsg?.id, chatIds: [group.id] },
+  }).then(() => null, (e) => e);
+  ok('restricted user cannot forward messages', !!fwdGate && fwdGate.status === 403 && /restricted/i.test(fwdGate.message), String(fwdGate?.status));
+  // Status reply is messaging too — create a status B can see, then try to reply as A.
+  const statusRes = await req('/api/status', { method: 'POST', token: b.token, body: { type: 'text', body: 'status for gate test', audience: 'contacts' } });
+  const statusId = statusRes.status?.id;
+  const replyGate = await req(`/api/status/${statusId}/reply`, {
+    method: 'POST', token: a.token, body: { body: 'reply attempt' },
+  }).then(() => null, (e) => e);
+  ok('restricted user cannot reply to a status', !!replyGate && replyGate.status === 403 && /restricted/i.test(replyGate.message), String(replyGate?.status));
+
   const caseAfter = await req(`/api/admin/moderation/cases/${threatCase.id}`, { token: admin.token });
   ok('case auto-closed as ACTION_TAKEN with the action recorded', caseAfter.case.status === 'ACTION_TAKEN' && caseAfter.case.actionTaken === 'restrict');
 

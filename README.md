@@ -164,7 +164,7 @@ who share your college or workplace.
 - **Collaborative notes**: every chat (especially groups) can have shared real-time notes — multiple users type together, cursors and presence live, powered by classic Jupiter OT (apply/compose/transform/invert).
 - **Offline OT**: operations queued when offline are transformed on reconnect against server history via `baseVersion`.
 - **Persistence**: server stores docs + operations in SQLite (`documents`, `document_operations`, `message_edit_operations`), client caches in IndexedDB/AsyncStorage.
-- See `OT.md` for full design, socket events (`doc:join`, `doc:operation`, `doc:selection`, `message:edit:ot`) and tests (`npm run test:ot` — 31 checks).
+- See `OT.md` for full design, socket events (`doc:join`, `doc:operation`, `doc:selection`, `message:edit:ot`) and tests (`npm run test:ot` — 33 checks, including client⇄server parity).
 
 **Calls** — real 1:1 voice/video WebRTC on every platform (browser + Android
 app), with the ink-and-paper full-screen overlay, ringing, accept/decline and
