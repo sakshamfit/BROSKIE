@@ -11,12 +11,15 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
 import { Avatar, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
-import AudiencePicker, { AUDIENCE } from '../components/AudiencePicker';
-import PhotoCropPicker from '../components/PhotoCropPicker';
+import { AUDIENCE } from '../components/audienceMeta';
 import SongCard from '../components/SongCard';
-import SongPicker from '../components/SongPicker';
 import { radius, type, inkBox, marker, stroke, raised } from '../theme';
 import { FadeSlide, Skeleton, motion } from '../motion';
+import { lazyComponent } from '../lazy';
+
+const AudiencePicker = lazyComponent(() => import('../components/AudiencePicker'));
+const PhotoCropPicker = lazyComponent(() => import('../components/PhotoCropPicker'));
+const SongPicker = lazyComponent(() => import('../components/SongPicker'));
 
 const BG_COLORS = ['#FFE24D', '#fdf8f8', '#e2e3de', '#5d5f5b', '#1c1b1b', '#39444c'];
 

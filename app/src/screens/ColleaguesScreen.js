@@ -10,12 +10,15 @@ import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
-import AffiliationPicker, { AFFILIATION_TYPES, affiliationType } from '../components/AffiliationPicker';
+import { AFFILIATION_TYPES, affiliationType } from '../components/affiliationMeta';
 import TodayStrip from '../components/TodayStrip';
 import { Avatar, InkField, TapeChip, handleFor, rippleFor, GoldTick, hasGoldTick } from '../components/common';
 import { openNetworkFeed } from '../push/routing';
 import { useDebouncedCallback } from '../rateLimit';
 import { type, inkBox, marker, dashedRule, raised } from '../theme';
+import { lazyComponent } from '../lazy';
+
+const AffiliationPicker = lazyComponent(() => import('../components/AffiliationPicker'));
 
 const FILTERS = [{ key: '', short: 'All', icon: 'globe-outline' }, ...AFFILIATION_TYPES];
 const CARD_TILTS = ['0.5deg', '-0.8deg', '1deg'];

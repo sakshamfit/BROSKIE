@@ -20,21 +20,22 @@ import {
   Avatar, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor, formatTime,
   FrostedBackdrop, GoldTick, hasGoldTick, PaperCard,
 } from '../components/common';
-import EmojiPicker from '../components/EmojiPicker';
 import MessageBubble, { DISAPPEAR_OPTIONS } from '../components/MessageBubble';
 import ReplyBar from '../components/ReplyBar';
-import ForwardSheet from '../components/ForwardSheet';
-import PollComposer from '../components/PollComposer';
 import ChatBackground from '../components/ChatBackground';
-import ThemePickerSheet from '../components/ThemePickerSheet';
 import { ThemeRegistry, alpha } from '../chatThemes';
 import { FadeSlide, TypingDots, FloatLoop, SheetSpringIn, SpringPressable, Pop, haptic, motion } from '../motion';
 import { api, mediaUrl } from '../api';
 import { setViewedChat } from '../push/notifications';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
 import { throttle, useDebouncedCallback } from '../rateLimit';
-import CollabDocumentView from '../components/CollabDocumentView';
-import TextOperation from '../ot/TextOperation';
+import { lazyComponent } from '../lazy';
+
+const EmojiPicker = lazyComponent(() => import('../components/EmojiPicker'));
+const ForwardSheet = lazyComponent(() => import('../components/ForwardSheet'));
+const PollComposer = lazyComponent(() => import('../components/PollComposer'));
+const ThemePickerSheet = lazyComponent(() => import('../components/ThemePickerSheet'));
+const CollabDocumentView = lazyComponent(() => import('../components/CollabDocumentView'));
 
 function ConversationContent({ route, navigation, embedded = false, themePicker = null }) {
   const { chatId, initialChat = null } = route.params || {};
