@@ -110,11 +110,10 @@ export default function AuthScreen() {
   const checkSequence = useRef(0);
 
   // Debounced username availability probe: one server call per typing
-  // pause (450ms) instead of one per keystroke. The sequence guard still
-  // discards out-of-order responses if a check is in flight while the user
-  // keeps typing.
-  const checkAvailability = useDebouncedCallback(async (candidate) => {
-    const sequence = ++checkSequence.current;
+  // pause (450ms) instead of one per keystroke. `checkSequence` bumps on
+  // every keystroke (here, in the effect), so any response that no longer
+  // matches the current candidate — out-of-order or stale — is discarded.
+  const checkAvailability = useDebouncedCallback(async (candidate, sequence) => {
     try {
       const result = await api.usernameAvailable(candidate);
       if (checkSequence.current === sequence) setAvailability(result);
@@ -126,6 +125,7 @@ export default function AuthScreen() {
   }, 450);
 
   useEffect(() => {
+    const sequence = ++checkSequence.current;
     const candidate = username.trim();
     if (mode !== 'register' || !candidate || candidate.length > MAX_USERNAME_LENGTH) {
       checkAvailability.cancel();
@@ -134,7 +134,7 @@ export default function AuthScreen() {
       return undefined;
     }
     setChecking(true);
-    checkAvailability(candidate);
+    checkAvailability(candidate, sequence);
     return () => checkAvailability.cancel();
   }, [username, mode, checkAvailability]);
 

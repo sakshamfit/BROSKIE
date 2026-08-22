@@ -52,12 +52,17 @@ export default function ChatListScreen({ navigation }) {
 
   // Debounce: a fast typist fires one /api/search per pause instead of one
   // per keystroke. `searchMessages` keeps a stable identity, so handing it
-  // to onChangeText is safe; the latest query wins.
-  const searchMessages = useDebouncedCallback(async (q) => {
+  // to onChangeText is safe; the latest query wins. `searchSeq` discards
+  // out-of-order responses so a slow result can't resurrect itself after
+  // the box was cleared.
+  const searchSeq = useRef(0);
+  const searchMessages = useDebouncedCallback(async (q, seq) => {
     try {
       const { messages } = await api.search(q.trim());
-      setMsgResults(messages);
-    } catch { setMsgResults([]); }
+      if (searchSeq.current === seq) setMsgResults(messages);
+    } catch {
+      if (searchSeq.current === seq) setMsgResults([]);
+    }
   }, 300);
 
   const runSearch = useCallback((q) => {
@@ -65,8 +70,9 @@ export default function ChatListScreen({ navigation }) {
     // applied on every keystroke. The server-side message search is the
     // expensive part, so it is debounced to one request per typing pause.
     setQuery(q);
+    const seq = ++searchSeq.current;
     if (q.trim().length < 2) { setMsgResults([]); searchMessages.cancel(); return; }
-    searchMessages(q);
+    searchMessages(q, seq);
   }, [searchMessages]);
 
   const archivedCount = chats.filter((c) => c.archived).length;

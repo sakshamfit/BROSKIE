@@ -444,20 +444,32 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   // Debounced: one /api/search per typing pause instead of one per
   // keystroke. The input and spinner update instantly; only the network
   // request waits. `chatId` is passed per call so results can never bleed
-  // across a chat switch.
-  const searchInChat = useDebouncedCallback(async (q, chatIdFor) => {
+  // across a chat switch; `searchSeq` discards out-of-order responses.
+  const searchSeq = useRef(0);
+  const searchInChat = useDebouncedCallback(async (q, chatIdFor, seq) => {
     try {
       const { messages: res } = await api.search(q.trim(), chatIdFor);
-      setSearchResults(res);
-    } catch { setSearchResults([]); }
-    finally { setSearching(false); }
+      if (searchSeq.current === seq) setSearchResults(res);
+    } catch {
+      if (searchSeq.current === seq) setSearchResults([]);
+    } finally {
+      if (searchSeq.current === seq) setSearching(false);
+    }
   }, 250);
 
   const runInChatSearch = useCallback((q) => {
     setSearchQ(q);
-    if (q.trim().length < 2) { setSearchResults([]); searchInChat.cancel(); return; }
+    const seq = ++searchSeq.current;
+    if (q.trim().length < 2) {
+      // Clearing the box cancels any pending search and settles the
+      // spinner immediately (it would otherwise spin forever).
+      setSearchResults([]);
+      setSearching(false);
+      searchInChat.cancel();
+      return;
+    }
     setSearching(true);
-    searchInChat(q, chatId);
+    searchInChat(q, chatId, seq);
   }, [searchInChat, chatId]);
 
   const rows = useMemo(() => {
