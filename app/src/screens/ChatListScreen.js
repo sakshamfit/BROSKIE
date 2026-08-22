@@ -14,7 +14,13 @@ import {
   FrostedBackdrop, GoldTick, hasGoldTick,
 } from '../components/common';
 import { type, inkBox, marker, radius, stroke } from '../theme';
-import { Skeleton, TypingDots, SpringPressable, FadeSlide, Pop, haptic, motion, BottomSheet } from '../motion';
+import {
+  Skeleton, TypingDots, SpringPressable, FadeSlide, Pop, haptic, motion,
+  BottomSheet, staggerDelay, useReducedMotion,
+} from '../motion';
+
+/** Pressable that can carry a native-driven animated transform. */
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 import { api } from '../api';
 import { confirm } from '../hooks/confirm';
 import { useDebouncedCallback } from '../rateLimit';
@@ -387,6 +393,21 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
     ]).start();
   }, [item.lastMessage?.createdAt, item.updatedAt, item.lastMessage, user?.id, pulse, wash]);
 
+  // Row press physics. Native-driven, one value, no re-render per press.
+  const reduced = useReducedMotion();
+  const press = useRef(new Animated.Value(0)).current;
+  const onRowPressIn = useCallback(() => {
+    if (reduced) { press.setValue(1); return; }
+    Animated.spring(press, { toValue: 1, ...motion.springPress, useNativeDriver: true }).start();
+  }, [press, reduced]);
+  const onRowPressOut = useCallback(() => {
+    if (reduced) { press.setValue(0); return; }
+    Animated.spring(press, { toValue: 0, ...motion.springBack, useNativeDriver: true }).start();
+  }, [press, reduced]);
+  const pressX = press.interpolate({ inputRange: [0, 1], outputRange: [0, 2] });
+  const pressY = press.interpolate({ inputRange: [0, 1], outputRange: [0, 4] });
+  const pressTint = press.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+
   const typers = Object.values(typing || {});
   const lm = item.lastMessage;
   const isMine = lm && lm.senderId === user.id;
@@ -410,28 +431,37 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
   }
 
   return (
-    <MotionIn delay={Math.min(index, 8) * 28} distance={10} style={s.rowWrap}>
+    <MotionIn delay={staggerDelay(index)} distance={8} style={s.rowWrap}>
       {/* A hard offset plate plus a soft shadow gives the black card real
           depth on Android, iOS and web without adding another native module. */}
       <View pointerEvents="none" style={[s.rowDepth, hasUnread && { backgroundColor: '#8d7900' }]} />
-      <Pressable
-        onPress={() => navigation.navigate('Conversation', { chatId: item.id })}
+      {/* Pressing slides the tile down onto its own depth plate — the same
+          2/4px offset as before, but sprung instead of snapped, so the card
+          reads as being physically pushed into the page and released. */}
+      <AnimatedPressable
+        onPress={() => { haptic('selection'); navigation.navigate('Conversation', { chatId: item.id }); }}
+        onPressIn={onRowPressIn}
+        onPressOut={onRowPressOut}
         onLongPress={() => onOpenSheet(item)}
         delayLongPress={280}
-        style={({ pressed }) => [
+        style={[
           s.row,
           hasUnread ? s.rowUnread : s.rowRead,
           {
             borderColor: hasUnread ? theme.highlighter : CHAT_TILE_LINE,
             transform: [
               { rotate: hasUnread ? '-0.18deg' : '0.1deg' },
-              { translateX: pressed ? 2 : 0 },
-              { translateY: pressed ? 4 : 0 },
+              { translateX: pressX },
+              { translateY: pressY },
             ],
           },
-          pressed ? { backgroundColor: CHAT_TILE_PRESSED } : null,
         ]}
       >
+        {/* pressed tint, driven by the same value as the offset */}
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: CHAT_TILE_PRESSED, opacity: pressTint }]}
+        />
         <View pointerEvents="none" style={s.rowSheen} />
         <View pointerEvents="none" style={s.rowEdge} />
         {/* brief "new thing happened" wash across the card */}
@@ -503,7 +533,7 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
             {item.muted && <Icon name="volume-mute" size={14} color={CHAT_TILE_MUTED} style={{ marginLeft: 8 }} />}
           </View>
         </View>
-      </Pressable>
+      </AnimatedPressable>
     </MotionIn>
   );
 }

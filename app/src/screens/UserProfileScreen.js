@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet, Image,
-  ActivityIndicator, RefreshControl, Modal,
+  View, Text, FlatList, Pressable, StyleSheet,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -11,6 +11,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import PostCard from '../components/PostCard';
 import { Avatar, EmptyState, TapeChip, Rule, handleFor, GoldTick, hasGoldTick } from '../components/common';
+import ImageLightbox from '../components/ImageLightbox';
 import { openPost } from '../push/routing';
 import { type, inkBox, marker, stroke } from '../theme';
 
@@ -257,11 +258,9 @@ export default function UserProfileScreen({ navigation, route, embedded = false,
         />
       )}
 
-      <Modal visible={!!lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(null)}>
-        <Pressable style={s.lightbox} onPress={() => setLightbox(null)}>
-          <Image source={{ uri: lightbox }} style={{ width: '92%', height: '78%' }} resizeMode="contain" />
-        </Pressable>
-      </Modal>
+      {/* shared viewer: springs open, drag it away in any vertical
+          direction, backdrop fades with the finger */}
+      <ImageLightbox uri={lightbox} onClose={() => setLightbox(null)} />
     </View>
   );
 }
@@ -314,7 +313,6 @@ const makeStyles = (t) => StyleSheet.create({
   statsRow: { flexDirection: 'row', alignItems: 'stretch', marginTop: 16 },
   statDivider: { width: 1, backgroundColor: t.graphiteLine },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  lightbox: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
 });
 
 const styles = StyleSheet.create({

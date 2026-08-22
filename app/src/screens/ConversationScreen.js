@@ -34,6 +34,7 @@ import { setViewedChat } from '../push/notifications';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
 import { throttle, useDebouncedCallback } from '../rateLimit';
 import CollabDocumentView from '../components/CollabDocumentView';
+import ImageLightbox from '../components/ImageLightbox';
 import TextOperation from '../ot/TextOperation';
 
 function ConversationContent({ route, navigation, embedded = false, themePicker = null }) {
@@ -1033,7 +1034,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       {/* -------- safety: report a message -------- */}
       <Modal visible={!!reportMsg} transparent animationType="fade" onRequestClose={() => setReportMsg(null)}>
         {reportMsg && (
-          <Pressable style={s.lightbox} onPress={() => setReportMsg(null)}>
+          <Pressable style={s.dimOverlay} onPress={() => setReportMsg(null)}>
             <Pressable style={[s.reportSheet, inkBox(theme, 'ink'), { backgroundColor: theme.bg }]} onPress={() => {}}>
               <Text style={[type.headlineSm, { color: theme.text }]}>Report this message</Text>
               <Text style={[type.bodySm, { color: theme.muted, marginTop: 4 }]}>
@@ -1080,14 +1081,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         )}
       </Modal>
 
-      <Modal visible={!!lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(null)}>
-        <Pressable style={s.lightbox} onPress={() => setLightbox(null)}>
-          <Image source={{ uri: lightbox }} style={s.lightboxImg} resizeMode="contain" />
-          <Pressable style={s.lightboxClose} onPress={() => setLightbox(null)}>
-            <Icon name="close" size={26} color="#fff" />
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* shared viewer: springs open, drag it away in any vertical
+          direction, backdrop fades with the finger */}
+      <ImageLightbox uri={lightbox} onClose={() => setLightbox(null)} />
 
       {/* forward picker */}
       <ForwardSheet visible={!!forwardMsg} message={forwardMsg} onClose={() => setForwardMsg(null)} />
@@ -1414,12 +1410,10 @@ const makeStyles = (t) => StyleSheet.create({
   input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },
   sendBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   recDot: { width: 9, height: 9, borderRadius: radius.full },
+  dimOverlay: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
   reportSheet: { width: '92%', maxWidth: 460, borderRadius: radius.md, padding: 18 },
   reportChip: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
   reportBtn: { flex: 1, alignItems: 'center', borderWidth: 1.5, borderRadius: 999, paddingVertical: 10 },
-  lightbox: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
-  lightboxImg: { width: '92%', height: '78%' },
-  lightboxClose: { position: 'absolute', top: 44, right: 22, padding: 8 },
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
   timerSheet: {
     width: '100%', maxWidth: 360, borderWidth: 3, padding: 20,
