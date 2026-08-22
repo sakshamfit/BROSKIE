@@ -5,30 +5,21 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import Svg, { Circle, Defs, Pattern, Path, Rect } from 'react-native-svg';
 import { useFonts } from 'expo-font';
-import {
-  BricolageGrotesque_600SemiBold,
-  BricolageGrotesque_700Bold,
-  BricolageGrotesque_800ExtraBold,
-} from '@expo-google-fonts/bricolage-grotesque';
-import {
-  Karla_400Regular,
-  Karla_500Medium,
-  Karla_700Bold,
-} from '@expo-google-fonts/karla';
-import {
-  JetBrainsMono_500Medium,
-  JetBrainsMono_700Bold,
-} from '@expo-google-fonts/jetbrains-mono';
-import {
-  Anybody_800ExtraBold,
-  Anybody_900Black,
-} from '@expo-google-fonts/anybody';
-import {
-  SpaceMono_400Regular,
-  SpaceMono_700Bold,
-} from '@expo-google-fonts/space-mono';
-import { HankenGrotesk_400Regular } from '@expo-google-fonts/hanken-grotesk';
-import { Caveat_600SemiBold, Caveat_700Bold } from '@expo-google-fonts/caveat';
+import { BricolageGrotesque_600SemiBold } from '@expo-google-fonts/bricolage-grotesque/600SemiBold';
+import { BricolageGrotesque_700Bold } from '@expo-google-fonts/bricolage-grotesque/700Bold';
+import { BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque/800ExtraBold';
+import { Karla_400Regular } from '@expo-google-fonts/karla/400Regular';
+import { Karla_500Medium } from '@expo-google-fonts/karla/500Medium';
+import { Karla_700Bold } from '@expo-google-fonts/karla/700Bold';
+import { JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono/500Medium';
+import { JetBrainsMono_700Bold } from '@expo-google-fonts/jetbrains-mono/700Bold';
+import { Anybody_800ExtraBold } from '@expo-google-fonts/anybody/800ExtraBold';
+import { Anybody_900Black } from '@expo-google-fonts/anybody/900Black';
+import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono/400Regular';
+import { SpaceMono_700Bold } from '@expo-google-fonts/space-mono/700Bold';
+import { HankenGrotesk_400Regular } from '@expo-google-fonts/hanken-grotesk/400Regular';
+import { Caveat_600SemiBold } from '@expo-google-fonts/caveat/600SemiBold';
+import { Caveat_700Bold } from '@expo-google-fonts/caveat/700Bold';
 
 import { AuthProvider, useAuth } from './src/store/AuthContext';
 import { ChatProvider } from './src/store/ChatContext';
@@ -36,7 +27,6 @@ import { ChatThemeProvider } from './src/store/ChatThemeContext';
 import { ThemeProvider, useTheme } from './src/store/ThemeContext';
 import Navigation from './src/Navigation';
 import PushController from './src/push/PushController';
-import { Loading } from './src/components/common';
 import OrientationManager from './src/components/OrientationManager';
 import CallOverlay from './src/components/CallOverlay';
 import DailyAIGreeting from './src/components/DailyAIGreeting';
@@ -211,7 +201,9 @@ export default function App() {
   useAutoUpdates();
 
   // Aliases keep theme.js font names short (Bricolage_800ExtraBold etc.)
-  const [fontsLoaded, fontError] = useFonts({
+  // Fonts load in the background; we deliberately do not gate first paint on
+  // them (see the comment before the return below).
+  useFonts({
     Bricolage_600SemiBold: BricolageGrotesque_600SemiBold,
     Bricolage_700Bold: BricolageGrotesque_700Bold,
     Bricolage_800ExtraBold: BricolageGrotesque_800ExtraBold,
@@ -228,29 +220,24 @@ export default function App() {
     Caveat_600SemiBold,
     Caveat_700Bold,
   });
-  const [fontGraceExpired, setFontGraceExpired] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setFontGraceExpired(true), 2500);
-    return () => clearTimeout(timer);
-  }, []);
-  const canRenderApp = fontsLoaded || !!fontError || fontGraceExpired;
-
+  // Fonts load in the background. Instead of holding the first paint until
+  // every TTF arrives (which made the auth screen sit on "LOADING +ONE" for
+  // up to 2.5s on cold visits), we render the shell immediately with the
+  // system fallback and swap in the brand fonts as they finish. This gets
+  // content in front of users much sooner — the Speed Insights win — while
+  // keeping the same custom type once loaded.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppErrorBoundary>
         <SafeAreaProvider>
           <ThemeProvider>
-            {canRenderApp ? (
-              <AuthProvider>
-                <ChatProvider>
-                  <ChatThemeProvider>
-                    <Root />
-                  </ChatThemeProvider>
-                </ChatProvider>
-              </AuthProvider>
-            ) : (
-              <Loading label="LOADING +ONE" />
-            )}
+            <AuthProvider>
+              <ChatProvider>
+                <ChatThemeProvider>
+                  <Root />
+                </ChatThemeProvider>
+              </ChatProvider>
+            </AuthProvider>
           </ThemeProvider>
         </SafeAreaProvider>
       </AppErrorBoundary>

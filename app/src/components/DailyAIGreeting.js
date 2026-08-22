@@ -14,7 +14,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { api } from '../api';
-import AIGreeterModel from './AIGreeterModel';
+import AIGreeterModelLoader from './AIGreeterModelLoader';
 import { Avatar } from './common';
 import { type } from '../theme';
 import { routeFromNotification } from '../push/routing';
@@ -409,7 +409,7 @@ export default function DailyAIGreeting() {
         {/* Original GLB animation stays isolated in its own stage. */}
         <View style={[styles.characterLayer, { top: stageTop, bottom: stageBottom }]}>
           <ModelBoundary theme={theme}>
-            <AIGreeterModel horizontalOffset={0} style={styles.model} />
+            <AIGreeterModelLoader horizontalOffset={0} style={styles.model} />
           </ModelBoundary>
         </View>
 
