@@ -6,16 +6,11 @@ import { api } from '../api';
 import { Avatar, InkCheckbox, EmptyState, GoldTick, hasGoldTick } from './common';
 import { EmojiText } from '../icons/Emoji';
 import { type, inkBox, marker, dashedRule } from '../theme';
+import { AUDIENCE, DEFAULT_AUDIENCE_OPTIONS } from './audienceMeta';
 
-export const AUDIENCE = {
-  public: { key: 'public', label: 'Public', sub: 'Everyone on +one can see this', icon: 'earth-outline' },
-  places: { key: 'places', label: 'My places', sub: 'People who share your college or workplace', icon: 'school-outline' },
-  contacts: { key: 'contacts', label: 'Friends', sub: 'Only people you already chat with', icon: 'people-outline' },
-  contacts_except: { key: 'contacts_except', label: 'Friends except…', sub: 'All friends except the people you choose', icon: 'person-remove-outline' },
-  selected: { key: 'selected', label: 'Private', sub: 'Only the people you choose can see it', icon: 'lock-closed-outline' },
-};
+export { AUDIENCE, DEFAULT_AUDIENCE_OPTIONS };
 
-const DEFAULT_OPTIONS = ['public', 'places', 'contacts', 'selected'];
+const DEFAULT_OPTIONS = DEFAULT_AUDIENCE_OPTIONS;
 
 /**
  * Reusable audience selector. Network uses the default Public / Friends /

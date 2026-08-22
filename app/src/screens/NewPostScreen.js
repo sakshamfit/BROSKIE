@@ -8,12 +8,14 @@ import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { api } from '../api';
 import useResponsive from '../hooks/useResponsive';
-import AudiencePicker from '../components/AudiencePicker';
 import SongCard from '../components/SongCard';
-import SongPicker from '../components/SongPicker';
-import PhotoCropPicker from '../components/PhotoCropPicker';
 import { rippleFor } from '../components/common';
 import { dashedRule, marker, radius, type, raised } from '../theme';
+import { lazyComponent } from '../lazy';
+
+const AudiencePicker = lazyComponent(() => import('../components/AudiencePicker'));
+const SongPicker = lazyComponent(() => import('../components/SongPicker'));
+const PhotoCropPicker = lazyComponent(() => import('../components/PhotoCropPicker'));
 
 /**
  * Full-screen "New Post" composer for The Network — a dedicated page

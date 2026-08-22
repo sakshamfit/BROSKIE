@@ -9,6 +9,7 @@ import {
 import { usePressScale, Pop, FloatLoop } from '../motion';
 import { mediaUrl } from '../api';
 import { useTheme } from '../store/ThemeContext';
+import { openProfile } from '../push/routing';
 
 // expo-blur was added after some APKs had already shipped. Keep it optional so
 // OTA bundles remain safe on those installations; newer builds get native
@@ -349,7 +350,7 @@ export function Highlight({ children, style }) {
 /* avatar — sketched square-ish portrait                               */
 /* ------------------------------------------------------------------ */
 
-export function Avatar({ uri, name, id, size = 48, group = false, online = false, unread = false, weight = 'ink', shape = 'circle' }) {
+export function Avatar({ uri, name, id, size = 48, group = false, online = false, unread = false, weight = 'ink', shape = 'circle', profileId = null, onPress = null }) {
   const { theme } = useTheme();
   const src = mediaUrl(uri);
   const fill = theme.dark ? theme.cardAlt : colorFor(id || name || '');
@@ -365,7 +366,7 @@ export function Avatar({ uri, name, id, size = 48, group = false, online = false
     ? sketchAvatarFrame(theme, size, lineWidth, lineColor, seed)
     : { borderRadius: radius.full, borderWidth: lineWidth, borderColor: lineColor };
 
-  return (
+  const body = (
     <View style={{ width: size, height: size }}>
       {/* circular by default (per the mockup's rounded-full avatars); pass
           shape="sketch" for a hand-drawn, uneven pencil-outline portrait */}
@@ -412,6 +413,21 @@ export function Avatar({ uri, name, id, size = 48, group = false, online = false
         />
       )}
     </View>
+  );
+
+  // Tapping the circle opens that person's profile — anywhere in the app.
+  // Pass `profileId` (a user id) to enable it, or a custom `onPress`.
+  const press = onPress || (profileId ? () => openProfile(profileId) : null);
+  if (!press) return body;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={name ? `View ${name}'s profile` : 'View profile'}
+      onPress={press}
+      hitSlop={4}
+    >
+      {body}
+    </Pressable>
   );
 }
 

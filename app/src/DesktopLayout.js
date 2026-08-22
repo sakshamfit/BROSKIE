@@ -9,26 +9,30 @@ import { useChat } from './store/ChatContext';
 import useResponsive from './hooks/useResponsive';
 import { FrostedBackdrop } from './components/common';
 import { type, inkBox, stroke, raised } from './theme';
+import { lazyScreen, lazyComponent, idlePreload } from './lazy';
+import { onOpenProfileRequest, onOpenPostRequest } from './push/routing';
 
-import ChatListScreen from './screens/ChatListScreen';
-import ConversationScreen from './screens/ConversationScreen';
-import NewChatScreen from './screens/NewChatScreen';
-import SettingsScreen from './screens/SettingsScreen';
-import ChatInfoScreen from './screens/ChatInfoScreen';
-import NetworkScreen from './screens/NetworkScreen';
-import ColleaguesScreen from './screens/ColleaguesScreen';
-import StatusScreen from './screens/StatusScreen';
-import PersonalInfoScreen from './screens/PersonalInfoScreen';
-import SecurityScreen from './screens/SecurityScreen';
-import AppearanceScreen from './screens/AppearanceScreen';
-import NotificationsScreen from './screens/NotificationsScreen';
-import ActivityScreen from './screens/ActivityScreen';
-import PrivacyScreen from './screens/PrivacyScreen';
-import BlockedUsersScreen from './screens/BlockedUsersScreen';
-import HelpScreen from './screens/HelpScreen';
-import CallsScreen from './screens/CallsScreen';
-import StarredMessagesScreen from './screens/StarredMessagesScreen';
-import AdminSafetyScreen from './screens/AdminSafetyScreen';
+const ChatListScreen = lazyScreen(() => import('./screens/ChatListScreen'), { label: 'Chats' });
+const ConversationScreen = lazyScreen(() => import('./screens/ConversationScreen'), { label: 'Conversation' });
+const NewChatScreen = lazyScreen(() => import('./screens/NewChatScreen'), { label: 'New Chat' });
+const SettingsScreen = lazyScreen(() => import('./screens/SettingsScreen'), { label: 'Settings' });
+const ChatInfoScreen = lazyScreen(() => import('./screens/ChatInfoScreen'), { label: 'Chat Info' });
+const NetworkScreen = lazyScreen(() => import('./screens/NetworkScreen'), { label: 'Network' });
+const ColleaguesScreen = lazyScreen(() => import('./screens/ColleaguesScreen'), { label: 'Colleagues' });
+const StatusScreen = lazyScreen(() => import('./screens/StatusScreen'), { label: 'See' });
+const PersonalInfoScreen = lazyScreen(() => import('./screens/PersonalInfoScreen'), { label: 'Personal Info' });
+const SecurityScreen = lazyScreen(() => import('./screens/SecurityScreen'), { label: 'Security' });
+const AppearanceScreen = lazyScreen(() => import('./screens/AppearanceScreen'), { label: 'Appearance' });
+const NotificationsScreen = lazyScreen(() => import('./screens/NotificationsScreen'), { label: 'Notifications' });
+const ActivityScreen = lazyScreen(() => import('./screens/ActivityScreen'), { label: 'Activity' });
+const PrivacyScreen = lazyScreen(() => import('./screens/PrivacyScreen'), { label: 'Privacy' });
+const BlockedUsersScreen = lazyScreen(() => import('./screens/BlockedUsersScreen'), { label: 'Blocked Contacts' });
+const HelpScreen = lazyScreen(() => import('./screens/HelpScreen'), { label: 'Help' });
+const CallsScreen = lazyScreen(() => import('./screens/CallsScreen'), { label: 'Calls' });
+const StarredMessagesScreen = lazyScreen(() => import('./screens/StarredMessagesScreen'), { label: 'Starred' });
+const AdminSafetyScreen = lazyScreen(() => import('./screens/AdminSafetyScreen'), { label: 'Safety & Reports' });
+const UserProfileScreen = lazyScreen(() => import('./screens/UserProfileScreen'), { label: 'User Profile' });
+const PostDetailScreen = lazyScreen(() => import('./screens/PostDetailScreen'), { label: 'Post Detail' });
 
 /**
  * Split shell for wide viewports — desktop web AND real tablets/foldables
@@ -56,6 +60,12 @@ export default function SplitLayout() {
 
   const openOverlay = (name, params) => setOverlay({ name, params });
   const closeOverlay = () => setOverlay(null);
+
+  // Tapping an avatar circle (or a "liked your post" activity row) anywhere
+  // in the split shell opens the profile / post as an overlay panel — the
+  // phone flow pushes real stack screens instead (see push/routing.js).
+  useEffect(() => onOpenProfileRequest((userId) => setOverlay({ name: 'UserProfile', params: { userId } })), []);
+  useEffect(() => onOpenPostRequest((postId) => setOverlay({ name: 'PostDetail', params: { postId } })), []);
 
   // Settings is a full-screen top-level section here (like Chats/See/
   // Network) — NOT a popup — with its own little navigation stack for the
@@ -130,6 +140,11 @@ export default function SplitLayout() {
 
   // Android hardware back: close whatever is on top instead of exiting the
   // app (matches how the native stack navigator behaves on phones).
+  useEffect(() => {
+    idlePreload(() => import('./screens/ConversationScreen'));
+    idlePreload(() => import('./screens/SettingsScreen'));
+  }, []);
+
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -272,6 +287,33 @@ export default function SplitLayout() {
           navigation={{ goBack: closeOverlay }}
           onOpenChat={(chatId) => { closeOverlay(); setTab('chats'); setSelectedChatId(chatId); }}
         />
+      </OverlayPanel>
+
+      <OverlayPanel visible={overlay?.name === 'UserProfile'} onClose={closeOverlay} width={560}>
+        {overlay?.name === 'UserProfile' && (
+          <UserProfileScreen
+            embedded
+            route={{ params: overlay.params }}
+            navigation={{
+              goBack: closeOverlay,
+              navigate: (name, params) => {
+                if (name === 'Conversation') { closeOverlay(); setTab('chats'); setSelectedChatId(params.chatId); }
+                else if (name === 'PersonalInfo') { closeOverlay(); setTab('settings'); setSettingsSub('PersonalInfo'); }
+              },
+            }}
+            onOpenChat={(chatId) => { closeOverlay(); setTab('chats'); setSelectedChatId(chatId); }}
+          />
+        )}
+      </OverlayPanel>
+
+      <OverlayPanel visible={overlay?.name === 'PostDetail'} onClose={closeOverlay} width={600}>
+        {overlay?.name === 'PostDetail' && (
+          <PostDetailScreen
+            embedded
+            route={{ params: overlay.params }}
+            navigation={{ goBack: closeOverlay }}
+          />
+        )}
       </OverlayPanel>
     </View>
   );

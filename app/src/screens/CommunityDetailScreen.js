@@ -244,7 +244,7 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
           <View style={{ gap: 16 }}>
             {community.members.map((m) => (
               <View key={m.id} style={s.memberRow}>
-                <Avatar uri={m.avatar} name={m.name} id={m.id} size={42} />
+                <Avatar uri={m.avatar} name={m.name} id={m.id} size={42} profileId={m.id} />
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <EmojiText style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]}>
@@ -288,7 +288,7 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
             ) : (
               requests.map((r) => (
                 <View key={r.user.id} style={s.reqRow}>
-                  <Avatar uri={r.user.avatar} name={r.user.name} id={r.user.id} size={38} />
+                  <Avatar uri={r.user.avatar} name={r.user.name} id={r.user.id} size={38} profileId={r.user.id} />
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <EmojiText style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]}>{r.user.name}</EmojiText>

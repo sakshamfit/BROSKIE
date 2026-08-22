@@ -945,10 +945,10 @@ app.post('/api/auth/register', (req, res) => {
      VALUES (@id, @username, @username_key, @phone, @name, @about, @avatar, @password_hash, @last_seen, @is_online, @created_at)`
   ).run(user);
 
-  // Bootstrap role: if this account's username is configured as an admin
-  // (ADMIN_USERNAMES, default "saksham") it receives the backend admin role
-  // immediately — same rule as the boot-time grant, for fresh databases.
-  if (ADMIN_USERNAME_KEYS.includes(canonicalUsername)) {
+  // Bootstrap role: if this account is the owner admin username it receives
+  // the backend admin role immediately — same rule as the boot-time grant,
+  // for fresh databases.
+  if (canonicalUsername === OWNER_ADMIN_USERNAME_KEY) {
     db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(user.id);
     user.role = 'admin';
   }
@@ -1235,6 +1235,39 @@ app.get('/api/users', requireAuth, (req, res) => {
 /* ------------------------------------------------------------------ */
 
 /** Discover registered colleges/institutions, organizations and workplaces. */
+/** GET /api/users/:id/profile — public profile page (tapping any avatar
+ *  opens this). Blocked pairs see a 404, never a profile. */
+app.get('/api/users/:id/profile', requireAuth, (req, res) => {
+  const target = getUser(req.params.id);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  const isSelf = target.id === req.userId;
+  if (!isSelf && (isBlocked(req.userId, target.id) || isBlocked(target.id, req.userId))) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const followers = db.prepare('SELECT COUNT(*) c FROM follows WHERE followed_id = ?').get(target.id).c;
+  const followingCount = db.prepare('SELECT COUNT(*) c FROM follows WHERE follower_id = ?').get(target.id).c;
+  // Post count respects audience — the viewer only ever counts what they
+  // could actually open in the feed.
+  const postRows = db
+    .prepare('SELECT id, user_id, audience FROM posts WHERE user_id = ? AND deleted = 0')
+    .all(target.id);
+  const postsCount = postRows.filter((r) => canViewPost(r.id, r.user_id, r.audience || 'public', req.userId)).length;
+
+  res.json({
+    profile: {
+      user: { ...publicUser(target), ...presenceFor(target, req.userId) },
+      affiliations: affiliationsForUser(target.id),
+      stats: { posts: postsCount, followers, following: followingCount },
+      isSelf,
+      following: isSelf ? undefined : isFollowing(req.userId, target.id),
+      followsYou: isSelf ? undefined : isFollowing(target.id, req.userId),
+      relationship: isSelf ? undefined : colleagueRelationship(req.userId, target.id),
+      sharedAffiliations: isSelf ? [] : sharedAffiliations(req.userId, target.id),
+    },
+  });
+});
+
 app.get('/api/affiliations', requireAuth, (req, res) => {
   const q = normalizeAffiliationName(req.query.q || '');
   const typeFilter = String(req.query.type || '');
@@ -3195,6 +3228,16 @@ app.get('/api/posts', requireAuth, (req, res) => {
     // (visible or filtered-out), so resuming from it never skips a post.
     nextBefore: !exhausted && visible.length === limit ? before : null,
   });
+});
+
+/** GET /api/posts/:id — one post, for deep links from Activity ("liked your
+ *  post") and pushes. Audience rules apply exactly like the feed. */
+app.get('/api/posts/:id', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM posts WHERE id = ? AND deleted = 0').get(req.params.id);
+  if (!row || !canViewPost(row.id, row.user_id, row.audience || 'public', req.userId)) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
+  res.json({ post: hydratePost(row, req.userId) });
 });
 
 app.post('/api/posts', requireAuth, (req, res) => {

@@ -10,12 +10,15 @@ import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
-import AffiliationPicker, { AFFILIATION_TYPES, affiliationType } from '../components/AffiliationPicker';
+import { AFFILIATION_TYPES, affiliationType } from '../components/affiliationMeta';
 import TodayStrip from '../components/TodayStrip';
 import { Avatar, InkField, TapeChip, handleFor, rippleFor, GoldTick, hasGoldTick } from '../components/common';
 import { openNetworkFeed } from '../push/routing';
 import { useDebouncedCallback } from '../rateLimit';
 import { type, inkBox, marker, dashedRule, raised } from '../theme';
+import { lazyComponent } from '../lazy';
+
+const AffiliationPicker = lazyComponent(() => import('../components/AffiliationPicker'));
 
 const FILTERS = [{ key: '', short: 'All', icon: 'globe-outline' }, ...AFFILIATION_TYPES];
 const CARD_TILTS = ['0.5deg', '-0.8deg', '1deg'];
@@ -321,7 +324,7 @@ export default function ColleaguesScreen({ onOpenChat }) {
               {requests.map((request, index) => (
                 <View key={request.id}>
                   <View style={s.requestRow}>
-                    <Avatar uri={request.user.avatar} name={request.user.name} id={request.user.id} size={46} />
+                    <Avatar uri={request.user.avatar} name={request.user.name} id={request.user.id} size={46} profileId={request.user.id} />
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <EmojiText style={[type.bodyStrong, { color: theme.text, flexShrink: 1 }]}>{request.user.name}</EmojiText>
@@ -367,7 +370,7 @@ export default function ColleaguesScreen({ onOpenChat }) {
                     <View style={[s.tape, { backgroundColor: theme.cardAlt, left: index % 2 ? 24 : '42%', transform: [{ rotate: index % 2 ? '5deg' : '-4deg' }] }]} />
                     <View style={s.cardHead}>
                       <View style={{ transform: [{ rotate: index % 2 ? '-3deg' : '5deg' }] }}>
-                        <Avatar uri={person.avatar} name={person.name} id={person.id} size={62} online={person.isOnline} weight={index % 3 === 0 ? 'ink' : 'thin'} />
+                        <Avatar uri={person.avatar} name={person.name} id={person.id} size={62} online={person.isOnline} weight={index % 3 === 0 ? 'ink' : 'thin'} profileId={person.id} />
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
