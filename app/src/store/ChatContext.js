@@ -34,7 +34,24 @@ const sortChats = (list) =>
 // peer-to-peer audio/video works on every platform).
 const RTC_SUPPORTED = RTC.supported;
 
-const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+// Keep TURN credentials out of source control. EXPO_PUBLIC_ICE_SERVERS may be
+// a JSON array, while the individual variables make local setup convenient.
+const configuredIceServers = (() => {
+  try {
+    const raw = typeof process !== 'undefined' ? process.env?.EXPO_PUBLIC_ICE_SERVERS : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    }
+  } catch {}
+  const turnUrl = typeof process !== 'undefined' ? process.env?.EXPO_PUBLIC_TURN_URL : null;
+  const turnUser = typeof process !== 'undefined' ? process.env?.EXPO_PUBLIC_TURN_USERNAME : null;
+  const turnCredential = typeof process !== 'undefined' ? process.env?.EXPO_PUBLIC_TURN_CREDENTIAL : null;
+  return turnUrl && turnUser && turnCredential
+    ? [{ urls: turnUrl, username: turnUser, credential: turnCredential }]
+    : [];
+})();
+const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }, ...configuredIceServers];
 
 export function ChatProvider({ children }) {
   const { token, user, logout, applySettings } = useAuth();
@@ -783,6 +800,11 @@ export function ChatProvider({ children }) {
     /* ---------------- calls ---------------- */
 
     socket.on('call:incoming', (payload) => {
+      // Never replace an active session with a stale/duplicate invite.
+      if (callRef.current) {
+        socket.emit('call:decline', { callId: payload.id });
+        return;
+      }
       setCall({
         id: payload.id, chatId: payload.chatId, type: payload.type,
         direction: 'incoming', status: 'ringing', with: payload.caller, startedAt: payload.startedAt,
@@ -810,17 +832,17 @@ export function ChatProvider({ children }) {
       setCall((prev) => (prev ? { ...prev, status: 'ongoing' } : prev));
     });
 
-    socket.on('call:answer', async ({ sdp }) => {
+    socket.on('call:answer', async ({ callId, sdp }) => {
       const pc = pcRef.current;
-      if (!pc) return;
+      if (!pc || callRef.current?.id !== callId) return;
       await pc.setRemoteDescription(RTC.SessionDescription(sdp));
       flushPendingCandidates(pc);
       setCall((prev) => (prev ? { ...prev, status: 'ongoing' } : prev));
     });
 
-    socket.on('call:ice-candidate', async ({ candidate }) => {
+    socket.on('call:ice-candidate', async ({ callId, candidate }) => {
       const pc = pcRef.current;
-      if (!candidate) return;
+      if (!candidate || callRef.current?.id !== callId) return;
       if (pc && pc.remoteDescription && pc.remoteDescription.type) {
         try { await pc.addIceCandidate(RTC.IceCandidate(candidate)); } catch {}
       } else {

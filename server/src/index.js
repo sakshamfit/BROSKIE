@@ -5000,8 +5000,9 @@ io.on('connection', (socket) => {
 
   // Caller starts a call. Blocked-either-way and busy checks mirror the
   // same enforcement as direct messaging (see message:send above).
-  socket.on('call:invite', ({ chatId, calleeId, type: callType = 'audio' }, ack) => {
+  socket.on('call:invite', ({ chatId, calleeId, type: callType = 'audio' } = {}, ack) => {
     try {
+      if (!['audio', 'video'].includes(callType)) return ack?.({ error: 'Invalid call type' });
       if (!calleeId || !getUser(calleeId)) return ack?.({ error: 'Unknown user' });
       const callGate = moderation.moderationGate(uid);
       if (callGate.blocked) return ack?.({ error: callGate.error });
@@ -5067,11 +5068,14 @@ io.on('connection', (socket) => {
   // inspects the payload, it's purely a signaling relay between the two
   // participants; the actual audio/video is peer-to-peer once connected.
   ['call:offer', 'call:answer', 'call:ice-candidate'].forEach((ev) => {
-    socket.on(ev, ({ callId, ...payload }) => {
+    socket.on(ev, ({ callId, ...payload } = {}) => {
       const call = db.prepare('SELECT * FROM calls WHERE id = ?').get(callId);
-      if (!call) return;
+      // Signalling is participant-scoped. Do not let an authenticated user
+      // who merely knows a call id inject SDP/ICE into somebody else's call.
+      if (!call || ![call.caller_id, call.callee_id].includes(uid)) return;
+      if (!['ringing', 'ongoing'].includes(call.status)) return;
       const otherId = call.caller_id === uid ? call.callee_id : call.caller_id;
-      if (otherId !== uid) emitToUser(otherId, ev, { callId, ...payload });
+      emitToUser(otherId, ev, { callId, ...payload });
     });
   });
 
