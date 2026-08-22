@@ -6,7 +6,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
-import * as ImagePicker from 'expo-image-picker';
 import {
   RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync,
   useAudioRecorder, useAudioRecorderState,
@@ -31,8 +30,10 @@ import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../the
 import { throttle } from '../rateLimit';
 import ImageLightbox from '../components/ImageLightbox';
 import { lazyComponent } from '../lazy';
+import { editorConfigFor } from '../imageEditor/config';
 
 const EmojiPicker = lazyComponent(() => import('../components/EmojiPicker'));
+const UniversalImageEditor = lazyComponent(() => import('../components/UniversalImageEditor'));
 const ForwardSheet = lazyComponent(() => import('../components/ForwardSheet'));
 const PollComposer = lazyComponent(() => import('../components/PollComposer'));
 const ThemePickerSheet = lazyComponent(() => import('../components/ThemePickerSheet'));
@@ -104,6 +105,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   };
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [imageEditor, setImageEditor] = useState(false);
   // Hold-to-record gesture state on the send button: when this press started
   // (0 = not held) and whether THIS press owns the current recording.
   const holdStartedAt = useRef(0);
@@ -323,25 +325,23 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     setText(''); setReplyTo(null); setShowEmoji(false); setTypingState(chatId, false);
   };
 
-  const pickImage = async () => {
-    try {
-      // Lower JPEG quality keeps image uploads light on slow/limited data
-      // plans; the web path additionally downscales to 1280px (media.js).
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.55 });
-      if (res.canceled || !res.assets?.length) return;
-      const asset = res.assets[0];
-      sendMessage(chatId, {
-        type: 'image',
-        mediaUrl: asset.uri,
-        localMediaUri: asset.uri,
-        mimeType: asset.mimeType || 'image/jpeg',
-        body: '',
-        ...replyPayload(),
-      });
-      setReplyTo(null);
-    } catch (e) {
-      console.warn('image send failed', e.message);
-    }
+  const pickImage = () => {
+    setImageEditor(true);
+  };
+
+  const sendEditedImage = (processed) => {
+    setImageEditor(false);
+    // The processed file is already cropped, rotated and compressed locally —
+    // OutboxManager uploads it (never the original) and generates a thumbnail.
+    sendMessage(chatId, {
+      type: 'image',
+      mediaUrl: processed.uri,
+      localMediaUri: processed.uri,
+      mimeType: processed.mimeType || 'image/jpeg',
+      body: '',
+      ...replyPayload(),
+    });
+    setReplyTo(null);
   };
 
   const restorePlaybackAudioMode = () => setAudioModeAsync({
@@ -823,6 +823,14 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       )}
 
       <EmojiPicker visible={showEmoji} onSelect={(e) => setText((v) => v + e)} />
+
+      <UniversalImageEditor
+        visible={imageEditor}
+        pickOnOpen
+        config={editorConfigFor('chat')}
+        onCancel={() => setImageEditor(false)}
+        onDone={sendEditedImage}
+      />
 
       {/* composer — bottom safe-area (home indicator / gesture bar) only
           applies full-screen; the desktop/tablet split already handles it. */}

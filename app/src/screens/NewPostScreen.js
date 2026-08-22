@@ -13,10 +13,11 @@ import { rippleFor } from '../components/common';
 import { dashedRule, marker, radius, type, raised } from '../theme';
 import { SpringPressable, motion } from '../motion';
 import { lazyComponent } from '../lazy';
+import { editorConfigFor } from '../imageEditor/config';
 
 const AudiencePicker = lazyComponent(() => import('../components/AudiencePicker'));
 const SongPicker = lazyComponent(() => import('../components/SongPicker'));
-const PhotoCropPicker = lazyComponent(() => import('../components/PhotoCropPicker'));
+const UniversalImageEditor = lazyComponent(() => import('../components/UniversalImageEditor'));
 
 /**
  * Full-screen "New Post" composer for The Network — a dedicated page
@@ -36,6 +37,7 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
   const [body, setBody] = useState('');
   const [image, setImage] = useState(null);
   const [cropPicker, setCropPicker] = useState(false);
+  const [editUri, setEditUri] = useState(null);
   const [song, setSong] = useState(null);
   const [songPicker, setSongPicker] = useState(false);
   const [tag, setTag] = useState('');
@@ -46,7 +48,7 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
   const [error, setError] = useState('');
 
   const reset = () => {
-    setBody(''); setImage(null); setCropPicker(false); setSong(null); setTag(''); setShowTagInput(false);
+    setBody(''); setImage(null); setCropPicker(false); setEditUri(null); setSong(null); setTag(''); setShowTagInput(false);
     setAudience('public'); setRecipientIds([]); setError('');
   };
 
@@ -54,6 +56,13 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
 
   const pickImage = () => {
     setError('');
+    setEditUri(null);
+    setCropPicker(true);
+  };
+
+  const reeditImage = () => {
+    setError('');
+    setEditUri(image?.uri || null);
     setCropPicker(true);
   };
 
@@ -148,7 +157,7 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
             <Pressable onPress={() => setImage(null)} style={[s.imagePreviewX, { backgroundColor: theme.ink }]}>
               <Icon name="close" size={13} color={theme.onPrimary} />
             </Pressable>
-            <Pressable onPress={() => setCropPicker(true)} style={[s.imageEdit, { backgroundColor: theme.ink }]}>
+            <Pressable onPress={reeditImage} style={[s.imageEdit, { backgroundColor: theme.ink }]}>
               <Icon name="create-outline" size={12} color={theme.onPrimary} />
               <Text style={[type.labelXs, { color: theme.onPrimary }]}>EDIT FRAME</Text>
             </Pressable>
@@ -272,12 +281,13 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
         </View>
       </View>
 
-      <PhotoCropPicker
+      <UniversalImageEditor
         visible={cropPicker}
-        onClose={() => setCropPicker(false)}
-        onPick={(asset) => { setImage(asset); setError(''); }}
-        title="Crop post photo"
-        quality={0.8}
+        source={editUri}
+        pickOnOpen={!editUri}
+        config={editorConfigFor('post')}
+        onCancel={() => { setCropPicker(false); setEditUri(null); }}
+        onDone={(result) => { setImage(result); setEditUri(null); setCropPicker(false); setError(''); }}
       />
       <SongPicker
         visible={songPicker}

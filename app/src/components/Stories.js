@@ -16,9 +16,10 @@ import SongCard from './SongCard';
 import { radius, type, marker, stroke, raised } from '../theme';
 import { FadeSlide, Skeleton, motion, SpringPressable, haptic, useReducedMotion } from '../motion';
 import { lazyComponent } from '../lazy';
+import { editorConfigFor } from '../imageEditor/config';
 
 const AudiencePicker = lazyComponent(() => import('./AudiencePicker'));
-const PhotoCropPicker = lazyComponent(() => import('./PhotoCropPicker'));
+const UniversalImageEditor = lazyComponent(() => import('./UniversalImageEditor'));
 const SongPicker = lazyComponent(() => import('./SongPicker'));
 
 const BG_COLORS = ['#FFE24D', '#fdf8f8', '#e2e3de', '#5d5f5b', '#1c1b1b', '#39444c'];
@@ -533,6 +534,7 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
   const [bg, setBg] = useState(BG_COLORS[0]);
   const [image, setImage] = useState(null);
   const [cropPicker, setCropPicker] = useState(false);
+  const [editUri, setEditUri] = useState(null);
   const [song, setSong] = useState(null);
   const [songPicker, setSongPicker] = useState(false);
   const [audience, setAudience] = useState('contacts');
@@ -547,6 +549,7 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
     setBg(BG_COLORS[0]);
     setImage(null);
     setCropPicker(false);
+    setEditUri(null);
     setSong(null);
     setSongPicker(false);
     setAudience('contacts');
@@ -560,7 +563,7 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
     const nextMode = ['choose', 'text', 'photo'].includes(initialMode) ? initialMode : 'choose';
     setMode(nextMode);
     if (nextMode === 'photo' && !image) {
-      const timer = setTimeout(() => setCropPicker(true), 180);
+      const timer = setTimeout(() => { setEditUri(null); setCropPicker(true); }, 180);
       return () => clearTimeout(timer);
     }
     return undefined;
@@ -575,6 +578,13 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
   const startPhoto = () => {
     setMode('photo');
     setError('');
+    setEditUri(null);
+    setCropPicker(true);
+  };
+
+  const openEditor = (uri) => {
+    setError('');
+    setEditUri(uri || null);
     setCropPicker(true);
   };
 
@@ -650,7 +660,7 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                 </Pressable>
               )}
               {mode === 'photo' && (
-                <Pressable onPress={() => setCropPicker(true)} hitSlop={8} style={s.composerIconButton}>
+                <Pressable onPress={() => openEditor(image?.uri)} hitSlop={8} style={s.composerIconButton}>
                   <Icon name="image-outline" size={22} color="#ffffff" />
                 </Pressable>
               )}
@@ -715,7 +725,7 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                     ]}
                   >
                     <Image source={{ uri: image.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                    <Pressable onPress={() => setCropPicker(true)} style={s.editCropButton}>
+                    <Pressable onPress={() => openEditor(image.uri)} style={s.editCropButton}>
                       <Icon name="create-outline" size={14} color="#ffffff" />
                       <Text style={[type.labelXs, { color: '#ffffff' }]}>EDIT CROP</Text>
                     </Pressable>
@@ -733,7 +743,7 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                   </View>
                 </>
               ) : (
-                <Pressable onPress={() => setCropPicker(true)} style={s.emptyPhoto}>
+                <Pressable onPress={() => openEditor(null)} style={s.emptyPhoto}>
                   <Icon name="image-outline" size={42} color="rgba(255,255,255,0.72)" />
                   <Text style={[type.headlineSm, { color: '#ffffff', marginTop: 15 }]}>Choose and crop a photo</Text>
                   <Text style={[type.bodySm, { color: 'rgba(255,255,255,0.58)', marginTop: 5, textAlign: 'center' }]}>Original, square, portrait, wide or story frame</Text>
@@ -846,12 +856,13 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
         </View>
       </Modal>
 
-      <PhotoCropPicker
+      <UniversalImageEditor
         visible={cropPicker}
-        onClose={() => setCropPicker(false)}
-        onPick={(asset) => { setImage(asset); setMode('photo'); setError(''); }}
-        title="Crop status photo"
-        quality={0.82}
+        source={editUri}
+        pickOnOpen={!editUri}
+        config={editorConfigFor('story')}
+        onCancel={() => { setCropPicker(false); setEditUri(null); }}
+        onDone={(result) => { setImage(result); setMode('photo'); setCropPicker(false); setEditUri(null); setError(''); }}
       />
       <SongPicker
         visible={songPicker}

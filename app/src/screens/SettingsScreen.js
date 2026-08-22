@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Linking, Modal, TextInput } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Linking, Modal, TextInput, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
@@ -15,6 +14,10 @@ import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 import { openProfile } from '../push/routing';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
+import { lazyComponent } from '../lazy';
+import { editorConfigFor } from '../imageEditor/config';
+
+const UniversalImageEditor = lazyComponent(() => import('../components/UniversalImageEditor'));
 
 /**
  * Settings hub — profile hero (editable avatar) + two grouped sections
@@ -308,6 +311,7 @@ export default function SettingsScreen({ navigation, embedded = false }) {
 function ProfileHero({ user, theme, joinYear, connected }) {
   const { updateProfile } = useAuth();
   const [uploading, setUploading] = useState(false);
+  const [avatarEditor, setAvatarEditor] = useState(false);
   const s = makeStyles(theme);
 
   const removeAvatar = async () => {
@@ -323,17 +327,13 @@ function ProfileHero({ user, theme, joinYear, connected }) {
     }
   };
 
-  const pickAvatar = async () => {
+  const saveAvatar = async (processed) => {
     try {
-      const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'], quality: 0.8, allowsEditing: true, aspect: [1, 1],
-      });
-      if (res.canceled || !res.assets?.length) return;
       setUploading(true);
-      const asset = res.assets[0];
-      const { url } = await api.uploadFile(asset.uri, asset.fileName || 'avatar.jpg', asset.mimeType || 'image/jpeg');
+      const { url } = await api.uploadFile(processed.uri, processed.fileName || 'avatar.jpg', processed.mimeType || 'image/jpeg');
       await updateProfile({ avatar: url });
     } catch (e) {
+      Alert.alert('Photo not saved', e.message || 'The profile photo could not be uploaded.');
       console.warn('avatar upload failed', e.message);
     } finally {
       setUploading(false);
@@ -343,7 +343,7 @@ function ProfileHero({ user, theme, joinYear, connected }) {
   return (
     <View style={s.hero}>
       <View style={s.avatarArea}>
-      <Pressable onPress={pickAvatar} style={s.avatarWrap} disabled={uploading}>
+      <Pressable onPress={() => setAvatarEditor(true)} style={s.avatarWrap} disabled={uploading}>
         <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={112} shape="sketch" weight="bold" />
         <View style={[s.editBadge, inkBox(theme, 'ink'), { backgroundColor: theme.card }]}>
           {uploading ? (
@@ -379,6 +379,14 @@ function ProfileHero({ user, theme, joinYear, connected }) {
           {!!joinYear && <TapeChip label={`JOINED ${joinYear}`} />}
         </View>
       </View>
+
+      <UniversalImageEditor
+        visible={avatarEditor}
+        pickOnOpen
+        config={editorConfigFor('profile')}
+        onCancel={() => setAvatarEditor(false)}
+        onDone={(result) => { setAvatarEditor(false); saveAvatar(result); }}
+      />
     </View>
   );
 }

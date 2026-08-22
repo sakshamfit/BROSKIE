@@ -28,6 +28,7 @@
     "expo-font": "~57.0.1",
     "expo-gl": "~57.0.2",
     "expo-haptics": "~57.0.1",
+    "expo-image-manipulator": "~57.0.10",
     "expo-image-picker": "~57.0.10",
     "expo-location": "~57.0.11",
     "expo-notifications": "~57.0.13",
@@ -60,7 +61,8 @@
     "mock-api": "node scripts/mock-api.js",
     "smoke": "node scripts/smoke-web.js",
     "smoke:app": "SMOKE_LOGGED_IN=1 node scripts/smoke-web.js",
-    "check": "./scripts/check.sh"
+    "check": "./scripts/check.sh",
+    "test:image-editor": "node --test src/imageEditor/geometry.test.mjs"
   },
   "private": true,
   "devDependencies": {
