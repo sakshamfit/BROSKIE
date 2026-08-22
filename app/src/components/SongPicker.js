@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { api } from '../api';
+import { useDebouncedCallback } from '../rateLimit';
 import SongCard from './SongCard';
 import { type, inkBox, marker, dashedRule } from '../theme';
 
@@ -22,8 +23,10 @@ export default function SongPicker({ visible, onClose, onSelect }) {
   const [configured, setConfigured] = useState(true);
   const [notice, setNotice] = useState('');
 
-  const search = async (q) => {
-    setQuery(q);
+  // Debounce the Jamendo lookup: the picker is typed into rapidly, and each
+  // keystroke used to fire a full server-side song search. The input itself
+  // (`query`) updates instantly; only the network call waits for a pause.
+  const searchSongs = useDebouncedCallback(async (q) => {
     if (q.trim().length < 2) { setResults([]); return; }
     setLoading(true);
     try {
@@ -32,6 +35,12 @@ export default function SongPicker({ visible, onClose, onSelect }) {
       setConfigured(c !== false);
       setNotice(error || '');
     } catch { setResults([]); } finally { setLoading(false); }
+  }, 300);
+
+  const search = (q) => {
+    setQuery(q);
+    if (q.trim().length < 2) { setResults([]); searchSongs.cancel(); return; }
+    searchSongs(q);
   };
 
   return (
