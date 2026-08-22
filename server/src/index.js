@@ -73,6 +73,16 @@ const storage = require('./storage');
 // otherwise — old /uploads/... URLs in the DB keep resolving).
 app.use('/uploads', express.static(storage.UPLOAD_DIR));
 
+// Google Search Console ownership verification. Served directly by the backend
+// so it resolves on this domain even when no web build is present. (The Expo
+// web build also ships the same file via app/public/.)
+app.get('/google6b23d829f263b9d6.html', (req, res) => {
+  res
+    .type('text/html')
+    .set('Cache-Control', 'no-store')
+    .send('google-site-verification: google6b23d829f263b9d6.html');
+});
+
 // Buffer in memory, then hand off to the storage backend (Supabase or disk).
 const upload = multer({
   storage: multer.memoryStorage(),
