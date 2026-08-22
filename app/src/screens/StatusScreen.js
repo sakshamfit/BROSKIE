@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput, RefreshControl,
-  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Keyboard, Animated, Easing,
+  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Keyboard, Animated, Easing, PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -16,7 +16,7 @@ import PhotoCropPicker from '../components/PhotoCropPicker';
 import SongCard from '../components/SongCard';
 import SongPicker from '../components/SongPicker';
 import { radius, type, inkBox, marker, stroke, raised } from '../theme';
-import { FadeSlide, Skeleton, motion } from '../motion';
+import { FadeSlide, Skeleton, motion, SpringPressable, haptic, useReducedMotion } from '../motion';
 
 const BG_COLORS = ['#FFE24D', '#fdf8f8', '#e2e3de', '#5d5f5b', '#1c1b1b', '#39444c'];
 
@@ -134,6 +134,7 @@ export default function StatusScreen() {
   const current = viewer?.group.items[viewer.index];
   const isOwnStatus = viewer?.group.user.id === user?.id;
   const [held, setHeld] = useState(false); // story hold-to-pause
+  const reducedMotion = useReducedMotion();
   const progress = useRef(new Animated.Value(0)).current;
   const progressVal = useRef(0);
   const segIdRef = useRef(null);
@@ -169,6 +170,56 @@ export default function StatusScreen() {
   }, [current?.id, held, replyFocused]);
 
   const progressScaleX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+
+  /* ---- story viewer gestures ----
+     `dismissY` follows a downward drag 1:1 (upward is heavily resisted) and
+     the story scales down as it travels, so letting go feels like handing
+     the card back. Holding to pause eases the same scale slightly, giving
+     the pause a visible state as well as a felt one. */
+  const dismissY = useRef(new Animated.Value(0)).current;
+  const holdScale = useRef(new Animated.Value(1)).current;
+  const closeViewerRef = useRef(closeViewer);
+  closeViewerRef.current = closeViewer;
+
+  useEffect(() => {
+    if (reducedMotion) { holdScale.setValue(1); return undefined; }
+    const anim = Animated.spring(holdScale, {
+      toValue: held ? 0.985 : 1, ...motion.springBack, useNativeDriver: true,
+    });
+    anim.start();
+    return () => anim.stop();
+  }, [held, holdScale, reducedMotion]);
+
+  useEffect(() => { dismissY.setValue(0); }, [viewer?.group?.user?.id, dismissY]);
+
+  const viewerPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (e, g) => g.dy > 12 && g.dy > Math.abs(g.dx) * 1.4,
+      onPanResponderGrant: () => { dismissY.stopAnimation(); },
+      onPanResponderMove: (e, g) => dismissY.setValue(g.dy > 0 ? g.dy : g.dy * 0.1),
+      onPanResponderRelease: (e, g) => {
+        if (g.dy > 110 || g.vy > 0.7) {
+          haptic('selection');
+          Animated.timing(dismissY, {
+            toValue: 700, duration: motion.fast, easing: motion.easing.out, useNativeDriver: true,
+          }).start(() => { dismissY.setValue(0); closeViewerRef.current(); });
+          return;
+        }
+        Animated.spring(dismissY, { toValue: 0, velocity: g.vy, ...motion.springBack, useNativeDriver: true }).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dismissY, { toValue: 0, ...motion.springBack, useNativeDriver: true }).start();
+      },
+      onPanResponderTerminationRequest: () => false,
+    }),
+  ).current;
+
+  // Drag distance also shrinks the story, so the gesture reads as physical.
+  const dragScale = dismissY.interpolate({
+    inputRange: [0, 320], outputRange: [1, 0.88], extrapolate: 'clamp',
+  });
+  const viewerScale = Animated.multiply(holdScale, dragScale);
 
   const recent = data.others.filter((group) => !group.allViewed);
   const viewed = data.others.filter((group) => group.allViewed);
@@ -304,13 +355,19 @@ export default function StatusScreen() {
           // Viewer opens with a soft scale/settle — the avatar's story
           // "expands" into the full screen without a jarring pop.
           <FadeSlide key={`story-${viewer.group.user.id}`} from="up" distance={16} scale={0.985} duration={motion.normal} style={{ flex: 1 }}>
-          <View
+          {/* The story itself is draggable: pull it down and it follows the
+              finger, shrinking slightly, then lets go past ~110px. Holding
+              to pause also eases it back a touch, so "paused" is something
+              you can see as well as feel. */}
+          <Animated.View
+            {...viewerPan.panHandlers}
             style={[
               s.viewer,
               {
                 backgroundColor: current.type === 'image' ? '#090909' : current.bg,
                 paddingTop: Math.max(insets.top, 14) + 14,
                 paddingBottom: Math.max(insets.bottom, 16),
+                transform: [{ translateY: dismissY }, { scale: viewerScale }],
               },
             ]}
           >
@@ -452,7 +509,7 @@ export default function StatusScreen() {
                 )}
               </KeyboardAvoidingView>
             )}
-          </View>
+          </Animated.View>
           </FadeSlide>
         )}
       </Modal>
@@ -499,8 +556,12 @@ function StatusRow({ group, onPress, theme, viewed }) {
   const latest = group.items[group.items.length - 1];
   const ringColor = viewed ? theme.graphiteLine : theme.ink;
   return (
-    <Pressable
+    <SpringPressable
+      accessibilityRole="button"
+      accessibilityLabel={`View ${group.user.name}'s status`}
       onPress={onPress}
+      scaleTo={motion.scale.row}
+      haptic="selection"
       style={({ pressed }) => [
         stylesStatic.statusRow,
         { backgroundColor: pressed ? theme.cardAlt : theme.card, borderBottomColor: theme.graphiteLine },
@@ -519,7 +580,7 @@ function StatusRow({ group, onPress, theme, viewed }) {
         </Text>
       </View>
       <Icon name={privacyMeta(latest.audience).icon} size={16} color={theme.muted} />
-    </Pressable>
+    </SpringPressable>
   );
 }
 
