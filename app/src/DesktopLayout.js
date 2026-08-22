@@ -212,7 +212,7 @@ export default function SplitLayout() {
 
         {tab === 'status' && (
           <View style={s.fullPane}>
-            <StatusScreen />
+            <StatusScreen navigation={listNav} />
           </View>
         )}
 
@@ -231,6 +231,7 @@ export default function SplitLayout() {
         {tab === 'colleagues' && (
           <View style={[s.fullPane, s.centeredPane]}>
             <ColleaguesScreen
+              navigation={listNav}
               onOpenChat={(chatId) => { setTab('chats'); setSelectedChatId(chatId); }}
             />
           </View>

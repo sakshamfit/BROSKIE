@@ -13,6 +13,7 @@ import { SpringPressable, motion } from '../motion';
 import UpdateSection from '../components/UpdateSection';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
+import { openProfile } from '../push/routing';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
 
 /**
@@ -87,6 +88,14 @@ export default function SettingsScreen({ navigation, embedded = false }) {
         {/* -------- Account Settings -------- */}
         <MotionIn delay={60}><SectionHeading theme={theme} label="Account Settings" tilt="-1deg" />
         <View style={s.group}>
+          <NavRow
+            theme={theme}
+            icon="person-circle-outline"
+            title="My public profile"
+            subtitle="View your profile the way +ones see it"
+            onPress={() => user?.id && openProfile(user.id)}
+          />
+          <Divider theme={theme} />
           <NavRow
             theme={theme}
             icon="person-outline"

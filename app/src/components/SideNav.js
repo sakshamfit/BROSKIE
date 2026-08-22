@@ -55,6 +55,9 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
           style={railOnly && { alignItems: 'center' }}
         >
           <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={railOnly ? 34 : 40} />
+          {railOnly && (
+            <Text style={[type.labelXs, { color: theme.muted, marginTop: 4 }]}>+one</Text>
+          )}
         </Pressable>
         {!railOnly && (
           <Pressable accessibilityRole="button" accessibilityLabel="Open your profile" onPress={openOwnProfile} style={{ flex: 1 }}>
