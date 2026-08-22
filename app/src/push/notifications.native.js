@@ -52,7 +52,7 @@ Notifications.setNotificationHandler({
   handleNotification: ({ notification }) => {
     const data = notification?.request?.content?.data || {};
     const readingThisChat = currentAppState === 'active'
-      && data.route === 'chat'
+      && (data.route === 'chat' || data.route === 'gc')
       && !!data.chatId
       && data.chatId === viewedChatId;
     const show = !readingThisChat;

@@ -3,7 +3,8 @@ import { AppState } from 'react-native';
 import { io } from 'socket.io-client';
 import { SOCKET_URL, api } from '../api';
 import { useAuth } from './AuthContext';
-import { createMessagingEngine } from '../messaging';
+import { createMessagingEngine, createMessageId } from '../messaging';
+import { GCLocalStore } from '../messaging/GCStore';
 import * as RTC from '../webrtc/rtc';
 import TextOperation from '../ot/TextOperation';
 import { OTManager } from '../ot/OTManager';
@@ -60,6 +61,26 @@ export function ChatProvider({ children }) {
   const docListeners = useRef(new Set());
   const [documents, setDocuments] = useState({}); // chatId -> docs[]
   const [otReady, setOtReady] = useState(false);
+
+  /* ---------------- GC environment (fully separate from direct chats) --
+     GC chats/messages/typing/unread live in their own state namespace and
+     their own cache (GCLocalStore → plusone.gc.v1.<userId>). Nothing in the
+     direct-chat store ever receives a GC row or GC message: incoming socket
+     events are routed by `conversationType`/chat type, so opening, joining,
+     messaging, or leaving a GC can NEVER move, archive, hide, delete,
+     reorder, or replace a normal direct chat. */
+  const [gcChats, setGcChats] = useState([]);
+  const [gcMessages, setGcMessages] = useState({});         // gcId -> message[]
+  const [gcMessagesLoaded, setGcMessagesLoaded] = useState({});
+  const [gcMessagesLoading, setGcMessagesLoading] = useState({});
+  const [gcMessageErrors, setGcMessageErrors] = useState({});
+  const [gcTyping, setGcTyping] = useState({});             // gcId -> {userId: name}
+  const [gcCursors, setGcCursors] = useState({});           // gcId -> cursor
+  const gcStoreRef = useRef(null);
+  const gcIdsRef = useRef(new Set());                       // fast GC-id routing
+  const gcRoomsRef = useRef(new Set());                     // joined gc:{id} rooms
+  const gcPendingRoomsRef = useRef(new Set());              // rooms to join on reconnect
+  const gcPullsRef = useRef(new Set());                     // in-flight older-page pulls
 
   /* ---------------- calls (WebRTC, signalled over the same socket) ---------------- */
   // call: null | { id, chatId, type, direction:'incoming'|'outgoing', status:'ringing'|'connecting'|'ongoing'|'ended', with, startedAt, endedReason }
@@ -150,6 +171,19 @@ export function ChatProvider({ children }) {
     setMessagesLoaded(engine.store.getLoaded());
   }, []);
 
+  /** Mirror the GC-only store into React state (direct store untouched). */
+  const publishGCStore = useCallback(() => {
+    const store = gcStoreRef.current;
+    if (!store) return;
+    setGcChats(store.getChats());
+    setGcMessages(store.getAllMessagesCopy());
+    setGcMessagesLoaded(store.getLoaded());
+    setGcCursors({
+      ...Object.fromEntries(Object.keys(store.messages).map((id) => [id, store.getCursor(id)])),
+    });
+    gcIdsRef.current = new Set(store.getChats().map((c) => c.id));
+  }, []);
+
   /* ---------------- local-first store + outbox ---------------- */
   useEffect(() => {
     const userId = user?.id;
@@ -210,6 +244,15 @@ export function ChatProvider({ children }) {
     (async () => {
       await engine.store.hydrate();
       if (disposed) return;
+      // Migration/isolation: the direct-chat store must NEVER hold GC rows.
+      // Older clients merged GCs into this same cache — once, here, we evict
+      // them (their real home is the GC store, distinct cache key).
+      const engineChats = engine.store.getChats();
+      const staleGCs = engineChats.filter((c) => c?.type === 'gc');
+      if (staleGCs.length) {
+        engine.store.setChats(engineChats.filter((c) => c?.type !== 'gc'));
+        staleGCs.forEach((gc) => engine.store.removeChat(gc.id));
+      }
       publishStore();
       if (engine.store.getChats().length) setChatsLoaded(true);
       engine.outbox.drain();
@@ -218,14 +261,10 @@ export function ChatProvider({ children }) {
         const result = await api.chats();
         if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
         if (!disposed) {
-          engine.store.setChats(result.chats, { fromServer: true });
-          // GCs are fetched separately (they live in their own section) but
-          // share this store, so live message/receipt updates just work.
-          api.gcs().then((gcs) => {
-            if (!disposed && Array.isArray(gcs?.chats) && gcs.chats.length) {
-              engine.store.setChats(gcs.chats, { fromServer: true });
-            }
-          }).catch(() => {});
+          // /api/chats never returns GC rows (server-side filter), and we
+          // defensively drop any that somehow arrive — GCs belong to the GC
+          // environment only.
+          engine.store.setChats(result.chats.filter((c) => c?.type !== 'gc'), { fromServer: true });
           setChatsError(null);
         }
       } catch {
@@ -264,6 +303,99 @@ export function ChatProvider({ children }) {
     };
   }, [token, user?.id, publishStore]);
 
+  /* ---------------- GC-only store lifecycle (isolated cache) ---------------- */
+  useEffect(() => {
+    const userId = user?.id;
+    if (!token || !userId) {
+      gcStoreRef.current?.dispose();
+      gcStoreRef.current = null;
+      setGcChats([]);
+      setGcMessages({});
+      setGcMessagesLoaded({});
+      setGcMessagesLoading({});
+      setGcMessageErrors({});
+      setGcTyping({});
+      setGcCursors({});
+      gcIdsRef.current = new Set();
+      return undefined;
+    }
+
+    let disposed = false;
+    setGcChats([]);
+    setGcMessages({});
+    setGcMessagesLoaded({});
+    setGcMessagesLoading({});
+    setGcMessageErrors({});
+    setGcTyping({});
+    setGcCursors({});
+
+    const store = new GCLocalStore(userId);
+    gcStoreRef.current = store;
+    const unsub = store.subscribe(() => {
+      if (!disposed) publishGCStore();
+    });
+
+    (async () => {
+      await store.hydrate();
+      if (disposed) return;
+      publishGCStore();
+      try {
+        const result = await api.gcs();
+        if (!disposed && Array.isArray(result?.chats)) {
+          store.setChats(result.chats, { fromServer: true });
+        }
+      } catch { /* keep the cached GC list; the refresh button retries */ }
+    })();
+
+    return () => {
+      disposed = true;
+      unsub();
+      store.dispose();
+      if (gcStoreRef.current === store) gcStoreRef.current = null;
+    };
+  }, [token, user?.id, publishGCStore]);
+
+  /** GC-only incoming-message path. `tempId` replaces the optimistic row. */
+  const applyIncomingGCMessage = useCallback((message, tempId = null) => {
+    if (!message?.chatId) return;
+    const store = gcStoreRef.current;
+    if (store) {
+      store.upsertMessage(message.chatId, { ...message, _new: !tempId }, { replaceId: tempId });
+      store.markLoaded(message.chatId);
+    }
+    setGcMessagesLoaded((prev) => ({ ...prev, [message.chatId]: true }));
+    setGcMessageErrors((prev) => {
+      if (!prev[message.chatId]) return prev;
+      const next = { ...prev };
+      delete next[message.chatId];
+      return next;
+    });
+  }, []);
+
+  /* ---- GC socket rooms: join only after membership is re-verified by the
+     server (gc:join), leave on blur, no duplicate listeners (idempotent). */
+  const joinGCRoom = useCallback((gcId) => {
+    if (!gcId || gcRoomsRef.current.has(gcId)) return;
+    const socket = socketRef.current;
+    if (!socket?.connected) {
+      gcPendingRoomsRef.current.add(gcId);
+      return;
+    }
+    gcRoomsRef.current.add(gcId);
+    socket.emit('gc:join', { gcId }, (res) => {
+      if (res?.error) gcRoomsRef.current.delete(gcId);
+      else if (res?.chat) gcStoreRef.current?.upsertChat(res.chat);
+    });
+  }, []);
+
+  const leaveGCRoom = useCallback((gcId) => {
+    if (!gcId) return;
+    gcPendingRoomsRef.current.delete(gcId);
+    if (!gcRoomsRef.current.has(gcId)) return;
+    gcRoomsRef.current.delete(gcId);
+    socketRef.current?.emit('gc:leave', { gcId });
+  }, []);
+
   /* ---------------- socket lifecycle ---------------- */
   useEffect(() => {
     if (!token) {
@@ -288,6 +420,14 @@ export function ChatProvider({ children }) {
         engine.sync.reconnect().catch(() => {});
       }
       otManagerRef.current?.drainOfflineQueue();
+      // Re-join any GC rooms that were waiting for a connection (no dupes:
+      // joinGCRoom is idempotent per gcId).
+      const pending = [...gcPendingRoomsRef.current];
+      gcPendingRoomsRef.current.clear();
+      pending.forEach((gcId) => {
+        gcRoomsRef.current.delete(gcId);
+        joinGCRoom(gcId);
+      });
     });
     socket.on('disconnect', () => {
       setConnected(false);
@@ -378,6 +518,12 @@ export function ChatProvider({ children }) {
     socket.on('settings:updated', ({ settings }) => applySettings(settings));
 
     socket.on('message:new', ({ message, tempId }) => {
+      // Route by explicit conversation type: GC messages land in the GC
+      // store ONLY — they never touch direct chat state.
+      if (message?.conversationType === 'gc' || gcIdsRef.current.has(message?.chatId)) {
+        applyIncomingGCMessage(message, tempId);
+        return;
+      }
       const engine = engineRef.current;
       if (engine) engine.repository.applyIncoming(message, tempId);
       else {
@@ -398,7 +544,17 @@ export function ChatProvider({ children }) {
       });
     });
 
+    // Dedicated GC realtime event (server also sends message:new for older
+    // clients; dedupe by message id is harmless).
+    socket.on('gc:message', ({ message, tempId }) => {
+      if (message) applyIncomingGCMessage(message, tempId);
+    });
+
     socket.on('message:updated', (message) => {
+      if (message?.conversationType === 'gc' || gcIdsRef.current.has(message?.chatId)) {
+        gcStoreRef.current?.upsertMessage(message.chatId, message);
+        return;
+      }
       const engine = engineRef.current;
       if (engine) {
         engine.repository.applyUpdated(message);
@@ -412,6 +568,10 @@ export function ChatProvider({ children }) {
     });
 
     socket.on('message:expired', ({ chatId, messageIds }) => {
+      if (gcIdsRef.current.has(chatId)) {
+        gcStoreRef.current?.removeMessages(chatId, messageIds);
+        return;
+      }
       const engine = engineRef.current;
       if (engine) {
         engine.repository.applyExpired(chatId, messageIds);
@@ -429,6 +589,10 @@ export function ChatProvider({ children }) {
     // "Delete for me" — the server hid a single message only for this user,
     // so drop it locally with no tombstone.
     socket.on('message:hidden', ({ chatId, messageId }) => {
+      if (gcIdsRef.current.has(chatId)) {
+        gcStoreRef.current?.removeMessages(chatId, [messageId]);
+        return;
+      }
       const engine = engineRef.current;
       if (engine) {
         engine.store.removeMessages(chatId, [messageId]);
@@ -443,6 +607,11 @@ export function ChatProvider({ children }) {
     });
 
     socket.on('chat:removed', ({ chatId }) => {
+      if (gcIdsRef.current.has(chatId)) {
+        gcStoreRef.current?.removeChat(chatId);
+        leaveGCRoom(chatId);
+        return;
+      }
       const engine = engineRef.current;
       if (engine) engine.store.removeChat(chatId);
       else setChats((prev) => prev.filter((c) => c.id !== chatId));
@@ -462,8 +631,47 @@ export function ChatProvider({ children }) {
       });
     });
 
-    socket.on('chat:updated', upsertChat);
-    socket.on('chat:new', upsertChat);
+    // Route every incoming chat summary: GC rows go to the GC store, all
+    // other rows (direct/group/community) stay in the direct-chat store.
+    const routeIncomingChat = (chat) => {
+      if (chat?.type === 'gc') {
+        gcStoreRef.current?.upsertChat(chat);
+        return;
+      }
+      upsertChat(chat);
+    };
+    socket.on('chat:updated', routeIncomingChat);
+    socket.on('chat:new', routeIncomingChat);
+
+    // GC-only list updates (same chat summary shape, GC namespaced).
+    socket.on('gc:updated', ({ chat }) => {
+      if (chat?.type === 'gc') gcStoreRef.current?.upsertChat(chat);
+    });
+    // A GC was removed/left — tear the GC environment down, leave its room.
+    socket.on('gc:removed', ({ chatId }) => {
+      gcStoreRef.current?.removeChat(chatId);
+      setGcMessages((prev) => {
+        if (!(chatId in prev)) return prev;
+        const next = { ...prev };
+        delete next[chatId];
+        return next;
+      });
+      [setGcMessagesLoaded, setGcMessagesLoading, setGcMessageErrors].forEach((setState) => {
+        setState((prev) => {
+          if (!(chatId in prev)) return prev;
+          const next = { ...prev };
+          delete next[chatId];
+          return next;
+        });
+      });
+      setGcTyping((prev) => {
+        if (!(chatId in prev)) return prev;
+        const next = { ...prev };
+        delete next[chatId];
+        return next;
+      });
+      leaveGCRoom(chatId);
+    });
 
     // Per-conversation chat theme changed (this device or another
     // participant). Patch the chat summary immediately and notify any
@@ -536,13 +744,39 @@ export function ChatProvider({ children }) {
       const engine = engineRef.current;
       if (engine) engine.store.setChats(engine.store.getChats().map(patch));
       else setChats((prev) => prev.map(patch));
+      // Keep GC member presence fresh too (separate store, same event).
+      const gcStore = gcStoreRef.current;
+      if (gcStore) {
+        gcStore.setChats(gcStore.getChats().map((c) => ({
+          ...c,
+          members: c.members?.map((m) => (m.id === userId ? { ...m, isOnline, lastSeen } : m)),
+        })), { fromServer: false });
+      }
     });
 
     socket.on('typing', ({ chatId, userId, name, isTyping }) => {
+      if (gcIdsRef.current.has(chatId)) {
+        setGcTyping((prev) => {
+          const forGC = { ...(prev[chatId] || {}) };
+          if (isTyping) forGC[userId] = name; else delete forGC[userId];
+          return { ...prev, [chatId]: forGC };
+        });
+        return;
+      }
       setTyping((prev) => {
         const forChat = { ...(prev[chatId] || {}) };
         if (isTyping) forChat[userId] = name; else delete forChat[userId];
         return { ...prev, [chatId]: forChat };
+      });
+    });
+
+    // Dedicated GC typing events (GC chat uses gc:typing; typing is kept as
+    // a fallback for parity with older servers).
+    socket.on('gc:typing', ({ gcId, userId, name, isTyping }) => {
+      setGcTyping((prev) => {
+        const forGC = { ...(prev[gcId] || {}) };
+        if (isTyping) forGC[userId] = name; else delete forGC[userId];
+        return { ...prev, [gcId]: forGC };
       });
     });
 
@@ -613,7 +847,7 @@ export function ChatProvider({ children }) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [token, upsertChat, logout, applySettings]);
+  }, [token, upsertChat, logout, applySettings, applyIncomingGCMessage, joinGCRoom, leaveGCRoom]);
 
   /* ---------------- calls: WebRTC plumbing ---------------- */
 
@@ -766,6 +1000,232 @@ export function ChatProvider({ children }) {
     });
   }, [localStream]);
 
+  /* ---------------- GC actions (isolated: never touch direct state) ---------------- */
+
+  /** Refresh My GCs from the GC-only API into the GC store. */
+  const refreshGCs = useCallback(async () => {
+    try {
+      const result = await api.gcs();
+      if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
+      const store = gcStoreRef.current;
+      if (store) store.setChats(result.chats, { fromServer: true });
+      return result.chats;
+    } catch (error) {
+      throw error;
+    }
+  }, []);
+
+  /** Load the latest page of one GC's messages (membership enforced server
+   *  side). Joins the GC room first so live gc:message events flow. */
+  const loadGCMessages = useCallback(async (gcId) => {
+    const store = gcStoreRef.current;
+    if (!gcId) return [];
+    joinGCRoom(gcId);
+    if (store) {
+      if (store.getMessages(gcId).length) store.markLoaded(gcId);
+    }
+    setGcMessagesLoading((prev) => ({ ...prev, [gcId]: true }));
+    setGcMessageErrors((prev) => {
+      if (!prev[gcId]) return prev;
+      const next = { ...prev };
+      delete next[gcId];
+      return next;
+    });
+    try {
+      const cursor = store?.getCursor(gcId) || null;
+      let page;
+      if (cursor?.after) {
+        page = await api.gcMessages(gcId, { after: cursor.after, afterId: cursor.afterId, limit: 50 });
+        if (store) {
+          if (page?.messages?.length) store.mergeMessages(gcId, page.messages);
+          else store.markLoaded(gcId);
+        }
+      } else {
+        page = await api.gcMessages(gcId, { limit: 50 });
+        if (store) store.mergeMessages(gcId, page?.messages || []);
+      }
+      if (store && page) {
+        store.setCursor(gcId, {
+          hasMore: !!page.hasMore,
+          after: page.cursor?.after || cursor?.after || null,
+          afterId: page.cursor?.afterId || cursor?.afterId || null,
+          before: page.cursor?.before || cursor?.before || null,
+          beforeId: page.cursor?.beforeId || cursor?.beforeId || null,
+        });
+        store.markLoaded(gcId);
+      }
+      return store ? store.getMessages(gcId) : [];
+    } catch (error) {
+      store?.markLoaded(gcId);
+      setGcMessageErrors((prev) => ({ ...prev, [gcId]: 'Unable to load GC messages. Check your connection and retry.' }));
+      throw error;
+    } finally {
+      setGcMessagesLoading((prev) => ({ ...prev, [gcId]: false }));
+    }
+  }, [joinGCRoom]);
+
+  /** Page older messages for a GC (one in-flight pull per GC). */
+  const loadOlderGCMessages = useCallback(async (gcId) => {
+    const store = gcStoreRef.current;
+    if (!store || gcPullsRef.current.has(gcId)) return;
+    const cursor = store.getCursor(gcId);
+    if (cursor?.hasMore === false) return;
+    const oldest = store.getMessages(gcId)[0];
+    if (!oldest) return loadGCMessages(gcId);
+    gcPullsRef.current.add(gcId);
+    try {
+      const page = await api.gcMessages(gcId, {
+        before: oldest.createdAt || oldest.clientCreatedAt,
+        beforeId: oldest.id,
+        limit: 50,
+      });
+      if (page?.messages?.length) store.mergeMessages(gcId, page.messages);
+      store.setCursor(gcId, { hasMore: !!page?.hasMore });
+    } catch {
+      // Keep the visible page; next scroll retries.
+    } finally {
+      gcPullsRef.current.delete(gcId);
+    }
+  }, [gcPullsRef, loadGCMessages]);
+
+  /**
+   * Optimistic GC send: a pending bubble appears in the GC's own message
+   * list immediately; the server (idempotent on clientId) replaces it.
+   * Failed sends keep a retry affordance — the direct chats are never
+   * touched by any of this.
+   */
+  const sendGCMessage = useCallback((gcId, payload = {}) => {
+    const store = gcStoreRef.current;
+    const senderId = user?.id;
+    if (!store || !senderId || !gcId) return null;
+    const clientId = payload.clientId || createMessageId();
+    const nowTs = payload.clientCreatedAt || Date.now();
+    const localMedia = payload.mediaUrl && !/^https?:|^\/uploads\//.test(payload.mediaUrl) ? payload.mediaUrl : null;
+    const optimistic = {
+      id: clientId,
+      clientId,
+      chatId: gcId,
+      conversationType: 'gc',
+      gcId,
+      senderId,
+      type: payload.type || 'text',
+      body: payload.body || '',
+      mediaUrl: payload.mediaUrl || null,
+      mediaThumbUrl: payload.mediaThumbUrl || null,
+      duration: payload.duration || 0,
+      createdAt: nowTs,
+      clientCreatedAt: nowTs,
+      status: 'sending',
+      pending: true,
+      _new: true,
+      reactions: [],
+      replyTo: payload.replyToMessage || null,
+      localMediaUri: localMedia,
+      uploadProgress: localMedia ? 0 : null,
+    };
+    store.upsertMessage(gcId, optimistic);
+    (async () => {
+      let sendPayload = { ...payload };
+      try {
+        // Local image first uploads (same flow as the direct-chat outbox),
+        // then the server stores the remote URL — never a file:// URI.
+        if (localMedia) {
+          const web = typeof document !== 'undefined';
+          const type = payload.mimeType || (web ? 'image/png' : 'image/jpeg');
+          const name = `gc-${Date.now()}.${web ? 'png' : 'jpg'}`;
+          const { url } = await api.uploadFile(localMedia, name, type);
+          sendPayload = {
+            ...sendPayload,
+            mediaUrl: url,
+            mediaThumbUrl: payload.mediaThumbUrl || null,
+            localMediaUri: null,
+          };
+          store.upsertMessage(gcId, { ...optimistic, uploadProgress: 100, localMediaUri: null, mediaUrl: url });
+        }
+        const r = await api.sendGCMessage(gcId, { ...sendPayload, clientId });
+        if (r?.message) store.upsertMessage(gcId, r.message, { replaceId: clientId });
+      } catch (e) {
+        store.upsertMessage(gcId, { ...optimistic, status: 'failed', pending: false, error: e.message || 'Could not send' });
+      }
+    })();
+    return clientId;
+  }, [user?.id]);
+
+  /** Edit one of my own GC text messages (same server OT path as direct
+   *  chats; the message is looked up in the GC-only store). */
+  const editGCMessage = useCallback((messageId, body, options = {}) => {
+    return new Promise((resolve, reject) => {
+      const store = gcStoreRef.current;
+      let found = null;
+      if (store) {
+        for (const list of Object.values(store.getAllMessagesCopy())) {
+          const m = list.find((x) => x.id === messageId);
+          if (m) { found = m; break; }
+        }
+      }
+      const baseVersion = options.baseVersion ?? found?.otVersion ?? 0;
+      const socket = socketRef.current;
+      if (!socket?.connected) return reject(new Error('Not connected'));
+      socket.emit('message:edit', { messageId, body, baseVersion }, (res) => {
+        if (res?.error) reject(new Error(res.error));
+        else resolve(res.message);
+      });
+    });
+  }, []);
+
+  /** Retry a failed GC message. */
+  const retryGCMessage = useCallback((gcId, messageId) => {
+    const store = gcStoreRef.current;
+    if (!store || !gcId || !messageId) return;
+    const message = store.getMessages(gcId).find((m) => m.id === messageId || m.clientId === messageId);
+    if (!message) return;
+    store.upsertMessage(gcId, { ...message, status: 'sending', pending: true, error: null });
+    (async () => {
+      try {
+        let mediaUrl = message.mediaUrl;
+        let localMediaUri = message.localMediaUri || null;
+        // Re-upload a local image that never made it to the first attempt.
+        if (message.type === 'image' && localMediaUri) {
+          const web = typeof document !== 'undefined';
+          const type = message.mimeType || (web ? 'image/png' : 'image/jpeg');
+          const name = `gc-${Date.now()}.${web ? 'png' : 'jpg'}`;
+          const { url } = await api.uploadFile(localMediaUri, name, type);
+          mediaUrl = url;
+          localMediaUri = null;
+          store.upsertMessage(gcId, { ...message, mediaUrl: url, localMediaUri: null, uploadProgress: 100 });
+        }
+        const r = await api.sendGCMessage(gcId, {
+          type: message.type,
+          body: message.body,
+          mediaUrl,
+          mediaThumbUrl: message.mediaThumbUrl,
+          duration: message.duration,
+          clientId: message.clientId || message.id,
+          clientCreatedAt: message.clientCreatedAt,
+          replyTo: message.replyTo?.id || null,
+          replyToMessage: message.replyTo || null,
+        });
+        if (r?.message) store.upsertMessage(gcId, r.message, { replaceId: message.clientId || message.id });
+      } catch (e) {
+        store.upsertMessage(gcId, { ...message, status: 'failed', pending: false, error: e.message || 'Could not send' });
+      }
+    })();
+  }, []);
+
+  /** Clear a GC's unread badge (server read receipts by chatId are shared
+   *  machinery; the badge itself lives only in GC state). */
+  const markGCRead = useCallback((gcId) => {
+    socketRef.current?.emit('message:read', { chatId: gcId });
+    const store = gcStoreRef.current;
+    if (store) {
+      store.setChats(store.getChats().map((c) => (c.id === gcId ? { ...c, unread: 0 } : c)), { fromServer: false });
+    }
+  }, []);
+
+  const setGCTypingState = useCallback((gcId, isTyping) => {
+    socketRef.current?.emit('gc:typing', { gcId, isTyping });
+  }, []);
+
   /* ---------------- actions ---------------- */
 
   const refreshChats = useCallback(async () => {
@@ -773,21 +1233,16 @@ export function ChatProvider({ children }) {
     try {
       const engine = engineRef.current;
       if (engine) {
-        const chatsResult = await engine.sync.refreshChatsFromServer();
-        // GCs (Instagram-style group chats) ride the same live store — the
-        // Chats inbox filters them out, the GC section filters for them.
-        try {
-          const gcs = await api.gcs();
-          if (Array.isArray(gcs?.chats) && gcs.chats.length) {
-            engine.store.setChats(gcs.chats, { fromServer: true });
-          }
-        } catch {}
+        await engine.sync.refreshChatsFromServer();
+        // GCs never ride the direct-chat store — refresh them separately.
+        const gcs = await refreshGCs().catch(() => []);
         setChatsLoaded(true);
-        return chatsResult;
+        return gcs;
       }
-      const [result, gcs] = await Promise.all([api.chats(), api.gcs().catch(() => ({ chats: [] }))]);
+      const result = await api.chats();
       if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
-      setChats(sortChats([...result.chats, ...(Array.isArray(gcs?.chats) ? gcs.chats : [])]));
+      setChats(sortChats(result.chats.filter((c) => c?.type !== 'gc')));
+      await refreshGCs().catch(() => {});
       setChatsLoaded(true);
       return result.chats;
     } catch (error) {
@@ -796,7 +1251,7 @@ export function ChatProvider({ children }) {
       setChatsLoaded(true);
       throw error;
     }
-  }, []);
+  }, [refreshGCs]);
 
   const refreshActivity = useCallback(async () => {
     try {
@@ -1028,6 +1483,18 @@ export function ChatProvider({ children }) {
         onChatThemeEvent, onDocEvent,
         refreshDocuments, createDocument,
         socketRef,
+        /* ---- GC environment: separate state/cache/events ---- */
+        gcChats, gcMessages, gcMessagesLoaded, gcMessagesLoading, gcMessageErrors,
+        gcTyping, gcCursors, gcConnected: connected,
+        refreshGCs, loadGCMessages, loadOlderGCMessages, sendGCMessage, retryGCMessage,
+        editGCMessage, markGCRead, setGCTypingState, joinGCRoom, leaveGCRoom,
+        setGcMessages: (updater) => {
+          const store = gcStoreRef.current;
+          if (!store) return;
+          const prev = store.getAllMessagesCopy();
+          const next = typeof updater === 'function' ? updater(prev) : updater;
+          store.replaceMessagesMap(next);
+        },
         otManager: otManagerRef.current,
         // exposed for lightweight local patches (e.g. optimistic star/timer state)
         setMessages: (updater) => {

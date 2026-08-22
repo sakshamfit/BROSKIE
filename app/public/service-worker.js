@@ -154,7 +154,7 @@ self.addEventListener('push', (event) => {
     try {
       const focused = await hasFocusedClient();
       const readingThisChat = focused
-        && data.route === 'chat'
+        && (data.route === 'chat' || data.route === 'gc')
         && !!data.chatId
         && data.chatId === viewingChatId;
       if (readingThisChat) return;

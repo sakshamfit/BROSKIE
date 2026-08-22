@@ -166,6 +166,14 @@ export function flushPendingRoute() {
           navigationRef.navigate('Conversation', { chatId: data.chatId });
         }
         break;
+      case 'gc':
+        // GC notifications open the GC environment (GCDetail) — the Chats
+        // tab is never activated by a GC message.
+        if (data.chatId) {
+          requestHomeTab('gc');
+          navigationRef.navigate('GCDetail', { chatId: data.chatId });
+        }
+        break;
       case 'activity':
         navigationRef.navigate('Activity');
         break;
@@ -212,6 +220,7 @@ export function routeFromUrl(url) {
   const [head, id] = path.split('/');
   switch (head) {
     case 'chat': return id ? { route: 'chat', chatId: id } : null;
+    case 'gc': return id ? { route: 'gc', chatId: id } : null;
     case 'activity': return { route: 'activity' };
     case 'colleagues': return { route: 'colleagues' };
     case 'network': return { route: 'network' };

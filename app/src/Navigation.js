@@ -25,6 +25,9 @@ const ConversationScreen = lazyScreen(() => import('./screens/ConversationScreen
 const NewChatScreen = lazyScreen(() => import('./screens/NewChatScreen'), { label: 'New Chat' });
 const NetworkScreen = lazyScreen(() => import('./screens/NetworkScreen'), { label: 'Network' });
 const GCScreen = lazyScreen(() => import('./screens/GCScreen'), { label: 'GC' });
+// GC environment: its own detail + chat screens, never the Chats stack.
+const GCDetailScreen = lazyScreen(() => import('./screens/GCDetailScreen'), { label: 'GC Details' });
+const GCChatScreen = lazyScreen(() => import('./screens/GCChatScreen'), { label: 'GC Chat' });
 const ColleaguesScreen = lazyScreen(() => import('./screens/ColleaguesScreen'), { label: 'Colleagues' });
 const SettingsScreen = lazyScreen(() => import('./screens/SettingsScreen'), { label: 'Settings' });
 const ChatInfoScreen = lazyScreen(() => import('./screens/ChatInfoScreen'), { label: 'Chat Info' });
@@ -47,12 +50,15 @@ const Stack = createNativeStackNavigator();
 /** Floating tab bar — bottom nav for phones (and tablets in portrait narrower than split). */
 function HomeTabs({ navigation }) {
   const { theme } = useTheme();
-  const { chats } = useChat();
+  const { chats, gcChats } = useChat();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState('network');
-  // The badge counts the Chats inbox only — GC unread lives on the GC tab's
-  // own rows (GC conversations never appear in Chats).
-  const unread = chats.reduce((n, c) => n + (c.archived || c.type === 'gc' ? 0 : c.unread), 0);
+  // Completely separate unread counters:
+  //   - Chats badge = direct/private conversations only (no GC rows in the
+  //     direct store at all).
+  //   - GC badge = GC unread (gcChats), shown on the GC tab.
+  const unread = chats.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
+  const gcUnread = gcChats.reduce((n, c) => n + (c.archived ? 0 : c.unread || 0), 0);
   const s = makeStyles(theme);
 
   // Feed first, chat in the centre: Network → GC → Chats → Colleagues →
@@ -64,7 +70,7 @@ function HomeTabs({ navigation }) {
   // part of the swipe strip.
   const TABS = [
     { key: 'network', label: 'Network', icon: 'people' },
-    { key: 'gc', label: 'GC', icon: 'gc', outlineOnly: true },
+    { key: 'gc', label: 'GC', icon: 'gc', outlineOnly: true, badge: gcUnread },
     { key: 'chats', label: 'Chats', icon: 'chatbubble', badge: unread },
     { key: 'colleagues', label: 'Colleagues', icon: 'school-outline', outlineOnly: true },
     { key: 'settings', label: 'Settings', icon: 'settings' },
@@ -77,7 +83,11 @@ function HomeTabs({ navigation }) {
   // tab bar updates at 60fps without re-rendering the page strip.
   const swipeProgress = useRef(new Animated.Value(0)).current;
 
-  const openChat = (chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); };
+  // A GC NEVER opens the normal Chats tab or the Conversation screen. Its
+  // flow stays entirely inside the GC environment: GC list → GCDetail →
+  // GCChat. The Chats tab keeps its own state and its own chats untouched.
+  const openDirectChat = (chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); };
+  const openGC = (chatId) => { navigation.navigate('GCDetail', { chatId }); };
 
   // Push deep links can target a Home page (e.g. a colleague request routes
   // to the Colleagues tab). Tab state lives here, not in navigation state,
@@ -104,9 +114,9 @@ function HomeTabs({ navigation }) {
             key: p.key,
             render: () => {
               if (p.key === 'chats') return <ChatListScreen navigation={navigation} />;
-              if (p.key === 'gc') return <GCScreen navigation={navigation} onOpenChat={openChat} />;
-              if (p.key === 'colleagues') return <ColleaguesScreen navigation={navigation} onOpenChat={openChat} />;
-              return <NetworkScreen navigation={navigation} onOpenChat={openChat} />;
+              if (p.key === 'gc') return <GCScreen navigation={navigation} onOpenChat={openGC} />;
+              if (p.key === 'colleagues') return <ColleaguesScreen navigation={navigation} onOpenChat={openDirectChat} />;
+              return <NetworkScreen navigation={navigation} onOpenChat={openDirectChat} />;
             },
           }))}
           index={pageIndex}
@@ -310,6 +320,11 @@ export default function Navigation() {
             <Stack.Screen name="UserProfile" component={UserProfileScreen} />
             <Stack.Screen name="PostDetail" component={PostDetailScreen} />
             <Stack.Screen name="Conversation" component={ConversationScreen} />
+            {/* GC environment — its own stack entries. Back from GCChat goes
+                to GCDetail; GCDetail back goes to Home with the GC tab still
+                active. Opening any of these never touches the Chats tab. */}
+            <Stack.Screen name="GCDetail" component={GCDetailScreen} />
+            <Stack.Screen name="GCChat" component={GCChatScreen} />
             <Stack.Screen name="NewChat" component={NewChatScreen} />
             <Stack.Screen name="ChatInfo" component={ChatInfoScreen} />
             <Stack.Screen name="Starred" component={StarredMessagesScreen} />
