@@ -6,6 +6,7 @@ import { useTheme } from '../store/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { Avatar } from './common';
 import { type, inkBox, marker, stroke } from '../theme';
+import { openProfile } from '../push/routing';
 
 /**
  * Persistent sidebar — the "SideNavBar" from the web mockup. Logo + New-chat
@@ -17,10 +18,16 @@ import { type, inkBox, marker, stroke } from '../theme';
  * medium Android tablet — so the list + detail panes still have room to
  * breathe, the same way native iPad apps collapse their sidebar.
  */
-export default function SideNav({ active, onNavigate, onNewChat, onSettings, onHelp, onLogout, railOnly = false }) {
+export default function SideNav({ active, onNavigate, onNewChat, onSettings, onHelp, onLogout, onOpenProfile, railOnly = false }) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const s = makeStyles(theme);
+
+  const openOwnProfile = () => {
+    if (!user?.id) return;
+    if (onOpenProfile) onOpenProfile(user.id);
+    else openProfile(user.id);
+  };
 
   const ITEMS = [
     { key: 'network', label: 'Network', icon: 'people' },
@@ -40,26 +47,30 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
       ]}
     >
       <View style={[s.brandRow, railOnly && s.brandRowRail]}>
-        <Pressable onPress={() => onNavigate?.('activity')} hitSlop={6} style={railOnly && { alignItems: 'center' }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open your profile"
+          onPress={openOwnProfile}
+          hitSlop={6}
+          style={railOnly && { alignItems: 'center' }}
+        >
           <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={railOnly ? 34 : 40} />
         </Pressable>
         {!railOnly && (
-          <Pressable onPress={() => onNavigate?.('activity')} style={{ flex: 1 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Open your profile" onPress={openOwnProfile} style={{ flex: 1 }}>
             <Text style={s.wordmark}>+one</Text>
-            <Text style={[type.labelXs, { color: theme.muted }]}>ACTIVITY</Text>
+            <Text style={[type.labelXs, { color: theme.muted }]}>YOUR PROFILE</Text>
           </Pressable>
         )}
-        {railOnly && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Activity"
-            onPress={() => onNavigate?.('activity')}
-            hitSlop={6}
-            style={{ marginTop: 12, alignItems: 'center' }}
-          >
-            <Icon name="heart-outline" size={20} color={theme.ink} />
-          </Pressable>
-        )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Activity"
+          onPress={() => onNavigate?.('activity')}
+          hitSlop={6}
+          style={railOnly ? { marginTop: 12, alignItems: 'center' } : s.activityHit}
+        >
+          <Icon name="heart-outline" size={railOnly ? 20 : 22} color={theme.ink} />
+        </Pressable>
       </View>
 
       <SpringPressable
@@ -147,6 +158,7 @@ const makeStyles = (t) => StyleSheet.create({
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
   brandRowRail: { flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
   wordmark: { ...type.headlineSm, fontSize: 22, color: t.text, fontStyle: 'italic' },
+  activityHit: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   newBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     paddingVertical: 11, marginBottom: 24,

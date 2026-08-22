@@ -2,34 +2,42 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
+import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { type, stroke } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { openProfile } from '../push/routing';
 
 /**
  * Instagram-style top bar: +one wordmark on the left, heart on the right.
- * Tapping either opens Activity (requests, likes, calls).
+ * The wordmark is the quick way to see your own public profile; the heart
+ * remains Activity (requests, likes, calls).
  */
 export default function BrandHeader({ navigation, onOpenActivity, bordered = true }) {
   const { theme } = useTheme();
+  const { user } = useAuth();
   const chat = useChat();
   const unread = chat?.activityUnread || 0;
   const s = makeStyles(theme);
 
-  const open = () => {
+  const openActivity = () => {
     if (onOpenActivity) onOpenActivity();
     else navigation?.navigate?.('Activity');
+  };
+
+  const openOwnProfile = () => {
+    if (user?.id) openProfile(user.id);
   };
 
   return (
     <View style={[s.header, bordered && { borderBottomWidth: stroke.ink, borderBottomColor: theme.ink }]}>
       <SpringPressable
         accessibilityRole="button"
-        accessibilityLabel="Open activity"
-        onPress={open}
+        accessibilityLabel="Open your profile"
+        onPress={openOwnProfile}
         hitSlop={8}
-        style={({ pressed }) => [s.wordmarkHit, pressed && { opacity: 0.55 }]}
-        scaleTo={motion.scale.row}
+        style={({ pressed }) => [s.wordmarkHit, pressed && { opacity: 0.7 }]}
+        scaleTo={motion.scale.chip}
         haptic="selection"
       >
         <Text style={s.wordmark}>+one</Text>
@@ -38,10 +46,10 @@ export default function BrandHeader({ navigation, onOpenActivity, bordered = tru
       <SpringPressable
         accessibilityRole="button"
         accessibilityLabel="Activity"
-        onPress={open}
+        onPress={openActivity}
         hitSlop={8}
-        style={({ pressed }) => [s.heartHit, pressed && { opacity: 0.55 }]}
-        scaleTo={motion.scale.row}
+        style={s.heartHit}
+        scaleTo={motion.scale.icon}
         haptic="selection"
       >
         <Icon name="heart-outline" size={26} color={theme.ink} />

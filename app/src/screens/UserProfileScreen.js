@@ -22,8 +22,10 @@ import { SpringPressable, motion } from '../motion';
  * posts (audience-filtered by the server). Follow and Message from here.
  */
 export default function UserProfileScreen({ navigation, route, embedded = false, onOpenChat }) {
-  const userId = route?.params?.userId;
   const { user: me } = useAuth();
+  // If a caller opens the Profile screen without a user id, show the signed-in
+  // account's own profile. This keeps the top-left +one shortcut resilient.
+  const userId = route?.params?.userId || me?.id;
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState(null);
@@ -38,7 +40,10 @@ export default function UserProfileScreen({ navigation, route, embedded = false,
   const s = makeStyles(theme);
 
   const load = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     setError('');
     try {
       const [{ profile: p }, { posts: list, nextBefore: nb }] = await Promise.all([
