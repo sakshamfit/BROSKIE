@@ -9,7 +9,8 @@ import { AUDIENCE } from './AudiencePicker';
 import SongCard from './SongCard';
 import DoubleTapLike from './DoubleTapLike';
 import { openProfile } from '../push/routing';
-import { type, inkBox, marker, dashedRule, raised } from '../theme';
+import { SpringPressable, IconSwap, Bloom, Pop, motion, haptic } from '../motion';
+import { type, inkBox, dashedRule, raised } from '../theme';
 
 const INSTAGRAM_HEART = '#ED4956';
 
@@ -73,33 +74,48 @@ export default function PostCard({
           </View>
         </Pressable>
         {showFollow && !post.mine && typeof post.following === 'boolean' && !!onToggleFollow && (
-          <Pressable
+          <SpringPressable
             accessibilityRole="button"
             accessibilityLabel={post.following ? `Unfollow ${post.author.name}` : `Follow ${post.author.name}`}
-            onPress={() => onToggleFollow(post)}
-            hitSlop={6}
-            style={({ pressed }) => [
+            onPress={() => { haptic(post.following ? 'selection' : 'success'); onToggleFollow(post); }}
+            scaleTo={motion.scale.chip}
+            hitSlop={8}
+            style={[
               s.followBtn,
               {
                 borderColor: post.following ? theme.graphiteLine : theme.ink,
-                backgroundColor: post.following ? 'transparent' : pressed ? theme.cardAlt : theme.cardAlt,
+                backgroundColor: post.following ? 'transparent' : theme.cardAlt,
               },
             ]}
           >
-            <Icon
-              name={post.following ? 'checkmark' : 'person-add-outline'}
-              size={12}
-              color={post.following ? theme.muted : theme.ink}
-            />
-            <Text style={[type.labelXs, { color: post.following ? theme.muted : theme.ink }]}>
-              {post.following ? 'FOLLOWING' : 'FOLLOW'}
-            </Text>
-          </Pressable>
+            {/* the icon turns over (add → check) instead of being swapped out,
+                so following someone reads as a state settling, not a redraw */}
+            <View style={s.followInner}>
+              <IconSwap
+                active={post.following}
+                size={12}
+                spin={45}
+                on={<Icon name="checkmark" size={12} color={theme.muted} />}
+                off={<Icon name="person-add-outline" size={12} color={theme.ink} />}
+              />
+              <Text style={[type.labelXs, { color: post.following ? theme.muted : theme.ink }]}>
+                {post.following ? 'FOLLOWING' : 'FOLLOW'}
+              </Text>
+            </View>
+          </SpringPressable>
         )}
         {post.mine && !!onDelete && (
-          <Pressable onPress={() => onDelete(post)} hitSlop={8} style={{ padding: 4 }}>
+          <SpringPressable
+            accessibilityRole="button"
+            accessibilityLabel="Delete post"
+            onPress={() => onDelete(post)}
+            scaleTo={motion.scale.icon}
+            haptic="warning"
+            hitSlop={8}
+            style={{ padding: 4 }}
+          >
             <Icon name="trash-outline" size={16} color={theme.muted} />
-          </Pressable>
+          </SpringPressable>
         )}
       </View>
 
@@ -138,38 +154,77 @@ export default function PostCard({
 
       {!!post.tag && (
         <View style={{ marginTop: 12, alignSelf: 'flex-start' }}>
-          <Pressable onPress={onTagPress ? () => onTagPress(post.tag) : undefined} disabled={!onTagPress}>
+          <SpringPressable
+            onPress={onTagPress ? () => onTagPress(post.tag) : undefined}
+            disabled={!onTagPress}
+            scaleTo={motion.scale.chip}
+            haptic={onTagPress ? 'selection' : undefined}
+          >
             <TapeChip label={`#${post.tag}`} tone={post.tag === activeTag ? 'accent' : 'ink'} />
-          </Pressable>
+          </SpringPressable>
         </View>
       )}
 
       <View style={[dashedRule(theme), { marginTop: 16, marginBottom: 12 }]} />
 
       <View style={s.actions}>
-        <Pressable
+        <LikeAction post={post} onToggleLike={onToggleLike} theme={theme} s={s} />
+        <SpringPressable
           accessibilityRole="button"
-          accessibilityLabel={post.liked ? 'Unlike' : 'Like'}
-          onPress={() => onToggleLike?.(post)}
-          style={({ pressed }) => [s.action, pressed && { transform: [{ scale: 1.12 }] }]}
-          hitSlop={8}
-        >
-          <Icon name={post.liked ? 'heart' : 'heart-outline'} size={24} color={post.liked ? INSTAGRAM_HEART : theme.ink} />
-          {post.likes > 0 && (
-            <Text style={[type.labelSm, { color: post.liked ? INSTAGRAM_HEART : theme.ink }]}>{post.likes}</Text>
-          )}
-        </Pressable>
-        <Pressable
+          accessibilityLabel="Comments"
           onPress={onOpenComments ? () => onOpenComments(post) : undefined}
           disabled={!onOpenComments}
-          style={({ pressed }) => [s.action, pressed && marker(theme, 1)]}
-          hitSlop={6}
+          scaleTo={motion.scale.chip}
+          haptic="selection"
+          style={s.action}
+          hitSlop={8}
         >
-          <Icon name="chatbubble-outline" size={16} color={theme.graphite} />
-          <Text style={[type.labelSm, { color: theme.graphite }]}>{post.comments}</Text>
-        </Pressable>
+          <View style={s.actionInner}>
+            <Icon name="chatbubble-outline" size={16} color={theme.graphite} />
+            <Text style={[type.labelSm, { color: theme.graphite }]}>{post.comments}</Text>
+          </View>
+        </SpringPressable>
       </View>
     </DoubleTapLike>
+  );
+}
+
+/**
+ * The like control. Three things happen on one tap, all native driven:
+ *   - the button compresses and springs back (the finger is answered),
+ *   - the heart morphs outline → filled with a pop (the state changed),
+ *   - a ring blooms outward once (the energy of the action).
+ * Un-liking gets the morph but no bloom and no impact haptic — taking
+ * something back should feel quieter than giving it.
+ */
+function LikeAction({ post, onToggleLike, theme, s }) {
+  const liked = !!post.liked;
+  return (
+    <SpringPressable
+      accessibilityRole="button"
+      accessibilityLabel={liked ? 'Unlike' : 'Like'}
+      onPress={() => { haptic(liked ? 'selection' : 'impact'); onToggleLike?.(post); }}
+      scaleTo={0.88}
+      style={s.action}
+      hitSlop={10}
+    >
+      <View style={s.actionInner}>
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+          <Bloom active={liked} color={INSTAGRAM_HEART} size={30} />
+          <IconSwap
+            active={liked}
+            size={24}
+            on={<Icon name="heart" size={24} color={INSTAGRAM_HEART} />}
+            off={<Icon name="heart-outline" size={24} color={theme.ink} />}
+          />
+        </View>
+        {post.likes > 0 && (
+          <Pop trigger={post.likes} firstStatic from={0.6}>
+            <Text style={[type.labelSm, { color: liked ? INSTAGRAM_HEART : theme.ink }]}>{post.likes}</Text>
+          </Pop>
+        )}
+      </View>
+    </SpringPressable>
   );
 }
 
@@ -181,10 +236,11 @@ const makeStyles = (t) => StyleSheet.create({
   noteHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   noteImage: { marginTop: 14, overflow: 'hidden', alignSelf: 'center' },
   actions: { flexDirection: 'row', gap: 22 },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2, paddingHorizontal: 2 },
+  action: { paddingVertical: 2, paddingHorizontal: 2 },
+  actionInner: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   followBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
     borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5,
     alignSelf: 'flex-start', marginLeft: 8,
   },
+  followInner: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 });

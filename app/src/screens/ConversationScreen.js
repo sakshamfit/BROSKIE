@@ -1014,11 +1014,16 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
           {voiceBusy ? (
             <ActivityIndicator size="small" color={theme.onSendButton} />
           ) : (
-            <Icon
-              name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
-              size={18}
-              color={theme.onSendButton}
-            />
+            // The composer's icon changes meaning as you type (mic → send).
+            // A pop on every change makes the button feel like it *became*
+            // something else, instead of silently swapping glyphs.
+            <Pop trigger={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'} firstStatic from={0.7}>
+              <Icon
+                name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
+                size={18}
+                color={theme.onSendButton}
+              />
+            </Pop>
           )}
         </SpringPressable>
         </View>

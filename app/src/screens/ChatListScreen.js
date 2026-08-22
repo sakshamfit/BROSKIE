@@ -14,7 +14,7 @@ import {
   FrostedBackdrop, GoldTick, hasGoldTick,
 } from '../components/common';
 import { type, inkBox, marker, radius, stroke } from '../theme';
-import { Skeleton, TypingDots, SheetSpringIn, SpringPressable, FadeSlide, Pop, haptic, motion } from '../motion';
+import { Skeleton, TypingDots, SpringPressable, FadeSlide, Pop, haptic, motion, BottomSheet } from '../motion';
 import { api } from '../api';
 import { confirm } from '../hooks/confirm';
 import { useDebouncedCallback } from '../rateLimit';
@@ -269,11 +269,19 @@ export default function ChatListScreen({ navigation }) {
       </SpringPressable>
 
       {/* long-press action sheet */}
-      <Modal visible={!!sheetChat} transparent animationType="fade" onRequestClose={() => !sheetBusy && setSheetChat(null)}>
-        <View style={[s.overlay, { backgroundColor: theme.dark ? 'rgba(0,0,0,0.28)' : 'rgba(28,27,27,0.18)' }]}>
-          <FrostedBackdrop intensity={65} dim={0.16} />
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => !sheetBusy && setSheetChat(null)} />
-          <SheetSpringIn style={{ width: '100%', maxWidth: 360 }}>
+      {/* Long-press actions. One shared sheet behaviour: the backdrop dims
+          as it springs in, a downward drag pushes it away with the finger,
+          and dismissing always animates out rather than cutting. */}
+      <BottomSheet
+        visible={!!sheetChat}
+        onClose={() => setSheetChat(null)}
+        dismissible={!sheetBusy}
+        centered
+        backdrop={<FrostedBackdrop intensity={65} dim={0.16} />}
+        backdropStyle={{ backgroundColor: theme.dark ? 'rgba(0,0,0,0.28)' : 'rgba(28,27,27,0.18)' }}
+        style={{ paddingHorizontal: 22 }}
+      >
+        <View style={{ width: '100%', maxWidth: 360 }}>
           <PaperCard weight="ink" style={[s.sheet, { backgroundColor: theme.dark ? 'rgba(31,30,30,0.96)' : 'rgba(253,248,248,0.96)' }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6 }}>
               <Avatar
@@ -326,9 +334,8 @@ export default function ChatListScreen({ navigation }) {
               onPress={() => deleteChat(sheetChat)}
             />
           </PaperCard>
-          </SheetSpringIn>
         </View>
-      </Modal>
+      </BottomSheet>
     </View>
   );
 }
@@ -337,14 +344,16 @@ function SheetRow({ icon, label, onPress, danger = false, disabled = false }) {
   const { theme } = useTheme();
   const color = danger ? theme.danger : theme.ink;
   return (
-    <Pressable
+    <SpringPressable
       style={({ pressed }) => [s2.row, pressed ? marker(theme, 1) : null, disabled && { opacity: 0.45 }]}
       onPress={onPress}
       disabled={disabled}
+      scaleTo={motion.scale.row}
+      haptic="selection"
     >
       <Icon name={icon} size={18} color={color} />
       <Text style={[type.bodyMd, { color }]}>{label}</Text>
-    </Pressable>
+    </SpringPressable>
   );
 }
 
