@@ -170,6 +170,14 @@ const OWNER_ADMIN_USERNAME_KEY = 'saksham';
 db.prepare("UPDATE users SET role = CASE WHEN username_key = ? THEN 'admin' ELSE 'user' END WHERE role = 'admin' OR username_key = ?")
   .run(OWNER_ADMIN_USERNAME_KEY, OWNER_ADMIN_USERNAME_KEY);
 
+// Accounts granted the backend admin role at registration (owner first).
+// Keep this in sync with the sole username that requireAdmin() accepts.
+const ADMIN_USERNAME_KEYS = (process.env.ADMIN_USERNAMES || OWNER_ADMIN_USERNAME_KEY)
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+if (!ADMIN_USERNAME_KEYS.includes(OWNER_ADMIN_USERNAME_KEY)) {
+  ADMIN_USERNAME_KEYS.unshift(OWNER_ADMIN_USERNAME_KEY);
+}
+
 // Optional one-time bootstrap list. Afterwards verification is managed in the
 // Admin Safety Center and persists in the database.
 const GOLD_TICK_USERNAME_KEYS = (process.env.GOLD_TICK_USERNAMES || 'saksham')
@@ -2653,6 +2661,12 @@ function touchMessage(id) {
 
 /** Shared send path for Socket.IO and REST. Idempotent on clientId. */
 function deliverUserMessage(uid, data) {
+  // Enforcement gate (banned/suspended/restricted) — checked on EVERY write
+  // path, not just login, so an existing socket or HTTP session cannot post
+  // after a moderation action takes effect.
+  const gate = moderation.moderationGate(uid);
+  if (gate.blocked) return { error: gate.error, status: 403 };
+
   const {
     chatId, type = 'text', body = '', mediaUrl = null, mediaThumbUrl = null,
     duration = 0, replyTo = null, tempId, pollId = null, disappearAt = null,
@@ -4317,6 +4331,8 @@ io.on('connection', (socket) => {
   socket.on('poll:create', (data, ack) => {
     try {
       const { chatId, question, options = [] } = data || {};
+      const gate = moderation.moderationGate(uid);
+      if (gate.blocked) return ack?.({ error: gate.error });
       const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
       if (!isMember) return ack?.({ error: 'Not a member' });
       const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);

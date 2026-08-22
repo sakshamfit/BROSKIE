@@ -222,9 +222,12 @@ export default function AdminSafetyScreen({ navigation }) {
     catch { setPeople([]); } finally { setPeopleLoading(false); }
   }, []);
 
-  const Tab = ({ key: k, label }) => (
-    <Pressable key={k} onPress={() => setTab(k)} style={[s.tabBtn, tab === k && { backgroundColor: theme.ink, borderColor: theme.ink }]}>
-      <Text style={[type.labelSm, { color: tab === k ? theme.onPrimary : theme.text }]}>{label.toUpperCase()}</Text>
+  // React 19 strips the special `key` prop, so the tab id MUST travel as a
+  // normal prop. Passing it as `key` silently made every onPress set tab to
+  // undefined → no tab body matched → blank Safety Center.
+  const Tab = ({ id, label }) => (
+    <Pressable key={id} onPress={() => setTab(id)} style={[s.tabBtn, tab === id && { backgroundColor: theme.ink, borderColor: theme.ink }]}>
+      <Text style={[type.labelSm, { color: tab === id ? theme.onPrimary : theme.text }]}>{label.toUpperCase()}</Text>
     </Pressable>
   );
 
@@ -256,12 +259,15 @@ export default function AdminSafetyScreen({ navigation }) {
         contentContainerStyle={[s.tabRow, { borderColor: theme.ink }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Tab key="overview" label="Overview" />
-        <Tab key="cases" label="Cases" />
-        <Tab key="people" label="People" />
-        <Tab key="audit" label="Audit" />
-        <Tab key="settings" label="Settings" />
+        <Tab id="overview" label="Overview" />
+        <Tab id="cases" label="Cases" />
+        <Tab id="people" label="People" />
+        <Tab id="audit" label="Audit" />
+        <Tab id="settings" label="Settings" />
       </ScrollView>
+      <Text style={[type.labelXs, { color: theme.muted, paddingHorizontal: 14, paddingBottom: 2 }]}>
+        SWIPE THE TAB STRIP FOR MORE SECTIONS
+      </Text>
 
       {/* Keep the tab body in its own bounded flex item. React Native Web
           otherwise treats the nested flex layout as content-sized in the
@@ -324,7 +330,7 @@ function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases, onRet
   if (!overview) {
     return (
       <View style={[s.center, s.centerState]}>
-        <Icon name="cloud-offline-outline" size={34} color={theme.muted} />
+        <Icon name="alert-circle-outline" size={34} color={theme.muted} />
         <Text style={[type.bodySm, { color: theme.muted, marginTop: 12, textAlign: 'center' }]}>
           Could not load the Safety Center.
         </Text>
@@ -693,12 +699,12 @@ function PeopleTab({ theme, s, query, setQuery, people, loading, onSearch, onOpe
     <ScrollView keyboardShouldPersistTaps="handled" style={s.main} contentContainerStyle={[s.scrollContent, { padding: 16, gap: 12 }]}>
       <Text style={[type.bodySm, { color: theme.muted, lineHeight: 19 }]}>Find any account by name or @username. Open the person to grant or revoke the yellow verification tick and use all moderation controls.</Text>
       <InkField style={s.search} focused={!!query}>
-        <Icon name="search-outline" size={17} color={theme.muted} />
+        <Icon name="search" size={17} color={theme.muted} />
         <TextInput value={query} onChangeText={changeQuery} autoCapitalize="none" autoCorrect={false} placeholder="Search people or @username" placeholderTextColor={theme.muted} style={s.searchInput} />
         {loading && <ActivityIndicator size="small" color={theme.ink} />}
       </InkField>
       {!query && <Text style={[type.labelXs, { color: theme.muted, textAlign: 'center', marginTop: 20 }]}>START TYPING TO MANAGE A PERSON</Text>}
-      {query && !loading && people.length === 0 && <Text style={[type.bodySm, { color: theme.muted, textAlign: 'center', marginTop: 20 }]}>No matching accounts found.</Text>}
+      {!!query && !loading && people.length === 0 && <Text style={[type.bodySm, { color: theme.muted, textAlign: 'center', marginTop: 20 }]}>No matching accounts found.</Text>}
       {people.map((person) => (
         <Pressable key={person.id} onPress={() => onOpen(person.id)} style={[s.alertRow, inkBox(theme, 'thin')]}>
           <Avatar uri={person.avatar} name={person.name} id={person.id} size={42} />
