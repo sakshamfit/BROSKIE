@@ -109,6 +109,13 @@ const ROUTES = {
   'POST /api/auth/login': () => ({ token: 'test-token', user: me }),
   'POST /api/auth/register': () => ({ token: 'test-token', user: me }),
   'GET /api/me': () => ({ user: me }),
+  // Find One (find +ones) directory — one row per connect state so the smoke
+  // test can assert the +one indicator's position for each of them.
+  'GET /api/users': () => ({ users: [
+    { ...other, phone: '555-0002', isOnline: true, connectStatus: 'none' },
+    { id: 'u3', username: 'katherine', name: 'Katherine Johnson', phone: '555-0003', avatar: null, isOnline: false, connectStatus: 'outgoing' },
+    { id: 'u4', username: 'annie', name: 'Annie Easley', phone: '555-0004', avatar: null, isOnline: false, connectStatus: 'connected' },
+  ] }),
   'GET /api/chats': () => ({ chats: [chat(0), chat(1), chat(2)] }),
   'GET /api/posts': () => ({ posts: [post(0), post(1), post(2), post(3)], nextBefore: null }),
   'GET /api/posts-tags': () => ({ tags: [{ tag: 'motion', count: 4 }, { tag: 'ink', count: 2 }] }),

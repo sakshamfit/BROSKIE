@@ -255,6 +255,28 @@ async function getBundle(argPath) {
       !!byLabel('Open chat with Grace Hopper') || [...window.document.querySelectorAll('[aria-label^="Open chat with"]')].length >= 3);
   }
 
+  // ---- Find One (find +ones): the +one indicator must render at the START
+  // of each person row — before the avatar, name and handle — at every width.
+  const findOneEntry = byLabel('find +ones');
+  if (findOneEntry) {
+    press(findOneEntry);
+    const findOneShown = await waitFor(() => /Grace Hopper/.test(bodyText())
+      && !!window.document.querySelector('[aria-label="Send +one request"], [aria-label="Request sent"], [aria-label="Already connected"]'));
+    check('find +ones opens the Find One list', findOneShown);
+
+    const plusOnes = [...window.document.querySelectorAll(
+      '[aria-label="Send +one request"], [aria-label="Request sent"], [aria-label="Already connected"]',
+    )];
+    check('Find One rows render a +one indicator', plusOnes.length > 0);
+    for (const indicator of plusOnes) {
+      const row = indicator.parentElement;
+      const kids = row ? [...row.children] : [];
+      const leading = kids.indexOf(indicator) === 0
+        && !(kids.slice(0, kids.indexOf(indicator)).map((k) => k.textContent).join('').trim());
+      check(`+one indicator precedes the row content ("${(row?.textContent || '').trim().slice(0, 40)}")`, leading);
+    }
+  }
+
   // press everything else that is still on screen; nothing may throw
   for (const el of clickable.slice(0, 20)) {
     try { press(el); } catch (e) { note('interaction', [e]); }
