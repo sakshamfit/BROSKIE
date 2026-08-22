@@ -16,7 +16,7 @@
  * holds the message data, and this cache holds the shell + the last API GET
  * responses. Socket.IO and media uploads are never cached; neither are
  * auth/profile endpoints, so a cached login is never served to anyone. */
-const CACHE_NAME = 'plusone-shell-v2';
+const CACHE_NAME = 'plusone-shell-v3';
 
 function isCacheable(request) {
   if (request.method !== 'GET') return false;
@@ -30,8 +30,26 @@ function isCacheable(request) {
   return true;
 }
 
+/* Content-hashed build output never changes for a given URL (a new build
+ * gets new file names), so once a chunk / font / image is cached it can be
+ * served instantly from disk — no network round-trip, no re-download on slow
+ * connections, fully available offline. */
+function isImmutableAsset(request) {
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return false;
+  return url.pathname.startsWith('/_expo/static/') || url.pathname.startsWith('/assets/');
+}
+
 self.addEventListener('install', (event) => {
   self.skipWaiting();
+  // Pre-cache the shell so a first-visit user who goes offline (or hits a
+  // dead zone) can still relaunch the app before their first natural reload.
+  event.waitUntil((async () => {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.add('/');
+    } catch (e) { /* offline install — the fetch handler will fill it in */ }
+  })());
 });
 
 self.addEventListener('activate', (event) => {
@@ -47,6 +65,24 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (!isCacheable(event.request)) return;
+
+  // Immutable hashed assets: cache-first. Serving from disk makes repeat
+  // visits load instantly on slow networks and keeps chunk navigation
+  // working offline. A miss falls through to the network and back-fills.
+  if (isImmutableAsset(event.request)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(event.request);
+      if (cached) return cached;
+      const network = await fetch(event.request);
+      if (network && network.status === 200) {
+        cache.put(event.request, network.clone());
+      }
+      return network;
+    })());
+    return;
+  }
+
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
     try {

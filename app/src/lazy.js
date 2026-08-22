@@ -81,6 +81,10 @@ class ChunkErrorBoundary extends React.Component {
   }
 
   retry = () => {
+    // Ask the wrapper for a FRESH lazy component before clearing the error.
+    // React.lazy caches a rejected import forever, so without this the retry
+    // button would re-render straight back into the same cached failure.
+    this.props.onRetry?.();
     this.setState({ error: null });
   };
 
@@ -90,6 +94,45 @@ class ChunkErrorBoundary extends React.Component {
     }
     return this.props.children;
   }
+}
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Wraps a dynamic import so transient failures (flaky mobile data, a dropped
+ * packet mid-download) retry automatically with a short backoff before the
+ * error ever reaches the user. Slow networks get 3 shots at the chunk instead
+ * of failing on the first hiccup.
+ */
+function retryingImporter(importer, { retries = 2, baseDelay = 700 } = {}) {
+  return async () => {
+    let lastError;
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        return await importer();
+      } catch (error) {
+        lastError = error;
+        if (attempt < retries) await wait(baseDelay * (attempt + 1));
+      }
+    }
+    throw lastError;
+  };
+}
+
+/**
+ * Holds the current React.lazy instance for an importer and can mint a fresh
+ * one. React.lazy memoises a rejected promise permanently, so recovery after
+ * a failed chunk download REQUIRES a brand new lazy component.
+ */
+function createLazySource(importer) {
+  let current = lazy(retryingImporter(importer));
+  return {
+    get: () => current,
+    refresh: () => {
+      current = lazy(retryingImporter(importer));
+      return current;
+    },
+  };
 }
 
 /**
@@ -102,16 +145,21 @@ class ChunkErrorBoundary extends React.Component {
  * @param {React.ReactNode} [options.fallback]
  */
 export function lazyScreen(importer, options = {}) {
-  const LazyComponent = lazy(importer);
+  const source = createLazySource(importer);
   const label = options.label || '';
 
-  const LazyScreenWrapper = React.forwardRef((props, ref) => (
-    <ChunkErrorBoundary label={label}>
-      <Suspense fallback={options.fallback || <ScreenFallback label={label} />}>
-        <LazyComponent ref={ref} {...props} />
-      </Suspense>
-    </ChunkErrorBoundary>
-  ));
+  const LazyScreenWrapper = React.forwardRef((props, ref) => {
+    const [, bump] = React.useReducer((n) => n + 1, 0);
+    const LazyComponent = source.get();
+    const handleRetry = React.useCallback(() => { source.refresh(); bump(); }, []);
+    return (
+      <ChunkErrorBoundary label={label} onRetry={handleRetry}>
+        <Suspense fallback={options.fallback || <ScreenFallback label={label} />}>
+          <LazyComponent ref={ref} {...props} />
+        </Suspense>
+      </ChunkErrorBoundary>
+    );
+  });
 
   LazyScreenWrapper.preload = importer;
   LazyScreenWrapper.displayName = `LazyScreen(${label || 'Component'})`;
@@ -129,15 +177,18 @@ export function lazyScreen(importer, options = {}) {
 export function lazyComponent(importer, optionsOrFallback = {}) {
   const isFallbackNode = React.isValidElement(optionsOrFallback) || optionsOrFallback === null;
   const options = isFallbackNode ? { fallback: optionsOrFallback } : (optionsOrFallback || {});
-  const LazyComponent = lazy(importer);
+  const source = createLazySource(importer);
   const fallback = options.fallback !== undefined ? options.fallback : null;
 
   const LazyComponentWrapper = React.forwardRef((props, ref) => {
+    const [, bump] = React.useReducer((n) => n + 1, 0);
+    const handleRetry = React.useCallback(() => { source.refresh(); bump(); }, []);
     if (props && props.visible === false) {
       return null;
     }
+    const LazyComponent = source.get();
     return (
-      <ChunkErrorBoundary label={options.label}>
+      <ChunkErrorBoundary label={options.label} onRetry={handleRetry}>
         <Suspense fallback={fallback}>
           <LazyComponent ref={ref} {...props} />
         </Suspense>

@@ -15,6 +15,11 @@
     <!-- Mobile browser chrome (URL bar / status bar) matches the paper bg;
          kept in sync with dark mode at runtime by App.js -->
     <meta name="theme-color" content="#fdf8f8" />
+    <!-- Realtime (Socket.IO) lives on the Railway origin. Warming DNS + TLS
+         while the JS bundle downloads removes a full handshake round-trip
+         from first connect — a noticeable save on slow mobile networks. -->
+    <link rel="preconnect" href="https://broskie-h.up.railway.app" crossorigin />
+    <link rel="dns-prefetch" href="https://broskie-h.up.railway.app" />
     <!-- PWA: installable, standalone (no browser chrome), app-like launch -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -73,5 +78,18 @@
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
+    <script>
+      // Register the service worker for EVERY visitor — not just after
+      // sign-in (push registration used to be the only entry point). It
+      // powers the offline shell and the cache-first store for hashed
+      // bundles, which is what makes repeat visits fast on slow networks.
+      // Deferred to `load` so it never competes with the app bundle
+      // download on the first visit.
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/service-worker.js').catch(function () {});
+        });
+      }
+    </script>
   </body>
 </html>
