@@ -170,7 +170,7 @@ export default function NewChatScreen({ navigation, embedded = false }) {
                   />
                 )}
                 {groupMode && <InkCheckbox checked={isSel} size={19} />}
-                <Avatar uri={item.avatar} name={item.name} id={item.id} online={item.isOnline} size={44} />
+                <Avatar uri={item.avatar} name={item.name} id={item.id} online={item.isOnline} size={44} profileId={item.id} />
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]}>{item.name}</EmojiText>

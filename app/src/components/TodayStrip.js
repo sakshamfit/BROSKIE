@@ -112,7 +112,7 @@ export default function TodayStrip({ reloadKey = 0, onOpenChat, onSeePosts }) {
           {people.map(({ user, around }) => (
             <Pressable key={user.id} style={s.person} onPress={() => onOpenChat?.(user.id)} hitSlop={4}>
               <View style={around ? [s.aroundRing, { borderColor: theme.highlighter }] : null}>
-                <Avatar uri={user.avatar} name={user.name} id={user.id} size={around ? 44 : 40} online={!around && true} />
+                <Avatar uri={user.avatar} name={user.name} id={user.id} size={around ? 44 : 40} online={!around && true} profileId={user.id} />
               </View>
               <Text style={[type.labelXs, { color: around ? theme.text : theme.muted, marginTop: 4 }]} numberOfLines={1}>
                 {user.name?.split(' ')[0] || user.username}

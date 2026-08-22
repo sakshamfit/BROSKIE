@@ -6,26 +6,22 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
-import { api, mediaUrl } from '../api';
+import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
-import { AUDIENCE } from '../components/audienceMeta';
 import BrandHeader from '../components/BrandHeader';
-import SongCard from '../components/SongCard';
 import TodayStrip from '../components/TodayStrip';
-import { type, inkBox, marker, dashedRule, stroke, radius, raised } from '../theme';
+import PostCard from '../components/PostCard';
+import { type, inkBox, stroke, raised } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
-import { onNetworkFilterRequest, consumePendingNetworkFilter, onOpenCommunity, consumePendingCommunity } from '../push/routing';
+import { onNetworkFilterRequest, consumePendingNetworkFilter, onOpenCommunity, consumePendingCommunity, onProfileWillOpen } from '../push/routing';
 import { lazyComponent } from '../lazy';
 
 const NewPostScreen = lazyComponent(() => import('./NewPostScreen'));
 const CommunitiesScreen = lazyComponent(() => import('./CommunitiesScreen'));
-
-/* Sticky notes alternate their tilt, like scraps pinned to a board. */
-const tiltFor = (i) => (i % 2 === 0 ? '-0.8deg' : '0.7deg');
 
 /* Phase 2 feed lenses: the whole world, your college/workplace people, or
  * just the authors you follow. */
@@ -208,119 +204,19 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         ? 'Tap FOLLOW on a post to build your own feed.'
         : 'Tap the pencil to sketch the first page.';
 
-  const renderPost = ({ item, index }) => {
-    const audienceMeta = AUDIENCE[item.audience] || AUDIENCE.public;
-    return (
-      <View style={[s.note, raised(theme, 1), { transform: [{ rotate: tiltFor(index) }], backgroundColor: index % 2 ? theme.cardAlt : theme.card }]}>
-        <View style={s.noteHead}>
-          <Avatar uri={item.author.avatar} name={item.author.name} id={item.author.id} size={38} />
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <Text style={[type.labelSm, { color: theme.ink, flexShrink: 1 }]} numberOfLines={1}>
-                {handleFor(item.author)}
-              </Text>
-              {hasGoldTick(item.author) && <GoldTick size={13} />}
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 }}>
-              <Icon name={audienceMeta.icon} size={11} color={theme.muted} />
-              <Text style={[type.labelXs, { color: theme.muted }]}>
-                {formatChatTime(item.createdAt)} · {audienceMeta.label}
-              </Text>
-            </View>
-          </View>
-          {!item.mine && typeof item.following === 'boolean' && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={item.following ? `Unfollow ${item.author.name}` : `Follow ${item.author.name}`}
-              onPress={() => toggleFollow(item)}
-              hitSlop={6}
-              style={({ pressed }) => [
-                s.followBtn,
-                {
-                  borderColor: item.following ? theme.graphiteLine : theme.ink,
-                  backgroundColor: item.following ? 'transparent' : pressed ? theme.cardAlt : theme.cardAlt,
-                },
-              ]}
-            >
-              <Icon
-                name={item.following ? 'checkmark' : 'person-add-outline'}
-                size={12}
-                color={item.following ? theme.muted : theme.ink}
-              />
-              <Text style={[type.labelXs, { color: item.following ? theme.muted : theme.ink }]}>
-                {item.following ? 'FOLLOWING' : 'FOLLOW'}
-              </Text>
-            </Pressable>
-          )}
-          {item.mine && (
-            <Pressable onPress={() => removePost(item)} hitSlop={8} style={{ padding: 4 }}>
-              <Icon name="trash-outline" size={16} color={theme.muted} />
-            </Pressable>
-          )}
-        </View>
-
-        {!!item.title && (
-          <EmojiText style={[type.headlineSm, { color: theme.text, marginTop: 12 }]}>{item.title}</EmojiText>
-        )}
-        {!!item.body && (
-          <EmojiText style={[type.bodyMd, { color: theme.text, marginTop: item.title ? 6 : 12 }]}>
-            {item.body}
-          </EmojiText>
-        )}
-
-        {!!item.mediaUrl && (
-          <Pressable
-            onPress={() => setLightbox(mediaUrl(item.mediaUrl))}
-            style={[
-              s.noteImage,
-              inkBox(theme, 'ink'),
-              {
-                aspectRatio: item.mediaAspect || 16 / 9,
-                width: (item.mediaAspect || 16 / 9) < 0.7 ? '62%' : (item.mediaAspect || 16 / 9) < 1 ? '80%' : '100%',
-              },
-            ]}
-          >
-            <Image source={{ uri: mediaUrl(item.mediaUrl) }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-          </Pressable>
-        )}
-
-        {!!item.song && (
-          <View style={{ marginTop: 12 }}>
-            <SongCard song={item.song} compact />
-          </View>
-        )}
-
-        {!!item.tag && (
-          <View style={{ marginTop: 12, alignSelf: 'flex-start' }}>
-            <Pressable onPress={() => setActiveTag(item.tag === activeTag ? null : item.tag)}>
-              <TapeChip label={`#${item.tag}`} tone={item.tag === activeTag ? 'accent' : 'ink'} />
-            </Pressable>
-          </View>
-        )}
-
-        <View style={[dashedRule(theme), { marginTop: 16, marginBottom: 12 }]} />
-
-        <View style={s.actions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={item.liked ? 'Unlike' : 'Like'}
-            onPress={() => toggleLike(item)}
-            style={({ pressed }) => [s.action, pressed && { transform: [{ scale: 1.12 }] }]}
-            hitSlop={8}
-          >
-            <Icon name={item.liked ? 'heart' : 'heart-outline'} size={24} color={item.liked ? INSTAGRAM_HEART : theme.ink} />
-            {item.likes > 0 && (
-              <Text style={[type.labelSm, { color: item.liked ? INSTAGRAM_HEART : theme.ink }]}>{item.likes}</Text>
-            )}
-          </Pressable>
-          <Pressable onPress={() => setCommentsFor(item)} style={({ pressed }) => [s.action, pressed && marker(theme, 1)]} hitSlop={6}>
-            <Icon name="chatbubble-outline" size={16} color={theme.graphite} />
-            <Text style={[type.labelSm, { color: theme.graphite }]}>{item.comments}</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  };
+  const renderPost = ({ item, index }) => (
+    <PostCard
+      post={item}
+      index={index}
+      onToggleLike={toggleLike}
+      onOpenComments={setCommentsFor}
+      onToggleFollow={toggleFollow}
+      onDelete={removePost}
+      onTagPress={(tag) => setActiveTag(tag === activeTag ? null : tag)}
+      activeTag={activeTag}
+      onOpenImage={setLightbox}
+    />
+  );
 
   const SectionToggle = (
     <View style={s.sectionRow}>
@@ -493,6 +389,10 @@ function CommentsSheet({ post, onClose, onCounted }) {
   const [loading, setLoading] = useState(false);
   const s = makeStyles(theme);
 
+  // Tapping a commenter's avatar opens their profile — close this sheet so
+  // the profile screen is actually visible underneath.
+  useEffect(() => onProfileWillOpen(() => onClose?.()), [onClose]);
+
   useEffect(() => {
     if (!post) { setList([]); setText(''); return; }
     setLoading(true);
@@ -553,7 +453,7 @@ function CommentsSheet({ post, onClose, onCounted }) {
               }
               renderItem={({ item }) => (
                 <View style={s.comment}>
-                  <Avatar uri={item.author.avatar} name={item.author.name} id={item.author.id} size={30} />
+                  <Avatar uri={item.author.avatar} name={item.author.name} id={item.author.id} size={30} profileId={item.author.id} />
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <Text style={[type.labelXs, { color: theme.ink }]}>{handleFor(item.author)}</Text>
@@ -614,23 +514,11 @@ const makeStyles = (t) => StyleSheet.create({
     borderWidth: 1, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 8,
   },
   filterBtnActive: { backgroundColor: t.ink },
-  followBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5,
-    alignSelf: 'flex-start', marginLeft: 8,
-  },
 
   communitiesHeaderWrap: { paddingTop: 22, paddingHorizontal: 20 },
   sectionRow: { flexDirection: 'row', gap: 7, marginBottom: 4 },
   sectionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 8 },
   sectionActive: { backgroundColor: t.ink },
-
-  note: { padding: 18, marginBottom: 22, borderWidth: 1, borderColor: t.graphiteLine,
-    borderTopLeftRadius: 2, borderTopRightRadius: 5, borderBottomRightRadius: 2, borderBottomLeftRadius: 4 },
-  noteHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  noteImage: { marginTop: 14, overflow: 'hidden', alignSelf: 'center' },
-  actions: { flexDirection: 'row', gap: 22 },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2, paddingHorizontal: 2 },
 
   fab: {
     position: 'absolute', right: 24, bottom: 26, width: 58, height: 58,

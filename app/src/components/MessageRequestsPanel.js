@@ -56,7 +56,7 @@ export default function MessageRequestsPanel({ visible, onClose, requests, onCha
     return (
       <View style={[s.card, inkBox(theme, index % 2 ? 'thin' : 'ink'), { transform: [{ rotate: index % 2 ? '0.35deg' : '-0.35deg' }] }]}>
         <View style={s.cardHead}>
-          <Avatar uri={person.avatar} name={person.name} id={person.id} size={52} weight="ink" />
+          <Avatar uri={person.avatar} name={person.name} id={person.id} size={52} weight="ink" profileId={person.id} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{person.name || 'Unknown'}</EmojiText>

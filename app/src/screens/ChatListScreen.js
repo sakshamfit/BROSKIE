@@ -450,6 +450,7 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
             unread={hasUnread}
             weight={hasUnread ? 'ink' : 'thin'}
             size={56}
+            profileId={item.type === 'group' ? null : item.otherUserId}
           />
         </Animated.View>
 

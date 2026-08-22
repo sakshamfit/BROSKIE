@@ -8,7 +8,7 @@ import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { Avatar, EmptyState, TapeChip, rippleFor } from '../components/common';
 import { CATEGORY_LIST, categoryMeta } from '../components/communityMeta';
-import { onOpenCommunity, consumePendingCommunity } from '../push/routing';
+import { onOpenCommunity, consumePendingCommunity, onProfileWillOpen } from '../push/routing';
 import { type, inkBox, marker, radius, raised } from '../theme';
 import { lazyComponent } from '../lazy';
 
@@ -38,6 +38,10 @@ export default function CommunitiesScreen({ onOpenChat }) {
   const [refreshing, setRefreshing] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [openId, setOpenId] = useState(null);
+
+  // Tapping a member's avatar inside the community detail modal opens their
+  // profile — close the modal so the profile screen is actually visible.
+  useEffect(() => onProfileWillOpen(() => setOpenId(null)), []);
 
   // Invite-link deep links: open this community's detail sheet. Consuming
   // the pending id on mount covers links that arrived while this page was

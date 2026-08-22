@@ -39,6 +39,8 @@ const HelpScreen = lazyScreen(() => import('./screens/HelpScreen'), { label: 'He
 const CallsScreen = lazyScreen(() => import('./screens/CallsScreen'), { label: 'Calls' });
 const StarredMessagesScreen = lazyScreen(() => import('./screens/StarredMessagesScreen'), { label: 'Starred' });
 const AdminSafetyScreen = lazyScreen(() => import('./screens/AdminSafetyScreen'), { label: 'Safety & Reports' });
+const UserProfileScreen = lazyScreen(() => import('./screens/UserProfileScreen'), { label: 'User Profile' });
+const PostDetailScreen = lazyScreen(() => import('./screens/PostDetailScreen'), { label: 'Post Detail' });
 
 const Stack = createNativeStackNavigator();
 
@@ -278,6 +280,8 @@ export default function Navigation() {
           <>
             <Stack.Screen name="Home" component={HomeTabs} />
             <Stack.Screen name="Activity" component={ActivityScreen} />
+            <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+            <Stack.Screen name="PostDetail" component={PostDetailScreen} />
             <Stack.Screen name="Conversation" component={ConversationScreen} />
             <Stack.Screen name="NewChat" component={NewChatScreen} />
             <Stack.Screen name="ChatInfo" component={ChatInfoScreen} />

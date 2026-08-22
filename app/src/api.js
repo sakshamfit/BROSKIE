@@ -467,11 +467,15 @@ export const api = {
     return request(`/api/posts?${q.toString()}`);
   },
   createPost: (payload) => request('/api/posts', { method: 'POST', body: payload }),
+  post: (id) => request(`/api/posts/${id}`),
   deletePost: (id) => request(`/api/posts/${id}`, { method: 'DELETE' }),
   likePost: (id) => request(`/api/posts/${id}/like`, { method: 'POST', body: {} }),
   comments: (id) => request(`/api/posts/${id}/comments`),
   addComment: (id, body) => request(`/api/posts/${id}/comments`, { method: 'POST', body: { body } }),
   postTags: () => request('/api/posts-tags'),
+
+  // Public profile — what opens when you tap someone's avatar anywhere.
+  userProfile: (id) => request(`/api/users/${id}/profile`),
 
   // Phase 2 — the daily campus loop.
   follow: (userId) => request(`/api/users/${userId}/follow`, { method: 'POST', body: {} }),
