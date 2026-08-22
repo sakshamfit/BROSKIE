@@ -3,11 +3,10 @@ import { useEffect, useState } from 'react';
 /**
  * Web emoji-data accessor.
  *
- * The Twemoji path data is ~2.4 MB of JSON and was previously bundled
- * synchronously into the one web chunk, which made the whole app pay to
- * download/parse it before first paint. On web we keep the data in its own
- * async chunk: components render without it (using the system emoji glyph)
- * and swap to the vector art as soon as the chunk arrives.
+ * The full Twemoji path table is ~3.8 MB of packed JSON (4000+ emoji) — far
+ * too heavy for the app shell's first paint. On web it stays in its own
+ * async chunk: components render without it (falling back to the system
+ * glyph for a beat) and swap to the vector art as soon as the chunk arrives.
  */
 let data = null;
 let promise = null;

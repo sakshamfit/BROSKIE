@@ -17,6 +17,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated, Easing, Platform, Pressable, View, StyleSheet, AccessibilityInfo,
 } from 'react-native';
+import Svg, { Defs, LinearGradient, RadialGradient, Stop, Path, Circle } from 'react-native-svg';
 import { useTheme } from './store/ThemeContext';
 
 /* ------------------------------------------------------------------ */
@@ -322,59 +323,181 @@ export function FloatLoop({ children, amplitude = 4, duration = 3400, style, red
 }
 
 /* ------------------------------------------------------------------ */
-/* HeartBurst — double-tap reaction burst                              */
+/* LikeBurst — double-tap love, the modern way                         */
 /* ------------------------------------------------------------------ */
 
 /**
- * The classic double-tap heart: scales in with a spring, small bounce,
- * then scales out while fading. Renders once and calls `onDone`.
+ * A big gradient heart springs out of the message with a playful rotation
+ * wobble, a shockwave ring ripples out from the tap, and a ring of mini
+ * hearts/dots scatters — then the heart floats up and away. Layout,
+ * geometry and palettes are deterministic (no Math.random in render) so the
+ * burst feels identical on every double-tap.
+ *
+ * Everything is transform + opacity on the native driver. Reduced motion
+ * keeps the feedback: a quick static heart that fades.
+ * Renders once, then calls `onDone`.
  */
-export function HeartBurst({ color = '#e5484d', onDone, reduced: reducedProp }) {
+
+// Official Twemoji red-heart silhouette (36×36 grid), given a soft brand
+// gradient + glow so the burst reads premium over any chat theme.
+const HEART_PATH =
+  'M35.89 11.83c0-5.45-4.42-9.87-9.87-9.87-3.31 0-6.23 1.63-8.02 4.13-1.79-2.5-4.71-4.13-8.02-4.13-5.45 0-9.87 4.42-9.87 9.87 0 .77.1 1.52.27 2.24C1.75 22.59 11.22 31.57 18 34.03c6.78-2.47 16.25-11.45 17.62-19.96.17-.72.27-1.47.27-2.24z';
+
+const PARTICLE_ANGLES = [-90, -38, 12, 63, -64, 27, -15, 116];
+const PARTICLE_HEART = [0, 2, 4, 6];           // these indices are mini hearts, rest are dots
+const PARTICLE_DIST = [64, 78, 58, 72, 66, 80, 60, 74];
+
+function LikeHeart({ size = 84, id = 'like' }) {
+  return (
+    <Svg width={size} height={size} viewBox="-6 -6 48 48">
+      <Defs>
+        <LinearGradient id={`${id}g`} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#FF8FA3" />
+          <Stop offset="0.55" stopColor="#FF4D6D" />
+          <Stop offset="1" stopColor="#E5383B" />
+        </LinearGradient>
+        <RadialGradient id={`${id}glow`} cx="0.5" cy="0.5" r="0.5">
+          <Stop offset="0" stopColor="#FF4D6D" stopOpacity="0.38" />
+          <Stop offset="0.55" stopColor="#FF4D6D" stopOpacity="0.14" />
+          <Stop offset="1" stopColor="#FF4D6D" stopOpacity="0" />
+        </RadialGradient>
+      </Defs>
+      <Circle cx="18" cy="17" r="22" fill={`url(#${id}glow)`} />
+      <Path
+        d={HEART_PATH}
+        fill={`url(#${id}g)`}
+        stroke="rgba(120,10,28,0.35)"
+        strokeWidth="0.6"
+      />
+    </Svg>
+  );
+}
+
+function MiniHeart({ size = 11, color = '#FF4D6D' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 36 36">
+      <Path d={HEART_PATH} fill={color} />
+    </Svg>
+  );
+}
+
+export function LikeBurst({ onDone, reduced: reducedProp }) {
   const reduced = reducedProp ?? useReducedMotion();
+  // unique gradient ids per burst instance (double-taps can stack)
+  const heartId = React.useId().replace(/[^a-zA-Z0-9]/g, 'h');
+
+  // main heart
   const scale = useRef(new Animated.Value(0)).current;
+  const rotate = useRef(new Animated.Value(0)).current;    // -1..1 → degrees
+  const rise = useRef(new Animated.Value(0)).current;      // exit float
   const opacity = useRef(new Animated.Value(1)).current;
+  // shockwave ring
+  const ring = useRef(new Animated.Value(0)).current;
+  // particles
+  const parts = useRef(PARTICLE_ANGLES.map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
     if (reduced) {
-      // Keep state feedback without the motion: a quick opacity flash.
       opacity.setValue(0.95);
-      Animated.timing(opacity, { toValue: 0, duration: 500, easing: motion.easing.out, useNativeDriver: true })
+      Animated.timing(opacity, { toValue: 0, duration: 480, easing: motion.easing.out, useNativeDriver: true })
         .start(() => onDone?.());
       return undefined;
     }
-    Animated.sequence([
-      Animated.spring(scale, { toValue: 1, friction: 5, tension: 130, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 0.84, friction: 6, tension: 220, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, friction: 5, tension: 170, useNativeDriver: true }),
+
+    const heartHit = Animated.sequence([
       Animated.parallel([
-        Animated.timing(scale, { toValue: 1.4, duration: 240, easing: motion.easing.out, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0, duration: 300, easing: motion.easing.out, useNativeDriver: true }),
+        Animated.spring(scale, { toValue: 1, friction: 4, tension: 170, useNativeDriver: true }),
+        Animated.sequence([
+          Animated.timing(rotate, { toValue: -1, duration: 90, easing: motion.easing.out, useNativeDriver: true }),
+          Animated.spring(rotate, { toValue: 0.35, friction: 4, tension: 160, useNativeDriver: true }),
+          Animated.spring(rotate, { toValue: 0, friction: 5, tension: 190, useNativeDriver: true }),
+        ]),
       ]),
-    ]).start(() => onDone?.());
+      Animated.spring(scale, { toValue: 0.92, friction: 5, tension: 240, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, friction: 5, tension: 200, useNativeDriver: true }),
+      Animated.delay(330),
+      Animated.parallel([
+        Animated.timing(rise, { toValue: 1, duration: 420, easing: motion.easing.out, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0, duration: 400, easing: motion.easing.out, useNativeDriver: true }),
+      ]),
+    ]);
+
+    const ringWave = Animated.sequence([
+      Animated.timing(ring, { toValue: 1, duration: 520, easing: motion.easing.out, useNativeDriver: true }),
+    ]);
+
+    const scatter = Animated.stagger(26, parts.map((p) =>
+      Animated.sequence([
+        Animated.timing(p, { toValue: 1, duration: 560, easing: motion.easing.out, useNativeDriver: true }),
+      ]),
+    ));
+
+    Animated.parallel([heartHit, ringWave, scatter]).start(() => onDone?.());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const rotateDeg = rotate.interpolate({ inputRange: [-1, 0, 0.35, 1], outputRange: ['-14deg', '0deg', '5deg', '14deg'] });
+  const liftY = rise.interpolate({ inputRange: [0, 1], outputRange: [0, -54] });
+  const shrink = rise.interpolate({ inputRange: [0, 1], outputRange: [1, 0.82] });
+
+  const ringScale = ring.interpolate({ inputRange: [0, 1], outputRange: [0.32, 2.05] });
+  const ringOpacity = ring.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0, 0.5, 0] });
+
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={[StyleSheet.absoluteFill, styles.burstWrap, { opacity, transform: [{ scale }] }]}
-    >
-      <View style={[styles.burstCircle, { backgroundColor: color }]}>
-        <Animated.Text style={[styles.burstHeart, { transform: [{ scale }] }]}>❤️</Animated.Text>
-      </View>
-    </Animated.View>
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.burstWrap]}>
+      {/* shockwave ring */}
+      <Animated.View style={[styles.ring, { opacity: ringOpacity, transform: [{ scale: ringScale }] }]} />
+      {/* scattered mini hearts + dots */}
+      {parts.map((p, i) => {
+        const rad = (PARTICLE_ANGLES[i] * Math.PI) / 180;
+        const dist = PARTICLE_DIST[i];
+        const tx = p.interpolate({ inputRange: [0, 1], outputRange: [0, Math.cos(rad) * dist] });
+        const ty = p.interpolate({ inputRange: [0, 1], outputRange: [8, Math.sin(rad) * dist - 14] });
+        const popIn = p.interpolate({ inputRange: [0, 0.18, 1], outputRange: [0, 1, 0.55] });
+        const fade = p.interpolate({ inputRange: [0, 0.55, 1], outputRange: [0, 1, 0] });
+        const sizeAlt = i % 3 === 0 ? 1 : 0.72;
+        return (
+          <Animated.View
+            key={i}
+            style={[
+              styles.particle,
+              { opacity: fade, transform: [{ translateX: tx }, { translateY: ty }, { scale: popIn }, { scale: sizeAlt }] },
+            ]}
+          >
+            {PARTICLE_HEART.includes(i) ? <MiniHeart /> : <View style={styles.dot} />}
+          </Animated.View>
+        );
+      })}
+      {/* the hero heart */}
+      <Animated.View
+        style={{
+          opacity,
+          transform: [
+            { translateY: liftY },
+            { rotate: rotateDeg },
+            { scale: Animated.multiply(scale, shrink) },
+          ],
+          ...styles.heroShadow,
+        }}
+      >
+        <LikeHeart id={heartId} />
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   burstWrap: { alignItems: 'center', justifyContent: 'center', zIndex: 40 },
-  burstCircle: {
-    width: 66, height: 66, borderRadius: 999,
-    alignItems: 'center', justifyContent: 'center',
-    // soft ink outline keeps it on-brand even over any bubble color
-    borderWidth: 2, borderColor: 'rgba(0,0,0,0.18)',
+  heroShadow: Platform.select({
+    web: { filter: 'drop-shadow(0 6px 14px rgba(229,56,59,0.35))' },
+    default: {},
+  }),
+  ring: {
+    position: 'absolute', width: 78, height: 78, borderRadius: 999,
+    borderWidth: 3, borderColor: '#FF758F',
   },
-  burstHeart: { fontSize: 32, lineHeight: 38 },
+  particle: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 8, height: 8, borderRadius: 999, backgroundColor: '#FF758F' },
 });
 
 /* ------------------------------------------------------------------ */

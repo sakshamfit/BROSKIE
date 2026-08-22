@@ -420,8 +420,10 @@ reusable primitives live there:
   rows and anywhere typing state shows.
 - `Skeleton` — soft shimmer placeholders (chat list shown until the first
   chats fetch resolves).
-- `HeartBurst` — double-tap a message → heart springs up, bounces, fades, and
-  adds a ❤️ reaction.
+- `LikeBurst` — double-tap a message → a gradient heart springs out with a
+  rotation wobble, a shockwave ring ripples out, mini hearts/dots scatter,
+  the bubble pulses with a medium haptic, and the heart floats away — then
+  the ❤️ reaction lands and the reaction pill pops.
 - `SheetSpringIn` — bottom sheets/modals (message menu, forward, poll, timers,
   chat info, chat-list actions) rise with a soft spring instead of popping.
 - `FloatLoop` — slow calm float for empty states (paused by unmount when
