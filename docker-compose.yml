@@ -1,0 +1,42 @@
+# Local dev/test for the BROSKIE server — same as `npm start`, just containerized.
+# The SQLite DB, local uploads and automatic backups persist in the `broskie_data`
+# named volume, so `docker compose down && docker compose up` keeps your data.
+#
+#   docker compose up --build      # http://localhost:4000
+#
+# Copy .env.example → .env to set real secrets, or export them in your shell:
+#   JWT_SECRET="$(openssl rand -hex 32)" docker compose up --build
+services:
+  broskie-server:
+    build:
+      context: ./server
+    image: broskie-server:local
+    container_name: broskie-server
+    ports:
+      - "4000:4000"
+    environment:
+      # Required in production. Generate with: openssl rand -hex 32
+      # The value below is a DEV-ONLY fallback — never ship it.
+      JWT_SECRET: ${JWT_SECRET:-devsecret}
+      # DATA_DIR already defaults to /data in the image; restated here so the
+      # intent is obvious and survives any base-image change.
+      DATA_DIR: /data
+      # Optional web-push VAPID keys. Leave blank to auto-generate a keypair
+      # once and persist it on the volume (server/src/push.js).
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:you@example.com}
+      # Optional integrations (see server/.env.example) — no-ops until set.
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+      SUPABASE_BUCKET: ${SUPABASE_BUCKET:-tomodachi-uploads}
+      JAMENDO_CLIENT_ID: ${JAMENDO_CLIENT_ID:-}
+    volumes:
+      - broskie_data:/data
+    restart: unless-stopped
+    # Mirror the cluster's graceful-shutdown window so the in-flight backup
+    # (SIGTERM → backupNow) always has time to finish locally too.
+    stop_grace_period: 30s
+
+volumes:
+  broskie_data:

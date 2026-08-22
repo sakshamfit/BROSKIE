@@ -1,0 +1,54 @@
+# BROSKIE server Service + Ingress.
+#
+#   kubectl apply -f k8s/03-service-ingress.yaml
+#
+# Edit the `host:` (and ingressClassName) below, then point the app at it:
+#   EXPO_PUBLIC_API_URL=https://api.yourdomain.com   (see K8S.md)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: broskie-server
+  namespace: broskie
+spec:
+  type: ClusterIP
+  selector:
+    app: broskie-server
+  ports:
+    - name: http
+      port: 80
+      targetPort: http # -> containerPort 4000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: broskie-server
+  namespace: broskie
+  annotations:
+    # Socket.IO holds long-lived WebSocket (and HTTP long-poll) connections.
+    # Default proxy timeouts (~60s) silently kill idle sockets; bump them.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # The app accepts 25mb JSON bodies + 25mb uploads (express/multer limits).
+    nginx.ingress.kubernetes.io/proxy-body-size: "30m"
+    # Explicitly route upgrades to this service (ingress-nginx auto-detects
+    # them, but this makes intent obvious). Harmless on other controllers.
+    nginx.ingress.kubernetes.io/websocket-services: broskie-server
+spec:
+  ingressClassName: nginx # set to your cluster's ingress class
+  rules:
+    - host: api.yourdomain.com # 👇 EDIT
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: broskie-server
+                port:
+                  name: http
+  # Enable TLS once you have a certificate (cert-manager, or a manual secret):
+  # tls:
+  #   - hosts:
+  #       - api.yourdomain.com
+  #   secretName: broskie-tls

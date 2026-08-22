@@ -1,0 +1,35 @@
+# Namespace + persistent storage for BROSKIE.
+#
+# SQLite is single-writer, single-file — so the workload runs as 1 replica with
+# strategy: Recreate and a ReadWriteOnce volume (see 02-deployment.yaml). The
+# PVC below matches the repo's existing DATA_DIR convention: the database
+# (tomodachi.db + WAL), locally-stored uploads, the 6-hourly + on-shutdown
+# backups, and the web-push VAPID keys ALL land on this volume and survive pod
+# restarts/redeploys — exactly as they already do on Railway/Render.
+#
+#   kubectl apply -f k8s/00-namespace-storage.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: broskie
+  labels:
+    name: broskie
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: broskie-data
+  namespace: broskie
+spec:
+  accessModes:
+    # SQLite cannot be safely written by two pods on different hosts.
+    # ReadWriteOnce + strategy: Recreate enforces a single writer.
+    - ReadWriteOnce
+  # Uses the cluster's default StorageClass. Pin one (e.g. gp3, premium-rwo,
+  # standard-rwo) if your provider needs it:
+  # storageClassName: standard-rwo
+  resources:
+    requests:
+      # Room for the DB + uploaded media + the 20 rotating auto-backups.
+      storage: 2Gi

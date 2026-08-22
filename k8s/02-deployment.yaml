@@ -1,0 +1,113 @@
+# BROSKIE server Deployment.
+#
+#   # edit the image: line below first, then:
+#   kubectl apply -f k8s/02-deployment.yaml
+#
+# DESIGN NOTES (see K8S.md → "Why these specific choices"):
+#  - replicas: 1 + strategy: Recreate + ReadWriteOnce PVC — SQLite is a single
+#    writer. Scaling past 1 pod means two processes writing the same DB file
+#    across hosts, which SQLite cannot do safely. To scale: move to Postgres,
+#    put uploads on S3, add the Socket.IO Redis adapter — then raise replicas.
+#  - secrets, not a ConfigMap, for JWT_SECRET / VAPID keys.
+#  - terminationGracePeriodSeconds lets the SIGTERM-driven backup finish.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broskie-server
+  namespace: broskie
+  labels:
+    app: broskie-server
+spec:
+  replicas: 1
+  strategy:
+    # Never run two pods on the same ReadWriteOnce volume. RollingUpdate would
+    # briefly start the new pod before the old one releases the volume.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: broskie-server
+  template:
+    metadata:
+      labels:
+        app: broskie-server
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001 # make the mounted PVC group-writable by uid 1001
+      terminationGracePeriodSeconds: 30 # allow the pre-shutdown backup to run
+      containers:
+        - name: broskie-server
+          # 👇 EDIT: the image you pushed (see K8S.md §2).
+          image: ghcr.io/sakshamfit/broskie-server:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "4000"
+            - name: DATA_DIR
+              value: /data # DB + uploads + backups + VAPID keys → the PVC
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: broskie-secrets
+                  key: JWT_SECRET
+            # Optional — empty/absent ⇒ auto-generated and persisted on /data.
+            - name: VAPID_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: broskie-secrets
+                  key: VAPID_PUBLIC_KEY
+                  optional: true
+            - name: VAPID_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: broskie-secrets
+                  key: VAPID_PRIVATE_KEY
+                  optional: true
+            - name: VAPID_SUBJECT
+              valueFrom:
+                secretKeyRef:
+                  name: broskie-secrets
+                  key: VAPID_SUBJECT
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 4000
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            # Conservative starters for a single-node SQLite chat server.
+            # Raise memory if you carry many concurrent WebSocket clients.
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: broskie-data
