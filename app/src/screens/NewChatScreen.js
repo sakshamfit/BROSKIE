@@ -25,10 +25,14 @@ export default function NewChatScreen({ navigation, embedded = false }) {
 
   const s = makeStyles(theme);
 
-  const loadUsers = () => api.users()
-    .then(({ users: list }) => setUsers(list))
-    .catch(() => {})
-    .finally(() => setLoading(false));
+  const loadUsers = async () => {
+    try {
+      const { users: list } = await api.users();
+      setUsers(list);
+    } catch {} finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => { loadUsers(); }, []);
 

@@ -33,9 +33,14 @@ export default function NotificationsScreen({ navigation, embedded = false }) {
 
   useEffect(() => {
     let disposed = false;
-    api.pushInfo()
-      .then((r) => { if (!disposed) setDevices(r?.devices || []); })
-      .catch(() => { if (!disposed) setDevices([]); });
+    (async () => {
+      try {
+        const r = await api.pushInfo();
+        if (!disposed) setDevices(r?.devices || []);
+      } catch {
+        if (!disposed) setDevices([]);
+      }
+    })();
     return () => { disposed = true; };
   }, [user?.settings]);
 

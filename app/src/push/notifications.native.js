@@ -197,16 +197,17 @@ export async function registerPushNotifications({ onRoute }) {
     // the tap itself, and only trust recent notifications so an old tap (or
     // one that merely arrived while the app was killed) doesn't hijack a
     // later normal launch and auto-open its chat.
-    Notifications.getLastNotificationResponseAsync()
-      .then((response) => {
+    (async () => {
+      try {
+        const response = await Notifications.getLastNotificationResponseAsync();
         const receivedAt = response?.notification?.date;
         const data = response?.notification?.request?.content?.data;
         const isColdStart = Date.now() - PROCESS_STARTED_AT < COLD_START_WINDOW_MS;
         if (isColdStart && data?.route && typeof receivedAt === 'number' && Date.now() - receivedAt < COLD_START_WINDOW_MS) {
           onRoute?.(data);
         }
-      })
-      .catch(() => {});
+      } catch {}
+    })();
 
     return {
       token,

@@ -303,9 +303,13 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     if (!body) return;
     haptic('impact'); // subtle send acknowledgement
     if (editing) {
-      editMessage(editing.id, body)
-        .then(() => {})
-        .catch((e) => console.warn('edit failed', e.message));
+      (async () => {
+        try {
+          await editMessage(editing.id, body);
+        } catch (e) {
+          console.warn('edit failed', e.message);
+        }
+      })();
       setEditing(null);
       setText('');
       setTypingState(chatId, false);
@@ -767,12 +771,16 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
           if (loadingOlderRef.current || !loadOlderMessages) return;
           loadingOlderRef.current = true;
           suppressScrollToEnd.current = true;
-          Promise.resolve(loadOlderMessages(chatId)).finally(() => {
-            setTimeout(() => {
-              suppressScrollToEnd.current = false;
-              loadingOlderRef.current = false;
-            }, 400);
-          });
+          (async () => {
+            try {
+              await loadOlderMessages(chatId);
+            } finally {
+              setTimeout(() => {
+                suppressScrollToEnd.current = false;
+                loadingOlderRef.current = false;
+              }, 400);
+            }
+          })();
         }}
         scrollEventThrottle={80}
         onContentSizeChange={() => {

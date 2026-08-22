@@ -41,7 +41,14 @@ export default function AudiencePicker({
   useEffect(() => {
     if (!choosingPeople || users.length) return;
     setLoading(true);
-    api.users('', { contactsOnly }).then(({ users }) => setUsers(users)).catch(() => {}).finally(() => setLoading(false));
+    (async () => {
+      try {
+        const { users: list } = await api.users('', { contactsOnly });
+        setUsers(list);
+      } catch {} finally {
+        setLoading(false);
+      }
+    })();
   }, [choosingPeople, contactsOnly, users.length]);
 
   const filtered = users.filter((u) => {

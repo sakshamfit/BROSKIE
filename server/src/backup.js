@@ -24,7 +24,7 @@ const DATA_DIR = db.DATA_DIR;
 const BACKUP_DIR = process.env.BACKUP_DIR || path.join(DATA_DIR, 'backups');
 const BACKUP_KEEP = Math.max(1, Number(process.env.BACKUP_KEEP || 20));
 
-function backupNow() {
+async function backupNow() {
   if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
   const stamp = new Date()
     .toISOString()
@@ -32,30 +32,30 @@ function backupNow() {
     .slice(0, 19); // YYYY-MM-DDTHH-MM-SS
   const target = path.join(BACKUP_DIR, `tomodachi-${stamp}.db`);
 
-  return db.backup(target).then(() => {
-    // Prune old backups, keep the newest BACKUP_KEEP.
-    const files = fs
-      .readdirSync(BACKUP_DIR)
-      .filter((f) => f.startsWith('tomodachi-') && f.endsWith('.db'))
-      .sort();
-    while (files.length > BACKUP_KEEP) {
-      fs.unlinkSync(path.join(BACKUP_DIR, files.shift()));
-    }
-    console.log(`[backup] saved ${target} (${BACKUP_KEEP} kept)`);
-    return target;
-  });
+  await db.backup(target);
+  // Prune old backups, keep the newest BACKUP_KEEP.
+  const files = fs
+    .readdirSync(BACKUP_DIR)
+    .filter((f) => f.startsWith('tomodachi-') && f.endsWith('.db'))
+    .sort();
+  while (files.length > BACKUP_KEEP) {
+    fs.unlinkSync(path.join(BACKUP_DIR, files.shift()));
+  }
+  console.log(`[backup] saved ${target} (${BACKUP_KEEP} kept)`);
+  return target;
 }
 
 module.exports = { backupNow, BACKUP_DIR };
 
 if (require.main === module) {
-  backupNow()
-    .then((p) => {
+  (async () => {
+    try {
+      const p = await backupNow();
       console.log('Backup OK:', p);
       process.exit(0);
-    })
-    .catch((e) => {
+    } catch (e) {
       console.error('[backup] failed:', e.message);
       process.exit(1);
-    });
+    }
+  })();
 }

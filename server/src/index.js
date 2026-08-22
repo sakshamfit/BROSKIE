@@ -4284,9 +4284,15 @@ function shutdownWithBackup(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[shutdown] ${signal} received — backing up before exit…`);
-  backupNow()
-    .catch((e) => console.error('[backup]', e.message))
-    .finally(() => process.exit(0));
+  (async () => {
+    try {
+      await backupNow();
+    } catch (e) {
+      console.error('[backup]', e.message);
+    } finally {
+      process.exit(0);
+    }
+  })();
 }
 process.on('SIGTERM', () => shutdownWithBackup('SIGTERM'));
 process.on('SIGINT', () => shutdownWithBackup('SIGINT'));

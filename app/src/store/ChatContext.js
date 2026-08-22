@@ -9,6 +9,14 @@ import * as RTC from '../webrtc/rtc';
 const ChatContext = createContext(null);
 export const useChat = () => useContext(ChatContext);
 
+/** Best-effort refresh of the activity badge count (used by socket events). */
+const refreshActivityUnread = async (setActivityUnread) => {
+  try {
+    const r = await api.activity();
+    setActivityUnread(r.unread || 0);
+  } catch {}
+};
+
 // Pinned chats float to the top; within each group, latest activity first.
 const sortChats = (list) =>
   [...list].sort((a, b) =>
@@ -182,10 +190,16 @@ export function ChatProvider({ children }) {
 
     const appSub = AppState.addEventListener('change', (next) => {
       if (next === 'active' && engineRef.current === engine) {
-        engine.connectivity.probe().finally(() => {
-          engine.outbox.drain();
-          engine.sync.reconnect().catch(() => {});
-        });
+        (async () => {
+          try {
+            await engine.connectivity.probe();
+          } catch {
+            // offline probe failed — still drain the outbox and resync below
+          } finally {
+            engine.outbox.drain();
+            engine.sync.reconnect().catch(() => {});
+          }
+        })();
       }
     });
 
@@ -321,12 +335,12 @@ export function ChatProvider({ children }) {
 
     socket.on('chat:request', (payload) => {
       chatRequestListeners.current.forEach((fn) => fn('chat:request', payload));
-      api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
+      refreshActivityUnread(setActivityUnread);
     });
     socket.on('chat:request:resolved', (payload) => {
       if (payload?.action === 'accept' && payload?.chat) upsertChat(payload.chat);
       chatRequestListeners.current.forEach((fn) => fn('chat:request:resolved', payload));
-      api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
+      refreshActivityUnread(setActivityUnread);
     });
 
     // The Network — re-broadcast post events to any subscribed screen
@@ -346,7 +360,7 @@ export function ChatProvider({ children }) {
       socket.on(ev, (payload) => {
         communityListeners.current.forEach((fn) => fn(ev, payload));
         if (ev === 'community:request' || ev === 'community:approved' || ev === 'community:declined') {
-          api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
+          refreshActivityUnread(setActivityUnread);
         }
       });
     });
@@ -358,7 +372,7 @@ export function ChatProvider({ children }) {
     ['colleague:updated', 'affiliation:updated'].forEach((ev) => {
       socket.on(ev, (payload) => {
         colleagueListeners.current.forEach((fn) => fn(ev, payload));
-        api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
+        refreshActivityUnread(setActivityUnread);
       });
     });
 
@@ -385,7 +399,7 @@ export function ChatProvider({ children }) {
         direction: 'incoming', status: 'ringing', with: payload.caller, startedAt: payload.startedAt,
       });
       playRingtone();
-      api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
+      refreshActivityUnread(setActivityUnread);
     });
 
     socket.on('call:accepted', (payload) => {
@@ -430,13 +444,13 @@ export function ChatProvider({ children }) {
       teardownWebRTC();
       setCall((prev) => (prev && prev.id === payload.id ? { ...prev, status: 'ended', endedReason: payload.endedReason } : prev));
       setTimeout(() => setCall((prev) => (prev && prev.status === 'ended' ? null : prev)), 2500);
-      api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
+      refreshActivityUnread(setActivityUnread);
     });
 
     // Conversation startup hydration/refresh is handled by the durable-cache
     // effect above. Keep activity independent so either request can fail
     // without making the chat history appear empty.
-    api.activity().then((r) => setActivityUnread(r.unread || 0)).catch(() => {});
+    refreshActivityUnread(setActivityUnread);
 
     return () => {
       stopRingtone();
@@ -551,16 +565,18 @@ export function ChatProvider({ children }) {
   const acceptCall = useCallback(() => {
     if (!call) return;
     stopRingtone();
-    socketRef.current?.emit('call:accept', { callId: call.id }, (res) => {
+    socketRef.current?.emit('call:accept', { callId: call.id }, async (res) => {
       if (res?.error) { setCall(null); return; }
       callTypeRef.current = call.type;
       setCall((prev) => (prev ? { ...prev, status: 'connecting' } : prev));
       // Callee waits for the caller's offer (see socket.on('call:offer') above)
       // but still needs its own media/peer connection ready to receive it.
-      ensurePeerConnection(call.id, call.type).catch((e) => {
+      try {
+        await ensurePeerConnection(call.id, call.type);
+      } catch (e) {
         socketRef.current?.emit('call:hangup', { callId: call.id });
         setCall((prev) => (prev ? { ...prev, status: 'ended', endedReason: 'failed', error: e.message } : prev));
-      });
+      }
     });
   }, [call, ensurePeerConnection]);
 

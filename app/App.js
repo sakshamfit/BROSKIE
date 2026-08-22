@@ -137,13 +137,19 @@ function Root() {
     try {
       if (window.localStorage?.getItem('+one.web-build') !== WEB_BUILD) {
         window.localStorage?.setItem('+one.web-build', WEB_BUILD);
-        window.navigator?.serviceWorker?.getRegistrations?.()
-          .then((registrations) => registrations.forEach((registration) => registration.unregister()))
-          .catch(() => {});
+        (async () => {
+          try {
+            const registrations = await window.navigator?.serviceWorker?.getRegistrations?.();
+            registrations?.forEach((registration) => registration.unregister());
+          } catch {}
+        })();
         if (window.caches?.keys) {
-          window.caches.keys()
-            .then((keys) => Promise.all(keys.map((key) => window.caches.delete(key))))
-            .catch(() => {});
+          (async () => {
+            try {
+              const keys = await window.caches.keys();
+              await Promise.all(keys.map((key) => window.caches.delete(key)));
+            } catch {}
+          })();
         }
       }
     } catch {}
