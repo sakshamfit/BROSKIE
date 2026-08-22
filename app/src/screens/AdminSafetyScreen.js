@@ -263,21 +263,26 @@ export default function AdminSafetyScreen({ navigation }) {
         <Tab key="settings" label="Settings" />
       </ScrollView>
 
-      {tab === 'overview' && (
-        <OverviewTab theme={theme} s={s} overview={overview} loading={loading} onOpenCase={openCaseDetail} onGoCases={() => setTab('cases')} onRetry={refreshAll} />
-      )}
-      {tab === 'cases' && (
-        <CasesTab
-          theme={theme} s={s} cases={cases} meta={casesMeta} loading={loading}
-          severity={severity} setSeverity={setSeverity} category={category} setCategory={setCategory}
-          status={status} setStatus={setStatus} source={source} setSource={setSource}
-          sort={sort} setSort={setSort} q={q} setQ={setQ}
-          onRefresh={() => refreshAll()} onOpenCase={openCaseDetail}
-        />
-      )}
-      {tab === 'audit' && <AuditTab theme={theme} s={s} />}
-      {tab === 'people' && <PeopleTab theme={theme} s={s} query={peopleQuery} setQuery={setPeopleQuery} people={people} loading={peopleLoading} onSearch={searchPeople} onOpen={(id) => setReviewUser(id)} />}
-      {tab === 'settings' && <SettingsTab theme={theme} s={s} onChanged={refreshAll} />}
+      {/* Keep the tab body in its own bounded flex item. React Native Web
+          otherwise treats the nested flex layout as content-sized in the
+          desktop split shell, leaving this entire region at zero height. */}
+      <View style={s.body}>
+        {tab === 'overview' && (
+          <OverviewTab theme={theme} s={s} overview={overview} loading={loading} onOpenCase={openCaseDetail} onGoCases={() => setTab('cases')} onRetry={refreshAll} />
+        )}
+        {tab === 'cases' && (
+          <CasesTab
+            theme={theme} s={s} cases={cases} meta={casesMeta} loading={loading}
+            severity={severity} setSeverity={setSeverity} category={category} setCategory={setCategory}
+            status={status} setStatus={setStatus} source={source} setSource={setSource}
+            sort={sort} setSort={setSort} q={q} setQ={setQ}
+            onRefresh={() => refreshAll()} onOpenCase={openCaseDetail}
+          />
+        )}
+        {tab === 'audit' && <AuditTab theme={theme} s={s} />}
+        {tab === 'people' && <PeopleTab theme={theme} s={s} query={peopleQuery} setQuery={setPeopleQuery} people={people} loading={peopleLoading} onSearch={searchPeople} onOpen={(id) => setReviewUser(id)} />}
+        {tab === 'settings' && <SettingsTab theme={theme} s={s} onChanged={refreshAll} />}
+      </View>
 
       {/* Case detail sheet */}
       <Modal visible={!!openCase} animationType="slide" onRequestClose={() => setOpenCase(null)}>
@@ -310,7 +315,7 @@ export default function AdminSafetyScreen({ navigation }) {
 function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases, onRetry }) {
   if (loading && !overview) {
     return (
-      <View style={s.center}>
+      <View style={[s.center, s.centerState]}>
         <ActivityIndicator color={theme.ink} />
         <Text style={[type.labelSm, { color: theme.muted, marginTop: 12 }]}>LOADING SAFETY CENTER…</Text>
       </View>
@@ -318,7 +323,7 @@ function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases, onRet
   }
   if (!overview) {
     return (
-      <View style={s.center}>
+      <View style={[s.center, s.centerState]}>
         <Icon name="cloud-offline-outline" size={34} color={theme.muted} />
         <Text style={[type.bodySm, { color: theme.muted, marginTop: 12, textAlign: 'center' }]}>
           Could not load the Safety Center.
@@ -329,10 +334,11 @@ function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases, onRet
       </View>
     );
   }
+  const counts = overview.counts || {};
   const cards = [
-    ['Critical', overview.counts.critical, '#d13c3c'],
-    ['High', overview.counts.high, '#e07a2e'],
-    ['Medium', overview.counts.medium, '#c9a227'],
+    ['Critical', counts.critical, '#d13c3c'],
+    ['High', counts.high, '#e07a2e'],
+    ['Medium', counts.medium, '#c9a227'],
     ['Open cases', overview.openCases, theme.ink],
   ];
   return (
@@ -807,14 +813,22 @@ function SettingsTab({ theme, s, onChanged }) {
 }
 
 const makeStyles = (t) => StyleSheet.create({
-  root: { flex: 1 },
+  // `minHeight: 0` / `minWidth: 0` are important on React Native Web:
+  // flex items otherwise keep their automatic minimum size and the nested
+  // split-layout body can collapse below the header and tab strip.
+  root: { flex: 1, minHeight: 0, minWidth: 0 },
+  // Keep a small fallback height as well: if a browser briefly reports an
+  // unresolved percentage height during a split-pane transition, the first
+  // loading/error state still has somewhere to paint.
+  body: { flex: 1, minHeight: 240, minWidth: 0, alignSelf: 'stretch' },
   denyRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: t.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 10 },
   // Horizontal ScrollViews default to flexGrow:1 on web, so a tab/filter row
   // placed inside a bounded flex column would stretch to fill the leftover
   // vertical space. Pin these rows to their content height instead.
-  hugRow: { flexGrow: 0, flexShrink: 0 },
+  hugRow: { flexGrow: 0, flexShrink: 0, minHeight: 0 },
   tabRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingBottom: 8, borderBottomWidth: 1 },
+  centerState: { minHeight: 260 },
   tabBtn: { minWidth: 78, alignItems: 'center', paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999 },
   livePill: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   statRow: { flexDirection: 'row', gap: 10 },
@@ -822,8 +836,8 @@ const makeStyles = (t) => StyleSheet.create({
   alertRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius.md, backgroundColor: t.card },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   retryBtn: { borderWidth: 1.5, borderColor: t.ink, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 8, marginTop: 16 },
-  main: { flex: 1 },
-  scrollContent: { flexGrow: 1 },
+  main: { flex: 1, minHeight: 0, minWidth: 0 },
+  scrollContent: { flexGrow: 1, minHeight: 0 },
   search: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
   searchInput: { flex: 1, fontFamily: 'Karla_400Regular', fontSize: 14, color: t.text, padding: 0 },
   sevBadge: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },

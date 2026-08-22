@@ -324,10 +324,13 @@ const makeStyles = (t, insets, isWeb) => StyleSheet.create({
     paddingTop: isWeb ? 0 : insets.top,
     paddingBottom: isWeb ? 0 : insets.bottom,
   },
-  main: { flex: 1, flexDirection: 'row' },
-  listPane: { width: 360, maxWidth: '42%', borderRightWidth: stroke.thin, borderStyle: 'dashed', height: '100%' },
-  detailPane: { flex: 1, height: '100%' },
-  fullPane: { flex: 1, height: '100%' },
+  // Every nested flex row needs an explicit bounded cross-axis on web.
+  // Without minHeight: 0, a full-screen child can collapse to its header's
+  // intrinsic height when it is swapped into the Settings pane.
+  main: { flex: 1, flexDirection: 'row', height: '100%', minHeight: 0, minWidth: 0 },
+  listPane: { width: 360, maxWidth: '42%', borderRightWidth: stroke.thin, borderStyle: 'dashed', height: '100%', minHeight: 0 },
+  detailPane: { flex: 1, height: '100%', minHeight: 0, minWidth: 0 },
+  fullPane: { flex: 1, height: '100%', minHeight: 0, minWidth: 0 },
   centeredPane: { alignItems: 'center' },
 });
 
