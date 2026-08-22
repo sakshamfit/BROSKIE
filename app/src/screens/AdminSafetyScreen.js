@@ -251,8 +251,8 @@ export default function AdminSafetyScreen({ navigation }) {
           remaining height on web, leaving the actual tab body off-screen. */}
       <ScrollView
         horizontal
-        style={s.tabScroller}
         showsHorizontalScrollIndicator={false}
+        style={s.hugRow}
         contentContainerStyle={[s.tabRow, { borderColor: theme.ink }]}
         keyboardShouldPersistTaps="handled"
       >
@@ -388,14 +388,14 @@ function CasesTab(props) {
   const { theme, s, cases, severity, setSeverity, category, setCategory, status, setStatus, source, setSource, sort, setSort, q, setQ, onOpenCase, onRefresh } = props;
   return (
     <View style={s.main}>
-      <ScrollView horizontal style={s.tabScroller} showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 8, gap: 6 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.hugRow} contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 8, gap: 6 }}>
         {SEV_FILTERS.map((sv) => (
           <Pressable key={sv} onPress={() => setSeverity(sv)}>
             <TapeChip label={sv} tone={severity === sv ? 'accent' : 'ink'} />
           </Pressable>
         ))}
       </ScrollView>
-      <ScrollView horizontal style={s.tabScroller} showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 6, gap: 6 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.hugRow} contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 6, gap: 6 }}>
         {CAT_FILTERS.map(([k, label]) => (
           <Pressable key={k} onPress={() => setCategory(category === k ? '' : k)}>
             <TapeChip label={label} tone={category === k ? 'accent' : 'ink'} />
@@ -810,6 +810,10 @@ const makeStyles = (t) => StyleSheet.create({
   root: { flex: 1 },
   denyRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: t.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 10 },
+  // Horizontal ScrollViews default to flexGrow:1 on web, so a tab/filter row
+  // placed inside a bounded flex column would stretch to fill the leftover
+  // vertical space. Pin these rows to their content height instead.
+  hugRow: { flexGrow: 0, flexShrink: 0 },
   tabRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingBottom: 8, borderBottomWidth: 1 },
   tabBtn: { minWidth: 78, alignItems: 'center', paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999 },
   livePill: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
@@ -820,7 +824,6 @@ const makeStyles = (t) => StyleSheet.create({
   retryBtn: { borderWidth: 1.5, borderColor: t.ink, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 8, marginTop: 16 },
   main: { flex: 1 },
   scrollContent: { flexGrow: 1 },
-  tabScroller: { flexGrow: 0, flexShrink: 0 },
   search: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
   searchInput: { flex: 1, fontFamily: 'Karla_400Regular', fontSize: 14, color: t.text, padding: 0 },
   sevBadge: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
