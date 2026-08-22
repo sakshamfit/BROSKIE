@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { useColorScheme } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { appStorage } from '../storage';
 import { lightTheme, darkTheme, kineticInkTheme } from '../theme';
 
 const ThemeContext = createContext(null);
@@ -25,16 +25,17 @@ export function ThemeProvider({ children }) {
   const [preference, setPreference] = useState('light');
 
   useEffect(() => {
-    AsyncStorage.getItem(KEY).then((v) => {
+    (async () => {
+      const v = await appStorage.getItem(KEY);
       if (v === 'light' || v === 'dark' || v === 'kinetic' || v === 'system') setPreference(v);
-    });
+    })();
   }, []);
 
   const mode = preference === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : preference;
 
   const setThemePreference = (next) => {
     setPreference(next);
-    AsyncStorage.setItem(KEY, next);
+    appStorage.setItem(KEY, next);
   };
 
   /** Back-compat: cycles light <-> dark, opting OUT of following the system. */

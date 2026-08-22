@@ -183,18 +183,21 @@ export default function DailyAIGreeting() {
     const key = `+one.ai-greeting.${user.id}.${dayKey}`;
     started.current = false;
     setSpokenLine('Preparing your daily signal…');
-    AsyncStorage.getItem(key).then((seen) => {
-      if (!active || seen) return;
-      // Mark immediately so reconnects/re-renders cannot stack the same daily modal.
-      AsyncStorage.setItem(key, 'shown').catch(() => {});
-      setLoading(true);
-      setVisible(true);
-    }).catch(() => {
-      if (active) {
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(key);
+        if (!active || seen) return;
+        // Mark immediately so reconnects/re-renders cannot stack the same daily modal.
+        AsyncStorage.setItem(key, 'shown').catch(() => {});
         setLoading(true);
         setVisible(true);
+      } catch {
+        if (active) {
+          setLoading(true);
+          setVisible(true);
+        }
       }
-    });
+    })();
     return () => {
       active = false;
       sequenceId.current += 1;
@@ -208,9 +211,16 @@ export default function DailyAIGreeting() {
     if (!visible) return undefined;
     let active = true;
     setLoading(true);
-    Promise.all([
-      api.greetingSummary(localMidnight()).then((result) => result.summary || EMPTY_SUMMARY).catch(() => EMPTY_SUMMARY),
-      (async () => {
+    (async () => {
+      const loadBriefing = async () => {
+        try {
+          const result = await api.greetingSummary(localMidnight());
+          return result.summary || EMPTY_SUMMARY;
+        } catch {
+          return EMPTY_SUMMARY;
+        }
+      };
+      const loadLocalWeather = async () => {
         try {
           const permission = await Location.requestForegroundPermissionsAsync();
           if (permission.status !== 'granted') return { state: 'denied' };
@@ -228,13 +238,17 @@ export default function DailyAIGreeting() {
         } catch {
           return { state: 'unavailable' };
         }
-      })(),
-    ]).then(([briefing, localWeather]) => {
-      if (!active) return;
-      setSummary(briefing);
-      setWeatherState(localWeather.state);
-      setWeather(localWeather.state === 'ready' ? localWeather : null);
-    }).finally(() => { if (active) setLoading(false); });
+      };
+      try {
+        const [briefing, localWeather] = await Promise.all([loadBriefing(), loadLocalWeather()]);
+        if (!active) return;
+        setSummary(briefing);
+        setWeatherState(localWeather.state);
+        setWeather(localWeather.state === 'ready' ? localWeather : null);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
     return () => { active = false; };
   }, [visible]);
 

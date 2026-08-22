@@ -37,10 +37,13 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
 
   useEffect(() => {
     if (chat?.type !== 'direct' || !chat.otherUserId) return;
-    api.users().then(({ users }) => {
-      const other = users.find((u) => u.id === chat.otherUserId);
-      if (other) setBlocked(!!other.blocked);
-    }).catch(() => {});
+    (async () => {
+      try {
+        const { users } = await api.users();
+        const other = users.find((u) => u.id === chat.otherUserId);
+        if (other) setBlocked(!!other.blocked);
+      } catch {}
+    })();
   }, [chat?.otherUserId]);
 
   if (!chat) return <View style={{ flex: 1, backgroundColor: theme.bg }} />;

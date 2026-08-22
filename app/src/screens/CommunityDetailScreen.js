@@ -77,7 +77,12 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
 
   useEffect(() => {
     if (community?.role === 'admin' && showRequests) {
-      api.communityRequests(communityId).then((r) => setRequests(r.requests)).catch(() => {});
+      (async () => {
+        try {
+          const r = await api.communityRequests(communityId);
+          setRequests(r.requests);
+        } catch {}
+      })();
     }
   }, [community?.role, showRequests, communityId]);
 

@@ -14,6 +14,7 @@ import AffiliationPicker, { AFFILIATION_TYPES, affiliationType } from '../compon
 import TodayStrip from '../components/TodayStrip';
 import { Avatar, InkField, TapeChip, handleFor, rippleFor, GoldTick, hasGoldTick } from '../components/common';
 import { openNetworkFeed } from '../push/routing';
+import { useDebouncedCallback } from '../rateLimit';
 import { type, inkBox, marker, dashedRule, raised } from '../theme';
 
 const FILTERS = [{ key: '', short: 'All', icon: 'globe-outline' }, ...AFFILIATION_TYPES];
@@ -63,11 +64,19 @@ export default function ColleaguesScreen({ onOpenChat }) {
     }
   }, [query, activeType]);
 
-  // Debounce text search; filter changes feel immediate.
+  // Debounce text search; filter changes feel immediate. While a query is
+  // active the server is hit once per typing pause; clearing the search
+  // reloads at once instead of waiting out the debounce window.
+  const debouncedLoad = useDebouncedCallback(() => load(), 220);
   useEffect(() => {
-    const timer = setTimeout(() => load(), query ? 220 : 0);
-    return () => clearTimeout(timer);
-  }, [load, query]);
+    if (!query.trim()) {
+      debouncedLoad.cancel();
+      load();
+      return undefined;
+    }
+    debouncedLoad();
+    return undefined;
+  }, [query, load, debouncedLoad]);
 
   // A request accepted on another device or a newly joined colleague should
   // appear without leaving/re-entering the screen.

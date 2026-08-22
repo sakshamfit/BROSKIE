@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { AppState } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { appStorage } from '../storage';
 import { api, setToken } from '../api';
 
 const AuthContext = createContext(null);
@@ -16,7 +16,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     (async () => {
       try {
-        const saved = await AsyncStorage.getItem(TOKEN_KEY);
+        const saved = await appStorage.getItem(TOKEN_KEY);
         if (saved) {
           setToken(saved);
           const { user } = await api.restoreSession();
@@ -27,7 +27,7 @@ export function AuthProvider({ children }) {
         // A temporary network outage must not erase a valid remembered
         // session. Only a real 401 means the token itself is no longer valid.
         if (error?.status === 401) {
-          await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
+          await appStorage.removeItem(TOKEN_KEY).catch(() => {});
           setToken(null);
         } else if (typeof __DEV__ !== 'undefined' && __DEV__) {
           console.warn('Could not restore session:', error?.technicalMessage || error?.message);
@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
     setTok(tok);
     setUser(usr);
     try {
-      await AsyncStorage.setItem(TOKEN_KEY, tok);
+      await appStorage.setItem(TOKEN_KEY, tok);
     } catch (error) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.warn('Could not remember this session:', error?.message);
@@ -73,11 +73,15 @@ export function AuthProvider({ children }) {
 
     // Removing the remembered token is best-effort; a failure here must not
     // prevent the current session from ending.
-    return AsyncStorage.removeItem(TOKEN_KEY).catch((error) => {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.warn('Could not clear remembered session:', error?.message);
+    return (async () => {
+      try {
+        await appStorage.removeItem(TOKEN_KEY);
+      } catch (error) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn('Could not clear remembered session:', error?.message);
+        }
       }
-    });
+    })();
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -94,18 +98,20 @@ export function AuthProvider({ children }) {
 
     let disposed = false;
     let refreshing = false;
-    const refreshOnForeground = () => {
+    const refreshOnForeground = async () => {
       if (disposed || refreshing) return;
       refreshing = true;
-      refreshUser()
-        .catch((error) => {
-          // A temporary offline period must not log the user out or interrupt
-          // the current screen; the next foreground transition retries it.
-          if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            console.warn('Could not refresh account settings:', error?.technicalMessage || error?.message);
-          }
-        })
-        .finally(() => { refreshing = false; });
+      try {
+        await refreshUser();
+      } catch (error) {
+        // A temporary offline period must not log the user out or interrupt
+        // the current screen; the next foreground transition retries it.
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn('Could not refresh account settings:', error?.technicalMessage || error?.message);
+        }
+      } finally {
+        refreshing = false;
+      }
     };
 
     const subscription = AppState.addEventListener('change', (nextState) => {

@@ -76,7 +76,12 @@ export function useReducedMotion() {
       return () => mq.removeEventListener?.('change', onChange);
     }
     let mounted = true;
-    AccessibilityInfo.isReduceMotionEnabled().then((v) => { if (mounted) setReduced(!!v); }).catch(() => {});
+    (async () => {
+      try {
+        const v = await AccessibilityInfo.isReduceMotionEnabled();
+        if (mounted) setReduced(!!v);
+      } catch {}
+    })();
     const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', (v) => setReduced(!!v));
     return () => { mounted = false; sub?.remove?.(); };
   }, []);

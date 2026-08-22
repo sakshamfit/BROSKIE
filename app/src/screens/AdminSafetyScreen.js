@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, Pressable, StyleSheet, ScrollView, TextInput, FlatList,
   ActivityIndicator, Modal, RefreshControl, KeyboardAvoidingView, Platform,
@@ -9,10 +9,11 @@ import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, PaperCard, TapeChip, Rule, InkButton } from '../components/common';
+import { Avatar, PaperCard, TapeChip, Rule, InkButton, InkField, GoldTick, hasGoldTick } from '../components/common';
 import { type, inkBox, marker, dashedRule, radius, raised } from '../theme';
 import { haptic } from '../motion';
 import { confirm } from '../hooks/confirm';
+import { useDebouncedCallback } from '../rateLimit';
 
 /* ------------------------------------------------------------------ */
 /* Admin Safety & Moderation Center                                    */
@@ -82,7 +83,6 @@ export default function AdminSafetyScreen({ navigation }) {
   const [source, setSource] = useState('');
   const [sort, setSort] = useState('new');
   const [q, setQ] = useState('');
-  const qTimer = useRef(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -109,7 +109,11 @@ export default function AdminSafetyScreen({ navigation }) {
     await Promise.all([loadOverview(), loadCases()]);
   }, [loadOverview, loadCases]);
 
-  useEffect(() => { refreshAll().finally(() => setLoading(false)); }, [refreshAll]);
+  useEffect(() => {
+    (async () => {
+      try { await refreshAll(); } finally { setLoading(false); }
+    })();
+  }, [refreshAll]);
 
   // realtime safety alerts — dashboard refreshes itself, no pull needed.
   useEffect(() => {
@@ -120,17 +124,23 @@ export default function AdminSafetyScreen({ navigation }) {
       }
       refreshAll();
       if (openCase && payload.caseId === openCase.case?.id) {
-        api.adminModerationCase(openCase.case.id).then(setOpenCase).catch(() => {});
+        (async () => {
+          try {
+            const updated = await api.adminModerationCase(openCase.case.id);
+            setOpenCase(updated);
+          } catch {}
+        })();
       }
     });
   }, [onModerationEvent, refreshAll, openCase]);
 
+  // Debounced case search: the filter box pauses 250ms before the
+  // moderation API is hit, instead of one request per keystroke. Filter
+  // chips (severity/category/status) reload through the same path.
+  const debouncedLoadCases = useDebouncedCallback(() => loadCases(), 250);
   useEffect(() => {
-    const t = qTimer.current;
-    if (t) clearTimeout(t);
-    qTimer.current = setTimeout(() => { loadCases(); }, 250);
-    return () => clearTimeout(qTimer.current);
-  }, [q, loadCases]);
+    debouncedLoadCases();
+  }, [q, loadCases, debouncedLoadCases]);
 
   if (!isAdmin) {
     return (
@@ -552,6 +562,16 @@ function UserPanel({ theme, s, userId, onClose, onAction }) {
   useEffect(() => { load(); }, [load]);
   const act = async (...args) => { await onAction(...args); load(); };
   const [reason, setReason] = useState('');
+  const [tickBusy, setTickBusy] = useState(false);
+  const toggleTick = async () => {
+    setTickBusy(true); haptic('selection');
+    try {
+      await api.adminModerationGoldTick(u.id, !u.goldTick);
+      await load();
+    } catch (e) {
+      await confirm(e.message || 'Could not update verification', { title: 'Safety Center', confirmLabel: 'OK' });
+    } finally { setTickBusy(false); }
+  };
   if (!data) return <View style={[s.denyRoot, { paddingTop: insets.top }]}><ActivityIndicator color={theme.ink} /></View>;
   const u = data.user;
   return (
@@ -564,7 +584,10 @@ function UserPanel({ theme, s, userId, onClose, onAction }) {
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Avatar uri={u.avatar} name={u.name} id={u.id} size={40} />
             <View>
-              <Text style={[type.headlineSm, { color: theme.text }]}>{u.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[type.headlineSm, { color: theme.text }]}>{u.name}</Text>
+                {hasGoldTick(u) && <GoldTick size={14} />}
+              </View>
               <Text style={[type.labelXs, { color: theme.muted }]}>@{u.username} · {u.role}</Text>
             </View>
           </View>
@@ -583,6 +606,13 @@ function UserPanel({ theme, s, userId, onClose, onAction }) {
           <TextInput value={reason} onChangeText={setReason} placeholder="Reason for the action below" placeholderTextColor={theme.muted} style={s.searchInput} />
         </InkField>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <Pressable
+            onPress={toggleTick}
+            disabled={tickBusy}
+            style={[s.actBtn, { borderColor: theme.ink }, u.goldTick && { backgroundColor: theme.highlighter, borderColor: theme.ink }]}
+          >
+            <Text style={[type.labelSm, { color: theme.ink }]}>{u.goldTick ? 'GOLD TICK ✓' : 'GOLD TICK'}</Text>
+          </Pressable>
           <Pressable onPress={() => act(u.id, 'warn', { reason })} style={[s.actBtn, { borderColor: theme.ink }]}><Text style={[type.labelSm, { color: theme.ink }]}>WARN</Text></Pressable>
           <Pressable onPress={() => act(u.id, 'restrict', { reason })} style={[s.actBtn, { borderColor: theme.ink }]}><Text style={[type.labelSm, { color: theme.ink }]}>RESTRICT</Text></Pressable>
           <Pressable onPress={() => act(u.id, 'unrestrict', { reason })} style={[s.actBtn, { borderColor: theme.ink }]}><Text style={[type.labelSm, { color: theme.ink }]}>UNRESTRICT</Text></Pressable>

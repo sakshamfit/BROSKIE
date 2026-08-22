@@ -32,6 +32,7 @@ import { FadeSlide, TypingDots, FloatLoop, SheetSpringIn, SpringPressable, Pop, 
 import { api, mediaUrl } from '../api';
 import { setViewedChat } from '../push/notifications';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
+import { throttle, useDebouncedCallback } from '../rateLimit';
 import CollabDocumentView from '../components/CollabDocumentView';
 import TextOperation from '../ot/TextOperation';
 
@@ -116,6 +117,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const typingTimer = useRef(null);
+  // Socket "typing: true" emits are throttled (see onChangeText) so a fast
+  // typist doesn't fire one packet per keystroke.
+  const typingThrottle = useRef(null);
   // Reply focus / quote-tap must not trigger the composer's usual
   // scroll-to-bottom jump — keep the user on the message they swiped.
   const suppressFocusScroll = useRef(false);
@@ -127,14 +131,14 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const [searchQ, setSearchQ] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
-  const searchTimer = useRef(null);
 
   // forward + timer + poll + docs modals
   const [forwardMsg, setForwardMsg] = useState(null);
   const [timerMsg, setTimerMsg] = useState(null);
   const [pollOpen, setPollOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
-  const [otEditingVersion, setOtEditingVersion] = useState({}); // messageId -> version
+  const [otEditingVersion, setOtEditingVersion] = useState({});
+  const loadingOlderRef = useRef(false);
 
   // ⋯ overflow menu (Theme lives here, per the familiar chat-menu flow)
   const [overflowOpen, setOverflowOpen] = useState(false);
@@ -147,7 +151,6 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   // because their keyboards may not resize the chat list for us.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const keyboardScrollTimer = useRef(null);
-  const loadingOlderRef = useRef(false);
   const scrollToLatest = useCallback((delay = 0) => {
     clearTimeout(keyboardScrollTimer.current);
     keyboardScrollTimer.current = setTimeout(() => {
@@ -248,13 +251,24 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       if (audioRecorder.getStatus()?.isRecording) audioRecorder.stop().catch(() => {});
     } catch {}
     setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+    typingThrottle.current?.cancel();
   }, [audioRecorder]);
 
   const typers = Object.values(typing[chatId] || {});
 
   const onChangeText = (v) => {
     setText(v);
-    setTypingState(chatId, true);
+    // Throttle the "typing: true" socket emit to one packet per 2s while the
+    // user keeps typing. Trailing is off, so the debounced "typing: false"
+    // below always lands after the last true — the indicator can't get stuck.
+    if (!typingThrottle.current) {
+      typingThrottle.current = throttle(
+        (id) => setTypingState(id, true),
+        2000,
+        { leading: true, trailing: false },
+      );
+    }
+    typingThrottle.current(chatId);
     clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => setTypingState(chatId, false), 1600);
   };
@@ -294,10 +308,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const send = () => {
     const body = text.trim();
     if (!body) return;
-    haptic('impact'); // subtle send acknowledgement
+    haptic('impact');
     if (editing) {
       const baseVersion = otEditingVersion[editing.id] || editing.otVersion || 0;
-      // OT-based edit: diff old vs new for conflict-free merge
       editMessage(editing.id, body, { baseVersion })
         .then(() => {})
         .catch((e) => console.warn('edit failed', e.message));
@@ -436,19 +449,36 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const cancelRecording = () => stopRecording(false);
 
   /* ---- in-chat search ---- */
+  // Debounced: one /api/search per typing pause instead of one per
+  // keystroke. The input and spinner update instantly; only the network
+  // request waits. `chatId` is passed per call so results can never bleed
+  // across a chat switch; `searchSeq` discards out-of-order responses.
+  const searchSeq = useRef(0);
+  const searchInChat = useDebouncedCallback(async (q, chatIdFor, seq) => {
+    try {
+      const { messages: res } = await api.search(q.trim(), chatIdFor);
+      if (searchSeq.current === seq) setSearchResults(res);
+    } catch {
+      if (searchSeq.current === seq) setSearchResults([]);
+    } finally {
+      if (searchSeq.current === seq) setSearching(false);
+    }
+  }, 250);
+
   const runInChatSearch = useCallback((q) => {
     setSearchQ(q);
-    clearTimeout(searchTimer.current);
-    if (q.trim().length < 2) { setSearchResults([]); return; }
+    const seq = ++searchSeq.current;
+    if (q.trim().length < 2) {
+      // Clearing the box cancels any pending search and settles the
+      // spinner immediately (it would otherwise spin forever).
+      setSearchResults([]);
+      setSearching(false);
+      searchInChat.cancel();
+      return;
+    }
     setSearching(true);
-    searchTimer.current = setTimeout(async () => {
-      try {
-        const { messages: res } = await api.search(q.trim(), chatId);
-        setSearchResults(res);
-      } catch { setSearchResults([]); }
-      finally { setSearching(false); }
-    }, 250);
-  }, [chatId]);
+    searchInChat(q, chatId, seq);
+  }, [searchInChat, chatId]);
 
   const rows = useMemo(() => {
     const out = [];
@@ -509,11 +539,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     setEditing(message);
     setText(message.body || '');
     setShowEmoji(false);
-    // Track version for OT
     if (message.otVersion != null) {
       setOtEditingVersion(prev => ({ ...prev, [message.id]: message.otVersion }));
     } else {
-      // Fetch latest OT version for this message
       api.getMessageEditHistory(message.id).then(r => {
         setOtEditingVersion(prev => ({ ...prev, [message.id]: r.version || 0 }));
       }).catch(() => {
@@ -1117,11 +1145,14 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
 
       {/* OT collaborative documents */}
       <Modal visible={docsOpen} animationType="slide" onRequestClose={() => setDocsOpen(false)}>
-        <CollabDocumentView chatId={chatId} socket={socket} />
-        <View style={{ position: 'absolute', top: 40, right: 16, zIndex: 10 }}>
-          <Pressable onPress={() => setDocsOpen(false)} style={[inkBox(theme, 'thin'), { backgroundColor: theme.bg, paddingHorizontal: 12, paddingVertical: 8 }]}>
-            <Text style={[type.labelSm, { color: theme.ink }]}>CLOSE</Text>
-          </Pressable>
+        <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: 20 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 2, borderBottomColor: theme.ink }}>
+            <Text style={[type.headlineSm, { color: theme.text }]}>COLLABORATIVE NOTES</Text>
+            <Pressable onPress={() => setDocsOpen(false)} style={[inkBox(theme, 'thin'), { paddingHorizontal: 12, paddingVertical: 8 }]}>
+              <Text style={[type.labelSm, { color: theme.ink }]}>CLOSE</Text>
+            </Pressable>
+          </View>
+          <CollabDocumentView chatId={chatId} socket={socket} embedded />
         </View>
       </Modal>
 

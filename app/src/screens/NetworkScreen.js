@@ -144,7 +144,12 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
 
   const onPosted = (post) => {
     setPosts((prev) => (prev.some((p) => p.id === post.id) ? prev : [post, ...prev]));
-    api.postTags().then((r) => setTags(r.tags)).catch(() => {});
+    (async () => {
+      try {
+        const r = await api.postTags();
+        setTags(r.tags);
+      } catch {}
+    })();
     // A fresh post always belongs at the top of the worldwide lens.
     setTodayReload((k) => k + 1);
   };
@@ -489,10 +494,14 @@ function CommentsSheet({ post, onClose, onCounted }) {
   useEffect(() => {
     if (!post) { setList([]); setText(''); return; }
     setLoading(true);
-    api.comments(post.id)
-      .then((r) => setList(r.comments))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    (async () => {
+      try {
+        const r = await api.comments(post.id);
+        setList(r.comments);
+      } catch {} finally {
+        setLoading(false);
+      }
+    })();
   }, [post]);
 
   const send = async () => {

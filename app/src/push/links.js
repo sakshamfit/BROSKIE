@@ -50,7 +50,12 @@ export function setupDeepLinks() {
     return () => {};
   }
 
-  Linking.getInitialURL?.().then(handleDeepLink).catch(() => {});
+  (async () => {
+    try {
+      const url = await Linking.getInitialURL?.();
+      handleDeepLink(url);
+    } catch {}
+  })();
   const sub = Linking.addEventListener?.('url', ({ url }) => handleDeepLink(url));
   return () => sub?.remove?.();
 }
