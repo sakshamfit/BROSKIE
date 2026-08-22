@@ -2743,12 +2743,6 @@ function deliverUserMessage(uid, data) {
   } = data || {};
   if (!chatId) return { error: 'Missing chat', status: 400 };
 
-  // Moderation enforcement applies to all message content paths (sending
-  // via socket or REST, edits, polls, forwards, status replies) — not just
-  // to login. Restricted/suspended/banned users cannot write messages.
-  const gate = moderation.moderationGate(uid);
-  if (gate.blocked) return { error: gate.error, status: 403 };
-
   const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
   if (!isMember) return { error: 'Not a member', status: 403 };
 
@@ -4441,8 +4435,6 @@ io.on('connection', (socket) => {
       const gate = moderation.moderationGate(uid);
       if (gate.blocked) return ack?.({ error: gate.error });
       const { chatId, question, options = [] } = data || {};
-      const gate = moderation.moderationGate(uid);
-      if (gate.blocked) return ack?.({ error: gate.error });
       const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
       if (!isMember) return ack?.({ error: 'Not a member' });
       const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
