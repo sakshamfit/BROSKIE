@@ -20,12 +20,14 @@ import {
 
 export const supported = Platform.OS === 'android' || Platform.OS === 'ios';
 
-async function ensurePermissions() {
+async function ensurePermissions(constraints = {}) {
   if (Platform.OS !== 'android') return;
+  // Voice calls must not prompt for (or fail because of) camera access.
   const needed = [
-    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-    PermissionsAndroid.PERMISSIONS.CAMERA,
+    ...(constraints.audio ? [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] : []),
+    ...(constraints.video ? [PermissionsAndroid.PERMISSIONS.CAMERA] : []),
   ];
+  if (!needed.length) return;
   try {
     const granted = await PermissionsAndroid.requestMultiple(needed);
     const denied = Object.values(granted).some((v) => v !== PermissionsAndroid.RESULTS.GRANTED);
@@ -37,7 +39,7 @@ async function ensurePermissions() {
 }
 
 export async function getUserMedia(constraints) {
-  await ensurePermissions();
+  await ensurePermissions(constraints);
   return mediaDevices.getUserMedia(constraints);
 }
 
