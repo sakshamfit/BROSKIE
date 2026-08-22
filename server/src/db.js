@@ -357,6 +357,8 @@ addColumnIfMissing('posts', 'media_aspect', 'media_aspect REAL');
 addColumnIfMissing('users', 'role', "role TEXT DEFAULT 'user'");
 addColumnIfMissing('users', 'moderation', "moderation TEXT DEFAULT 'active'"); // active|warned|restricted|suspended|banned
 addColumnIfMissing('users', 'suspended_until', 'suspended_until INTEGER');
+// Admin-managed verification badge. Stored per account so it is visible everywhere.
+addColumnIfMissing('users', 'gold_tick', 'gold_tick INTEGER NOT NULL DEFAULT 0');
 
 // Phase 3: community invite links — short unique code per community; admins
 // can regenerate it. A valid code joins regardless of join_policy.

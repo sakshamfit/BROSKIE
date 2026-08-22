@@ -171,6 +171,15 @@ const ADMIN_USERNAME_KEYS = (process.env.ADMIN_USERNAMES || 'saksham')
 db.prepare(`UPDATE users SET role = 'admin' WHERE username_key IN (${ADMIN_USERNAME_KEYS.map(() => '?').join(',')}) AND role != 'admin'`)
   .run(...ADMIN_USERNAME_KEYS);
 
+// Optional one-time bootstrap list. Afterwards verification is managed in the
+// Admin Safety Center and persists in the database.
+const GOLD_TICK_USERNAME_KEYS = (process.env.GOLD_TICK_USERNAMES || 'saksham')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+if (GOLD_TICK_USERNAME_KEYS.length) {
+  db.prepare(`UPDATE users SET gold_tick = 1 WHERE username_key IN (${GOLD_TICK_USERNAME_KEYS.map(() => '?').join(',')})`)
+    .run(...GOLD_TICK_USERNAME_KEYS);
+}
+
 /** Server-side authorization for EVERY admin API request. */
 function requireAdmin(req, res, next) {
   const u = getUser(req.userId);
@@ -246,6 +255,7 @@ const publicUser = (u) =>
     lastSeen: u.last_seen,
     isOnline: !!u.is_online,
     createdAt: u.created_at,
+    goldTick: !!u.gold_tick,
   };
 
 const MAX_USERNAME_LENGTH = 64;
@@ -3916,12 +3926,37 @@ app.post('/api/admin/moderation/cases/:id/remove-content', requireAuth, requireA
   res.json({ ok: true });
 });
 
+app.get('/api/admin/moderation/users', requireAuth, requireAdmin, (req, res) => {
+  const q = String(req.query.q || '').trim().replace(/^@/, '').toLowerCase();
+  if (q.length < 1) return res.json({ users: [] });
+  const term = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
+  const users = db.prepare(`SELECT id, username, name, avatar, role, moderation, gold_tick
+    FROM users WHERE username_key LIKE ? OR lower(name) LIKE ? ORDER BY username_key LIMIT 30`).all(term, term)
+    .map((u) => ({ id: u.id, username: u.username, name: u.name, avatar: u.avatar, role: u.role, moderation: u.moderation, goldTick: !!u.gold_tick }));
+  res.json({ users });
+});
+
+app.put('/api/admin/moderation/users/:id/gold-tick', requireAuth, requireAdmin, (req, res) => {
+  const target = getUser(req.params.id);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  const enabled = req.body?.enabled === true;
+  db.prepare('UPDATE users SET gold_tick = ? WHERE id = ?').run(enabled ? 1 : 0, target.id);
+  const admin = getUser(req.userId);
+  moderation.writeAudit({
+    adminId: req.userId, adminName: admin?.username, action: enabled ? 'user:gold_tick_granted' : 'user:gold_tick_revoked',
+    target: `@${target.username}`, detail: enabled ? 'Verification badge granted' : 'Verification badge revoked',
+  });
+  // Refresh live clients immediately; every normal user payload also carries goldTick.
+  moderationIO.emitToUser(target.id, 'profile:updated', { user: publicUser(getUser(target.id)) });
+  res.json({ ok: true, user: { id: target.id, goldTick: enabled } });
+});
+
 app.get('/api/admin/moderation/users/:id', requireAuth, requireAdmin, (req, res) => {
   const u = getUser(req.params.id);
   if (!u) return res.status(404).json({ error: 'User not found' });
   const cases = db.prepare('SELECT * FROM moderation_cases WHERE user_id = ? ORDER BY created_at DESC LIMIT 25').all(u.id).map(caseSummary);
   res.json({
-    user: { id: u.id, username: u.username, name: u.name, avatar: u.avatar, role: u.role, moderation: u.moderation, suspendedUntil: u.suspended_until, createdAt: u.created_at, lastSeen: u.last_seen, isOnline: u.is_online },
+    user: { id: u.id, username: u.username, name: u.name, avatar: u.avatar, role: u.role, goldTick: !!u.gold_tick, moderation: u.moderation, suspendedUntil: u.suspended_until, createdAt: u.created_at, lastSeen: u.last_seen, isOnline: u.is_online },
     cases,
     counts: {
       total: cases.length,

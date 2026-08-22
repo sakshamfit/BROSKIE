@@ -75,6 +75,9 @@ export default function AdminSafetyScreen({ navigation }) {
   const [caseLoading, setCaseLoading] = useState(false);
   const [reviewUser, setReviewUser] = useState(null); // user panel id
   const [liveAlert, setLiveAlert] = useState(null);
+  const [peopleQuery, setPeopleQuery] = useState('');
+  const [people, setPeople] = useState([]);
+  const [peopleLoading, setPeopleLoading] = useState(false);
 
   // case filters
   const [severity, setSeverity] = useState('ALL');
@@ -211,6 +214,14 @@ export default function AdminSafetyScreen({ navigation }) {
     }
   };
 
+  const searchPeople = useCallback(async (value) => {
+    const query = value.trim();
+    if (!query) { setPeople([]); return; }
+    setPeopleLoading(true);
+    try { const result = await api.adminModerationUsers(query); setPeople(result.users || []); }
+    catch { setPeople([]); } finally { setPeopleLoading(false); }
+  }, []);
+
   const Tab = ({ key: k, label }) => (
     <Pressable key={k} onPress={() => setTab(k)} style={[s.tabBtn, tab === k && { backgroundColor: theme.ink, borderColor: theme.ink }]}>
       <Text style={[type.labelSm, { color: tab === k ? theme.onPrimary : theme.text }]}>{label.toUpperCase()}</Text>
@@ -236,12 +247,13 @@ export default function AdminSafetyScreen({ navigation }) {
         )}
       </View>
 
-      <View style={[s.tabRow, { borderColor: theme.ink }]}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[s.tabRow, { borderColor: theme.ink }]} keyboardShouldPersistTaps="handled">
         <Tab key="overview" label="Overview" />
         <Tab key="cases" label="Cases" />
+        <Tab key="people" label="People" />
         <Tab key="audit" label="Audit" />
         <Tab key="settings" label="Settings" />
-      </View>
+      </ScrollView>
 
       {tab === 'overview' && (
         <OverviewTab theme={theme} s={s} overview={overview} loading={loading} onOpenCase={openCaseDetail} onGoCases={() => setTab('cases')} />
@@ -256,6 +268,7 @@ export default function AdminSafetyScreen({ navigation }) {
         />
       )}
       {tab === 'audit' && <AuditTab theme={theme} s={s} />}
+      {tab === 'people' && <PeopleTab theme={theme} s={s} query={peopleQuery} setQuery={setPeopleQuery} people={people} loading={peopleLoading} onSearch={searchPeople} onOpen={(id) => setReviewUser(id)} />}
       {tab === 'settings' && <SettingsTab theme={theme} s={s} onChanged={refreshAll} />}
 
       {/* Case detail sheet */}
@@ -640,6 +653,35 @@ function UserPanel({ theme, s, userId, onClose, onAction }) {
   );
 }
 
+function PeopleTab({ theme, s, query, setQuery, people, loading, onSearch, onOpen }) {
+  const changeQuery = (value) => { setQuery(value); onSearch(value); };
+  return (
+    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 12 }}>
+      <Text style={[type.bodySm, { color: theme.muted, lineHeight: 19 }]}>Find any account by name or @username. Open the person to grant or revoke the yellow verification tick and use all moderation controls.</Text>
+      <InkField style={s.search} focused={!!query}>
+        <Icon name="search-outline" size={17} color={theme.muted} />
+        <TextInput value={query} onChangeText={changeQuery} autoCapitalize="none" autoCorrect={false} placeholder="Search people or @username" placeholderTextColor={theme.muted} style={s.searchInput} />
+        {loading && <ActivityIndicator size="small" color={theme.ink} />}
+      </InkField>
+      {!query && <Text style={[type.labelXs, { color: theme.muted, textAlign: 'center', marginTop: 20 }]}>START TYPING TO MANAGE A PERSON</Text>}
+      {query && !loading && people.length === 0 && <Text style={[type.bodySm, { color: theme.muted, textAlign: 'center', marginTop: 20 }]}>No matching accounts found.</Text>}
+      {people.map((person) => (
+        <Pressable key={person.id} onPress={() => onOpen(person.id)} style={[s.alertRow, inkBox(theme, 'thin')]}>
+          <Avatar uri={person.avatar} name={person.name} id={person.id} size={42} />
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={[type.bodyStrong, { color: theme.text }]} numberOfLines={1}>{person.name}</Text>
+              {hasGoldTick(person) && <GoldTick size={14} />}
+            </View>
+            <Text style={[type.labelXs, { color: theme.muted, marginTop: 2 }]}>@{person.username} · {person.moderation || 'active'}</Text>
+          </View>
+          <Text style={[type.labelXs, { color: person.goldTick ? '#8A6500' : theme.muted }]}>{person.goldTick ? 'YELLOW TICK' : 'MANAGE'} ›</Text>
+        </Pressable>
+      ))}
+    </ScrollView>
+  );
+}
+
 function AuditTab({ theme, s }) {
   const [entries, setEntries] = useState(null);
   const load = useCallback(async () => {
@@ -740,7 +782,7 @@ const makeStyles = (t) => StyleSheet.create({
   denyRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: t.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 10 },
   tabRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingBottom: 8, borderBottomWidth: 1 },
-  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderWidth: 1, borderRadius: 999 },
+  tabBtn: { minWidth: 78, alignItems: 'center', paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderRadius: 999 },
   livePill: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   statRow: { flexDirection: 'row', gap: 10 },
   statCard: { flex: 1, alignItems: 'center', paddingVertical: 16, borderRadius: radius.md },
