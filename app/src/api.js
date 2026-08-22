@@ -352,7 +352,10 @@ export const api = {
     request(`/api/admin/moderation/cases/${id}/review`, { method: 'POST', body: { action, reason } }),
   adminModerationRemoveContent: (id, reason) =>
     request(`/api/admin/moderation/cases/${id}/remove-content`, { method: 'POST', body: { reason } }),
+  adminModerationUsers: (q) => request(`/api/admin/moderation/users?q=${encodeURIComponent(q)}`, { timeoutMs: 12000, retries: 1 }),
   adminModerationUser: (id) => request(`/api/admin/moderation/users/${id}`, { timeoutMs: 12000, retries: 1 }),
+  adminModerationGoldTick: (id, enabled) =>
+    request(`/api/admin/moderation/users/${id}/gold-tick`, { method: 'PUT', body: { enabled } }),
   adminModerationUserAction: (id, body) =>
     request(`/api/admin/moderation/users/${id}/action`, { method: 'POST', body }),
   adminModerationAudit: (before) =>

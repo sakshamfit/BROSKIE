@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator, TextInput, Modal, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator, TextInput, Modal, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
@@ -226,8 +226,9 @@ export function CollabDocumentView({ chatId, embedded = false, socket: socketPro
       )}
 
       <Modal visible={showCreate} transparent animationType="fade" onRequestClose={() => setShowCreate(false)}>
-        <Pressable style={s.modalOverlay} onPress={() => setShowCreate(false)}>
-          <Pressable style={[s.modalSheet, { backgroundColor: theme.bg, borderColor: theme.ink }]} onPress={() => {}}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowCreate(false)} accessibilityLabel="Close new note panel" />
+          <View style={[s.modalSheet, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
             <Text style={[type.headlineSm, { color: theme.text }]}>New Collaborative Note</Text>
             <Text style={[type.bodySm, { color: theme.muted, marginTop: 4 }]}>
               Powered by Operational Transformation — edits from everyone merge conflict-free.
@@ -240,6 +241,9 @@ export function CollabDocumentView({ chatId, embedded = false, socket: socketPro
                 placeholderTextColor={theme.muted}
                 style={[s.textInput, { color: theme.text }]}
                 autoFocus
+                returnKeyType="done"
+                onSubmitEditing={handleCreate}
+                blurOnSubmit={false}
                 maxLength={120}
               />
             </View>
@@ -251,8 +255,8 @@ export function CollabDocumentView({ chatId, embedded = false, socket: socketPro
                 {creating ? <ActivityIndicator size="small" color={theme.onPrimary} /> : <Text style={[type.labelSm, { color: theme.onPrimary }]}>CREATE</Text>}
               </Pressable>
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
