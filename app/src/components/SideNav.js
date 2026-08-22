@@ -62,7 +62,7 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
         )}
       </View>
 
-      <Pressable
+      <SpringPressable
         accessibilityRole="button"
         accessibilityLabel="find +ones"
         onPress={onNewChat}
@@ -73,10 +73,12 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
           inkBox(theme, 'ink'),
           pressed ? marker(theme, 2) : null,
         ]}
+        scaleTo={motion.scale.row}
+        haptic="selection"
       >
         <Icon name="search" size={17} color={theme.ink} />
         {!railOnly && <Text style={[type.bodyStrong, { color: theme.ink }]}>find +ones</Text>}
-      </Pressable>
+      </SpringPressable>
 
       <View style={s.nav}>
         {ITEMS.map((item) => {

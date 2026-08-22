@@ -748,10 +748,12 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
                 {searchResults.length} FOUND
               </Text>
               {searchResults.slice(0, 8).map((m) => (
-                <Pressable
+                <SpringPressable
                   key={m.id}
                   style={({ pressed }) => [s.resultRow, pressed ? marker(theme, 1) : null]}
                   onPress={() => scrollToMessage(m.id)}
+                  scaleTo={motion.scale.row}
+                  haptic="selection"
                 >
                   <View style={{ flex: 1 }}>
                     <EmojiText style={[type.bodyMd, { color: theme.text }]} numberOfLines={1}>
@@ -760,7 +762,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
                     {m.type === 'text' && <Text style={[type.labelXs, { color: theme.muted }]}>{m.senderId === user.id ? 'You' : nameFor(m.senderId)}</Text>}
                   </View>
                   <Text style={[type.labelXs, { color: theme.muted }]}>{formatTime(m.createdAt)}</Text>
-                </Pressable>
+                </SpringPressable>
               ))}
             </View>
           )}
@@ -860,13 +862,15 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               <Icon name="alert-circle-outline" size={26} color={theme.danger} />
               <Text style={[type.bodyStrong, { color: theme.text, marginTop: 10 }]}>Unable to load messages</Text>
               <Text style={[type.bodySm, { color: theme.muted, marginTop: 4, textAlign: 'center' }]}>Your conversation was not erased.</Text>
-              <Pressable
+              <SpringPressable
                 onPress={() => loadMessages(chatId).catch(() => {})}
                 style={({ pressed }) => [s.historyRetry, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="refresh" size={15} color={theme.ink} />
                 <Text style={[type.labelSm, { color: theme.ink }]}>RETRY</Text>
-              </Pressable>
+              </SpringPressable>
             </View>
           ) : (
             <View style={s.emptyChat}>
@@ -1128,24 +1132,28 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
                 const isActive = (sec) => (sec === 0 ? remaining === 0 : Math.abs(remaining - sec) < Math.max(2, sec * 0.05));
                 return (
                   <>
-                    <Pressable
+                    <SpringPressable
                       style={({ pressed }) => [s.timerOpt, inkBox(theme, 'thin'), pressed ? marker(theme, 1) : null]}
                       onPress={() => { setMessageTimer(timerMsg, 0); setTimerMsg(null); }}
+                      scaleTo={motion.scale.row}
+                      haptic="selection"
                     >
                       <Icon name="time-outline" size={18} color={theme.ink} />
                       <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]}>Off — keep forever</Text>
                       {isActive(0) && <Icon name="checkmark" size={18} color={theme.ink} />}
-                    </Pressable>
+                    </SpringPressable>
                     {DISAPPEAR_OPTIONS.map((o) => (
-                      <Pressable
+                      <SpringPressable
                         key={o.seconds}
                         style={({ pressed }) => [s.timerOpt, inkBox(theme, 'thin'), pressed ? marker(theme, 1) : null]}
                         onPress={() => { setMessageTimer(timerMsg, o.seconds); setTimerMsg(null); }}
+                        scaleTo={motion.scale.row}
+                        haptic="selection"
                       >
                         <Icon name="timer-outline" size={18} color={theme.ink} />
                         <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]}>{o.label}</Text>
                         {isActive(o.seconds) && <Icon name="checkmark" size={18} color={theme.ink} />}
-                      </Pressable>
+                      </SpringPressable>
                     ))}
                   </>
                 );
@@ -1183,9 +1191,11 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setOverflowOpen(false)}>
           <FrostedBackdrop />
           <PaperCard weight="ink" style={s.overflowMenu}>
-            <Pressable
+            <SpringPressable
               style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
               onPress={() => { setOverflowOpen(false); themePicker?.setPickerOpen(true); }}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <View style={[s.menuIcon, { backgroundColor: alpha(theme.accent, 0.16) }]}>
                 <Icon name="color-palette-outline" size={18} color={theme.accent} />
@@ -1196,30 +1206,36 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
                   {ThemeRegistry.get(theme.chatThemeId || 'graphite').name}
                 </Text>
               </View>
-            </Pressable>
+            </SpringPressable>
             <Rule style={{ marginVertical: 6 }} />
-            <Pressable
+            <SpringPressable
               style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
               onPress={() => { setOverflowOpen(false); navigation.navigate('ChatInfo', { chatId }); }}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <Icon name="information-circle-outline" size={18} color={theme.ink} style={{ width: 26 }} />
               <Text style={[type.bodyMd, { color: theme.text }]}>Chat info</Text>
-            </Pressable>
-            <Pressable
+            </SpringPressable>
+            <SpringPressable
               style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
               onPress={() => { setOverflowOpen(false); navigation.navigate('ChatInfo', { chatId }); }}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <Icon name="timer-outline" size={18} color={theme.ink} style={{ width: 26 }} />
               <Text style={[type.bodyMd, { color: theme.text }]}>Disappearing messages</Text>
-            </Pressable>
+            </SpringPressable>
             {!embedded && (
-              <Pressable
+              <SpringPressable
                 style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
                 onPress={() => { setOverflowOpen(false); navigation.navigate('Starred'); }}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="star-outline" size={18} color={theme.ink} style={{ width: 26 }} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>Starred messages</Text>
-              </Pressable>
+              </SpringPressable>
             )}
           </PaperCard>
         </Pressable>

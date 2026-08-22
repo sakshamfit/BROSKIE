@@ -7,6 +7,7 @@ import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { PaperCard, InkButton, marker } from '../components/common';
 import { radius, type, inkBox } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 const LAST_SEEN_OPTIONS = [
   { key: 'everyone', label: 'Everyone', icon: 'earth-outline', sub: 'Anyone can see when you were last online' },
@@ -58,7 +59,7 @@ export default function PrivacyScreen({ navigation, embedded = false }) {
           {LAST_SEEN_OPTIONS.map((opt) => {
             const active = privacy.lastSeen === opt.key;
             return (
-              <Pressable
+              <SpringPressable
                 key={opt.key}
                 onPress={() => setLastSeen(opt.key)}
                 disabled={busy}
@@ -67,6 +68,8 @@ export default function PrivacyScreen({ navigation, embedded = false }) {
                   active && { backgroundColor: theme.highlighterWash },
                   pressed && !active ? marker(theme, 1) : null,
                 ]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name={opt.icon} size={19} color={theme.ink} style={{ width: 26 }} />
                 <View style={{ flex: 1 }}>
@@ -74,7 +77,7 @@ export default function PrivacyScreen({ navigation, embedded = false }) {
                   <Text style={[type.bodySm, { color: theme.subtext, marginTop: 2 }]}>{opt.sub}</Text>
                 </View>
                 {active && <Icon name="checkmark-circle" size={19} color={theme.ink} />}
-              </Pressable>
+              </SpringPressable>
             );
           })}
         </View>
@@ -100,9 +103,11 @@ export default function PrivacyScreen({ navigation, embedded = false }) {
         )}
 
         <Text style={[type.labelXs, { color: theme.muted, marginTop: 24, marginBottom: 10 }]}>BLOCKED CONTACTS</Text>
-        <Pressable
+        <SpringPressable
           onPress={() => navigation.navigate('BlockedUsers')}
           style={({ pressed }) => [s.optionRow, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Icon name="ban-outline" size={19} color={theme.ink} style={{ width: 26 }} />
           <View style={{ flex: 1 }}>
@@ -112,7 +117,7 @@ export default function PrivacyScreen({ navigation, embedded = false }) {
             </Text>
           </View>
           <Icon name="chevron-forward-outline" size={17} color={theme.muted} />
-        </Pressable>
+        </SpringPressable>
       </ScrollView>
     </View>
   );

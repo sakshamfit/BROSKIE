@@ -232,13 +232,15 @@ export default function StatusScreen() {
           <Text style={s.title}>Status</Text>
           <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>Updates disappear after 24 hours</Text>
         </View>
-        <Pressable
+        <SpringPressable
           onPress={() => setComposerMode('choose')}
           hitSlop={8}
           style={({ pressed }) => [s.headerAdd, { borderColor: theme.ink }, pressed && marker(theme, 1)]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Icon name="add" size={20} color={theme.ink} />
-        </Pressable>
+        </SpringPressable>
       </View>
 
       {loading ? (
@@ -255,9 +257,11 @@ export default function StatusScreen() {
           }
         >
           <View style={[s.myStatus, { backgroundColor: theme.card, borderColor: theme.graphiteLine }]}>
-            <Pressable
+            <SpringPressable
               onPress={() => (data.mine ? openViewer(data.mine) : setComposerMode('choose'))}
               style={({ pressed }) => [s.myStatusMain, pressed && { opacity: 0.72 }]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <View style={s.myAvatarWrap}>
                 <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={58} />
@@ -273,22 +277,26 @@ export default function StatusScreen() {
                     : 'Tap to add a status update'}
                 </Text>
               </View>
-            </Pressable>
+            </SpringPressable>
             <View style={s.myQuickActions}>
-              <Pressable
+              <SpringPressable
                 accessibilityLabel="Create text status"
                 onPress={() => setComposerMode('text')}
                 style={({ pressed }) => [s.quickButton, { backgroundColor: theme.cardAlt, borderColor: theme.graphiteLine }, pressed && marker(theme, 1)]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="create-outline" size={18} color={theme.ink} />
-              </Pressable>
-              <Pressable
+              </SpringPressable>
+              <SpringPressable
                 accessibilityLabel="Create photo status"
                 onPress={() => setComposerMode('photo')}
                 style={({ pressed }) => [s.quickButton, { backgroundColor: '#050505', borderColor: '#000000' }, pressed && { backgroundColor: '#242321' }]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="camera-outline" size={18} color="#ffffff" />
-              </Pressable>
+              </SpringPressable>
             </View>
           </View>
 
@@ -322,7 +330,7 @@ export default function StatusScreen() {
       )}
 
       <View style={s.fabStack} pointerEvents="box-none">
-        <Pressable
+        <SpringPressable
           accessibilityLabel="Create text status"
           onPress={() => setComposerMode('text')}
           style={({ pressed }) => [
@@ -330,17 +338,21 @@ export default function StatusScreen() {
             { backgroundColor: theme.cardAlt, borderColor: theme.ink },
             pressed && marker(theme, 1),
           ]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Icon name="create-outline" size={19} color={theme.ink} />
-        </Pressable>
-        <Pressable
+        </SpringPressable>
+        <SpringPressable
           accessibilityLabel="Create photo status"
           onPress={() => setComposerMode('photo')}
           android_ripple={rippleFor(theme, { borderless: false, radius: 30 })}
           style={({ pressed }) => [s.fab, { backgroundColor: pressed && Platform.OS !== 'android' ? '#242321' : '#050505' }]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Icon name="camera-outline" size={22} color="#ffffff" />
-        </Pressable>
+        </SpringPressable>
       </View>
 
       <StatusComposer
@@ -486,7 +498,7 @@ export default function StatusScreen() {
                     editable={!replySending}
                     maxLength={700}
                   />
-                  <Pressable
+                  <SpringPressable
                     onPress={sendStatusReply}
                     disabled={replySending || !replyText.trim()}
                     style={({ pressed }) => [
@@ -494,13 +506,15 @@ export default function StatusScreen() {
                       (replySending || !replyText.trim()) && { opacity: 0.42 },
                       pressed && { opacity: 0.82 },
                     ]}
+                    scaleTo={motion.scale.row}
+                    haptic="selection"
                   >
                     {replySending ? (
                       <ActivityIndicator color="#050505" size="small" />
                     ) : (
                       <Icon name="send" size={18} color="#050505" />
                     )}
-                  </Pressable>
+                  </SpringPressable>
                 </View>
                 {!!replyFeedback && (
                   <Text style={[type.labelXs, { color: '#ffffff', textAlign: 'center', marginTop: 7, opacity: 0.94 }]}>
@@ -728,9 +742,11 @@ function StatusComposer({ visible, initialMode, onClose, onPosted }) {
               <Text style={[type.bodyMd, { color: theme.subtext, textAlign: 'center', marginTop: 8, marginBottom: 28 }]}>
                 Preview it, crop it and choose exactly who can see it before posting.
               </Text>
-              <Pressable
+              <SpringPressable
                 onPress={startPhoto}
                 style={({ pressed }) => [s.chooseCard, { backgroundColor: '#050505', borderColor: '#000000' }, pressed && { backgroundColor: '#242321' }]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <View style={[s.chooseIcon, { backgroundColor: '#ffffff' }]}>
                   <Icon name="camera-outline" size={24} color="#050505" />
@@ -740,10 +756,12 @@ function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                   <Text style={[type.bodySm, { color: '#c7c3c1', marginTop: 3 }]}>Choose a frame, crop and preview</Text>
                 </View>
                 <Icon name="chevron-forward-outline" size={20} color="#ffffff" />
-              </Pressable>
-              <Pressable
+              </SpringPressable>
+              <SpringPressable
                 onPress={() => setMode('text')}
                 style={({ pressed }) => [s.chooseCard, { backgroundColor: theme.card, borderColor: theme.ink }, pressed && marker(theme, 1)]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <View style={[s.chooseIcon, { backgroundColor: theme.highlighter }]}>
                   <Icon name="create-outline" size={22} color="#1c1b1b" />
@@ -753,7 +771,7 @@ function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                   <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>Write on a colour background</Text>
                 </View>
                 <Icon name="chevron-forward-outline" size={20} color={theme.ink} />
-              </Pressable>
+              </SpringPressable>
             </View>
           )}
 
@@ -839,22 +857,26 @@ function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                 </View>
               )}
               <View style={s.sendRow}>
-                <Pressable
+                <SpringPressable
                   onPress={() => setPrivacyOpen(true)}
                   style={({ pressed }) => [s.privacyPill, pressed && { backgroundColor: 'rgba(255,255,255,0.18)' }]}
+                  scaleTo={motion.scale.row}
+                  haptic="selection"
                 >
                   <Icon name={meta.icon} size={16} color="#ffffff" />
                   <Text style={[type.labelSm, { color: '#ffffff', flexShrink: 1 }]} numberOfLines={1}>{meta.label}</Text>
                   <Icon name="chevron-down-outline" size={14} color="#ffffff" />
-                </Pressable>
-                <Pressable
+                </SpringPressable>
+                <SpringPressable
                   onPress={submit}
                   disabled={posting}
                   android_ripple={rippleFor(theme, { borderless: false, radius: 30 })}
                   style={({ pressed }) => [s.sendButton, pressed && Platform.OS !== 'android' && { opacity: 0.82 }, posting && { opacity: 0.55 }]}
+                  scaleTo={motion.scale.row}
+                  haptic="selection"
                 >
                   {posting ? <ActivityIndicator color="#050505" /> : <Icon name="send" size={21} color="#050505" />}
-                </Pressable>
+                </SpringPressable>
               </View>
             </View>
           )}

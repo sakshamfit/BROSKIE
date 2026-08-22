@@ -11,7 +11,7 @@ import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, PaperCard, TapeChip, Rule, InkButton, InkField, GoldTick, hasGoldTick } from '../components/common';
 import { type, inkBox, marker, dashedRule, radius, raised } from '../theme';
-import { haptic } from '../motion';
+import { haptic, SpringPressable, motion } from '../motion';
 import { confirm } from '../hooks/confirm';
 import { useDebouncedCallback } from '../rateLimit';
 
@@ -328,9 +328,9 @@ function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases, onRet
         <Text style={[type.bodySm, { color: theme.muted, marginTop: 12, textAlign: 'center' }]}>
           Could not load the Safety Center.
         </Text>
-        <Pressable onPress={onRetry} style={({ pressed }) => [s.retryBtn, pressed && { opacity: 0.7 }]} hitSlop={8}>
+        <SpringPressable onPress={onRetry} style={({ pressed }) => [s.retryBtn, pressed && { opacity: 0.7 }]} hitSlop={8} scaleTo={motion.scale.row} haptic="selection">
           <Text style={[type.labelSm, { color: theme.ink }]}>RETRY</Text>
-        </Pressable>
+        </SpringPressable>
       </View>
     );
   }
@@ -368,7 +368,7 @@ function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases, onRet
       {(overview.recent || []).map((c) => {
         const tone = SEVERITY_TONE[c.severity] || SEVERITY_TONE.LOW;
         return (
-          <Pressable key={c.id} onPress={() => onOpenCase(c.id)} style={({ pressed }) => [s.alertRow, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}>
+          <SpringPressable key={c.id} onPress={() => onOpenCase(c.id)} style={({ pressed }) => [s.alertRow, inkBox(theme, 'thin'), pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="selection">
             <Text style={{ fontSize: 18 }}>{tone.emoji}</Text>
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -383,7 +383,7 @@ function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases, onRet
               </Text>
             </View>
             <Icon name="chevron-forward-outline" size={16} color={theme.muted} />
-          </Pressable>
+          </SpringPressable>
         );
       })}
     </ScrollView>
@@ -446,7 +446,7 @@ function CasesTab(props) {
         renderItem={({ item }) => {
           const tone = SEVERITY_TONE[item.severity] || SEVERITY_TONE.LOW;
           return (
-            <Pressable onPress={() => onOpenCase(item.id)} style={({ pressed }) => [s.alertRow, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}>
+            <SpringPressable onPress={() => onOpenCase(item.id)} style={({ pressed }) => [s.alertRow, inkBox(theme, 'thin'), pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="selection">
               <Text style={{ fontSize: 18 }}>{tone.emoji}</Text>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -459,7 +459,7 @@ function CasesTab(props) {
                 </Text>
               </View>
               <Icon name="chevron-forward-outline" size={16} color={theme.muted} />
-            </Pressable>
+            </SpringPressable>
           );
         }}
         ListEmptyComponent={
@@ -482,7 +482,7 @@ function CaseDetail({ theme, s, detail, onClose, onReview, onUserAction, onRevie
   const withReason = (fn) => async (...args) => { setActionBusy('x'); try { await fn(...args); } finally { setActionBusy(''); } };
 
   const Act = ({ label, run, destructive, filled }) => (
-    <Pressable
+    <SpringPressable
       disabled={!!actionBusy}
       onPress={run}
       style={({ pressed }) => [
@@ -491,9 +491,11 @@ function CaseDetail({ theme, s, detail, onClose, onReview, onUserAction, onRevie
         filled && { backgroundColor: theme.ink },
         pressed && marker(theme, 1),
       ]}
+      scaleTo={motion.scale.row}
+      haptic="selection"
     >
       <Text style={[type.labelSm, { color: filled ? theme.onPrimary : destructive ? theme.danger : theme.ink }]}>{label.toUpperCase()}</Text>
-    </Pressable>
+    </SpringPressable>
   );
 
   return (

@@ -5,7 +5,7 @@ import { api } from '../api';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, PaperCard } from './common';
 import { type, inkBox, radius } from '../theme';
-import { haptic } from '../motion';
+import { haptic, SpringPressable, motion } from '../motion';
 
 /** Local midnight in ms — "today" follows the viewer's day, not UTC's. */
 function localMidnight() {
@@ -86,7 +86,7 @@ export default function TodayStrip({ reloadKey = 0, onOpenChat, onSeePosts }) {
             {placeName}
           </Text>
         </View>
-        <Pressable
+        <SpringPressable
           accessibilityRole="button"
           accessibilityLabel={data.me.around ? "I'm not around" : "I'm around"}
           onPress={toggleAround}
@@ -99,12 +99,14 @@ export default function TodayStrip({ reloadKey = 0, onOpenChat, onSeePosts }) {
               opacity: busy ? 0.6 : 1,
             },
           ]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Icon name={data.me.around ? 'checkmark' : 'walk-outline'} size={13} color={theme.ink} />
           <Text style={[type.labelSm, { color: theme.ink }]}>
             {data.me.around ? `AROUND · ${hoursLeft(data.me.expiresAt || Date.now())}H` : "I'M AROUND"}
           </Text>
-        </Pressable>
+        </SpringPressable>
       </View>
 
       {people.length > 0 ? (
@@ -128,10 +130,12 @@ export default function TodayStrip({ reloadKey = 0, onOpenChat, onSeePosts }) {
       )}
 
       {(data.postsCount > 0 || data.around?.length > 0) && (
-        <Pressable
+        <SpringPressable
           accessibilityRole="button"
           onPress={() => { haptic('selection'); onSeePosts?.(); }}
           style={({ pressed }) => [s.postsRow, pressed && { opacity: 0.6 }]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Icon name="albums-outline" size={14} color={theme.ink} />
           <Text style={[type.labelSm, { color: theme.ink, flex: 1 }]} numberOfLines={1}>
@@ -140,7 +144,7 @@ export default function TodayStrip({ reloadKey = 0, onOpenChat, onSeePosts }) {
               : `${data.around.length} ${data.around.length === 1 ? 'person' : 'people'} around now`}
           </Text>
           <Icon name="arrow-forward" size={14} color={theme.muted} />
-        </Pressable>
+        </SpringPressable>
       )}
     </PaperCard>
   );

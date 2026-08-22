@@ -274,7 +274,7 @@ export default function MessageBubble({
           )}
           {isWeb && !message.deleted && (
             <Animated.View pointerEvents="box-none" style={[s.hoverBadge, { opacity: hoverOpacity }]}>
-              <Pressable
+              <SpringPressable
                 accessibilityLabel="Reply"
                 accessibilityRole="button"
                 onPress={() => onReply?.(message)}
@@ -284,9 +284,11 @@ export default function MessageBubble({
                   { borderColor: theme.ink, backgroundColor: theme.replyPreview },
                   pressed && { backgroundColor: theme.highlighterSoft },
                 ]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="arrow-undo-outline" size={16} color={theme.ink} />
-              </Pressable>
+              </SpringPressable>
             </Animated.View>
           )}
           <Pressable
@@ -358,7 +360,7 @@ export default function MessageBubble({
           )}
 
           {message.replyTo && (
-            <Pressable
+            <SpringPressable
               accessibilityRole="button"
               accessibilityLabel="View original message"
               onPress={() => onOpenReply?.(message.replyTo.id)}
@@ -367,6 +369,8 @@ export default function MessageBubble({
                 { borderLeftColor: isMine ? subInk : theme.graphiteLine },
                 pressed && { backgroundColor: alpha(ink, 0.06) },
               ]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Icon name="arrow-undo-outline" size={11} color={isMine ? subInk : theme.graphite} />
@@ -386,7 +390,7 @@ export default function MessageBubble({
                   {message.replyTo.body}
                 </EmojiText>
               )}
-            </Pressable>
+            </SpringPressable>
           )}
 
           {message.deleted ? (
@@ -546,7 +550,7 @@ function PollBody({ messageId, poll, ink, isMine, onVotePoll }) {
         const mine = poll?.myVote === opt.index;
         const pct = totalVotes ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0;
         return (
-          <Pressable
+          <SpringPressable
             key={opt.index}
             onPress={() => onVotePoll?.(messageId, poll.id, opt.index)}
             style={({ pressed }) => [
@@ -555,6 +559,8 @@ function PollBody({ messageId, poll, ink, isMine, onVotePoll }) {
               mine ? { backgroundColor: theme.highlighterSoft, borderColor: theme.ink } : null,
               pressed ? marker(theme, 1) : null,
             ]}
+            scaleTo={motion.scale.row}
+            haptic="selection"
           >
             <View style={s.pollOptionTop}>
               <EmojiText style={[type.bodyMd, { color: ink, flex: 1 }]} numberOfLines={2}>{opt.text}</EmojiText>
@@ -568,7 +574,7 @@ function PollBody({ messageId, poll, ink, isMine, onVotePoll }) {
             {mine && (
               <Text style={[type.labelXs, { color: theme.ink, marginTop: 4 }]}>YOUR VOTE ✓</Text>
             )}
-          </Pressable>
+          </SpringPressable>
         );
       })}
 

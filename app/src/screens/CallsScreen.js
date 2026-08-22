@@ -10,6 +10,7 @@ import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, formatChatTime, rippleFor, GoldTick, hasGoldTick } from '../components/common';
 import useResponsive from '../hooks/useResponsive';
 import { type, dashedRule, marker } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 /**
  * Real call history — every ringing/accepted/declined/missed/hung-up call
@@ -97,10 +98,12 @@ export default function CallsScreen({ navigation, embedded = false }) {
             const ic = iconFor(item);
             const missed = item.status === 'missed' && item.direction === 'incoming';
             return (
-              <Pressable
+              <SpringPressable
                 onPress={() => callBack(item, item.type)}
                 android_ripple={rippleFor(theme)}
                 style={({ pressed }) => [s.row, pressed && marker(theme, 1)]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Avatar uri={item.with.avatar} name={item.with.name} id={item.with.id} size={48} profileId={item.with.id} />
                 <View style={{ flex: 1 }}>
@@ -121,7 +124,7 @@ export default function CallsScreen({ navigation, embedded = false }) {
                   <Text style={[type.labelXs, { color: theme.muted }]}>{formatChatTime(item.startedAt)}</Text>
                   <Icon name={item.type === 'video' ? 'videocam' : 'call'} size={17} color={theme.ink} />
                 </View>
-              </Pressable>
+              </SpringPressable>
             );
           }}
         />

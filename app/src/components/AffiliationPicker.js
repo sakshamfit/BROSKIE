@@ -10,6 +10,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { InkButton, InkField, TapeChip } from './common';
 import { type, inkBox, marker, dashedRule, stroke } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 export const AFFILIATION_TYPES = [
   { key: 'institution', label: 'College / Institution', short: 'Institution', icon: 'school-outline' },
@@ -112,7 +113,7 @@ export default function AffiliationPicker({ visible, onClose, onChanged }) {
             {AFFILIATION_TYPES.map((item, index) => {
               const active = item.key === selectedType;
               return (
-                <Pressable
+                <SpringPressable
                   key={item.key}
                   onPress={() => { setSelectedType(item.key); setError(''); }}
                   style={({ pressed }) => [
@@ -122,10 +123,12 @@ export default function AffiliationPicker({ visible, onClose, onChanged }) {
                     pressed && marker(theme, 1),
                     { transform: [{ rotate: index === 1 ? '1deg' : '-1deg' }] },
                   ]}
+                  scaleTo={motion.scale.row}
+                  haptic="selection"
                 >
                   <Icon name={item.icon} size={17} color={active ? theme.ink : theme.graphite} />
                   <Text style={[type.labelXs, { color: active ? theme.ink : theme.graphite }]}>{item.short.toUpperCase()}</Text>
-                </Pressable>
+                </SpringPressable>
               );
             })}
           </View>
@@ -198,10 +201,12 @@ export default function AffiliationPicker({ visible, onClose, onChanged }) {
           )}
 
           {!!query.trim() && !exactMatch && (
-            <Pressable
+            <SpringPressable
               onPress={create}
               disabled={!!busyId}
               style={({ pressed }) => [s.createCard, inkBox(theme, 'ink'), pressed && marker(theme, 1), !!busyId && { opacity: 0.5 }]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <View style={[s.plus, { backgroundColor: theme.ink }]}>
                 {busyId === 'create'
@@ -213,7 +218,7 @@ export default function AffiliationPicker({ visible, onClose, onChanged }) {
                 <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]}>CREATE & JOIN AS {affiliationType(selectedType).short.toUpperCase()}</Text>
               </View>
               <Icon name="arrow-forward" size={18} color={theme.ink} />
-            </Pressable>
+            </SpringPressable>
           )}
         </ScrollView>
       </KeyboardAvoidingView>

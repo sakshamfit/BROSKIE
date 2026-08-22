@@ -6,6 +6,7 @@ import { api } from '../api';
 import { Avatar, InkCheckbox, EmptyState, GoldTick, hasGoldTick } from './common';
 import { EmojiText } from '../icons/Emoji';
 import { type, inkBox, marker, dashedRule } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 export const AUDIENCE = {
   public: { key: 'public', label: 'Public', sub: 'Everyone on +one can see this', icon: 'earth-outline' },
@@ -66,7 +67,7 @@ export default function AudiencePicker({
         {optionItems.map((opt) => {
           const active = audience === opt.key;
           return (
-            <Pressable
+            <SpringPressable
               key={opt.key}
               onPress={() => onChange(opt.key)}
               style={({ pressed }) => [
@@ -75,6 +76,8 @@ export default function AudiencePicker({
                 !listLayout && active ? { backgroundColor: theme.highlighterWash } : null,
                 pressed && !active ? marker(theme, 1) : null,
               ]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <Icon name={opt.icon} size={listLayout ? 21 : 18} color={theme.ink} />
               {listLayout ? (
@@ -90,7 +93,7 @@ export default function AudiencePicker({
               ) : (
                 <Text style={[type.labelSm, { color: theme.ink, textAlign: 'center', marginTop: 6 }]}>{opt.label}</Text>
               )}
-            </Pressable>
+            </SpringPressable>
           );
         })}
       </View>
@@ -122,14 +125,14 @@ export default function AudiencePicker({
               renderItem={({ item }) => {
                 const checked = recipientIds.includes(item.id);
                 return (
-                  <Pressable onPress={() => toggle(item.id)} style={({ pressed }) => [s.personRow, pressed ? marker(theme, 1) : null]}>
+                  <SpringPressable onPress={() => toggle(item.id)} style={({ pressed }) => [s.personRow, pressed ? marker(theme, 1) : null]} scaleTo={motion.scale.row} haptic="selection">
                     <InkCheckbox checked={checked} onPress={() => toggle(item.id)} size={18} />
                     <Avatar uri={item.avatar} name={item.name} id={item.id} size={34} />
                     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
                       <EmojiText style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{item.name}</EmojiText>
                       {hasGoldTick(item) && <GoldTick size={13} />}
                     </View>
-                  </Pressable>
+                  </SpringPressable>
                 );
               }}
             />

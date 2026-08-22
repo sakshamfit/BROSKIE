@@ -18,6 +18,7 @@ import AIGreeterModelLoader from './AIGreeterModelLoader';
 import { Avatar } from './common';
 import { type } from '../theme';
 import { routeFromNotification } from '../push/routing';
+import { SpringPressable, motion } from '../motion';
 
 const EMPTY_SUMMARY = {
   unreadMessages: 0, unreadChats: 0, messageRequests: 0,
@@ -434,11 +435,11 @@ export default function DailyAIGreeting() {
                 Segment safety timers guarantee `finished` is reached even if
                 TTS is unavailable, so the handoff can never be missed. */}
             {hasCampus && finished && (
-              <Pressable accessibilityRole="button" accessibilityLabel="See today at your place" onPress={seeToday} style={({ pressed }) => [styles.handoffButton, pressed && { opacity: 0.7 }]}>
+              <SpringPressable accessibilityRole="button" accessibilityLabel="See today at your place" onPress={seeToday} style={({ pressed }) => [styles.handoffButton, pressed && { opacity: 0.7 }]} scaleTo={motion.scale.row} haptic="selection">
                 <Icon name="albums-outline" size={15} color="#f4f0ef" />
                 <Text style={styles.handoffText}>SEE TODAY AT YOUR COLLEGE</Text>
                 <Icon name="arrow-forward" size={14} color="#f4f0ef" />
-              </Pressable>
+              </SpringPressable>
             )}
             <View style={styles.metaRow}>
               <View style={styles.metaItem}>

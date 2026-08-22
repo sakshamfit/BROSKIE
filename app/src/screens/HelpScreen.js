@@ -6,6 +6,7 @@ import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { PaperCard, TapeChip, Rule } from '../components/common';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -131,7 +132,7 @@ export default function HelpScreen({ navigation, embedded = false }) {
             const open = openTopic === t.key;
             return (
               <PaperCard key={t.key} style={{ padding: 0, overflow: 'hidden' }} weight={open ? 'ink' : 'thin'}>
-                <Pressable onPress={() => toggleTopic(t.key)} style={({ pressed }) => [s.topicHead, pressed && marker(theme, 1)]}>
+                <SpringPressable onPress={() => toggleTopic(t.key)} style={({ pressed }) => [s.topicHead, pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="selection">
                   <View style={[s.topicIcon, inkBox(theme, 'thin')]}>
                     <Icon name={t.icon} size={18} color={theme.ink} />
                   </View>
@@ -140,7 +141,7 @@ export default function HelpScreen({ navigation, embedded = false }) {
                     <Text style={[type.bodySm, { color: theme.subtext, marginTop: 2 }]}>{t.summary}</Text>
                   </View>
                   <Icon name={open ? 'chevron-forward-outline' : 'chevron-down-outline'} size={16} color={theme.muted} style={{ transform: [{ rotate: open ? '-90deg' : '0deg' }] }} />
-                </Pressable>
+                </SpringPressable>
 
                 {open && (
                   <View style={s.topicBody}>
@@ -164,10 +165,10 @@ export default function HelpScreen({ navigation, embedded = false }) {
             const open = openFaq === i;
             return (
               <PaperCard key={i} style={{ padding: 0, overflow: 'hidden' }} weight={open ? 'ink' : 'thin'}>
-                <Pressable onPress={() => toggleFaq(i)} style={({ pressed }) => [s.faqHead, pressed && marker(theme, 1)]}>
+                <SpringPressable onPress={() => toggleFaq(i)} style={({ pressed }) => [s.faqHead, pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="selection">
                   <Text style={[type.bodyMd, { color: theme.text, flex: 1, fontFamily: type.body(700) }]}>{f.q}</Text>
                   <Icon name={open ? 'chevron-forward-outline' : 'chevron-down-outline'} size={15} color={theme.muted} style={{ transform: [{ rotate: open ? '-90deg' : '0deg' }] }} />
-                </Pressable>
+                </SpringPressable>
                 {open && (
                   <View style={s.faqBody}>
                     <Text style={[type.bodySm, { color: theme.subtext, lineHeight: 20 }]}>{f.a}</Text>

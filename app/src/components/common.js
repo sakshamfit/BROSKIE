@@ -152,8 +152,8 @@ export function InkButton({
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable
-        onPress={onPress}
-        onPressIn={() => { if (inert) return; onPressIn(); if (hapticKind) haptic(hapticKind); }}
+        onPress={(e) => { if (hapticKind) haptic(hapticKind); onPress?.(e); }}
+        onPressIn={() => { if (!inert) onPressIn(); }}
         onPressOut={onPressOut}
         disabled={inert}
         android_ripple={rippleFor(theme, { color: filled ? 'rgba(255,255,255,0.25)' : theme.ripple })}
@@ -197,10 +197,10 @@ export function InkIconButton({
   const slop = Math.max(0, Math.ceil((44 - size) / 2));
   return (
     <Pressable
-      onPress={onPress}
+      onPress={(e) => { if (hapticKind) haptic(hapticKind); onPress?.(e); }}
       disabled={disabled}
       hitSlop={Math.max(slop, 6)}
-      onPressIn={() => { if (disabled) return; onPressIn(); if (hapticKind) haptic(hapticKind); }}
+      onPressIn={() => { if (!disabled) onPressIn(); }}
       onPressOut={onPressOut}
       android_ripple={rippleFor(theme, { borderless: true, radius: size * 0.8 })}
       style={({ pressed }) => [
@@ -289,8 +289,8 @@ export function InkCheckbox({ checked, size = 20, onPress }) {
     <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked: !!checked }}
-      onPress={onPress}
-      onPressIn={() => { onPressIn(); haptic('selection'); }}
+      onPress={() => { haptic('selection'); onPress?.(); }}
+      onPressIn={onPressIn}
       onPressOut={onPressOut}
       hitSlop={8}
     >
@@ -593,9 +593,9 @@ export function IconButton({ name, onPress, size = 22, color, style, haptic: hap
   const { scale, onPressIn, onPressOut } = usePressScale(motion.scale.icon);
   return (
     <Pressable
-      onPress={onPress}
+      onPress={(e) => { if (hapticKind) haptic(hapticKind); onPress?.(e); }}
       disabled={disabled}
-      onPressIn={() => { if (disabled) return; onPressIn(); if (hapticKind) haptic(hapticKind); }}
+      onPressIn={() => { if (!disabled) onPressIn(); }}
       onPressOut={onPressOut}
       android_ripple={rippleFor(theme, { borderless: true, radius: 24 })}
       style={[{ padding: 8 }, disabled && { opacity: 0.4 }, style]}

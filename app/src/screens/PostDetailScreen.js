@@ -14,6 +14,7 @@ import PostCard from '../components/PostCard';
 import { Avatar, EmptyState, handleFor, formatChatTime, GoldTick, hasGoldTick } from '../components/common';
 import ImageLightbox from '../components/ImageLightbox';
 import { type, inkBox, stroke } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 /**
  * One post, full screen — the destination when you tap a "liked your post" /
@@ -188,7 +189,7 @@ export default function PostDetailScreen({ navigation, route, embedded = false }
                 }
               }}
             />
-            <Pressable
+            <SpringPressable
               onPress={send}
               disabled={busy || !text.trim()}
               style={({ pressed }) => [
@@ -197,9 +198,11 @@ export default function PostDetailScreen({ navigation, route, embedded = false }
                 { backgroundColor: pressed ? theme.highlighter : theme.ink },
                 (busy || !text.trim()) && { opacity: 0.4 },
               ]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <Icon name="send" size={15} color={theme.onPrimary} />
-            </Pressable>
+            </SpringPressable>
           </View>
         </KeyboardAvoidingView>
       ) : null}

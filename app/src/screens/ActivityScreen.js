@@ -14,6 +14,7 @@ import {
 } from '../components/common';
 import { openPost, openProfile } from '../push/routing';
 import { type, inkBox, marker, stroke } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 const INSTAGRAM_HEART = '#ED4956';
 
@@ -183,10 +184,12 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
           ? () => openProfile(person.id)
           : null;
     return (
-      <Pressable
+      <SpringPressable
         onPress={rowTarget || undefined}
         disabled={!rowTarget}
         style={({ pressed }) => [s.row, pressed && rowTarget && marker(theme, 1)]}
+        scaleTo={motion.scale.row}
+        haptic="selection"
       >
         <View style={s.avatarWrap}>
           {(item.users?.length || 0) > 1 ? (
@@ -299,7 +302,7 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
         {!!item.postId && (
           <Icon name="chevron-forward-outline" size={16} color={theme.muted} style={{ marginTop: 14 }} />
         )}
-      </Pressable>
+      </SpringPressable>
     );
   };
 
@@ -355,7 +358,7 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
 
 function MiniButton({ theme, label, filled, busy, disabled, onPress }) {
   return (
-    <Pressable
+    <SpringPressable
       onPress={onPress}
       disabled={disabled}
       style={({ pressed }) => [
@@ -365,13 +368,15 @@ function MiniButton({ theme, label, filled, busy, disabled, onPress }) {
         pressed && !filled && marker(theme, 1),
         disabled && { opacity: busy ? 1 : 0.5 },
       ]}
+      scaleTo={motion.scale.row}
+      haptic="selection"
     >
       {busy ? (
         <ActivityIndicator size="small" color={filled ? theme.onPrimary : theme.ink} />
       ) : (
         <Text style={[type.labelXs, { color: filled ? theme.onPrimary : theme.ink }]}>{label.toUpperCase()}</Text>
       )}
-    </Pressable>
+    </SpringPressable>
   );
 }
 

@@ -8,6 +8,7 @@ import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, InkField, InkIconButton, InkCheckbox, handleFor, GoldTick, hasGoldTick } from '../components/common';
 import { type, inkBox, marker, dashedRule } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 export default function NewChatScreen({ navigation, embedded = false }) {
   const { theme } = useTheme();
@@ -155,10 +156,12 @@ export default function NewChatScreen({ navigation, embedded = false }) {
           renderItem={({ item }) => {
             const isSel = selected.includes(item.id);
             return (
-              <Pressable
+              <SpringPressable
                 style={({ pressed }) => [s.row, isSel && marker(theme, 1), pressed && marker(theme, 1)]}
                 onPress={() => (groupMode ? toggleSelect(item) : openDirect(item))}
                 disabled={busy}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 {!groupMode && (
                   <PlusOneButton
@@ -180,20 +183,22 @@ export default function NewChatScreen({ navigation, embedded = false }) {
                     {handleFor(item)}
                   </Text>
                 </View>
-              </Pressable>
+              </SpringPressable>
             );
           }}
         />
       )}
 
       {groupMode && selected.length > 0 && !!groupName.trim() && (
-        <Pressable
+        <SpringPressable
           onPress={createGroup}
           disabled={busy}
           style={({ pressed }) => [s.fab, inkBox(theme, 'bold'), { backgroundColor: pressed ? theme.highlighter : theme.ink }]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           {busy ? <ActivityIndicator color={theme.onPrimary} /> : <Icon name="checkmark" size={22} color={theme.onPrimary} />}
-        </Pressable>
+        </SpringPressable>
       )}
     </View>
   );
@@ -205,7 +210,7 @@ function PlusOneButton({ theme, status, busy, disabled, onPress }) {
   const incoming = status === 'incoming';
   const label = connected ? 'ONE' : sent ? 'SENT' : incoming ? 'IN' : '+one';
   return (
-    <Pressable
+    <SpringPressable
       accessibilityRole="button"
       accessibilityLabel={connected ? 'Already connected' : sent ? 'Request sent' : 'Send +one request'}
       onPress={(e) => {
@@ -221,11 +226,13 @@ function PlusOneButton({ theme, status, busy, disabled, onPress }) {
         pressed && !sent && !connected && marker(theme, 1),
         (disabled || sent) && { opacity: busy ? 1 : 0.7 },
       ]}
+      scaleTo={motion.scale.row}
+      haptic="selection"
     >
       {busy
         ? <ActivityIndicator size="small" color={theme.ink} />
         : <Text style={[type.labelXs, { color: connected ? theme.onPrimary : theme.ink }]}>{label}</Text>}
-    </Pressable>
+    </SpringPressable>
   );
 }
 

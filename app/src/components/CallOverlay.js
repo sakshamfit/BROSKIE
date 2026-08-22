@@ -7,6 +7,7 @@ import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, rippleFor, GoldTick, hasGoldTick } from './common';
 import { radius, type, inkBox } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 /**
  * Real 1:1 voice/video calling, rendered as a global overlay so it shows up
@@ -134,19 +135,21 @@ function CallButton({ icon, label, tone, onPress, theme, dark }) {
   const bg = tone === 'danger' ? theme.danger : tone === 'accept' ? '#0a8a2f' : tone === 'active' ? theme.highlighter : (dark ? 'rgba(255,255,255,0.15)' : theme.cardAlt);
   const fg = tone === 'danger' || tone === 'accept' ? '#fff' : tone === 'active' ? theme.ink : (dark ? '#fff' : theme.ink);
   return (
-    <Pressable
+    <SpringPressable
       onPress={onPress}
       android_ripple={rippleFor(theme, { borderless: true, radius: 34 })}
       style={({ pressed }) => [
         buttonStyles.wrap,
         { backgroundColor: bg, opacity: pressed && Platform.OS !== 'android' ? 0.85 : 1 },
       ]}
+      scaleTo={motion.scale.row}
+      haptic="selection"
     >
       <Icon name={icon} size={24} color={fg} />
       <Text style={[type.labelXs, { color: dark ? 'rgba(255,255,255,0.75)' : theme.muted, marginTop: 6 }]}>
         {label.toUpperCase()}
       </Text>
-    </Pressable>
+    </SpringPressable>
   );
 }
 

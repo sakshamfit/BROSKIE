@@ -6,6 +6,7 @@ import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { PaperCard } from '../components/common';
 import { type, inkBox, marker, lightTheme, darkTheme, kineticInkTheme } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 const SYSTEM_SETTING_NAME = Platform.select({
   ios: 'your iOS Display & Brightness setting',
@@ -108,13 +109,15 @@ export default function AppearanceScreen({ navigation, embedded = false }) {
 function ThemePreviewCard({ label, active, onPress, bg, ink, card, outerTheme, split, icon }) {
   const s = makeStyles(outerTheme);
   return (
-    <Pressable
+    <SpringPressable
       onPress={onPress}
       style={({ pressed }) => [
         s.themeCard,
         inkBox(outerTheme, active ? 'bold' : 'thin'),
         pressed ? marker(outerTheme, 1) : null,
       ]}
+      scaleTo={motion.scale.row}
+      haptic="selection"
     >
       {split ? (
         <View style={[s.swatch, s.swatchSplit, { borderColor: ink }]}>
@@ -131,7 +134,7 @@ function ThemePreviewCard({ label, active, onPress, bg, ink, card, outerTheme, s
         <Text style={[type.bodyStrong, { color: outerTheme.text }]}>{label}</Text>
         {active && <Icon name="checkmark-circle" size={16} color={outerTheme.ink} />}
       </View>
-    </Pressable>
+    </SpringPressable>
   );
 }
 

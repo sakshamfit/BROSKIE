@@ -247,12 +247,15 @@ function childLayoutOf(style) {
  * function (applied to the outer Pressable); the spring applies to the
  * content inside.
  *
- * `haptic`: pass a haptic kind ('selection' | 'impact' | …) to fire it on
- * touch-down — feedback lands with the finger, not after the handler runs.
+ * `haptic`: pass a haptic kind ('selection' | 'impact' | …) to fire it when
+ * the press *completes*. Deliberately not on touch-down: rows live inside
+ * scroll views, and a finger that lands to scroll would otherwise buzz on
+ * every flick. The visual compression still happens instantly on touch-down,
+ * so the control feels immediate either way.
  */
 export function SpringPressable({
   children, style, contentStyle, scaleTo = motion.scale.button, dim = false,
-  onPressIn, onPressOut, haptic: hapticKind, disabled, ...rest
+  onPress, onPressIn, onPressOut, haptic: hapticKind, disabled, ...rest
 }) {
   const { scale, opacity, onPressIn: in_, onPressOut: out_ } = usePressScale(scaleTo);
   const spring = { transform: [{ scale }], opacity };
@@ -270,7 +273,8 @@ export function SpringPressable({
     <Pressable
       {...rest}
       disabled={disabled}
-      onPressIn={(e) => { if (!disabled) { in_(); if (hapticKind) haptic(hapticKind); } onPressIn?.(e); }}
+      onPress={(e) => { if (hapticKind && !disabled) haptic(hapticKind); onPress?.(e); }}
+      onPressIn={(e) => { if (!disabled) in_(); onPressIn?.(e); }}
       onPressOut={(e) => { out_(); onPressOut?.(e); }}
       style={typeof style === 'function'
         ? (state) => [style(state), state.pressed && dim && { opacity: 0.82 }]

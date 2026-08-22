@@ -14,6 +14,7 @@ import { Avatar, EmptyState, TapeChip, Rule, handleFor, GoldTick, hasGoldTick } 
 import ImageLightbox from '../components/ImageLightbox';
 import { openPost } from '../push/routing';
 import { type, inkBox, marker, stroke } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 /**
  * Someone's profile — what opens when you tap their avatar circle anywhere
@@ -276,7 +277,7 @@ function Stat({ theme, label, value }) {
 
 function ActionButton({ theme, icon, label, onPress, filled = false, busy = false }) {
   return (
-    <Pressable
+    <SpringPressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
@@ -288,6 +289,8 @@ function ActionButton({ theme, icon, label, onPress, filled = false, busy = fals
         pressed && !filled && marker(theme, 1),
         busy && { opacity: 0.6 },
       ]}
+      scaleTo={motion.scale.row}
+      haptic="selection"
     >
       {busy ? (
         <ActivityIndicator size="small" color={filled ? theme.onPrimary : theme.ink} />
@@ -297,7 +300,7 @@ function ActionButton({ theme, icon, label, onPress, filled = false, busy = fals
           <Text style={[type.labelSm, { color: filled ? theme.onPrimary : theme.ink }]}>{label}</Text>
         </>
       )}
-    </Pressable>
+    </SpringPressable>
   );
 }
 

@@ -9,7 +9,7 @@ import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, lastSeenText, PaperCard, TapeChip, handleFor, Rule, InkButton, InkField, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
-import { FadeSlide, SheetSpringIn } from '../motion';
+import { FadeSlide, SheetSpringIn, SpringPressable, motion } from '../motion';
 import { radius, type, inkBox, marker, dashedRule, raised } from '../theme';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
@@ -131,13 +131,13 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
   };
 
   const Row = ({ icon, label, onPress, danger, sub }) => (
-    <Pressable style={({ pressed }) => [s.row, pressed && marker(theme, 1)]} onPress={onPress} disabled={busy}>
+    <SpringPressable style={({ pressed }) => [s.row, pressed && marker(theme, 1)]} onPress={onPress} disabled={busy} scaleTo={motion.scale.row} haptic="selection">
       <Icon name={icon} size={19} color={danger ? theme.danger : theme.ink} style={{ width: 26 }} />
       <View style={{ flex: 1 }}>
         <Text style={[type.bodyMd, { color: danger ? theme.danger : theme.text }]}>{label}</Text>
         {!!sub && <Text style={[type.labelXs, { color: theme.muted, marginTop: 2 }]}>{sub}</Text>}
       </View>
-    </Pressable>
+    </SpringPressable>
   );
 
   return (
@@ -229,20 +229,24 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
                   {m.role === 'admin' && <TapeChip label="ADMIN" tone="accent" />}
                   {isAdmin && m.id !== user.id && (
                     <View style={{ flexDirection: 'row', gap: 6 }}>
-                      <Pressable
+                      <SpringPressable
                         onPress={() => promote(m)}
                         hitSlop={6}
                         style={({ pressed }) => [s.memberAction, pressed ? marker(theme, 1) : null]}
+                        scaleTo={motion.scale.row}
+                        haptic="selection"
                       >
                         <Icon name={m.role === 'admin' ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'} size={19} color={theme.ink} />
-                      </Pressable>
-                      <Pressable
+                      </SpringPressable>
+                      <SpringPressable
                         onPress={() => removeMember(m)}
                         hitSlop={6}
                         style={({ pressed }) => [s.memberAction, pressed ? marker(theme, 1) : null]}
+                        scaleTo={motion.scale.row}
+                        haptic="selection"
                       >
                         <Icon name="remove-circle-outline" size={19} color={theme.danger} />
-                      </Pressable>
+                      </SpringPressable>
                     </View>
                   )}
                 </View>
@@ -313,24 +317,28 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
               New messages in this {chat.type === 'group' ? 'group' : 'chat'} self-destruct after the timer.
             </Text>
             <View style={{ gap: 8 }}>
-              <Pressable
+              <SpringPressable
                 style={({ pressed }) => [s.timerOpt, inkBox(theme, 'thin'), pressed ? marker(theme, 1) : null]}
                 onPress={() => setDisappear(0)}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="time-outline" size={18} color={theme.ink} />
                 <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]}>Off — keep forever</Text>
                 {!chat.disappearSeconds && <Icon name="checkmark" size={18} color={theme.ink} />}
-              </Pressable>
+              </SpringPressable>
               {DISAPPEAR_OPTIONS.map((o) => (
-                <Pressable
+                <SpringPressable
                   key={o.seconds}
                   style={({ pressed }) => [s.timerOpt, inkBox(theme, 'thin'), pressed ? marker(theme, 1) : null]}
                   onPress={() => setDisappear(o.seconds)}
+                  scaleTo={motion.scale.row}
+                  haptic="selection"
                 >
                   <Icon name="timer-outline" size={18} color={theme.ink} />
                   <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]}>{o.label}</Text>
                   {chat.disappearSeconds === o.seconds && <Icon name="checkmark" size={18} color={theme.ink} />}
-                </Pressable>
+                </SpringPressable>
               ))}
             </View>
           </Pressable>

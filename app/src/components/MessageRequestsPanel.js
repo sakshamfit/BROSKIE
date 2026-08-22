@@ -11,6 +11,7 @@ import { useTheme } from '../store/ThemeContext';
 import { confirm } from '../hooks/confirm';
 import { Avatar, EmptyState, Rule, TapeChip, formatChatTime, handleFor, GoldTick, hasGoldTick } from './common';
 import { type, inkBox, marker, stroke } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 /** Full-height inbox for first messages from people outside accepted contacts. */
 export default function MessageRequestsPanel({ visible, onClose, requests, onChanged, navigation }) {
@@ -94,10 +95,10 @@ export default function MessageRequestsPanel({ visible, onClose, requests, onCha
             busy={busy === `${item.chatId}:delete`}
             onPress={() => respond(item, 'delete')}
           />
-          <Pressable onPress={() => respond(item, 'block')} disabled={!!busy} hitSlop={7} style={({ pressed }) => [s.block, pressed && marker(theme, 1)]}>
+          <SpringPressable onPress={() => respond(item, 'block')} disabled={!!busy} hitSlop={7} style={({ pressed }) => [s.block, pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="selection">
             <Icon name="ban-outline" size={15} color={theme.danger} />
             <Text style={[type.labelXs, { color: theme.danger }]}>BLOCK</Text>
-          </Pressable>
+          </SpringPressable>
         </View>
       </View>
     );
@@ -145,7 +146,7 @@ export default function MessageRequestsPanel({ visible, onClose, requests, onCha
 
 function RequestButton({ theme, label, icon, filled, busy, disabled, onPress }) {
   return (
-    <Pressable
+    <SpringPressable
       onPress={onPress}
       disabled={disabled}
       style={({ pressed }) => [
@@ -155,6 +156,8 @@ function RequestButton({ theme, label, icon, filled, busy, disabled, onPress }) 
         pressed && !filled && marker(theme, 1),
         disabled && { opacity: busy ? 1 : 0.5 },
       ]}
+      scaleTo={motion.scale.row}
+      haptic="selection"
     >
       {busy ? <ActivityIndicator size="small" color={filled ? theme.onPrimary : theme.ink} /> : (
         <>
@@ -162,7 +165,7 @@ function RequestButton({ theme, label, icon, filled, busy, disabled, onPress }) 
           <Text style={[type.labelXs, { color: filled ? theme.onPrimary : theme.ink }]}>{label.toUpperCase()}</Text>
         </>
       )}
-    </Pressable>
+    </SpringPressable>
   );
 }
 

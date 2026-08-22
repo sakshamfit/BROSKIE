@@ -4,6 +4,7 @@ import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
 import { type, stroke } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 /**
  * Instagram-style top bar: +one wordmark on the left, heart on the right.
@@ -22,26 +23,30 @@ export default function BrandHeader({ navigation, onOpenActivity, bordered = tru
 
   return (
     <View style={[s.header, bordered && { borderBottomWidth: stroke.ink, borderBottomColor: theme.ink }]}>
-      <Pressable
+      <SpringPressable
         accessibilityRole="button"
         accessibilityLabel="Open activity"
         onPress={open}
         hitSlop={8}
         style={({ pressed }) => [s.wordmarkHit, pressed && { opacity: 0.55 }]}
+        scaleTo={motion.scale.row}
+        haptic="selection"
       >
         <Text style={s.wordmark}>+one</Text>
-      </Pressable>
+      </SpringPressable>
       <View style={{ flex: 1 }} />
-      <Pressable
+      <SpringPressable
         accessibilityRole="button"
         accessibilityLabel="Activity"
         onPress={open}
         hitSlop={8}
         style={({ pressed }) => [s.heartHit, pressed && { opacity: 0.55 }]}
+        scaleTo={motion.scale.row}
+        haptic="selection"
       >
         <Icon name="heart-outline" size={26} color={theme.ink} />
         {unread > 0 && <View style={[s.dot, { backgroundColor: '#ED4956', borderColor: theme.bg }]} />}
-      </Pressable>
+      </SpringPressable>
     </View>
   );
 }

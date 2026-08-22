@@ -539,7 +539,7 @@ function CommentsSheet({ post, onClose, onCounted }) {
                 }
               }}
             />
-            <Pressable
+            <SpringPressable
               onPress={send}
               disabled={busy || !text.trim()}
               style={({ pressed }) => [
@@ -548,9 +548,11 @@ function CommentsSheet({ post, onClose, onCounted }) {
                 { backgroundColor: pressed ? theme.highlighter : theme.ink },
                 (busy || !text.trim()) && { opacity: 0.4 },
               ]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <Icon name="send" size={15} color={theme.onPrimary} />
-            </Pressable>
+            </SpringPressable>
           </View>
         </KeyboardAvoidingView>
       </View>

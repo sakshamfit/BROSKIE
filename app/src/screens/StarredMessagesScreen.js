@@ -7,6 +7,7 @@ import { useTheme } from '../store/ThemeContext';
 import { EmptyState, formatChatTime, Rule, InkIconButton } from '../components/common';
 import { type, inkBox, marker } from '../theme';
 import { api, mediaUrl } from '../api';
+import { SpringPressable, motion } from '../motion';
 
 /**
  * Starred messages — every message you've bookmarked across all chats,
@@ -69,9 +70,11 @@ export default function StarredMessagesScreen({ navigation, embedded = false }) 
           />
         }
         renderItem={({ item }) => (
-          <Pressable
+          <SpringPressable
             style={({ pressed }) => [s.row, pressed ? marker(theme, 1) : null]}
             onPress={() => navigation.navigate('Conversation', { chatId: item.chatId })}
+            scaleTo={motion.scale.row}
+            haptic="selection"
           >
             <View style={[s.quote, { borderLeftColor: theme.ink }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -93,7 +96,7 @@ export default function StarredMessagesScreen({ navigation, embedded = false }) 
             <Pressable onPress={() => unstar(item)} hitSlop={10} style={{ padding: 6 }}>
               <Icon name="star" size={20} color={theme.highlighter} />
             </Pressable>
-          </Pressable>
+          </SpringPressable>
         )}
       />
     </View>

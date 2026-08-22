@@ -16,6 +16,7 @@ import { Avatar, InkField, TapeChip, handleFor, rippleFor, GoldTick, hasGoldTick
 import { openNetworkFeed } from '../push/routing';
 import { useDebouncedCallback } from '../rateLimit';
 import { type, inkBox, marker, dashedRule, raised } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 const FILTERS = [{ key: '', short: 'All', icon: 'globe-outline' }, ...AFFILIATION_TYPES];
 const CARD_TILTS = ['0.5deg', '-0.8deg', '1deg'];
@@ -220,7 +221,7 @@ export default function ColleaguesScreen({ onOpenChat }) {
           {FILTERS.map((filter, index) => {
             const active = activeType === filter.key;
             return (
-              <Pressable
+              <SpringPressable
                 key={filter.key || 'all'}
                 onPress={() => setActiveType(filter.key)}
                 style={({ pressed }) => [
@@ -231,10 +232,12 @@ export default function ColleaguesScreen({ onOpenChat }) {
                   pressed && marker(theme, 1),
                   { transform: [{ rotate: index % 2 ? '1deg' : '-1deg' }] },
                 ]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name={filter.icon} size={14} color={active ? theme.ink : theme.graphite} />
                 <Text style={[type.labelSm, { color: active ? theme.ink : theme.graphite }]}>{filter.short.toUpperCase()}</Text>
-              </Pressable>
+              </SpringPressable>
             );
           })}
         </ScrollView>
@@ -257,10 +260,10 @@ export default function ColleaguesScreen({ onOpenChat }) {
                 style={{ maxWidth: '100%' }}
               />
             ))}
-            <Pressable onPress={() => setPickerOpen(true)} style={({ pressed }) => [s.addPlaceChip, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}>
+            <SpringPressable onPress={() => setPickerOpen(true)} style={({ pressed }) => [s.addPlaceChip, inkBox(theme, 'thin'), pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="selection">
               <Icon name="add" size={15} color={theme.ink} />
               <Text style={[type.labelXs, { color: theme.ink }]}>ADD A PLACE</Text>
-            </Pressable>
+            </SpringPressable>
           </View>
         ) : (
           <View style={[s.onboarding, inkBox(theme, 'ink')]}>
@@ -272,10 +275,10 @@ export default function ColleaguesScreen({ onOpenChat }) {
               <Text style={[type.bodySm, { color: theme.subtext, marginTop: 5 }]}>
                 Add a place to your profile. Everyone who joins that same place appears here.
               </Text>
-              <Pressable onPress={() => setPickerOpen(true)} style={({ pressed }) => [s.onboardingButton, inkBox(theme, 'ink'), pressed && marker(theme, 1)]}>
+              <SpringPressable onPress={() => setPickerOpen(true)} style={({ pressed }) => [s.onboardingButton, inkBox(theme, 'ink'), pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="selection">
                 <Icon name="add" size={16} color={theme.ink} />
                 <Text style={[type.labelSm, { color: theme.ink }]}>ADD YOUR FIRST PLACE</Text>
-              </Pressable>
+              </SpringPressable>
             </View>
           </View>
         )}
@@ -309,10 +312,10 @@ export default function ColleaguesScreen({ onOpenChat }) {
           )}
         </View>
 
-        <Pressable onPress={() => setPickerOpen(true)} style={({ pressed }) => [s.registerButton, inkBox(theme, 'ink'), pressed && marker(theme, 1)]}>
+        <SpringPressable onPress={() => setPickerOpen(true)} style={({ pressed }) => [s.registerButton, inkBox(theme, 'ink'), pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="selection">
           <Icon name="add-circle-outline" size={19} color={theme.ink} />
           <Text style={[type.labelSm, { color: theme.ink }]}>REGISTER OR ADD ANOTHER PLACE</Text>
-        </Pressable>
+        </SpringPressable>
 
         {requests.length > 0 && (
           <>
@@ -433,7 +436,7 @@ function SectionTitle({ theme, title, note }) {
 
 function ActionButton({ theme, label, icon, onPress, busy, filled, subtle }) {
   return (
-    <Pressable
+    <SpringPressable
       onPress={onPress}
       disabled={busy}
       android_ripple={rippleFor(theme)}
@@ -445,6 +448,8 @@ function ActionButton({ theme, label, icon, onPress, busy, filled, subtle }) {
         pressed && Platform.OS !== 'android' && !filled ? marker(theme, 1) : null,
         busy && { opacity: 0.55 },
       ]}
+      scaleTo={motion.scale.row}
+      haptic="selection"
     >
       {busy
         ? <ActivityIndicator size="small" color={filled ? theme.onPrimary : theme.ink} />
@@ -452,7 +457,7 @@ function ActionButton({ theme, label, icon, onPress, busy, filled, subtle }) {
             {!!icon && <Icon name={icon} size={14} color={filled ? theme.onPrimary : theme.ink} />}
             <Text style={[type.labelSm, { color: filled ? theme.onPrimary : theme.ink }]}>{label.toUpperCase()}</Text>
           </>}
-    </Pressable>
+    </SpringPressable>
   );
 }
 

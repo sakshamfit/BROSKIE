@@ -14,10 +14,7 @@ import {
   FrostedBackdrop, GoldTick, hasGoldTick,
 } from '../components/common';
 import { type, inkBox, marker, radius, stroke } from '../theme';
-import {
-  Skeleton, TypingDots, SpringPressable, FadeSlide, Pop, haptic, motion,
-  BottomSheet, staggerDelay, useReducedMotion,
-} from '../motion';
+import { Skeleton, TypingDots, SpringPressable, FadeSlide, Pop, haptic, motion, BottomSheet, staggerDelay, useReducedMotion } from '../motion';
 
 /** Pressable that can carry a native-driven animated transform. */
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -183,10 +180,12 @@ export default function ChatListScreen({ navigation }) {
               <View style={s.resultsWrap}>
                 <Text style={[type.labelXs, { color: theme.muted, marginBottom: 8 }]}>MESSAGES</Text>
                 {msgResults.slice(0, 6).map((m) => (
-                  <Pressable
+                  <SpringPressable
                     key={m.id}
                     style={({ pressed }) => [s.resultRow, pressed ? marker(theme, 1) : null]}
                     onPress={() => { setQuery(''); setMsgResults([]); searchMessages.cancel(); navigation.navigate('Conversation', { chatId: m.chatId }); }}
+                    scaleTo={motion.scale.row}
+                    haptic="selection"
                   >
                     <Icon name="chatbubble-outline" size={15} color={theme.graphite} />
                     <View style={{ flex: 1 }}>
@@ -194,7 +193,7 @@ export default function ChatListScreen({ navigation }) {
                       <EmojiText style={[type.bodySm, { color: theme.subtext }]} numberOfLines={1}>{m.body}</EmojiText>
                     </View>
                     <Text style={s.time}>{formatChatTime(m.createdAt)}</Text>
-                  </Pressable>
+                  </SpringPressable>
                 ))}
                 <Rule />
               </View>
@@ -209,17 +208,17 @@ export default function ChatListScreen({ navigation }) {
             )}
 
             {!showArchived && archivedCount > 0 && (
-              <Pressable style={({ pressed }) => [s.archiveRow, pressed ? marker(theme, 1) : null]} onPress={() => setShowArchived(true)}>
+              <SpringPressable style={({ pressed }) => [s.archiveRow, pressed ? marker(theme, 1) : null]} onPress={() => setShowArchived(true)} scaleTo={motion.scale.row} haptic="selection">
                 <Icon name="archive-outline" size={17} color={theme.ink} />
                 <Text style={[type.bodyMd, { flex: 1, color: theme.text }]}>Archived</Text>
                 <Text style={[type.labelSm, { color: theme.muted }]}>{archivedCount}</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {showArchived && (
-              <Pressable style={({ pressed }) => [s.archiveRow, pressed ? marker(theme, 1) : null]} onPress={() => setShowArchived(false)}>
+              <SpringPressable style={({ pressed }) => [s.archiveRow, pressed ? marker(theme, 1) : null]} onPress={() => setShowArchived(false)} scaleTo={motion.scale.row} haptic="selection">
                 <Icon name="arrow-back" size={17} color={theme.ink} />
                 <Text style={[type.bodyMd, { flex: 1, color: theme.text }]}>Back to chats</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             </View>
           </MotionIn>
@@ -234,14 +233,16 @@ export default function ChatListScreen({ navigation }) {
                 title="Unable to load conversations"
                 subtitle="Your history was not erased. Check your connection and retry."
               />
-              <Pressable
+              <SpringPressable
                 accessibilityRole="button"
                 onPress={() => refreshChats().catch(() => {})}
                 style={({ pressed }) => [s.retryButton, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="refresh" size={16} color={theme.ink} />
                 <Text style={[type.labelSm, { color: theme.ink }]}>RETRY</Text>
-              </Pressable>
+              </SpringPressable>
             </View>
           ) : (
             <EmptyState

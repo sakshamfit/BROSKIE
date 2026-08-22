@@ -12,6 +12,7 @@ import NewCommunityScreen from './NewCommunityScreen';
 import CommunityDetailScreen from './CommunityDetailScreen';
 import { onOpenCommunity, consumePendingCommunity, onProfileWillOpen } from '../push/routing';
 import { type, inkBox, marker, radius, raised } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 const tiltFor = (i) => (i % 2 === 0 ? '-0.7deg' : '0.6deg');
 
@@ -84,7 +85,7 @@ export default function CommunitiesScreen({ onOpenChat }) {
   const renderCard = ({ item, index }) => {
     const cat = categoryMeta(item.category);
     return (
-      <Pressable
+      <SpringPressable
         onPress={() => setOpenId(item.id)}
         android_ripple={rippleFor(theme)}
         style={({ pressed }) => [
@@ -97,6 +98,8 @@ export default function CommunitiesScreen({ onOpenChat }) {
           },
           pressed && marker(theme, 1),
         ]}
+        scaleTo={motion.scale.row}
+        haptic="selection"
       >
         <View style={s.cardHead}>
           <View style={[s.catBadge, inkBox(theme, 'thin')]}>
@@ -121,25 +124,29 @@ export default function CommunitiesScreen({ onOpenChat }) {
           </View>
           <Text style={[type.labelXs, { color: theme.muted }]}>{cat.label.toUpperCase()}</Text>
         </View>
-      </Pressable>
+      </SpringPressable>
     );
   };
 
   const ListHeader = (
     <View style={s.headerWrap}>
       <View style={s.scopeRow}>
-        <Pressable
+        <SpringPressable
           onPress={() => setScope('discover')}
           style={({ pressed }) => [s.scopeBtn, raised(theme, scope === 'discover' ? 2 : 1), { borderColor: theme.ink, backgroundColor: scope === 'discover' ? '#050505' : theme.card }, pressed && { transform: [{ translateY: 2 }] }]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Text style={[type.labelSm, { color: scope === 'discover' ? '#ffffff' : theme.text }]}>DISCOVER</Text>
-        </Pressable>
-        <Pressable
+        </SpringPressable>
+        <SpringPressable
           onPress={() => setScope('mine')}
           style={({ pressed }) => [s.scopeBtn, raised(theme, scope === 'mine' ? 2 : 1), { borderColor: theme.ink, backgroundColor: scope === 'mine' ? '#050505' : theme.card }, pressed && { transform: [{ translateY: 2 }] }]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Text style={[type.labelSm, { color: scope === 'mine' ? '#ffffff' : theme.text }]}>MY COMMUNITIES</Text>
-        </Pressable>
+        </SpringPressable>
       </View>
 
       <View style={s.catRow}>
@@ -192,17 +199,19 @@ export default function CommunitiesScreen({ onOpenChat }) {
 
       <View style={s.createFabWrap} pointerEvents="box-none">
         <View pointerEvents="none" style={s.createFabDepth} />
-        <Pressable
+        <SpringPressable
           accessibilityLabel="Create community"
           onPress={() => setComposerOpen(true)}
           android_ripple={rippleFor(theme, { borderless: false, radius: 28 })}
           style={({ pressed }) => [s.fab, pressed && { transform: [{ translateX: 2 }, { translateY: 4 }], backgroundColor: '#242321' }]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <View style={[s.fabIcon, { backgroundColor: theme.highlighter }]}>
             <Icon name="add" size={19} color="#050505" />
           </View>
           <Text style={[type.labelSm, { color: '#ffffff' }]}>CREATE COMMUNITY</Text>
-        </Pressable>
+        </SpringPressable>
       </View>
 
       <NewCommunityScreen visible={composerOpen} onClose={() => setComposerOpen(false)} onCreated={onCreated} />
