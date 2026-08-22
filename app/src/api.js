@@ -449,6 +449,7 @@ export const api = {
   gcDiscover: () => request('/api/gc/discover'),
   gcCreate: (payload) => request('/api/gc', { method: 'POST', body: payload }),
   gcDetail: (chatId) => request(`/api/gc/${chatId}`),
+  gcSettings: (chatId, payload) => request(`/api/gc/${chatId}/settings`, { method: 'PATCH', body: payload }),
   gcJoin: (chatId) => request(`/api/gc/${chatId}/join`, { method: 'POST', body: {} }),
   gcCancelJoin: (chatId) => request(`/api/gc/${chatId}/join`, { method: 'DELETE' }),
   gcRequests: (chatId) => request(`/api/gc/${chatId}/requests`),

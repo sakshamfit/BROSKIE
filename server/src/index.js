@@ -2449,6 +2449,7 @@ function hydrateGC(chat, viewerId) {
     name: chat.name,
     avatar: chat.avatar,
     description: meta.description || '',
+    rules: (() => { try { return JSON.parse(meta.rules || '[]'); } catch { return []; } })(),
     privacy: meta.privacy,
     createdAt: meta.created_at,
     createdBy: chat.created_by,
@@ -2483,6 +2484,28 @@ app.post('/api/gc', requireAuth, (req, res) => {
   res.json({ gc: hydrateGC(db.prepare('SELECT * FROM chats WHERE id = ?').get(id), req.userId), chat: chatSummary(id, req.userId) });
 });
 
+/** GC identity/settings. Membership is required to view; only the persisted
+ * admin role may mutate the GC-owned photo and rules. */
+app.patch('/api/gc/:id/settings', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ? AND type = \'gc\'').get(req.params.id);
+  if (!chat) return res.status(404).json({ error: 'GC not found' });
+  if (gcRole(chat.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Only the GC admin can change settings' });
+  const { avatar, rules } = req.body || {};
+  if (avatar !== undefined && avatar !== null && String(avatar).length > 2000) return res.status(400).json({ error: 'Invalid GC photo' });
+  let nextRules;
+  if (rules !== undefined) {
+    if (!Array.isArray(rules) || rules.length > 50) return res.status(400).json({ error: 'Invalid GC rules' });
+    nextRules = rules.map((r) => String(r || '').trim()).filter(Boolean).slice(0, 50);
+    if (nextRules.some((r) => r.length > 500)) return res.status(400).json({ error: 'A GC rule is too long' });
+  }
+  const t = now();
+  if (avatar !== undefined) db.prepare('UPDATE chats SET avatar = ?, updated_at = ? WHERE id = ?').run(avatar ? String(avatar).trim() : null, t, chat.id);
+  if (nextRules !== undefined) db.prepare('UPDATE gcs SET rules = ? WHERE chat_id = ?').run(JSON.stringify(nextRules), chat.id);
+  memberIds(chat.id).forEach((uid) => emitToUser(uid, 'gc:settings', { chatId: chat.id }));
+  const fresh = db.prepare('SELECT * FROM chats WHERE id = ?').get(chat.id);
+  res.json({ gc: hydrateGC(fresh, req.userId), chat: chatSummary(chat.id, req.userId) });
+});
+
 /** My GCs — the GC inbox. Same chat-summary shape as /api/chats (plus a
  *  `gc` block) so the client can feed them through the identical live store. */
 app.get('/api/gc', requireAuth, (req, res) => {
@@ -2500,7 +2523,7 @@ app.get('/api/gc', requireAuth, (req, res) => {
       const requestCount = summary.role === 'admin'
         ? db.prepare("SELECT COUNT(*) c FROM gc_requests WHERE chat_id = ? AND status = 'pending'").get(r.id).c
         : 0;
-      return { ...summary, gc: { description: meta?.description || '', privacy: meta?.privacy || 'request', requestCount } };
+      return { ...summary, gc: { description: meta?.description || '', rules: (() => { try { return JSON.parse(meta?.rules || '[]'); } catch { return []; } })(), privacy: meta?.privacy || 'request', requestCount } };
     }).filter(Boolean),
   });
 });
