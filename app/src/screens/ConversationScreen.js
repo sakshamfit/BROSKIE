@@ -28,7 +28,7 @@ import PollComposer from '../components/PollComposer';
 import ChatBackground from '../components/ChatBackground';
 import ThemePickerSheet from '../components/ThemePickerSheet';
 import { ThemeRegistry, alpha } from '../chatThemes';
-import { FadeSlide, TypingDots, FloatLoop, SheetSpringIn, SpringPressable, Pop, haptic, motion } from '../motion';
+import { FadeSlide, TypingDots, FloatLoop, SheetSpringIn, SpringPressable, IconSwap, Pop, haptic, motion } from '../motion';
 import { api, mediaUrl } from '../api';
 import { setViewedChat } from '../push/notifications';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
@@ -638,9 +638,17 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       <View style={[s.headerWrap, !embedded && { paddingTop: 18 + insets.top }]}>
         <View style={s.header}>
           {!embedded && (
-            <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={s.backBtn}>
+            <SpringPressable
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+              onPress={() => navigation.goBack()}
+              hitSlop={8}
+              scaleTo={motion.scale.icon}
+              haptic="selection"
+              style={s.backBtn}
+            >
               <Icon name="arrow-back" size={22} color={theme.primary} />
-            </Pressable>
+            </SpringPressable>
           )}
           <Pressable style={s.headerInfo} onPress={() => navigation.navigate('ChatInfo', { chatId })}>
             <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={42} profileId={chat.type === 'group' ? null : chat.otherUserId} />
@@ -931,9 +939,22 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
           </InkField>
         ) : (
           <InkField style={s.inputBar}>
-            <Pressable onPress={() => setShowEmoji((v) => !v)} hitSlop={6}>
-              <Icon name={showEmoji ? 'keypad-outline' : 'happy-outline'} size={23} color={theme.muted} />
-            </Pressable>
+            <SpringPressable
+              accessibilityRole="button"
+              accessibilityLabel={showEmoji ? 'Show keyboard' : 'Show emoji'}
+              onPress={() => setShowEmoji((v) => !v)}
+              hitSlop={6}
+              scaleTo={motion.scale.icon}
+              haptic="selection"
+            >
+              <IconSwap
+                active={showEmoji}
+                size={23}
+                spin={30}
+                on={<Icon name="keypad-outline" size={23} color={theme.muted} />}
+                off={<Icon name="happy-outline" size={23} color={theme.muted} />}
+              />
+            </SpringPressable>
             <TextInput
               ref={inputRef}
               style={s.input}
@@ -958,16 +979,16 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               }}
             />
             {!editing && (
-              <Pressable onPress={pickImage} hitSlop={6} disabled={uploading}>
+              <SpringPressable accessibilityRole="button" accessibilityLabel="Attach a photo" onPress={pickImage} hitSlop={6} disabled={uploading} scaleTo={motion.scale.icon} haptic="selection">
                 {uploading
                   ? <ActivityIndicator size="small" color={theme.muted} />
                   : <Icon name="attach" size={22} color={theme.muted} style={{ transform: [{ rotate: '45deg' }] }} />}
-              </Pressable>
+              </SpringPressable>
             )}
             {!editing && !text.trim() && (
-              <Pressable onPress={pickImage} hitSlop={6}>
+              <SpringPressable accessibilityRole="button" accessibilityLabel="Take a photo" onPress={pickImage} hitSlop={6} scaleTo={motion.scale.icon} haptic="selection">
                 <Icon name="camera-outline" size={22} color={theme.muted} />
-              </Pressable>
+              </SpringPressable>
             )}
           </InkField>
         )}

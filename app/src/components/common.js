@@ -526,11 +526,37 @@ export function Screen({ children, style }) {
   return <View style={[{ flex: 1, backgroundColor: theme.bg }, style]}>{children}</View>;
 }
 
+/**
+ * Full-screen boot / busy state.
+ *
+ * A bare spinner on an empty screen reads as "stuck". The mark breathes
+ * instead: a slow, low-amplitude pulse that says the app is alive without
+ * competing for attention, plus the label. Reduced motion gets the static
+ * mark and the platform spinner only.
+ */
 export function Loading({ label }) {
   const { theme } = useTheme();
+  const reduced = useReducedMotion();
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduced) return undefined;
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 900, easing: motion.easing.inOut, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 900, easing: motion.easing.inOut, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [pulse, reduced]);
+
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] });
+
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg, gap: 14 }}>
-      <ActivityIndicator size="large" color={theme.ink} />
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg, gap: 18 }}>
+      <Animated.View style={reduced ? null : { transform: [{ scale }], opacity }}>
+        <ActivityIndicator size="large" color={theme.ink} />
+      </Animated.View>
       {!!label && <Text style={[type.labelSm, { color: theme.muted }]}>{label}</Text>}
     </View>
   );
