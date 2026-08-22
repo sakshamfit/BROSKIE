@@ -84,6 +84,13 @@ export function ChatProvider({ children }) {
     return () => statusListeners.current.delete(fn);
   }, []);
 
+  /** Subscribe to gc:* socket events (join requests, approvals). */
+  const gcListeners = useRef(new Set());
+  const onGCEvent = useCallback((fn) => {
+    gcListeners.current.add(fn);
+    return () => gcListeners.current.delete(fn);
+  }, []);
+
   /** Subscribe to community:* socket events. Returns an unsubscribe fn. */
   const onCommunityEvent = useCallback((fn) => {
     communityListeners.current.add(fn);
@@ -212,6 +219,13 @@ export function ChatProvider({ children }) {
         if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
         if (!disposed) {
           engine.store.setChats(result.chats, { fromServer: true });
+          // GCs are fetched separately (they live in their own section) but
+          // share this store, so live message/receipt updates just work.
+          api.gcs().then((gcs) => {
+            if (!disposed && Array.isArray(gcs?.chats) && gcs.chats.length) {
+              engine.store.setChats(gcs.chats, { fromServer: true });
+            }
+          }).catch(() => {});
           setChatsError(null);
         }
       } catch {
@@ -486,6 +500,15 @@ export function ChatProvider({ children }) {
       statusListeners.current.forEach((fn) => fn('status:new', payload));
     });
 
+    // GCs — a join request landed on a GC I admin, or my own request was
+    // answered. The GC section refreshes its badges / discover cards.
+    socket.on('gc:request', (payload) => {
+      gcListeners.current.forEach((fn) => fn('gc:request', payload));
+    });
+    socket.on('gc:requestUpdate', (payload) => {
+      gcListeners.current.forEach((fn) => fn('gc:requestUpdate', payload));
+    });
+
     // Communities — re-broadcast to any subscribed screen
     ['community:updated', 'community:deleted', 'community:request', 'community:approved',
      'community:declined', 'community:added', 'community:removed', 'community:left'].forEach((ev) => {
@@ -751,12 +774,20 @@ export function ChatProvider({ children }) {
       const engine = engineRef.current;
       if (engine) {
         const chatsResult = await engine.sync.refreshChatsFromServer();
+        // GCs (Instagram-style group chats) ride the same live store — the
+        // Chats inbox filters them out, the GC section filters for them.
+        try {
+          const gcs = await api.gcs();
+          if (Array.isArray(gcs?.chats) && gcs.chats.length) {
+            engine.store.setChats(gcs.chats, { fromServer: true });
+          }
+        } catch {}
         setChatsLoaded(true);
         return chatsResult;
       }
-      const result = await api.chats();
+      const [result, gcs] = await Promise.all([api.chats(), api.gcs().catch(() => ({ chats: [] }))]);
       if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
-      setChats(sortChats(result.chats));
+      setChats(sortChats([...result.chats, ...(Array.isArray(gcs?.chats) ? gcs.chats : [])]));
       setChatsLoaded(true);
       return result.chats;
     } catch (error) {
@@ -993,7 +1024,7 @@ export function ChatProvider({ children }) {
         documents, otReady,
         refreshChats, refreshActivity, loadMessages, loadOlderMessages, sendMessage, markRead,
         setTypingState, react, deleteMessage, removeMessageLocal, editMessage, editMessageOT, createPoll, votePoll,
-        upsertChat, onPostEvent, onStatusEvent, onCommunityEvent, onColleagueEvent, onChatRequestEvent,
+        upsertChat, onPostEvent, onStatusEvent, onGCEvent, onCommunityEvent, onColleagueEvent, onChatRequestEvent,
         onChatThemeEvent, onDocEvent,
         refreshDocuments, createDocument,
         socketRef,

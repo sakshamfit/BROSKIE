@@ -11,7 +11,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import {
   Avatar, Ticks, EmptyState, formatChatTime, SketchDivider, Rule, PaperCard, MotionIn,
-  FrostedBackdrop, GoldTick, hasGoldTick,
+  FrostedBackdrop, GoldTick, hasGoldTick, isGroupChat,
 } from '../components/common';
 import { type, inkBox, marker, radius, stroke } from '../theme';
 import { Skeleton, TypingDots, SpringPressable, FadeSlide, Pop, haptic, motion, BottomSheet, staggerDelay, useReducedMotion } from '../motion';
@@ -72,7 +72,9 @@ export default function ChatListScreen({ navigation }) {
   const searchMessages = useDebouncedCallback(async (q, seq) => {
     try {
       const { messages } = await api.search(q.trim());
-      if (searchSeq.current === seq) setMsgResults(messages);
+      // GC messages stay in the GC section — they never surface in Chats search.
+      const gcIds = new Set(chats.filter((c) => c.type === 'gc').map((c) => c.id));
+      if (searchSeq.current === seq) setMsgResults(messages.filter((m) => !gcIds.has(m.chatId)));
     } catch {
       if (searchSeq.current === seq) setMsgResults([]);
     }
@@ -88,9 +90,10 @@ export default function ChatListScreen({ navigation }) {
     searchMessages(q, seq);
   }, [searchMessages]);
 
-  const archivedCount = chats.filter((c) => c.archived).length;
+  // GCs (Instagram-style group chats) live in their own section — never here.
+  const archivedCount = chats.filter((c) => c.archived && c.type !== 'gc').length;
   const visible = useMemo(() => {
-    const base = chats.filter((c) => (showArchived ? c.archived : !c.archived));
+    const base = chats.filter((c) => c.type !== 'gc' && (showArchived ? c.archived : !c.archived));
     if (!query.trim()) return base;
     const q = query.toLowerCase();
     return base.filter((c) => c.name?.toLowerCase().includes(q));
@@ -103,7 +106,7 @@ export default function ChatListScreen({ navigation }) {
   const toggleMute = async (chat) => { await api.mute(chat.id, !chat.muted); refreshChats(); };
   const deleteChat = async (chat) => {
     const ok = await confirm(
-      `Delete ${chat.type === 'group' ? `“${chat.name}”` : `your chat with ${chat.name}`} from your inbox? Its current history will be cleared for you, but not for other members.`,
+      `Delete ${isGroupChat(chat) ? `“${chat.name}”` : `your chat with ${chat.name}`} from your inbox? Its current history will be cleared for you, but not for other members.`,
       { title: 'Delete chat', confirmLabel: 'Delete chat', destructive: true }
     );
     if (!ok) return;
@@ -304,7 +307,7 @@ export default function ChatListScreen({ navigation }) {
               <Avatar
                 uri={sheetChat?.avatar} name={sheetChat?.name}
                 id={sheetChat?.otherUserId || sheetChat?.id}
-                group={sheetChat?.type === 'group'} size={44}
+                group={isGroupChat(sheetChat)} size={44}
               />
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -312,7 +315,7 @@ export default function ChatListScreen({ navigation }) {
                   {hasGoldTick(sheetChat) && <GoldTick size={15} />}
                 </View>
                 <Text style={[type.bodySm, { color: theme.subtext }]}>
-                  {sheetChat?.type === 'group' ? 'Group chat' : 'Direct chat'}
+                  {sheetChat?.type === 'gc' ? 'Group chat (GC)' : isGroupChat(sheetChat) ? 'Group chat' : 'Direct chat'}
                 </Text>
               </View>
               <Pressable onPress={() => setSheetChat(null)} hitSlop={8}>
@@ -455,7 +458,7 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
     else if (lm.type === 'poll') preview = '📊 Poll';
     else if (lm.type === 'system') preview = lm.body;
     else preview = lm.body;
-    if (item.type === 'group' && lm.type !== 'system' && !isMine) {
+    if (isGroupChat(item) && lm.type !== 'system' && !isMine) {
       const sender = item.members.find((m) => m.id === lm.senderId);
       if (sender) senderPrefix = `${sender.name.split(' ')[0]}:`;
     }
@@ -514,12 +517,12 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
             uri={item.avatar}
             name={item.name}
             id={item.otherUserId || item.id}
-            group={item.type === 'group'}
+            group={isGroupChat(item)}
             online={item.isOnline}
             unread={hasUnread}
             weight={hasUnread ? 'ink' : 'thin'}
             size={56}
-            profileId={item.type === 'group' ? null : item.otherUserId}
+            profileId={isGroupChat(item) ? null : item.otherUserId}
           />
         </Animated.View>
 
@@ -543,7 +546,7 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
               <View style={[marker(theme, 1), s.typingRow]}>
                 <TypingDots color={theme.highlighter} size={4} />
                 <Text style={[type.bodyMd, { color: theme.highlighter, fontStyle: 'italic' }]} numberOfLines={1}>
-                  {item.type === 'group' ? `${typers[0]} is typing` : 'typing'}
+                  {isGroupChat(item) ? `${typers[0]} is typing` : 'typing'}
                 </Text>
               </View>
             ) : (

@@ -23,8 +23,8 @@ const AuthScreen = lazyScreen(() => import('./screens/AuthScreen'), { label: 'Si
 const ChatListScreen = lazyScreen(() => import('./screens/ChatListScreen'), { label: 'Chats' });
 const ConversationScreen = lazyScreen(() => import('./screens/ConversationScreen'), { label: 'Conversation' });
 const NewChatScreen = lazyScreen(() => import('./screens/NewChatScreen'), { label: 'New Chat' });
-const StatusScreen = lazyScreen(() => import('./screens/StatusScreen'), { label: 'See' });
 const NetworkScreen = lazyScreen(() => import('./screens/NetworkScreen'), { label: 'Network' });
+const GCScreen = lazyScreen(() => import('./screens/GCScreen'), { label: 'GC' });
 const ColleaguesScreen = lazyScreen(() => import('./screens/ColleaguesScreen'), { label: 'Colleagues' });
 const SettingsScreen = lazyScreen(() => import('./screens/SettingsScreen'), { label: 'Settings' });
 const ChatInfoScreen = lazyScreen(() => import('./screens/ChatInfoScreen'), { label: 'Chat Info' });
@@ -50,21 +50,26 @@ function HomeTabs({ navigation }) {
   const { chats } = useChat();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState('network');
-  const unread = chats.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
+  // The badge counts the Chats inbox only — GC unread lives on the GC tab's
+  // own rows (GC conversations never appear in Chats).
+  const unread = chats.reduce((n, c) => n + (c.archived || c.type === 'gc' ? 0 : c.unread), 0);
   const s = makeStyles(theme);
 
-  // Feed first, chat in the centre: Network → See → Chats → Colleagues →
-  // Settings. Page-swipe navigation follows THIS order — the existing tab
-  // architecture — and covers the four in-tab sections. Settings stays a
-  // pushed stack screen, so it is not part of the swipe strip.
+  // Feed first, chat in the centre: Network → GC → Chats → Colleagues →
+  // Settings. The old See tab was merged into Network (24-hour status
+  // updates live as Instagram-style story rings at the top of the feed, see
+  // components/Stories.js); the See slot is now GC — Instagram-style group
+  // chats, kept out of the Chats inbox entirely. Page-swipe navigation
+  // follows THIS order. Settings stays a pushed stack screen, so it is not
+  // part of the swipe strip.
   const TABS = [
     { key: 'network', label: 'Network', icon: 'people' },
-    { key: 'status', label: 'See', icon: 'eye' },
+    { key: 'gc', label: 'GC', icon: 'gc', outlineOnly: true },
     { key: 'chats', label: 'Chats', icon: 'chatbubble', badge: unread },
     { key: 'colleagues', label: 'Colleagues', icon: 'school-outline', outlineOnly: true },
     { key: 'settings', label: 'Settings', icon: 'settings' },
   ];
-  const PAGES = TABS.slice(0, 4);
+  const PAGES = TABS.filter((t) => t.key !== 'settings');
   const pageIndex = Math.max(0, PAGES.findIndex((p) => p.key === tab));
 
   // The pager feeds this value during a drag so the tab bar responds while
@@ -99,9 +104,9 @@ function HomeTabs({ navigation }) {
             key: p.key,
             render: () => {
               if (p.key === 'chats') return <ChatListScreen navigation={navigation} />;
-              if (p.key === 'network') return <NetworkScreen navigation={navigation} onOpenChat={openChat} />;
+              if (p.key === 'gc') return <GCScreen navigation={navigation} onOpenChat={openChat} />;
               if (p.key === 'colleagues') return <ColleaguesScreen navigation={navigation} onOpenChat={openChat} />;
-              return <StatusScreen navigation={navigation} />;
+              return <NetworkScreen navigation={navigation} onOpenChat={openChat} />;
             },
           }))}
           index={pageIndex}

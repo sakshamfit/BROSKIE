@@ -8,7 +8,7 @@ import { EmojiText } from '../icons/Emoji';
 import { useChat } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, lastSeenText, PaperCard, TapeChip, handleFor, Rule, InkButton, InkField, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
+import { Avatar, lastSeenText, PaperCard, TapeChip, handleFor, Rule, InkButton, InkField, FrostedBackdrop, GoldTick, hasGoldTick, isGroupChat } from '../components/common';
 import { FadeSlide, SheetSpringIn, SpringPressable, motion } from '../motion';
 import { radius, type, inkBox, marker, dashedRule, raised } from '../theme';
 import { confirm } from '../hooks/confirm';
@@ -151,7 +151,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
 
         <FadeSlide from="down" distance={12} scale={0.97} duration={280}>
         <PaperCard style={s.hero} weight="ink">
-          <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={104} profileId={chat.type === 'group' ? null : chat.otherUserId} />
+          <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={isGroupChat(chat)} size={104} profileId={isGroupChat(chat) ? null : chat.otherUserId} />
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16 }}>
             <EmojiText style={[type.headlineMd, { color: theme.text, textAlign: 'center', flexShrink: 1 }]}>{chat.name}</EmojiText>
             {hasGoldTick(chat) && <GoldTick size={20} />}
@@ -162,7 +162,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
             </Text>
           ) : null}
           <Text style={[type.bodySm, { color: theme.subtext, marginTop: 8, textAlign: 'center' }]}>
-            {chat.type === 'group' ? `Group · ${chat.members.length} participants` : lastSeenText(chat.isOnline, chat.lastSeen)}
+            {chat.type === 'gc' ? `GC · ${chat.members.length} members` : isGroupChat(chat) ? `Group · ${chat.members.length} participants` : lastSeenText(chat.isOnline, chat.lastSeen)}
           </Text>
         </PaperCard>
         </FadeSlide>
@@ -191,9 +191,9 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
           <Row icon="document-text-outline" label="Collaborative notes" sub="Real-time OT docs for this chat" onPress={() => setDocsOpen(true)} />
         </PaperCard>
 
-        {chat.type === 'group' && isAdmin && (
+        {isGroupChat(chat) && isAdmin && (
           <PaperCard style={{ padding: 6 }}>
-            <Row icon="create-outline" label="Rename group" onPress={() => { setRenameValue(chat.name || ''); setRenameOpen(true); }} />
+            <Row icon="create-outline" label={chat.type === 'gc' ? 'Rename GC' : 'Rename group'} onPress={() => { setRenameValue(chat.name || ''); setRenameOpen(true); }} />
           </PaperCard>
         )}
 
@@ -208,10 +208,10 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
           </PaperCard>
         )}
 
-        {chat.type === 'group' && (
+        {isGroupChat(chat) && (
           <PaperCard>
             <Text style={[type.labelXs, { color: theme.muted, marginBottom: 14 }]}>
-              {chat.members.length} PARTICIPANTS
+              {chat.members.length} {chat.type === 'gc' ? 'MEMBERS' : 'PARTICIPANTS'}
             </Text>
             <View style={{ gap: 16 }}>
               {chat.members.map((m) => (
@@ -257,9 +257,9 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
           </PaperCard>
         )}
 
-        {chat.type === 'group' && (
+        {isGroupChat(chat) && (
           <PaperCard style={{ padding: 6 }}>
-            <Row icon="exit-outline" label="Leave group" onPress={leaveGroup} danger />
+            <Row icon="exit-outline" label={chat.type === 'gc' ? 'Leave GC' : 'Leave group'} onPress={leaveGroup} danger />
           </PaperCard>
         )}
       </ScrollView>
@@ -316,7 +316,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
           <Pressable style={[s.sheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
             <Text style={[type.headlineSm, { color: theme.text }]}>Disappearing messages</Text>
             <Text style={[type.bodySm, { color: theme.subtext, marginTop: 4, marginBottom: 12 }]}>
-              New messages in this {chat.type === 'group' ? 'group' : 'chat'} self-destruct after the timer.
+              New messages in this {chat.type === 'gc' ? 'GC' : isGroupChat(chat) ? 'group' : 'chat'} self-destruct after the timer.
             </Text>
             <View style={{ gap: 8 }}>
               <SpringPressable

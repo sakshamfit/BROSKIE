@@ -213,8 +213,14 @@ through Three.js without bone manipulation or retargeting. It uses the user's fi
 real location-based Open-Meteo weather, temperature and request counts, then closes itself
 after “Let’s find the +ones.” See `AI_GREETER.md` for model/animation details.
 
-**Status / stories** — post coloured text statuses, 24-hour auto-expiry, viewed/unviewed
-rings, tap-through story viewer with progress bars.
+**Status / stories** — Instagram-style story rings at the top of the Network feed
+(the merged See section): your profile circle uploads an update, friends' circles
+open the tap-through story viewer with progress bars. Coloured text statuses,
+24-hour auto-expiry, viewed/unviewed rings.
+
+**GC (group chats)** — Instagram-style GCs in their own tab. Make any group,
+chat with messages/voice/polls/themes, discover GCs and join instantly (open)
+or by admin-approved request. GC conversations never appear in the Chats inbox.
 
 **Design** — "Graphite & Pulp" (see `design.md`): artisanal ink-on-paper. No
 shadows, no blur, no elevation tints — depth comes from stroke weight (hairline
@@ -288,7 +294,7 @@ whatsapp-clone/
         │                Emoji.js + emojiData.json (Twemoji vectors)
         ├── components/   Avatar, Ticks, MessageBubble, VoiceNote…
         └── screens/      Auth, ChatList, Conversation, NewChat,
-                          Status, ChatInfo, Settings
+                          GC, ChatInfo, Settings
 ```
 
 ### Socket events

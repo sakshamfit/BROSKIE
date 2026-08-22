@@ -38,12 +38,23 @@ const TOPICS = [
   {
     key: 'see',
     icon: 'eye-outline',
-    title: 'See (Status)',
-    summary: '24-hour updates, discover feed, songs & photos',
+    title: 'Status stories',
+    summary: '24-hour updates in Network, songs & photos',
     body: [
-      { h: 'Posting a status', p: 'Use the camera or pencil button in See. Photo updates open a frame and crop editor first, then show the exact posting preview with an editable caption. Text updates have switchable backgrounds. Every update disappears after 24 hours.' },
+      { h: 'Posting a status', p: 'Status updates now live at the top of the Network feed, Instagram-style. Tap your profile circle (the first one, with the +) to upload. Photo updates open a frame and crop editor first, then show the exact posting preview with an editable caption. Text updates have switchable backgrounds. Every update disappears after 24 hours.' },
       { h: 'Who can see it', p: 'Before sending, tap the privacy pill to choose Public, My friends, My friends except…, or Only share with…. Inclusion and exclusion lists are enforced by the server, not just hidden in the app.' },
-      { h: 'Viewing others\u2019', p: 'Recent and viewed updates appear in separate lists. Tap a person to open the full-screen viewer; tap the left or right side to move through updates, or let them advance automatically.' },
+      { h: 'Viewing others\u2019', p: 'People with a live update appear as circles along the top of Network. A bold ink ring means unseen, a faded graphite ring means you have caught up. Tap a circle to open the full-screen viewer; tap the left or right side to move through updates, or let them advance automatically. Reply to someone\u2019s update and it arrives as a message in Chats.' },
+    ],
+  },
+  {
+    key: 'gc',
+    icon: 'gc',
+    title: 'GC (Group Chats)',
+    summary: 'Make any group, chat about anything — separate from Chats',
+    body: [
+      { h: 'Creating a GC', p: 'Open the GC tab and tap +. Name it anything — your squad, your class, your 2am overthinkers — add a description, pick who can join, and optionally add people from your contacts straight away. Every GC gets a real group chat with messages, voice notes, reactions, themes and polls.' },
+      { h: 'Joining & requests', p: 'Switch to DISCOVER to see GCs you haven\u2019t joined. Anyone can join an OPEN GC instantly. REQUEST GCs work like Instagram: send a request, and once an admin approves it the GC appears in your GC tab — never in your Chats inbox.' },
+      { h: 'Staying separate', p: 'GC conversations live only in the GC section. Your Chats inbox, its unread badge and its search stay purely 1:1 and regular-group. To leave a GC, open it, tap the name, and choose Leave GC.' },
     ],
   },
   {

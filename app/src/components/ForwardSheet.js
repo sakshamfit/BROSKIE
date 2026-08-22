@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList } from 'react-native';
 import Icon from '../icons/Icon';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, InkCheckbox, InkButton, EmptyState, Rule, FrostedBackdrop, GoldTick, hasGoldTick } from './common';
+import { Avatar, InkCheckbox, InkButton, EmptyState, Rule, FrostedBackdrop, GoldTick, hasGoldTick, isGroupChat } from './common';
 import { BottomSheet, SpringPressable, motion } from '../motion';
 import { type, inkBox, marker, radius, raised } from '../theme';
 import { api } from '../api';
@@ -88,7 +88,7 @@ export default function ForwardSheet({ visible, message, onClose }) {
                   style={({ pressed }) => [s.row, pressed ? marker(theme, 1) : null]}
                   onPress={() => toggle(item.id)}
                 >
-                  <Avatar uri={item.avatar} name={item.name} id={item.otherUserId || item.id} group={item.type === 'group'} size={42} />
+                  <Avatar uri={item.avatar} name={item.name} id={item.otherUserId || item.id} group={isGroupChat(item)} size={42} />
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     <Text style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{item.name}</Text>
                     {hasGoldTick(item) && <GoldTick size={14} />}

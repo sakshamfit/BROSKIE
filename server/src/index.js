@@ -643,9 +643,9 @@ function chatSummary(chatId, viewerId) {
   return {
     id: chat.id,
     type: chat.type,
-    name: chat.type === 'group' ? chat.name : other ? other.name : 'Unknown',
+    name: chat.type !== 'direct' ? chat.name : other ? other.name : 'Unknown',
     username: chat.type === 'direct' && other ? other.username : null,
-    avatar: chat.type === 'group' ? chat.avatar : other ? other.avatar : null,
+    avatar: chat.type !== 'direct' ? chat.avatar : other ? other.avatar : null,
     about: other ? other.about : null,
     otherUserId: other ? other.id : null,
     isOnline: otherPresence.isOnline,
@@ -712,6 +712,9 @@ function userChats(userId) {
        JOIN chat_members cm ON cm.chat_id = c.id
        LEFT JOIN chat_requests cr ON cr.chat_id = c.id
        WHERE cm.user_id = ?
+         /* GCs (Instagram-style group chats, chats.type = 'gc') live in their
+            own GC section — never in the Chats inbox. */
+         AND c.type != 'gc'
          /* Incoming requests stay in Activity until accepted. This is the only
             inbox-level exclusion that is unrelated to an explicit user clear. */
          AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
@@ -765,7 +768,7 @@ function deleteAccountData(userId) {
   const directPeers = [...new Set(directChats.flatMap((chatId) => memberIds(chatId)).filter((id) => id !== userId))];
   const groupChats = db.prepare(
     `SELECT c.id, c.created_by FROM chats c JOIN chat_members cm ON cm.chat_id = c.id
-     WHERE cm.user_id = ? AND c.type = 'group'`
+     WHERE cm.user_id = ? AND c.type IN ('group', 'gc')`
   ).all(userId);
   const ownedPostIds = db.prepare('SELECT id FROM posts WHERE user_id = ?').all(userId).map((row) => row.id);
 
@@ -2236,7 +2239,7 @@ app.post('/api/chats/:id/pin', requireAuth, (req, res) => {
 app.patch('/api/chats/:id', requireAuth, (req, res) => {
   const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
   if (!chat) return res.status(404).json({ error: 'Chat not found' });
-  if (chat.type !== 'group') return res.status(400).json({ error: 'Only group chats can be renamed here' });
+  if (!['group', 'gc'].includes(chat.type)) return res.status(400).json({ error: 'Only group and GC chats can be renamed here' });
   const me = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
   if (!me) return res.status(403).json({ error: 'Not a member of this chat' });
   if (me.role !== 'admin') return res.status(403).json({ error: 'Only group admins can edit this group' });
@@ -2318,7 +2321,7 @@ app.post('/api/chats/:id/theme', requireAuth, (req, res) => {
 /** Promote / demote a group member (admins only). */
 app.post('/api/chats/:id/group/members/:userId/role', requireAuth, (req, res) => {
   const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
-  if (!chat || chat.type !== 'group') return res.status(404).json({ error: 'Group not found' });
+  if (!chat || !['group', 'gc'].includes(chat.type)) return res.status(404).json({ error: 'Group not found' });
   const actor = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
   const target = db.prepare('SELECT * FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.params.userId);
   if (!actor) return res.status(403).json({ error: 'Not a member of this group' });
@@ -2340,7 +2343,7 @@ app.post('/api/chats/:id/group/members/:userId/role', requireAuth, (req, res) =>
 /** Admin removes a member from the group. */
 app.delete('/api/chats/:id/group/members/:userId', requireAuth, (req, res) => {
   const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
-  if (!chat || chat.type !== 'group') return res.status(404).json({ error: 'Group not found' });
+  if (!chat || !['group', 'gc'].includes(chat.type)) return res.status(404).json({ error: 'Group not found' });
   const actor = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
   const target = db.prepare('SELECT * FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.params.userId);
   if (!actor || actor.role !== 'admin') return res.status(403).json({ error: 'Only group admins can remove members' });
@@ -2363,7 +2366,7 @@ app.delete('/api/chats/:id/group/members/:userId', requireAuth, (req, res) => {
 /** Leave a group (last admin must promote someone first). */
 app.post('/api/chats/:id/group/leave', requireAuth, (req, res) => {
   const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
-  if (!chat || chat.type !== 'group') return res.status(404).json({ error: 'Group not found' });
+  if (!chat || !['group', 'gc'].includes(chat.type)) return res.status(404).json({ error: 'Group not found' });
   const me = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
   if (!me) return res.status(400).json({ error: 'Not a member' });
   if (me.role === 'admin') {
@@ -2377,6 +2380,220 @@ app.post('/api/chats/:id/group/leave', requireAuth, (req, res) => {
   emitToUser(req.userId, 'chat:removed', { chatId: chat.id });
   memberIds(chat.id).forEach((uid) => emitToUser(uid, 'chat:updated', chatSummary(chat.id, uid)));
   res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ */
+/* GCs — Instagram-style group chats                                   */
+/*                                                                     */
+/* A GC is a real chat (type='gc'), so messages, receipts, typing,      */
+/* themes, polls and moderation all work through the existing chat      */
+/* endpoints. Two differences: the Chats inbox never lists them         */
+/* (userChats excludes type='gc' — they live in the GC section), and    */
+/* anyone can discover a GC and join it — instantly when privacy is     */
+/* 'open', or through an admin-approved request when it's 'request'.    */
+/* ------------------------------------------------------------------ */
+
+const GC_PRIVACIES = ['open', 'request'];
+
+function gcMetaRow(chatId) {
+  return db.prepare('SELECT * FROM gcs WHERE chat_id = ?').get(chatId);
+}
+
+function gcRole(chatId, userId) {
+  const row = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, userId);
+  return row ? row.role : null;
+}
+
+/** Public GC card — everything Discover shows, plus admin request counts. */
+function hydrateGC(chat, viewerId) {
+  const meta = gcMetaRow(chat.id);
+  if (!meta) return null;
+  const memberCount = db.prepare('SELECT COUNT(*) c FROM chat_members WHERE chat_id = ?').get(chat.id).c;
+  const role = gcRole(chat.id, viewerId);
+  const pendingRequest = !role
+    ? !!db.prepare("SELECT 1 FROM gc_requests WHERE chat_id = ? AND user_id = ? AND status = 'pending'").get(chat.id, viewerId)
+    : false;
+  const requestCount = role === 'admin'
+    ? db.prepare("SELECT COUNT(*) c FROM gc_requests WHERE chat_id = ? AND status = 'pending'").get(chat.id).c
+    : 0;
+  const creator = getUser(chat.created_by);
+  return {
+    id: chat.id,
+    name: chat.name,
+    avatar: chat.avatar,
+    description: meta.description || '',
+    privacy: meta.privacy,
+    createdAt: meta.created_at,
+    createdBy: chat.created_by,
+    createdByName: creator ? creator.name : null,
+    memberCount,
+    role,
+    isMember: !!role,
+    pendingRequest,
+    requestCount,
+    updatedAt: chat.updated_at,
+  };
+}
+
+app.post('/api/gc', requireAuth, (req, res) => {
+  const { name, description = '', privacy = 'request', memberIds: ids = [] } = req.body || {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Give your GC a name' });
+  if (!GC_PRIVACIES.includes(privacy)) return res.status(400).json({ error: 'Invalid privacy' });
+
+  const id = nano();
+  const t = now();
+  db.prepare('INSERT INTO chats (id, type, name, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?)')
+    .run(id, 'gc', String(name).trim().slice(0, 60), req.userId, t, t);
+  db.prepare('INSERT INTO gcs (chat_id, description, privacy, created_at) VALUES (?,?,?,?)')
+    .run(id, String(description || '').trim().slice(0, 300), privacy, t);
+  const addMember = db.prepare('INSERT OR IGNORE INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)');
+  addMember.run(id, req.userId, 'admin', t);
+  ids.filter((x) => x !== req.userId).forEach((uid) => { if (getUser(uid)) addMember.run(id, uid, 'member', t); });
+
+  const creator = getUser(req.userId);
+  insertSystemMessage(id, `${creator.name} created the GC "${String(name).trim()}"`);
+  memberIds(id).forEach((uid) => emitToUser(uid, 'chat:new', chatSummary(id, uid)));
+  res.json({ gc: hydrateGC(db.prepare('SELECT * FROM chats WHERE id = ?').get(id), req.userId), chat: chatSummary(id, req.userId) });
+});
+
+/** My GCs — the GC inbox. Same chat-summary shape as /api/chats (plus a
+ *  `gc` block) so the client can feed them through the identical live store. */
+app.get('/api/gc', requireAuth, (req, res) => {
+  const rows = db.prepare(
+    `SELECT c.id FROM chats c
+     JOIN chat_members cm ON cm.chat_id = c.id
+     JOIN gcs g ON g.chat_id = c.id
+     WHERE cm.user_id = ? ORDER BY c.updated_at DESC`
+  ).all(req.userId);
+  res.json({
+    chats: rows.map((r) => {
+      const summary = chatSummary(r.id, req.userId);
+      if (!summary) return null;
+      const meta = gcMetaRow(r.id);
+      const requestCount = summary.role === 'admin'
+        ? db.prepare("SELECT COUNT(*) c FROM gc_requests WHERE chat_id = ? AND status = 'pending'").get(r.id).c
+        : 0;
+      return { ...summary, gc: { description: meta?.description || '', privacy: meta?.privacy || 'request', requestCount } };
+    }).filter(Boolean),
+  });
+});
+
+/** Discover — GCs I haven't joined yet. */
+app.get('/api/gc/discover', requireAuth, (req, res) => {
+  const rows = db.prepare(
+    `SELECT c.* FROM chats c
+     JOIN gcs g ON g.chat_id = c.id
+     WHERE c.id NOT IN (SELECT chat_id FROM chat_members WHERE user_id = ?)
+     ORDER BY c.updated_at DESC LIMIT 100`
+  ).all(req.userId);
+  res.json({ gcs: rows.map((r) => hydrateGC(r, req.userId)).filter(Boolean) });
+});
+
+/** One GC's full card (members via the chat summary; pending requests for admins). */
+app.get('/api/gc/:id', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat || chat.type !== 'gc') return res.status(404).json({ error: 'GC not found' });
+  const role = gcRole(chat.id, req.userId);
+  if (!role) return res.status(403).json({ error: 'Join this GC to see more' });
+  const gc = hydrateGC(chat, req.userId);
+  if (role === 'admin') {
+    gc.pendingRequests = db.prepare(
+      `SELECT u.id, u.username, u.name, u.avatar, r.created_at FROM gc_requests r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.chat_id = ? AND r.status = 'pending' ORDER BY r.created_at ASC`
+    ).all(chat.id);
+  }
+  res.json({ gc, chat: chatSummary(chat.id, req.userId) });
+});
+
+/** Join a GC — instant when open, queued for admin approval when request-only. */
+app.post('/api/gc/:id/join', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat || chat.type !== 'gc') return res.status(404).json({ error: 'GC not found' });
+  const meta = gcMetaRow(chat.id);
+  if (!meta) return res.status(404).json({ error: 'GC not found' });
+  if (gcRole(chat.id, req.userId)) return res.status(400).json({ error: 'You are already in this GC' });
+  if (blockedEitherWay(chat.created_by, req.userId)) {
+    return res.status(403).json({ error: 'You cannot join this GC' });
+  }
+
+  const me = getUser(req.userId);
+  if (meta.privacy === 'open') {
+    const t = now();
+    db.prepare('INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)')
+      .run(chat.id, req.userId, 'member', t);
+    db.prepare('DELETE FROM gc_requests WHERE chat_id = ? AND user_id = ?').run(chat.id, req.userId);
+    insertSystemMessage(chat.id, `${me.name} joined the GC`);
+    db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(t, chat.id);
+    emitToUser(req.userId, 'chat:new', chatSummary(chat.id, req.userId));
+    memberIds(chat.id).forEach((uid) => {
+      if (uid !== req.userId) emitToUser(uid, 'chat:updated', chatSummary(chat.id, uid));
+    });
+    return res.json({ joined: true, gc: hydrateGC(db.prepare('SELECT * FROM chats WHERE id = ?').get(chat.id), req.userId) });
+  }
+
+  db.prepare(
+    `INSERT INTO gc_requests (chat_id, user_id, status, created_at) VALUES (?,?,'pending',?)
+     ON CONFLICT(chat_id, user_id) DO UPDATE SET status = 'pending', created_at = excluded.created_at`
+  ).run(chat.id, req.userId, now());
+  db.prepare("SELECT user_id FROM chat_members WHERE chat_id = ? AND role = 'admin'").all(chat.id)
+    .forEach(({ user_id: adminId }) => {
+      if (blockedEitherWay(adminId, req.userId)) return;
+      emitToUser(adminId, 'gc:request', { chatId: chat.id, gcName: chat.name, user: publicUser(me) });
+    });
+  res.json({ joined: false, requested: true, gc: hydrateGC(chat, req.userId) });
+});
+
+/** Withdraw my pending join request. */
+app.delete('/api/gc/:id/join', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat || chat.type !== 'gc') return res.status(404).json({ error: 'GC not found' });
+  db.prepare('DELETE FROM gc_requests WHERE chat_id = ? AND user_id = ?').run(chat.id, req.userId);
+  res.json({ ok: true, gc: hydrateGC(chat, req.userId) });
+});
+
+/** Pending join requests (admins only). */
+app.get('/api/gc/:id/requests', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat || chat.type !== 'gc') return res.status(404).json({ error: 'GC not found' });
+  if (gcRole(chat.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Only GC admins can see requests' });
+  res.json({
+    requests: db.prepare(
+      `SELECT u.id, u.username, u.name, u.avatar, r.created_at FROM gc_requests r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.chat_id = ? AND r.status = 'pending' ORDER BY r.created_at ASC`
+    ).all(chat.id),
+  });
+});
+
+/** Approve / decline a join request. Approving seats the member and drops
+ *  the GC straight into their GC inbox (chat:new) — exactly the Instagram
+ *  "request → you're in" flow. */
+app.post('/api/gc/:id/requests/:userId', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat || chat.type !== 'gc') return res.status(404).json({ error: 'GC not found' });
+  if (gcRole(chat.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Only GC admins can manage requests' });
+  const { action } = req.body || {};
+  if (!['approve', 'decline'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
+  const row = db.prepare("SELECT * FROM gc_requests WHERE chat_id = ? AND user_id = ? AND status = 'pending'")
+    .get(chat.id, req.params.userId);
+  if (!row) return res.status(404).json({ error: 'No pending request from this person' });
+
+  if (action === 'approve') {
+    const t = now();
+    db.prepare('INSERT OR IGNORE INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)')
+      .run(chat.id, row.user_id, 'member', t);
+    const who = getUser(row.user_id);
+    if (who) insertSystemMessage(chat.id, `${who.name} joined the GC`);
+    db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(t, chat.id);
+    emitToUser(row.user_id, 'chat:new', chatSummary(chat.id, row.user_id));
+    memberIds(chat.id).forEach((uid) => {
+      if (uid !== row.user_id) emitToUser(uid, 'chat:updated', chatSummary(chat.id, uid));
+    });
+  }
+  db.prepare('DELETE FROM gc_requests WHERE chat_id = ? AND user_id = ?').run(chat.id, row.user_id);
+  emitToUser(row.user_id, 'gc:requestUpdate', { chatId: chat.id, gcName: chat.name, approved: action === 'approve' });
+  res.json({ ok: true, gc: hydrateGC(chat, req.userId) });
 });
 
 /* ---- starred messages ---- */
@@ -3952,7 +4169,7 @@ app.get('/api/admin/moderation/cases/:id', requireAuth, requireAdmin, (req, res)
     reports,
     actions,
     message: message ? { id: message.id, body: message.body, type: message.type, deleted: !!message.deleted, createdAt: message.created_at } : null,
-    conversation: chat ? { id: chat.id, type: chat.type, name: chat.type === 'group' ? chat.name : 'Private Chat' } : null,
+    conversation: chat ? { id: chat.id, type: chat.type, name: chat.type !== 'direct' ? chat.name : 'Private Chat' } : null,
     userHistory: history,
   });
 });
@@ -4438,7 +4655,7 @@ io.on('connection', (socket) => {
       const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
       if (!isMember) return ack?.({ error: 'Not a member' });
       const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
-      if (!chat || chat.type !== 'group') return ack?.({ error: 'Polls are only available in group chats' });
+      if (!chat || !['group', 'gc'].includes(chat.type)) return ack?.({ error: 'Polls are only available in group and GC chats' });
       const q = String(question || '').trim();
       const opts = options.map((o) => String(o).trim()).filter(Boolean);
       if (!q) return ack?.({ error: 'Write a question for the poll' });
