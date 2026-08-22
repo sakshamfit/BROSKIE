@@ -9,7 +9,7 @@ import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
-import { Avatar, PaperCard, TapeChip, Rule, InkButton } from '../components/common';
+import { Avatar, PaperCard, TapeChip, Rule, InkButton, InkField, GoldTick, hasGoldTick } from '../components/common';
 import { type, inkBox, marker, dashedRule, radius, raised } from '../theme';
 import { haptic } from '../motion';
 import { confirm } from '../hooks/confirm';
@@ -552,6 +552,16 @@ function UserPanel({ theme, s, userId, onClose, onAction }) {
   useEffect(() => { load(); }, [load]);
   const act = async (...args) => { await onAction(...args); load(); };
   const [reason, setReason] = useState('');
+  const [tickBusy, setTickBusy] = useState(false);
+  const toggleTick = async () => {
+    setTickBusy(true); haptic('selection');
+    try {
+      await api.adminModerationGoldTick(u.id, !u.goldTick);
+      await load();
+    } catch (e) {
+      await confirm(e.message || 'Could not update verification', { title: 'Safety Center', confirmLabel: 'OK' });
+    } finally { setTickBusy(false); }
+  };
   if (!data) return <View style={[s.denyRoot, { paddingTop: insets.top }]}><ActivityIndicator color={theme.ink} /></View>;
   const u = data.user;
   return (
@@ -564,7 +574,10 @@ function UserPanel({ theme, s, userId, onClose, onAction }) {
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Avatar uri={u.avatar} name={u.name} id={u.id} size={40} />
             <View>
-              <Text style={[type.headlineSm, { color: theme.text }]}>{u.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[type.headlineSm, { color: theme.text }]}>{u.name}</Text>
+                {hasGoldTick(u) && <GoldTick size={14} />}
+              </View>
               <Text style={[type.labelXs, { color: theme.muted }]}>@{u.username} · {u.role}</Text>
             </View>
           </View>
@@ -583,6 +596,13 @@ function UserPanel({ theme, s, userId, onClose, onAction }) {
           <TextInput value={reason} onChangeText={setReason} placeholder="Reason for the action below" placeholderTextColor={theme.muted} style={s.searchInput} />
         </InkField>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <Pressable
+            onPress={toggleTick}
+            disabled={tickBusy}
+            style={[s.actBtn, { borderColor: theme.ink }, u.goldTick && { backgroundColor: theme.highlighter, borderColor: theme.ink }]}
+          >
+            <Text style={[type.labelSm, { color: theme.ink }]}>{u.goldTick ? 'GOLD TICK ✓' : 'GOLD TICK'}</Text>
+          </Pressable>
           <Pressable onPress={() => act(u.id, 'warn', { reason })} style={[s.actBtn, { borderColor: theme.ink }]}><Text style={[type.labelSm, { color: theme.ink }]}>WARN</Text></Pressable>
           <Pressable onPress={() => act(u.id, 'restrict', { reason })} style={[s.actBtn, { borderColor: theme.ink }]}><Text style={[type.labelSm, { color: theme.ink }]}>RESTRICT</Text></Pressable>
           <Pressable onPress={() => act(u.id, 'unrestrict', { reason })} style={[s.actBtn, { borderColor: theme.ink }]}><Text style={[type.labelSm, { color: theme.ink }]}>UNRESTRICT</Text></Pressable>
