@@ -205,10 +205,16 @@ async function getBundle(argPath) {
       }
       if (bubble) check('long-press opens the message menu', opened);
     }
+    // Return to the inbox so subsequent tab flows start from Home
+    if (byLabel('Back')) {
+      press(byLabel('Back'));
+      await waitFor(() => /Grace Hopper|Katherine Johnson/.test(bodyText()));
+    }
   }
 
-  // ---- GC isolation: GC tab → GC detail → GC chat → back, and the normal
-  // Chats inbox must remain exactly as it was (no GC rows, no GC messages).
+  // ---- GC flow: GC tab → tap joined GC → GC Chat directly (not GC detail)
+  // → tap chat header → GC Detail → back to GC Chat → back to GC List.
+  // The normal Chats inbox must remain exactly as it was (no GC rows, no GC messages).
   if (byLabel('GC')) {
     press(byLabel('GC'));
     const gcListShown = await waitFor(() => /Gaming Hub/.test(bodyText()));
@@ -219,28 +225,35 @@ async function getBundle(argPath) {
         .find((el) => /Gaming Hub/.test(el.textContent || ''));
     if (gcRow) {
       press(gcRow);
-      const detailShown = await waitFor(() => /GC ·|MEMBERS|Open chat/i.test(bodyText()));
-      check('GC row opens GC DETAIL (not Chats)', detailShown);
+      const gcChatShown = await waitFor(() => /GC-only message check\./.test(bodyText()));
+      check('GC row opens GC Chat directly (not GC Detail)', gcChatShown);
+      check('GC chat header identifies the group', /members/i.test(bodyText()));
+      check('GC chat shows no direct-chat content', !/Try long-pressing this bubble/.test(bodyText()));
 
-      const openChatBtn = [...window.document.querySelectorAll('[role="button"], button')]
-        .find((el) => /Open chat/i.test(el.textContent || ''));
-      if (openChatBtn) {
-        press(openChatBtn);
-        const gcChatShown = await waitFor(() => /GC-only message check\./.test(bodyText()));
-        check('GC detail opens the GC chat', gcChatShown);
-        check('GC chat header identifies the group', /members/i.test(bodyText()));
-        check('GC chat shows no direct-chat content', !/Try long-pressing this bubble/.test(bodyText()));
+      // Tap GC chat header to open GC profile / description / details
+      const gcHeader = [...window.document.querySelectorAll('[aria-label^="GC Gaming Hub"]')][0]
+        || [...window.document.querySelectorAll('[role="button"], button')]
+          .find((el) => /Gaming Hub.*members/i.test(el.textContent || '') || el.textContent?.trim() === 'Gaming Hub');
+      if (gcHeader) {
+        press(gcHeader);
+        const detailShown = await waitFor(() => /GC ·|MEMBERS|GC rules/i.test(bodyText()));
+        check('GC chat header opens GC Detail', detailShown);
 
-        const backToDetail = byLabel('Back to GC');
-        if (backToDetail) {
-          press(backToDetail);
-          check('GC chat back returns to GC details', await waitFor(() => /GC ·|MEMBERS|Open chat/i.test(bodyText())));
-          const backToGcList = byLabel('Back to GCs') || byLabel('Back to GC');
-          if (backToGcList) {
-            press(backToGcList);
-            check('GC details back returns to GC list', await waitFor(() => /Gaming Hub/.test(bodyText())));
-          }
+        // Back from GC details returns to GC chat
+        const backToChat = byLabel('Back to GC') || byLabel('Back to GCs') || byLabel('Back');
+        if (backToChat) {
+          press(backToChat);
+          const backInChat = await waitFor(() => /GC-only message check\./.test(bodyText()));
+          check('GC detail back returns to GC chat', backInChat);
         }
+      }
+
+      // Back from GC chat returns to GC list
+      const backToGcList = byLabel('Back to GC') || byLabel('Back to GCs');
+      if (backToGcList) {
+        press(backToGcList);
+        const backInList = await waitFor(() => /Gaming Hub/.test(bodyText()) && !/GC-only message check\./.test(bodyText()));
+        check('GC chat back returns to GC list', backInList);
       }
     }
 

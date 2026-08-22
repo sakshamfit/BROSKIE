@@ -246,26 +246,28 @@ export default function StoriesRow({ reloadKey = 0 }) {
 function StoryCircle({ accessibilityLabel, onPress, avatar, label, badge, theme, styles: s, segments = 1, seen = false, empty = false }) {
   return (
     <View style={s.circleCol}>
-      <SpringPressable
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-        onPress={onPress}
-        scaleTo={motion.scale.row}
-        haptic="selection"
-        style={({ pressed }) => [s.circlePress, pressed && { opacity: 0.72 }]}
-      >
-        <StatusRing
-          size={68}
-          segments={segments}
-          seen={seen}
-          empty={empty}
-          color={theme.ink}
-          seenColor={theme.graphiteLine}
+      <View style={s.circlePress}>
+        <SpringPressable
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+          onPress={onPress}
+          scaleTo={motion.scale.row}
+          haptic="selection"
+          style={({ pressed }) => [pressed && { opacity: 0.72 }]}
         >
-          <Avatar uri={avatar?.uri || avatar?.avatar} name={avatar?.name} id={avatar?.id} size={54} />
-        </StatusRing>
+          <StatusRing
+            size={68}
+            segments={segments}
+            seen={seen}
+            empty={empty}
+            color={theme.ink}
+            seenColor={theme.graphiteLine}
+          >
+            <Avatar uri={avatar?.uri || avatar?.avatar} name={avatar?.name} id={avatar?.id} size={54} />
+          </StatusRing>
+        </SpringPressable>
         {badge}
-      </SpringPressable>
+      </View>
       <EmojiText style={[type.labelXs, { color: theme.subtext }]} numberOfLines={1} ellipsizeMode="tail">
         {label}
       </EmojiText>
