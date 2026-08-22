@@ -1268,8 +1268,8 @@ const makeStyles = (t) => StyleSheet.create({
   replyInput: { flex: 1, ...type.bodyMd, color: '#1c1b1b', paddingVertical: 6, outlineStyle: 'none' },
   replySend: { width: 38, height: 38, borderRadius: radius.full, backgroundColor: '#FFE24D', borderWidth: 2, borderColor: '#1c1b1b', alignItems: 'center', justifyContent: 'center' },
   replyHintWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 10, zIndex: 4, alignItems: 'center' },
-});
-: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
+  reactRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 10 },
+  reactChip: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
   reactBurst: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 8 },
   overlayChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, marginBottom: 6 },
   overlayChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)' },
