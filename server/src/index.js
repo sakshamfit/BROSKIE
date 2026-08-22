@@ -163,13 +163,12 @@ push.init({ getUser: (id) => getUser(id), getSettings: (u) => getSettings(u) });
 /* ------------------------------------------------------------------ */
 const moderation = require('./moderation');
 
-// The initial administrator is granted the backend `admin` ROLE (never a
-// username check in the client). Extra admins: ADMIN_USERNAMES env
-// (comma-separated). Idempotent at every boot.
-const ADMIN_USERNAME_KEYS = (process.env.ADMIN_USERNAMES || 'saksham')
-  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-db.prepare(`UPDATE users SET role = 'admin' WHERE username_key IN (${ADMIN_USERNAME_KEYS.map(() => '?').join(',')}) AND role != 'admin'`)
-  .run(...ADMIN_USERNAME_KEYS);
+// The admin console is owner-only: it is available exclusively to @saksham.
+// This is enforced on the server (not just hidden in the app), so an old
+// session, a manually changed client, or ADMIN_USERNAMES cannot grant access.
+const OWNER_ADMIN_USERNAME_KEY = 'saksham';
+db.prepare("UPDATE users SET role = CASE WHEN username_key = ? THEN 'admin' ELSE 'user' END WHERE role = 'admin' OR username_key = ?")
+  .run(OWNER_ADMIN_USERNAME_KEY, OWNER_ADMIN_USERNAME_KEY);
 
 // Optional one-time bootstrap list. Afterwards verification is managed in the
 // Admin Safety Center and persists in the database.
@@ -183,7 +182,9 @@ if (GOLD_TICK_USERNAME_KEYS.length) {
 /** Server-side authorization for EVERY admin API request. */
 function requireAdmin(req, res, next) {
   const u = getUser(req.userId);
-  if (!u || u.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  if (!u || u.username_key !== OWNER_ADMIN_USERNAME_KEY || u.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access is restricted to @saksham' });
+  }
   next();
 }
 
