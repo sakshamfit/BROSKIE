@@ -564,6 +564,7 @@ function UserPanel({ theme, s, userId, onClose, onAction }) {
   const [reason, setReason] = useState('');
   const [tickBusy, setTickBusy] = useState(false);
   const toggleTick = async () => {
+    if (!u) return;
     setTickBusy(true); haptic('selection');
     try {
       await api.adminModerationGoldTick(u.id, !u.goldTick);
