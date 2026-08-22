@@ -28,10 +28,13 @@ echo "━━━ [3/5] server: test suites ━━━"
   npm run test:ot                 && \
   npm run test:features)
 
-echo "━━━ [4/5] app: install deps ━━━"
+echo "━━━ [4/6] app: install deps ━━━"
 (cd app && npm ci --no-audit --no-fund)
 
-echo "━━━ [5/5] app: production web bundle ━━━"
+echo "━━━ [5/6] app: image editor unit tests ━━━"
+(cd app && npm run test:image-editor)
+
+echo "━━━ [6/6] app: production web bundle ━━━"
 (cd app && CI=true npx expo export --platform web --output-dir dist)
 
 echo ""

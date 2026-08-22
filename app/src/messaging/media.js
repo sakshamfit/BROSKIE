@@ -26,9 +26,10 @@ function canvasToJpeg(image, maxDim, quality) {
 
 /**
  * Compress an outgoing image. On web we downscale to a chat-sized JPEG and
- * produce a small thumbnail. Native keeps the already-compressed picker URI
- * (expo-image-picker quality) and reuses it as the thumbnail source so we
- * never block send on extra native modules.
+ * produce a small thumbnail. Native keeps the already-processed file from the
+ * universal image editor (cropped/rotated/compressed locally before upload)
+ * and reuses it as the thumbnail source so we never block send on extra
+ * native modules.
  */
 export async function prepareOutgoingImage(uri) {
   if (!uri) return { uri, thumbUri: null, mimeType: 'image/jpeg' };
