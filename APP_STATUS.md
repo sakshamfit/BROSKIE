@@ -405,33 +405,77 @@ theme in one chat never touches another.
 ### Motion & interaction system
 
 `app/src/motion.js` is the single, centralized motion system. All animation
-tokens (micro 150ms / fast 210ms / normal 280ms / slow 380ms, spring presets,
+tokens (micro 130ms / fast 190ms / normal 260ms / slow 360ms, spring presets,
 easing curves), the `prefers-reduced-motion` gate (web `matchMedia` + native
-`AccessibilityInfo`), safe haptics (`expo-haptics`, no-op on web), and the
-reusable primitives live there:
+`AccessibilityInfo`), safe haptics (`expo-haptics`, throttled, no-op on web),
+and the reusable primitives live there.
 
-- `SpringPressable` / `usePressScale` — physical 100% → 96% → 100% press
-  springs on buttons (send, FAB, icon buttons, tab items, theme cards, emoji).
-- `FadeSlide` — opacity + translate + scale entrances (tab switches, chat
-  header/composer opening, in-chat search, story segments, profile hero).
-- `Pop` — tiny spring for badges (unread count changes), reaction pills,
-  theme-picker check marks, tab icon activation.
-- `TypingDots` — three staggered pulsing dots in the chat header, chat list
-  rows and anywhere typing state shows.
-- `Skeleton` — soft shimmer placeholders (chat list shown until the first
-  chats fetch resolves).
-- `HeartBurst` — double-tap a message → heart springs up, bounces, fades, and
-  adds a ❤️ reaction.
-- `SheetSpringIn` — bottom sheets/modals (message menu, forward, poll, timers,
-  chat info, chat-list actions) rise with a soft spring instead of popping.
-- `FloatLoop` — slow calm float for empty states (paused by unmount when
-  content arrives).
+**The rules the system enforces**
+
+- *Press depth scales inversely with surface size* — `motion.scale` is a
+  ladder: rows 0.985, cards 0.975, buttons 0.97, chips 0.95, icons 0.9. A
+  full-width row dropping 4% looks broken; a 20px icon dropping 1.5% looks
+  dead.
+- *Overshoot is one ~1.5% kick, never a bounce* — `springBack`
+  (1.00 → 0.97 → 1.015 → 1.00) is the release for every pressable in the app.
+- *Haptics fire on the completed press, not touch-down* — a finger landing on
+  a row to scroll must never buzz. Repeats inside 45ms are swallowed.
+- *Transform + opacity only, native driver everywhere* — the single exception
+  is the settings toggle's track colour, which the native driver cannot
+  interpolate; its thumb still travels natively.
+- *Nothing animates off-screen* — `MotionActive` (fed by `PageSwipePager`)
+  stops shimmer, typing dots and floating empties on the mounted-but-hidden
+  neighbouring pages.
+- *Reduced motion cuts movement, keeps feedback* — presses swap scale for a
+  brightness dip, gestures keep working, entrances land instantly.
+
+**Primitives**
+
+- `SpringPressable` / `usePressScale` — the press primitive used by every
+  affordance in the app (~95 call sites). Layout props follow the children
+  into the animated wrapper, so wrapping a row of [icon, label] never
+  restacks it.
+- `FadeSlide` / `Stagger` — opacity + 8px translate entrances on the
+  "arriving" curve; `staggerDelay` caps list cascades at 6 items so long
+  lists never feel slow.
+- `Pop` — one spring (not a chained sequence) for badges, reaction pills,
+  check marks, and the composer icon as it changes meaning (mic → send).
+- `IconSwap` — state changes *morph*: the two glyphs crossfade and
+  counter-scale (tab bar outline → filled, heart, follow ✓, emoji/keyboard).
+- `Bloom` — a single ring pushed outward when a toggle turns on (likes).
+- `Shake` — the one "rejected" motion: 5px, ~250ms, paired with an error
+  haptic (sign-in failures).
+- `BottomSheet` / `SheetHandle` — one sheet behaviour app-wide: backdrop
+  dims in step with a 1:1 downward drag, flings away past ~28% of its
+  height, and always animates *out* before unmounting. Centred dialogs get a
+  24px lift + scale instead of flying up from off-screen.
+- `TypingDots`, `Skeleton`, `FloatLoop` — looping primitives, all gated on
+  `useMotionActive()`.
+- `HeartBurst` — double-tap a message → one arrival, one departure.
+- `MotionActive` / `useMotionActive` — the off-screen gate.
+
+**Gesture surfaces** (all finger-tracking, all with velocity-aware release):
+page-to-page swiping (`PageSwipePager`), swipe-to-reply on a message,
+drag-to-dismiss on every sheet, drag-to-dismiss on the story viewer (which
+also shrinks as it travels and eases back while held to pause), and
+`ImageLightbox` — one shared photo viewer for the feed, post detail, profile
+and conversation, where a vertical drag moves the photo and fades the
+backdrop proportionally.
 
 Chat behavior details: new messages animate in once (opacity + translate +
 scale spring; an id set prevents re-animation on scroll recycling); the
 optimistic copy and its server confirmation never double-animate; chat-list
-rows pulse the avatar and wash with a highlight when an incoming message
-arrives; story progress bars animate 0→100% with hold-to-pause and resume.
+rows press *into* their own depth plate (sprung 2/4px offset) and give a
+brief avatar pulse + wash when a message arrives; the list cascade only runs
+on first paint, never when rows scroll back into view; story progress bars
+animate 0→100% with hold-to-pause and resume.
+
+**Verifying motion changes:** `app/scripts/smoke-web.js` boots the real web
+bundle in jsdom against `app/scripts/mock-api.js`, drives likes, follows, tab
+switches, opening a chat and long-pressing a bubble, and fails on any
+uncaught error or React warning. Run `npm run check` (or
+`SMOKE_LOGGED_IN=1 ./scripts/check.sh`, plus `SMOKE_REDUCED=1` for the
+reduced-motion pass) from `app/`.
 
 ### Daily AI greeting
 
@@ -586,7 +630,7 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 | current | **Phase 2 — the daily campus loop**: Today-at-your-place strip (around/online, 12h "I'm around"), greeter campus lines + one-tap handoff, Network Worldwide/My places/Following lenses, follow from posts, "My places" post audience, campus pushes; `test-phase2.js` (39 checks). |
 | current | **Phase 3**: live WebRTC calls on Android, **web push parity** (VAPID, zero-config), community invite links + deep links, hold-to-record voice notes, grouped Activity rows, GitHub Actions CI; `test-phase3.js` (27 checks). |
 | current | Per-conversation chat themes (13 themes, realtime sync, picker with live preview). |
-| current | Centralized motion system (`src/motion.js`): press springs, tab/section transitions, animated message entrances, double-tap ❤️, typing dots, skeleton chat list, story progress bars with hold-to-pause, spring sheets, reduced-motion + haptics support. |
+| current | Centralized motion system (`src/motion.js`): a press-depth ladder applied to every affordance, single-kick overshoot springs, icon morphs, toggle blooms, error shakes, one drag-to-dismiss sheet behaviour, a shared gesture-driven photo viewer, feed skeletons, a scroll-aware compose button, off-screen loop gating, reduced-motion + haptics support, and a headless smoke test for all of it. |
 
 ---
 

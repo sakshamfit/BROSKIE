@@ -95,7 +95,7 @@ export default function MessageRequestsPanel({ visible, onClose, requests, onCha
             busy={busy === `${item.chatId}:delete`}
             onPress={() => respond(item, 'delete')}
           />
-          <SpringPressable onPress={() => respond(item, 'block')} disabled={!!busy} hitSlop={7} style={({ pressed }) => [s.block, pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="selection">
+          <SpringPressable onPress={() => respond(item, 'block')} disabled={!!busy} hitSlop={7} style={({ pressed }) => [s.block, pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="warning">
             <Icon name="ban-outline" size={15} color={theme.danger} />
             <Text style={[type.labelXs, { color: theme.danger }]}>BLOCK</Text>
           </SpringPressable>

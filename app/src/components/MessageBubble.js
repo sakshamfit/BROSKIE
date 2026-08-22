@@ -512,13 +512,13 @@ export default function MessageBubble({
               </SpringPressable>
             )}
             {isMine && !message.deleted && (
-              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onDelete(message.id); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="warning" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onDelete(message.id); setMenu(false); }}>
                 <Icon name="trash-outline" size={18} color={theme.danger} />
                 <Text style={[type.bodyMd, { color: theme.danger }]}>Delete for everyone</Text>
               </SpringPressable>
             )}
             {!isMine && !message.deleted && onReport && (
-              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReport(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="warning" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReport(message); setMenu(false); }}>
                 <Icon name="flag-outline" size={18} color={theme.danger} />
                 <Text style={[type.bodyMd, { color: theme.danger }]}>Report</Text>
               </SpringPressable>

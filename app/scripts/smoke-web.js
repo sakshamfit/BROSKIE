@@ -56,9 +56,13 @@ async function getBundle(argPath) {
   window.addEventListener('unhandledrejection', (e) => note('unhandledrejection', [e.reason]));
 
   // Minimal browser surface the app expects.
-  window.matchMedia = window.matchMedia || ((q) => ({
-    matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
-  }));
+  // SMOKE_REDUCED=1 runs the whole app as a user with "reduce motion" on.
+  const reducedMotion = !!process.env.SMOKE_REDUCED;
+  window.matchMedia = (q) => ({
+    matches: reducedMotion && /prefers-reduced-motion/.test(q),
+    media: q,
+    addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
+  });
   // Talk to the mock API (scripts/mock-api.js) if it is up; the app resolves
   // localhost:4000 automatically when it is served from :8081.
   window.fetch = (...args) => fetch(...args);
