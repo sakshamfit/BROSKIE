@@ -592,6 +592,7 @@ function hydrateMessage(m, viewerId) {
     statusReply,
     status,
     reactions: reactions.map((r) => ({ userId: r.user_id, emoji: r.emoji })),
+    mentions: (() => { try { return JSON.parse(m.mentions || '[]'); } catch { return []; } })(),
   };
 }
 
@@ -2449,6 +2450,7 @@ function hydrateGC(chat, viewerId) {
     name: chat.name,
     avatar: chat.avatar,
     description: meta.description || '',
+    rules: (() => { try { return JSON.parse(meta.rules || '[]'); } catch { return []; } })(),
     privacy: meta.privacy,
     createdAt: meta.created_at,
     createdBy: chat.created_by,
@@ -2483,6 +2485,28 @@ app.post('/api/gc', requireAuth, (req, res) => {
   res.json({ gc: hydrateGC(db.prepare('SELECT * FROM chats WHERE id = ?').get(id), req.userId), chat: chatSummary(id, req.userId) });
 });
 
+/** GC identity/settings. Membership is required to view; only the persisted
+ * admin role may mutate the GC-owned photo and rules. */
+app.patch('/api/gc/:id/settings', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ? AND type = \'gc\'').get(req.params.id);
+  if (!chat) return res.status(404).json({ error: 'GC not found' });
+  if (gcRole(chat.id, req.userId) !== 'admin') return res.status(403).json({ error: 'Only the GC admin can change settings' });
+  const { avatar, rules } = req.body || {};
+  if (avatar !== undefined && avatar !== null && String(avatar).length > 2000) return res.status(400).json({ error: 'Invalid GC photo' });
+  let nextRules;
+  if (rules !== undefined) {
+    if (!Array.isArray(rules) || rules.length > 50) return res.status(400).json({ error: 'Invalid GC rules' });
+    nextRules = rules.map((r) => String(r || '').trim()).filter(Boolean).slice(0, 50);
+    if (nextRules.some((r) => r.length > 500)) return res.status(400).json({ error: 'A GC rule is too long' });
+  }
+  const t = now();
+  if (avatar !== undefined) db.prepare('UPDATE chats SET avatar = ?, updated_at = ? WHERE id = ?').run(avatar ? String(avatar).trim() : null, t, chat.id);
+  if (nextRules !== undefined) db.prepare('UPDATE gcs SET rules = ? WHERE chat_id = ?').run(JSON.stringify(nextRules), chat.id);
+  memberIds(chat.id).forEach((uid) => emitToUser(uid, 'gc:settings', { chatId: chat.id }));
+  const fresh = db.prepare('SELECT * FROM chats WHERE id = ?').get(chat.id);
+  res.json({ gc: hydrateGC(fresh, req.userId), chat: chatSummary(chat.id, req.userId) });
+});
+
 /** My GCs — the GC inbox. Same chat-summary shape as /api/chats (plus a
  *  `gc` block) so the client can feed them through the identical live store. */
 app.get('/api/gc', requireAuth, (req, res) => {
@@ -2500,7 +2524,7 @@ app.get('/api/gc', requireAuth, (req, res) => {
       const requestCount = summary.role === 'admin'
         ? db.prepare("SELECT COUNT(*) c FROM gc_requests WHERE chat_id = ? AND status = 'pending'").get(r.id).c
         : 0;
-      return { ...summary, gc: { description: meta?.description || '', privacy: meta?.privacy || 'request', requestCount } };
+      return { ...summary, gc: { description: meta?.description || '', rules: (() => { try { return JSON.parse(meta?.rules || '[]'); } catch { return []; } })(), privacy: meta?.privacy || 'request', requestCount } };
     }).filter(Boolean),
   });
 });
@@ -2981,6 +3005,7 @@ const persistMessageTx = db.transaction((msg, chatId) => {
     poll_id: msg.poll_id ?? null,
     status_id: msg.status_id ?? null,
     status_snapshot: msg.status_snapshot ?? null,
+    mentions: msg.mentions ?? '[]',
     media_thumb_url: msg.media_thumb_url ?? null,
     client_id: msg.client_id ?? msg.id,
     client_created_at: msg.client_created_at ?? msg.created_at,
@@ -2996,8 +3021,8 @@ const persistMessageTx = db.transaction((msg, chatId) => {
 
   try {
     db.prepare(
-      `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, media_thumb_url, duration, reply_to, expires_at, edited, forwarded_from, poll_id, status_id, status_snapshot, client_id, client_created_at, updated_at, created_at)
-       VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @media_thumb_url, @duration, @reply_to, @expires_at, @edited, @forwarded_from, @poll_id, @status_id, @status_snapshot, @client_id, @client_created_at, @updated_at, @created_at)`
+      `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, media_thumb_url, duration, reply_to, expires_at, edited, forwarded_from, poll_id, status_id, status_snapshot, mentions, client_id, client_created_at, updated_at, created_at)
+       VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @media_thumb_url, @duration, @reply_to, @expires_at, @edited, @forwarded_from, @poll_id, @status_id, @status_snapshot, @mentions, @client_id, @client_created_at, @updated_at, @created_at)`
     ).run(payload);
   } catch (error) {
     if (String(error.message || '').includes('UNIQUE')) {
@@ -3035,7 +3060,7 @@ function deliverUserMessage(uid, data) {
   const {
     chatId, type = 'text', body = '', mediaUrl = null, mediaThumbUrl = null,
     duration = 0, replyTo = null, tempId, pollId = null, disappearAt = null,
-    clientId = null, clientCreatedAt = null,
+    clientId = null, clientCreatedAt = null, mentions = [],
   } = data || {};
   if (!chatId) return { error: 'Missing chat', status: 400 };
 
@@ -3047,6 +3072,22 @@ function deliverUserMessage(uid, data) {
   if (chat.type === 'direct') {
     const otherId = memberIds(chatId).find((x) => x !== uid);
     if (otherId && blockedEitherWay(uid, otherId)) return { error: "You can't message this person", status: 403 };
+  }
+
+  let safeMentions = [];
+  if (chat.type === 'gc' && Array.isArray(mentions)) {
+    const members = db.prepare('SELECT u.id, u.username FROM users u JOIN chat_members cm ON cm.user_id = u.id WHERE cm.chat_id = ?').all(chatId);
+    const byId = new Map(members.map((m) => [m.id, m]));
+    for (const mention of mentions.slice(0, 50)) {
+      const member = byId.get(String(mention?.userId || ''));
+      if (!member) return { error: 'Mentioned user is not a current GC member', status: 400 };
+      safeMentions.push({ userId: member.id, username: member.username });
+    }
+    if (safeMentions.some((m) => safeMentions.filter((x) => x.userId === m.userId).length > 1)) safeMentions = [...new Map(safeMentions.map((m) => [m.userId, m])).values()];
+    if (String(body).toLowerCase().includes('@everyone')) {
+      if (isMember.role !== 'admin') return { error: 'Only GC admins can use @everyone', status: 403 };
+      safeMentions = [...safeMentions, { userId: 'everyone', username: 'everyone' }];
+    }
   }
 
   let request = pendingChatRequest(chatId);
@@ -3097,6 +3138,7 @@ function deliverUserMessage(uid, data) {
     edited: 0,
     forwarded_from: null,
     poll_id: pollId || null,
+    mentions: JSON.stringify(safeMentions),
     client_id: normalizedId || id,
     client_created_at: clientCreated,
     updated_at: created,

@@ -84,8 +84,8 @@ export default function GCScreen({ navigation, onOpenChat }) {
 
   const openChat = (chat) => {
     haptic('selection');
-    if (onOpenChat) onOpenChat(chat.id);
-    else navigation?.navigate?.('GCDetail', { chatId: chat.id });
+    if (onOpenChat) onOpenChat(chat.id, !!chat.isMember || !!chat.role);
+    else navigation?.navigate?.(chat.isMember || chat.role ? 'GCChat' : 'GCDetail', { chatId: chat.id });
   };
 
   const [joinError, setJoinError] = useState('');

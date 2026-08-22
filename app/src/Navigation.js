@@ -87,7 +87,7 @@ function HomeTabs({ navigation }) {
   // flow stays entirely inside the GC environment: GC list → GCDetail →
   // GCChat. The Chats tab keeps its own state and its own chats untouched.
   const openDirectChat = (chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); };
-  const openGC = (chatId) => { navigation.navigate('GCDetail', { chatId }); };
+  const openGC = (chatId, isMember) => { navigation.navigate(isMember ? 'GCChat' : 'GCDetail', { chatId }); };
 
   // Push deep links can target a Home page (e.g. a colleague request routes
   // to the Colleagues tab). Tab state lives here, not in navigation state,

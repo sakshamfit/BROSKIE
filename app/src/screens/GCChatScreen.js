@@ -70,6 +70,7 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
   const messageHistoryError = gcMessageErrors[chatId] || null;
 
   const [text, setText] = useState('');
+  const [cursor, setCursor] = useState(0);
   const [replyTo, setReplyTo] = useState(null);
   const [editing, setEditing] = useState(null);
   const [replyHighlightId, setReplyHighlightId] = useState(null);
@@ -247,6 +248,18 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
     setTimeout(() => { suppressFocusScroll.current = false; }, 700);
   }, []);
 
+  const mentionMatch = text.slice(0, cursor).match(/(?:^|\s)@([a-zA-Z0-9_]{0,30})$/);
+  const mentionQuery = mentionMatch ? mentionMatch[1].toLowerCase() : null;
+  const mentionSuggestions = mentionQuery === null ? [] : [
+    ...(chat?.members || []).filter((m) => m.id !== user.id && m.username && (`${m.username} ${m.name || ''}`).toLowerCase().includes(mentionQuery)).slice(0, 8),
+    ...(chat?.members?.some((m) => m.role === 'admin' && m.id === user.id) && 'everyone'.includes(mentionQuery) ? [{ id: 'everyone', username: 'everyone', name: 'Everyone' }] : []),
+  ];
+  const selectMention = (member) => {
+    const start = cursor - (mentionMatch?.[1]?.length || 0) - 1;
+    const next = `${text.slice(0, start)}@${member.username} ${text.slice(cursor)}`;
+    setText(next); setCursor(start + member.username.length + 2); inputRef.current?.focus();
+  };
+
   const onChangeText = (v) => {
     setText(v);
     if (!typingThrottle.current) {
@@ -269,7 +282,12 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
       setGCTypingState(chatId, false);
       return;
     }
-    sendGCMessage(chatId, { type: 'text', body, ...replyPayload() });
+    const mentionTokens = [...body.matchAll(/@([a-zA-Z0-9_]+)/g)].map((m) => {
+      const member = (chat?.members || []).find((x) => x.username?.toLowerCase() === m[1].toLowerCase());
+      return member ? { userId: member.id, username: member.username } : null;
+    }).filter(Boolean);
+    if (body.toLowerCase().includes('@everyone')) mentionTokens.push({ userId: 'everyone', username: 'everyone' });
+    sendGCMessage(chatId, { type: 'text', body, mentions: mentionTokens, ...replyPayload() });
     setText(''); setReplyTo(null); setShowEmoji(false); setGCTypingState(chatId, false);
   };
 
@@ -684,6 +702,7 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
               </View>
             )}
             <EmojiPicker visible={showEmoji} onSelect={(e) => setText((v) => v + e)} />
+            {mentionSuggestions.length > 0 && <View style={[s.mentionPopup, { backgroundColor: theme.card, borderColor: theme.ink }]}>{mentionSuggestions.map((m) => <Pressable key={m.id} onPress={() => selectMention(m)} style={s.mentionItem}><Avatar uri={m.avatar} name={m.name} id={m.id} size={30} /><View><Text style={[type.bodyStrong, { color: theme.text }]}>{m.name}</Text><Text style={[type.labelXs, { color: theme.muted }]}>@{m.username}</Text></View></Pressable>)}</View>}
             <View style={[s.composerWrap, keyboardPad > 0
               ? { paddingBottom: 8 }
               : !embedded ? { paddingBottom: Math.max(insets.bottom, 12) } : null
@@ -723,6 +742,7 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
                     placeholderTextColor={theme.muted}
                     value={text}
                     onChangeText={onChangeText}
+                    onSelectionChange={(e) => setCursor(e.nativeEvent.selection.start)}
                     onFocus={() => {
                       if (suppressFocusScroll.current) return;
                       scrollToLatest(120);
@@ -1069,6 +1089,8 @@ const makeStyles = (t) => StyleSheet.create({
   toastWrap: { position: 'absolute', left: 20, right: 20, alignItems: 'center', zIndex: 50 },
   toast: { flexDirection: 'row', alignItems: 'center', gap: 9, maxWidth: 420, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 2, borderRadius: 999 },
   editBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderStyle: 'dashed' },
+  mentionPopup: { marginHorizontal: 20, maxHeight: 260, borderWidth: 1, borderRadius: 10, paddingVertical: 4 },
+  mentionItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 8 },
   composerWrap: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 20, paddingBottom: 22, paddingTop: 12, gap: 12, borderTopWidth: 1, borderTopColor: t.graphiteLine, borderStyle: 'dashed' },
   inputBar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 12, minHeight: 48, borderTopLeftRadius: 5, borderTopRightRadius: 3, borderBottomRightRadius: 6, borderBottomLeftRadius: 4, backgroundColor: t.inputBackground },
   input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },

@@ -1,4 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Alert } from 'react-native';
+import { lazyComponent } from '../lazy';
+import { editorConfigFor } from '../imageEditor/config';
+
+const UniversalImageEditor = lazyComponent(() => import('../components/UniversalImageEditor'));
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput, Platform,
   KeyboardAvoidingView,
@@ -43,6 +48,10 @@ export default function GCDetailScreen({ route, navigation, embedded = false, on
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [requestsBusyId, setRequestsBusyId] = useState(null);
   const [missing, setMissing] = useState(false);
+  const [photoEditor, setPhotoEditor] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rulesDraft, setRulesDraft] = useState([]);
+  const [rulesBusy, setRulesBusy] = useState(false);
   const s = makeStyles(theme);
 
   const me = chat?.members?.find((m) => m.id === user.id);
@@ -131,6 +140,20 @@ export default function GCDetailScreen({ route, navigation, embedded = false, on
       await refreshGCs().catch(() => {});
     } catch (e) { console.warn(e.message); }
     finally { setBusy(false); }
+  };
+
+  const saveGCSettings = async (payload) => {
+    setRulesBusy(true);
+    try { await api.gcSettings(chatId, payload); await refreshGCs(); }
+    catch (e) { Alert.alert('GC settings', e.message || 'Could not save changes'); }
+    finally { setRulesBusy(false); }
+  };
+
+  const savePhoto = async (processed) => {
+    try {
+      const { url } = await api.uploadFile(processed.uri, processed.fileName || 'gc-avatar.jpg', processed.mimeType || 'image/jpeg');
+      await saveGCSettings({ avatar: url });
+    } catch (e) { Alert.alert('Photo not saved', e.message || 'Could not upload the GC photo'); }
   };
 
   const leaveGC = async () => {
@@ -278,8 +301,17 @@ export default function GCDetailScreen({ route, navigation, embedded = false, on
               <Rule style={{ marginVertical: 4 }} />
               <Row icon="create-outline" label="Rename GC" onPress={() => { setRenameValue(chat.name || ''); setRenameOpen(true); }} />
               <Rule style={{ marginVertical: 4 }} />
+              <Row icon="image-outline" label="Change GC photo" onPress={() => setPhotoEditor(true)} />
+              {!!chat.avatar && <>
+                <Rule style={{ marginVertical: 4 }} />
+                <Row icon="trash-outline" label="Remove GC photo" danger onPress={() => saveGCSettings({ avatar: null })} />
+              </>}
+              <Rule style={{ marginVertical: 4 }} />
+              <Row icon="list-outline" label="GC rules" sub={gc.rules?.length ? `${gc.rules.length} rules` : 'No rules added yet'} onPress={() => { setRulesDraft([...(gc.rules || []), '']); setRulesOpen(true); }} />
             </>
           )}
+          {!isAdmin && <Row icon="list-outline" label="GC rules" sub={gc.rules?.length ? `${gc.rules.length} rules` : 'No rules have been added yet'} onPress={() => setRulesOpen(true)} />}
+          <Rule style={{ marginVertical: 4 }} />
           <Row icon="notifications-outline" label={chat.muted ? 'Unmute notifications' : 'Mute notifications'} onPress={async () => {
             await api.mute(chatId, !chat.muted);
             await refreshGCs().catch(() => {});
@@ -375,6 +407,21 @@ export default function GCDetailScreen({ route, navigation, embedded = false, on
             )}
           </KeyboardAvoidingView>
         </View>
+      </Modal>
+
+      <UniversalImageEditor visible={photoEditor} pickOnOpen config={{ ...editorConfigFor('profile'), title: 'GC profile photo', ratios: [{ key: 'square', label: '1:1', value: 1 }], defaultRatio: 'square' }} onCancel={() => setPhotoEditor(false)} onDone={(result) => { setPhotoEditor(false); savePhoto(result); }} />
+
+      <Modal visible={rulesOpen} transparent animationType="fade" onRequestClose={() => setRulesOpen(false)}>
+        <Pressable style={s.overlay} onPress={() => setRulesOpen(false)}>
+          <Pressable style={[s.sheet, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
+            <Text style={[type.headlineSm, { color: theme.text }]}>GC Rules</Text>
+            {!isAdmin && !(gc.rules || []).length ? <Text style={[type.bodySm, { color: theme.muted, marginTop: 14 }]}>No rules have been added yet.</Text> : isAdmin ? <>
+              {rulesDraft.map((rule, i) => <InkField key={i} style={{ marginTop: 10 }}><TextInput value={rule} onChangeText={(v) => setRulesDraft((p) => p.map((x, n) => n === i ? v : x))} placeholder={`Rule ${i + 1}`} placeholderTextColor={theme.muted} style={[s.input, { color: theme.text }]} maxLength={500} /></InkField>)}
+              <InkButton label="Add rule" icon="add" onPress={() => setRulesDraft((p) => [...p, ''])} style={{ marginTop: 12 }} />
+              <InkButton label="Save rules" filled busy={rulesBusy} onPress={() => { saveGCSettings({ rules: rulesDraft }); setRulesOpen(false); }} style={{ marginTop: 10 }} />
+            </> : (gc.rules || []).map((rule, i) => <Text key={i} style={[type.bodyMd, { color: theme.text, marginTop: 12 }]}>{i + 1}. {rule}</Text>)}
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );

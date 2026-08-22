@@ -271,7 +271,7 @@ export default function SplitLayout() {
             ) : (
               <GCScreen
                 navigation={gcNav}
-                onOpenChat={(chatId) => { setGcSelectedId(chatId); setGcSub('detail'); }}
+                onOpenChat={(chatId, isMember) => { setGcSelectedId(chatId); setGcSub(isMember ? 'chat' : 'detail'); }}
               />
             )}
           </View>
