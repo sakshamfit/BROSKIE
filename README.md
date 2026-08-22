@@ -157,6 +157,13 @@ Feed lenses: **Worldwide / My places / Following** — plus **Follow** any autho
 from their post and a **My places** audience so a post can target just people
 who share your college or workplace.
 
+**Operational Transformation (OT)** — conflict-free collaborative editing everywhere text is edited:
+- **Message edit OT**: editing a message from two devices offline concurrently no longer loses data — edits are transformed (retain/insert/delete) and converge.
+- **Collaborative notes**: every chat (especially groups) can have shared real-time notes — multiple users type together, cursors and presence live, powered by classic Jupiter OT (apply/compose/transform/invert).
+- **Offline OT**: operations queued when offline are transformed on reconnect against server history via `baseVersion`.
+- **Persistence**: server stores docs + operations in SQLite (`documents`, `document_operations`, `message_edit_operations`), client caches in IndexedDB/AsyncStorage.
+- See `OT.md` for full design, socket events (`doc:join`, `doc:operation`, `doc:selection`, `message:edit:ot`) and tests (`npm run test:ot` — 31 checks).
+
 **Calls** — real 1:1 voice/video WebRTC on every platform (browser + Android
 app), with the ink-and-paper full-screen overlay, ringing, accept/decline and
 call history. **Hold the mic button to record a voice note and release to send**
@@ -284,12 +291,20 @@ whatsapp-clone/
 | → | `message:read` | mark a chat read → emits blue ticks |
 | → | `typing` | broadcast typing state |
 | → | `message:react` / `message:delete` | toggle reaction / delete for everyone |
-| → | `message:edit` | edit one of my own text messages (acked with the update) |
+| → | `message:edit` | edit one of my own text messages — now OT-aware: `{messageId, operation, baseVersion, body}` transformed server-side |
+| → | `message:edit:ot` | explicit OT edit: `{messageId, operation, baseVersion}` |
+| ← | `message:edit:ot` | broadcast transformed message edit |
 | → | `poll:create` / `poll:vote` | post a poll message / vote or change my vote |
-| ← | `message:new` / `message:updated` | new message, or status/reaction/edit/poll-count change |
+| ← | `message:new` / `message:updated` | new message, or status/reaction/edit/poll-count change (includes `otVersion`, `otOperation` when OT) |
 | ← | `message:expired` | a disappearing message was deleted by its timer (`{chatId, messageIds}`) |
 | ← | `chat:new` / `chat:updated` / `chat:removed` | chat list changes (removed = left/removed from a chat) |
 | ← | `presence` | online / last-seen |
+| → | `doc:join` / `doc:leave` | join/leave collaborative doc room, get snapshot |
+| → | `doc:operation` | submit OT operation for doc `{documentId, operation, baseVersion, selection}` |
+| → | `doc:selection` | broadcast cursor/selection |
+| ← | `doc:operation` | remote OT operation transformed by server |
+| ← | `doc:created` / `doc:deleted` / `doc:updated` | collaborative note lifecycle in chat |
+| ← | `doc:selection` / `doc:user:joined` / `doc:user:left` | live cursors and presence |
 | → | `call:invite` / `call:accept` / `call:decline` / `call:hangup` | start, accept, decline, or end a 1:1 call |
 | → / ← | `call:offer` / `call:answer` / `call:ice-candidate` | WebRTC SDP + ICE signaling relay (server never inspects payloads) |
 | ← | `call:incoming` / `call:accepted` / `call:ended` | ring the callee, notify the caller, notify both sides a call ended |

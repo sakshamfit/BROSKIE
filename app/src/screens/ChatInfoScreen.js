@@ -14,10 +14,12 @@ import { radius, type, inkBox, marker, dashedRule, raised } from '../theme';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 import { DISAPPEAR_OPTIONS, disappearLabel } from '../components/MessageBubble';
+import CollabDocumentView from '../components/CollabDocumentView';
 
 export default function ChatInfoScreen({ route, navigation, embedded = false }) {
   const { chatId } = route.params;
-  const { chats, refreshChats } = useChat();
+  const { chats, refreshChats, socketRef } = useChat();
+  const socket = socketRef?.current || null;
   const { user } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -28,6 +30,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [disappearOpen, setDisappearOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
 
   const me = chat?.members?.find((m) => m.id === user.id);
   const isAdmin = me?.role === 'admin';
@@ -180,6 +183,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
           />
           <Row icon="archive-outline" label={chat.archived ? 'Unarchive chat' : 'Archive chat'} onPress={toggleArchive} />
           <Row icon="star-outline" label="Starred messages" onPress={() => navigation.navigate('Starred')} />
+          <Row icon="document-text-outline" label="Collaborative notes" sub="Real-time OT docs for this chat" onPress={() => setDocsOpen(true)} />
         </PaperCard>
 
         {chat.type === 'group' && isAdmin && (
@@ -280,6 +284,19 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
           </Pressable>
           </SheetSpringIn>
         </Pressable>
+      </Modal>
+
+      {/* OT docs modal */}
+      <Modal visible={docsOpen} animationType="slide" onRequestClose={() => setDocsOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: insets.top }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 2, borderBottomColor: theme.ink }}>
+            <Text style={[type.headlineSm, { color: theme.text }]}>COLLABORATIVE NOTES</Text>
+            <Pressable onPress={() => setDocsOpen(false)} style={[inkBox(theme, 'thin'), { paddingHorizontal: 12, paddingVertical: 8 }]}>
+              <Text style={[type.labelSm, { color: theme.ink }]}>CLOSE</Text>
+            </Pressable>
+          </View>
+          <CollabDocumentView chatId={chatId} socket={socket} embedded />
+        </View>
       </Modal>
 
       {/* disappearing timer modal */}

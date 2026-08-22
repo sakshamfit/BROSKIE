@@ -512,6 +512,15 @@ export const api = {
     request(`/api/communities/${id}/members/${userId}`, { method: 'PATCH', body: { role } }),
   removeCommunityMember: (id, userId) => request(`/api/communities/${id}/members/${userId}`, { method: 'DELETE' }),
 
+  // Operational Transformation — collaborative documents
+  getChatDocuments: (chatId) => request(`/api/chats/${chatId}/documents`),
+  getDocument: (docId) => request(`/api/documents/${docId}`),
+  createChatDocument: (chatId, payload) => request(`/api/chats/${chatId}/documents`, { method: 'POST', body: payload }),
+  updateDocument: (docId, payload) => request(`/api/documents/${docId}`, { method: 'PATCH', body: payload }),
+  deleteDocument: (docId) => request(`/api/documents/${docId}`, { method: 'DELETE' }),
+  submitDocOperation: (docId, operation, baseVersion) => request(`/api/documents/${docId}/operation`, { method: 'POST', body: { operation, baseVersion } }),
+  getMessageEditHistory: (messageId) => request(`/api/messages/${messageId}/edits`),
+
   // Calls — history; the live call itself is signalled over the socket (see ChatContext)
   calls: (limit) => request(`/api/calls${limit ? `?limit=${limit}` : ''}`),
   deleteCall: (id) => request(`/api/calls/${id}`, { method: 'DELETE' }),

@@ -4,6 +4,8 @@ import { createConnectivityManager } from './ConnectivityManager';
 import { createOutboxManager } from './OutboxManager';
 import { createSyncManager } from './SyncManager';
 import { createMessageRepository } from './MessageRepository';
+import { OTDocumentCache } from './OTStore';
+import { OTManager } from '../ot/OTManager';
 
 export { sortChats };
 export { createMessageId, isClientMessageId } from './ids';
@@ -16,6 +18,10 @@ export function createMessagingEngine({ userId, getSocket }) {
   const outbox = createOutboxManager({ store, getSocket, connectivity });
   const sync = createSyncManager({ store, outbox, connectivity });
   const repository = createMessageRepository({ store, outbox });
+  const otCache = new OTDocumentCache(userId, persistence);
+  const otManager = new OTManager({ getSocket });
+
+  otCache.hydrate().catch(() => {});
 
   return {
     store,
@@ -23,11 +29,15 @@ export function createMessagingEngine({ userId, getSocket }) {
     sync,
     connectivity,
     repository,
+    otCache,
+    otManager,
     dispose() {
       outbox.dispose();
       sync.dispose();
       connectivity.dispose();
       store.dispose();
+      otCache.dispose();
+      otManager.dispose();
     },
   };
 }

@@ -5,6 +5,8 @@ import { SOCKET_URL, api } from '../api';
 import { useAuth } from './AuthContext';
 import { createMessagingEngine } from '../messaging';
 import * as RTC from '../webrtc/rtc';
+import TextOperation from '../ot/TextOperation';
+import { OTManager } from '../ot/OTManager';
 
 const ChatContext = createContext(null);
 export const useChat = () => useContext(ChatContext);
@@ -39,6 +41,7 @@ export function ChatProvider({ children }) {
   const [activityUnread, setActivityUnread] = useState(0);
   const socketRef = useRef(null);
   const engineRef = useRef(null);
+  const otManagerRef = useRef(null);
   const postListeners = useRef(new Set());
   const statusListeners = useRef(new Set());
   const communityListeners = useRef(new Set());
@@ -46,6 +49,9 @@ export function ChatProvider({ children }) {
   const chatRequestListeners = useRef(new Set());
   const chatThemeListeners = useRef(new Set());
   const moderationListeners = useRef(new Set());
+  const docListeners = useRef(new Set());
+  const [documents, setDocuments] = useState({}); // chatId -> docs[]
+  const [otReady, setOtReady] = useState(false);
 
   /* ---------------- calls (WebRTC, signalled over the same socket) ---------------- */
   // call: null | { id, chatId, type, direction:'incoming'|'outgoing', status:'ringing'|'connecting'|'ongoing'|'ended', with, startedAt, endedReason }
@@ -98,6 +104,12 @@ export function ChatProvider({ children }) {
   const onModerationEvent = useCallback((fn) => {
     moderationListeners.current.add(fn);
     return () => moderationListeners.current.delete(fn);
+  }, []);
+
+  /** Subscribe to OT document events. */
+  const onDocEvent = useCallback((fn) => {
+    docListeners.current.add(fn);
+    return () => docListeners.current.delete(fn);
   }, []);
 
   const upsertChat = useCallback((chat) => {
@@ -153,6 +165,29 @@ export function ChatProvider({ children }) {
       getSocket: () => socketRef.current,
     });
     engineRef.current = engine;
+
+    // OT Manager for collaborative editing
+    const otManager = new OTManager({
+      getSocket: () => socketRef.current,
+      onDocumentUpdate: (docId, content, operation, isRemote) => {
+        docListeners.current.forEach(fn => fn('doc:content', { documentId: docId, content, operation, isRemote }));
+      },
+      onMessageEdit: (messageId, body, version) => {
+        // Update message via engine if available
+        if (engineRef.current) {
+          const allMessages = engineRef.current.store.getAllMessagesCopy();
+          Object.entries(allMessages).forEach(([chatId, list]) => {
+            const idx = list.findIndex(m => m.id === messageId);
+            if (idx !== -1) {
+              engineRef.current.store.upsertMessage(chatId, { ...list[idx], body, edited: true, otVersion: version });
+            }
+          });
+        }
+      }
+    });
+    otManagerRef.current = otManager;
+    setOtReady(true);
+
     const unsub = engine.store.subscribe(() => {
       if (!disposed) publishStore();
     });
@@ -194,7 +229,10 @@ export function ChatProvider({ children }) {
       appSub.remove();
       unsub();
       engine.dispose();
+      otManager.dispose();
       if (engineRef.current === engine) engineRef.current = null;
+      if (otManagerRef.current === otManager) otManagerRef.current = null;
+      setOtReady(false);
     };
   }, [token, user?.id, publishStore]);
 
@@ -221,6 +259,7 @@ export function ChatProvider({ children }) {
         engine.outbox.drain();
         engine.sync.reconnect().catch(() => {});
       }
+      otManagerRef.current?.drainOfflineQueue();
     });
     socket.on('disconnect', () => {
       setConnected(false);
@@ -229,6 +268,83 @@ export function ChatProvider({ children }) {
     socket.on('connect_error', () => {
       setConnected(false);
       engineRef.current?.connectivity.setSocketConnected(false);
+    });
+
+    // OT Document events
+    socket.on('doc:operation', (payload) => {
+      otManagerRef.current?.handleRemoteOperation(payload);
+      docListeners.current.forEach(fn => fn('doc:operation', payload));
+      // Update documents preview in chat
+      if (payload.documentId) {
+        const docRow = { id: payload.documentId, content: null, version: payload.version };
+        // We don't have full content here, but notify listeners
+      }
+    });
+    socket.on('doc:created', (payload) => {
+      docListeners.current.forEach(fn => fn('doc:created', payload));
+      if (payload.chatId) {
+        setDocuments(prev => ({
+          ...prev,
+          [payload.chatId]: [...(prev[payload.chatId] || []).filter(d => d.id !== payload.document.id), payload.document]
+        }));
+      }
+    });
+    socket.on('doc:deleted', (payload) => {
+      docListeners.current.forEach(fn => fn('doc:deleted', payload));
+      if (payload.chatId) {
+        setDocuments(prev => ({
+          ...prev,
+          [payload.chatId]: (prev[payload.chatId] || []).filter(d => d.id !== payload.documentId)
+        }));
+      }
+    });
+    socket.on('doc:updated', (payload) => {
+      docListeners.current.forEach(fn => fn('doc:updated', payload));
+    });
+    socket.on('doc:selection', (payload) => {
+      docListeners.current.forEach(fn => fn('doc:selection', payload));
+    });
+    socket.on('doc:user:joined', (payload) => {
+      docListeners.current.forEach(fn => fn('doc:user:joined', payload));
+    });
+    socket.on('doc:user:left', (payload) => {
+      docListeners.current.forEach(fn => fn('doc:user:left', payload));
+    });
+
+    // OT Message edit events
+    socket.on('message:edit:ot', (payload) => {
+      const engine = engineRef.current;
+      if (engine) {
+        try {
+          const allMessages = engine.store.getAllMessagesCopy();
+          Object.entries(allMessages).forEach(([chatId, list]) => {
+            const idx = list.findIndex(m => m.id === payload.messageId);
+            if (idx !== -1) {
+              const op = TextOperation.fromJSON(payload.operation);
+              const newBody = op.apply(list[idx].body || '');
+              engine.store.upsertMessage(chatId, { ...list[idx], body: newBody, edited: true, otVersion: payload.version });
+            }
+          });
+        } catch {}
+      } else {
+        setMessages(prev => {
+          const next = { ...prev };
+          Object.keys(next).forEach(chatId => {
+            next[chatId] = next[chatId].map(m => {
+              if (m.id === payload.messageId) {
+                try {
+                  const op = TextOperation.fromJSON(payload.operation);
+                  return { ...m, body: op.apply(m.body || ''), edited: true, otVersion: payload.version };
+                } catch {
+                  return { ...m, body: payload.body || m.body, edited: true, otVersion: payload.version };
+                }
+              }
+              return m;
+            });
+          });
+          return next;
+        });
+      }
     });
     socket.on('account:deleted', () => logout());
     socket.on('settings:updated', ({ settings }) => applySettings(settings));
@@ -722,11 +838,59 @@ export function ChatProvider({ children }) {
     socketRef.current?.emit('message:delete', { messageId });
   }, []);
 
-  /** Edit one of my own text messages. Resolves with the updated message. */
-  const editMessage = useCallback((messageId, body) => {
+  /** Edit one of my own text messages with OT. Resolves with the updated message. */
+  const editMessage = useCallback((messageId, body, options = {}) => {
     return new Promise((resolve, reject) => {
-      socketRef.current?.emit('message:edit', { messageId, body }, (res) => {
+      const engine = engineRef.current;
+      let oldBody = '';
+      let baseVersion = options.baseVersion;
+
+      if (engine) {
+        const all = engine.store.getAllMessagesCopy();
+        for (const list of Object.values(all)) {
+          const found = list.find(m => m.id === messageId);
+          if (found) {
+            oldBody = found.body || '';
+            if (baseVersion == null) baseVersion = found.otVersion || 0;
+            break;
+          }
+        }
+      } else {
+        // Fallback search in state
+        for (const list of Object.values(messages)) {
+          const found = list.find(m => m.id === messageId);
+          if (found) {
+            oldBody = found.body || '';
+            if (baseVersion == null) baseVersion = found.otVersion || 0;
+            break;
+          }
+        }
+      }
+
+      // Use OT if we have oldBody and it's different
+      if (oldBody && oldBody !== body) {
+        try {
+          const operation = TextOperation.fromDiff(oldBody, body);
+          if (!operation.isNoop()) {
+            socketRef.current?.emit('message:edit', { messageId, operation: operation.toJSON(), baseVersion, body }, (res) => {
+              if (res?.error) reject(new Error(res.error)); else resolve(res.message);
+            });
+            return;
+          }
+        } catch {}
+      }
+
+      // Fallback legacy
+      socketRef.current?.emit('message:edit', { messageId, body, baseVersion }, (res) => {
         if (res?.error) reject(new Error(res.error)); else resolve(res.message);
+      });
+    });
+  }, [messages]);
+
+  const editMessageOT = useCallback((messageId, operation, baseVersion) => {
+    return new Promise((resolve, reject) => {
+      socketRef.current?.emit('message:edit:ot', { messageId, operation, baseVersion }, (res) => {
+        if (res?.error) reject(new Error(res.error)); else resolve(res);
       });
     });
   }, []);
@@ -749,16 +913,37 @@ export function ChatProvider({ children }) {
     });
   }, []);
 
+  const refreshDocuments = useCallback(async (chatId) => {
+    if (!chatId) return [];
+    try {
+      const res = await api.getChatDocuments(chatId);
+      setDocuments(prev => ({ ...prev, [chatId]: res.documents || [] }));
+      return res.documents || [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const createDocument = useCallback(async (chatId, payload) => {
+    const res = await api.createChatDocument(chatId, payload);
+    setDocuments(prev => ({ ...prev, [chatId]: [res.document, ...(prev[chatId] || [])] }));
+    return res.document;
+  }, []);
+
   return (
     <ChatContext.Provider
       value={{
         chats, chatsLoaded, chatsError,
         messages, messagesLoaded, messagesLoading, messageErrors,
         typing, connected, activityUnread,
+        documents, otReady,
         refreshChats, refreshActivity, loadMessages, loadOlderMessages, sendMessage, markRead,
-        setTypingState, react, deleteMessage, editMessage, createPoll, votePoll,
+        setTypingState, react, deleteMessage, editMessage, editMessageOT, createPoll, votePoll,
         upsertChat, onPostEvent, onStatusEvent, onCommunityEvent, onColleagueEvent, onChatRequestEvent,
-        onChatThemeEvent,
+        onChatThemeEvent, onDocEvent,
+        refreshDocuments, createDocument,
+        socketRef,
+        otManager: otManagerRef.current,
         // exposed for lightweight local patches (e.g. optimistic star/timer state)
         setMessages: (updater) => {
           const engine = engineRef.current;

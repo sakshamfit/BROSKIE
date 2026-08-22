@@ -20,7 +20,8 @@
     "test:push": "node test-push.js",
     "test:phase2": "node test-phase2.js",
     "test:phase3": "node test-phase3.js",
-    "test:moderation": "node test-moderation.js"
+    "test:moderation": "node test-moderation.js",
+    "test:ot": "node test-ot.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
