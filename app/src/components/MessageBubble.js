@@ -8,10 +8,15 @@ import { mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 import { alpha } from '../chatThemes';
 import { Pop, SheetSpringIn, HeartBurst, haptic, useReducedMotion, motion } from '../motion';
-import { MESSAGE_SWIPE, messageTravel, shouldClaimMessageSwipe } from '../gestures';
+import { MESSAGE_SWIPE, messageTravel, shouldClaimMessageSwipe, isTouchInput, hasTouchScreen } from '../gestures';
 import VoiceNote from './VoiceNote';
 
 const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+// Web (touch) only: `touch-action: pan-y` hands horizontal finger drags to
+// our swipe gesture while the chat's vertical scrolling stays native — the
+// browser never turns a message swipe into history-nav or overscroll.
+const WEB_TOUCH_ACTION = { touchAction: 'pan-y' };
 
 // ---- swipe-to-reply gesture tuning lives in ../gestures.js (the app-wide
 // gesture-priority system). Keep travel small and physical: the bubble
@@ -90,11 +95,18 @@ export default function MessageBubble({
     }
   };
 
-  // ---- swipe-to-reply (touch only). The bubble tracks the finger with a
-  // native-driver translateX (no re-renders, 60fps) and reveals a themed ↩
-  // badge. Web gets a hover-reveal reply button + R shortcut instead. ----
+  // ---- swipe-to-reply (finger-first, on every touch surface). The bubble
+  // tracks the finger with a native-driver translateX (no re-renders, 60fps)
+  // and reveals a themed ↩ badge. Enabled on native builds AND touch-capable
+  // web (mobile browsers, the Median WebView shell, touch laptops) — so
+  // sliding a message replies everywhere the app actually runs. Mouse-only
+  // desktop never claims drags and keeps the hover-reveal ↩ + R shortcut. ----
   const isWeb = Platform.OS === 'web';
-  const canSwipe = !isWeb && !message.deleted;
+  const swipeSurface = !isWeb || hasTouchScreen();
+  const canSwipe = swipeSurface && !message.deleted;
+  // On web only real finger events may claim the gesture — a hybrid laptop's
+  // mouse drags stay clicks/text-selection, never swipes.
+  const isFinger = (e) => !isWeb || isTouchInput(e?.nativeEvent);
   const translateX = useRef(new Animated.Value(0)).current;
   const badgeScale = useRef(new Animated.Value(1)).current;
   const armedRef = useRef(false);
@@ -129,8 +141,8 @@ export default function MessageBubble({
   };
 
   const panResponder = useRef(PanResponder.create({
-    onMoveShouldSetPanResponderCapture: (e, g) => canSwipeRef.current && !menuOpenRef.current && shouldClaimMessageSwipe(g.dx, g.dy),
-    onMoveShouldSetPanResponder: (e, g) => canSwipeRef.current && !menuOpenRef.current && shouldClaimMessageSwipe(g.dx, g.dy),
+    onMoveShouldSetPanResponderCapture: (e, g) => canSwipeRef.current && !menuOpenRef.current && isFinger(e) && shouldClaimMessageSwipe(g.dx, g.dy),
+    onMoveShouldSetPanResponder: (e, g) => canSwipeRef.current && !menuOpenRef.current && isFinger(e) && shouldClaimMessageSwipe(g.dx, g.dy),
     onPanResponderGrant: (e, g) => {
       armedRef.current = false;
       translateX.setValue(messageTravel(g.dx));
@@ -247,7 +259,7 @@ export default function MessageBubble({
     <>
       <View
         {...(canSwipe ? panResponder.panHandlers : {})}
-        style={[s.wrap, isMine ? s.wrapMine : s.wrapTheirs]}
+        style={[s.wrap, isMine ? s.wrapMine : s.wrapTheirs, isWeb && canSwipe && WEB_TOUCH_ACTION]}
       >
         <View style={[s.bubbleSlot, isMine ? s.slotMine : s.slotTheirs]}>
           {canSwipe && (
