@@ -186,6 +186,7 @@ export default function SplitLayout() {
         onNewChat={() => openOverlay('NewChat')}
         onSettings={() => { setSettingsSub(null); setTab('settings'); }}
         onHelp={() => openOverlay('Help')}
+        onOpenProfile={(userId) => userId && openOverlay('UserProfile', { userId })}
         onLogout={logout}
       />
 
