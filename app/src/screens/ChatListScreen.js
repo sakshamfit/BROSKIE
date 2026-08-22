@@ -439,6 +439,10 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
           2/4px offset as before, but sprung instead of snapped, so the card
           reads as being physically pushed into the page and released. */}
       <AnimatedPressable
+        // No accessibilityRole here: the row already contains the avatar's
+        // own "view profile" button, and a button inside a button is invalid
+        // (and confuses screen readers). The label is enough.
+        accessibilityLabel={`Open chat with ${item.name}`}
         onPress={() => { haptic('selection'); navigation.navigate('Conversation', { chatId: item.id }); }}
         onPressIn={onRowPressIn}
         onPressOut={onRowPressOut}

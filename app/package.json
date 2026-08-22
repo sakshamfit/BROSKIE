@@ -59,7 +59,8 @@
     "submit:ios": "eas submit -p ios --profile production",
     "mock-api": "node scripts/mock-api.js",
     "smoke": "node scripts/smoke-web.js",
-    "smoke:app": "SMOKE_LOGGED_IN=1 node scripts/smoke-web.js"
+    "smoke:app": "SMOKE_LOGGED_IN=1 node scripts/smoke-web.js",
+    "check": "./scripts/check.sh"
   },
   "private": true,
   "devDependencies": {

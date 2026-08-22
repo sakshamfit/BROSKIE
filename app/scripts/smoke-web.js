@@ -36,7 +36,7 @@ async function getBundle(argPath) {
   const problems = [];
   const note = (kind, args) => {
     const text = args.map((a) => (a && a.stack) || String(a)).join(' ');
-    problems.push(`${kind}: ${text.slice(0, 400)}`);
+    problems.push(`${kind}: ${text.slice(0, process.env.SMOKE_VERBOSE ? 3000 : 400)}`);
   };
 
   window.console = {
@@ -98,6 +98,10 @@ async function getBundle(argPath) {
   Object.defineProperty(window, 'innerWidth', { value: VIEW_W, configurable: true });
   Object.defineProperty(window, 'innerHeight', { value: VIEW_H, configurable: true });
   window.navigator.vibrate = () => true;
+  // Metro's HMR client would otherwise open a websocket back to the dev
+  // server and confuse it; the test only cares about the rendered app.
+  window.WebSocket = class { constructor() {} send() {} close() {} addEventListener() {} removeEventListener() {} };
+  window.EventSource = class { constructor() {} close() {} addEventListener() {} removeEventListener() {} };
   window.speechSynthesis = {
     cancel() {}, speak() {}, pause() {}, resume() {}, getVoices: () => [],
     addEventListener() {}, removeEventListener() {},
@@ -153,7 +157,36 @@ async function getBundle(argPath) {
   if (byLabel('Chats')) {
     press(byLabel('Chats'));
     await settle(700);
-    check('chats tab shows conversations', /Grace Hopper|Katherine Johnson|conversation/i.test(window.document.body.textContent));
+    const t = window.document.body.textContent || '';
+    check('chats tab shows conversations', /Grace Hopper|Katherine Johnson/.test(t));
+    if (process.env.SMOKE_DUMP) console.log('after chats tab:', t.replace(/BESbswy/g, '').replace(/\s+/g, ' ').slice(0, 400));
+  }
+
+  // open a conversation → the thread and its composer must appear
+  const chatRow = [...window.document.querySelectorAll('[aria-label^="Open chat with"]')][0]
+    || [...window.document.querySelectorAll('[role="button"], button')]
+      .find((el) => /Grace Hopper|Katherine Johnson/.test(el.textContent || ''));
+  if (process.env.SMOKE_DUMP) console.log('chatRow found:', !!chatRow, window.document.querySelectorAll('[aria-label^="Open chat with"]').length);
+  if (chatRow) {
+    press(chatRow);
+    await settle(900);
+    const inThread = /long-pressing this bubble|Message 0 in/i.test(window.document.body.textContent);
+    check('chat row opens the conversation', inThread);
+
+    // long-press a bubble → the action menu must open
+    if (inThread) {
+      const bubble = [...window.document.querySelectorAll('div')]
+        .find((el) => (el.textContent || '').trim() === 'Try long-pressing this bubble.');
+      if (bubble) {
+        bubble.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+        bubble.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        await settle(650);
+        bubble.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true, cancelable: true }));
+        bubble.dispatchEvent(new window.MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        await settle(500);
+        check('long-press opens the message menu', /Reply|Forward|Star message/.test(window.document.body.textContent));
+      }
+    }
   }
 
   // press everything else that is still on screen; nothing may throw

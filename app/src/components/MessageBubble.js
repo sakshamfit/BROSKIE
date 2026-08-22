@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, Image, Pressable, StyleSheet, Modal, Animated, PanResponder, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, Image, Pressable, StyleSheet, Animated, PanResponder, Platform, ActivityIndicator } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
@@ -7,7 +7,7 @@ import { Ticks, formatTime, PaperCard, Rule, FrostedBackdrop, GoldTick, hasGoldT
 import { mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 import { alpha } from '../chatThemes';
-import { Pop, SheetSpringIn, HeartBurst, haptic, useReducedMotion, motion } from '../motion';
+import { Pop, BottomSheet, SpringPressable, HeartBurst, haptic, useReducedMotion, motion } from '../motion';
 import { MESSAGE_SWIPE, messageTravel, shouldClaimMessageSwipe, isTouchInput, hasTouchScreen } from '../gestures';
 import VoiceNote from './VoiceNote';
 
@@ -450,69 +450,78 @@ export default function MessageBubble({
         </View>
       </View>
 
-      <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)}>
-        <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setMenu(false)}>
-          <FrostedBackdrop />
-          <SheetSpringIn style={{ width: '100%', maxWidth: 340, alignItems: 'center' }}>
+      {/* Long-press menu: springs in over a blurred backdrop, can be pushed
+          away with a downward drag, and animates out instead of vanishing. */}
+      <BottomSheet
+        visible={menu}
+        onClose={() => setMenu(false)}
+        centered
+        backdrop={<FrostedBackdrop />}
+        style={{ paddingHorizontal: 22 }}
+      >
+        <View style={{ width: '100%', maxWidth: 340, alignItems: 'center' }}>
           <PaperCard weight="ink" style={s.menu}>
             <View style={s.quickRow}>
               {QUICK.map((e) => (
-                <Pressable
+                <SpringPressable
                   key={e}
+                  accessibilityRole="button"
+                  accessibilityLabel={`React ${e}`}
                   onPress={() => { onReact(message.id, e); setMenu(false); }}
+                  scaleTo={0.86}
+                  haptic="impact"
                   style={({ pressed }) => [s.quickBtn, inkBox(theme, 'thin'), pressed ? marker(theme, 2) : null]}
                 >
                   <Emoji char={e} size={22} />
-                </Pressable>
+                </SpringPressable>
               ))}
             </View>
             <Rule style={{ marginVertical: 10 }} />
             {!message.deleted && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReply(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReply(message); setMenu(false); }}>
                 <Icon name="arrow-undo-outline" size={18} color={theme.ink} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>Reply</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {canForward && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onForward(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onForward(message); setMenu(false); }}>
                 <Icon name="arrow-redo-outline" size={18} color={theme.ink} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>Forward</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {!message.deleted && message.type !== 'poll' && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onStar(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onStar(message); setMenu(false); }}>
                 <Icon name={message.starred ? 'star' : 'star-outline'} size={18} color={message.starred ? theme.highlighter : theme.ink} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>{message.starred ? 'Unstar message' : 'Star message'}</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {canEdit && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onEdit(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onEdit(message); setMenu(false); }}>
                 <Icon name="create-outline" size={18} color={theme.ink} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>Edit</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {!message.deleted && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onSetTimer(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onSetTimer(message); setMenu(false); }}>
                 <Icon name="timer-outline" size={18} color={theme.ink} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>Disappear in…</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {isMine && !message.deleted && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onDelete(message.id); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onDelete(message.id); setMenu(false); }}>
                 <Icon name="trash-outline" size={18} color={theme.danger} />
                 <Text style={[type.bodyMd, { color: theme.danger }]}>Delete for everyone</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {!isMine && !message.deleted && onReport && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReport(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReport(message); setMenu(false); }}>
                 <Icon name="flag-outline" size={18} color={theme.danger} />
                 <Text style={[type.bodyMd, { color: theme.danger }]}>Report</Text>
-              </Pressable>
+              </SpringPressable>
             )}
           </PaperCard>
-          </SheetSpringIn>
-        </Pressable>
-      </Modal>
+        </View>
+      </BottomSheet>
     </>
   );
 }

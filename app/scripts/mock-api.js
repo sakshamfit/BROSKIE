@@ -54,6 +54,19 @@ const chat = (i) => ({
   },
 });
 
+const messages = (chatId) => [0, 1, 2].map((i) => ({
+  id: `${chatId}-m${i}`,
+  chatId,
+  senderId: i % 2 ? 'u2' : 'u1',
+  body: i === 1 ? 'Try long-pressing this bubble.' : `Message ${i} in ${chatId}.`,
+  type: 'text',
+  createdAt: now - (3 - i) * 60_000,
+  status: 'read',
+  reactions: [],
+  starred: false,
+  deleted: false,
+}));
+
 const ROUTES = {
   'POST /api/auth/login': () => ({ token: 'test-token', user: me }),
   'POST /api/auth/register': () => ({ token: 'test-token', user: me }),
@@ -63,6 +76,7 @@ const ROUTES = {
   'GET /api/posts-tags': () => ({ tags: [{ tag: 'motion', count: 4 }, { tag: 'ink', count: 2 }] }),
   'GET /api/today': () => ({ around: [], online: [], places: [], posts: [], me: { around: false } }),
   'GET /api/activity': () => ({ activity: [] }),
+  'GET /api/sync/messages': () => ({ messages: [], chats: [] }),
   'GET /api/chat-requests': () => ({ requests: [] }),
   'GET /api/colleagues': () => ({ colleagues: [] }),
   'GET /api/colleagues/requests': () => ({ requests: [], incoming: [], outgoing: [] }),
@@ -74,6 +88,16 @@ const ROUTES = {
   'GET /api/push/info': () => ({ enabled: false }),
   'GET /api/push/web-config': () => ({ publicKey: null }),
 };
+
+/** /api/chats/<id>/messages and other id-bearing paths. */
+function dynamicRoute(method, pathname) {
+  let m = pathname.match(/^\/api\/chats\/([^/]+)\/messages$/);
+  if (m && method === 'GET') return { messages: messages(m[1]) };
+  if (m && method === 'POST') return { message: messages(m[1])[0] };
+  m = pathname.match(/^\/api\/chats\/([^/]+)$/);
+  if (m && method === 'GET') return { chat: chat(0) };
+  return null;
+}
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -87,7 +111,7 @@ const server = http.createServer((req, res) => {
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
     const handler = ROUTES[key];
-    const payload = handler ? handler(url, body) : {};
+    const payload = handler ? handler(url, body) : (dynamicRoute(req.method, url.pathname) || {});
     res.writeHead(handler ? 200 : 200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(payload));
   });
