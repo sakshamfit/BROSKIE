@@ -24,7 +24,9 @@ echo "━━━ [3/5] server: test suites ━━━"
   npm run test:push               && \
   npm run test:phase2             && \
   npm run test:moderation         && \
-  npm run test:phase3)
+  npm run test:phase3             && \
+  npm run test:ot                 && \
+  npm run test:features)
 
 echo "━━━ [4/5] app: install deps ━━━"
 (cd app && npm ci --no-audit --no-fund)

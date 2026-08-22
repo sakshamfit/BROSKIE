@@ -1,7 +1,13 @@
-/* End-to-end test for the six new features (run against a local server on :4000).
- * Usage: node test-features.js   (server must already be running) */
+/* End-to-end test for the core feature flows (standalone; boots its own
+ * server on :4300 with a throwaway DATA_DIR).
+ * Usage: node test-features.js */
+process.env.PORT = '4300';
+process.env.DATA_DIR = process.env.FEATURES_TEST_DATA_DIR || `/tmp/plusone-features-test-${Date.now()}`;
+
+require('./src/index');
+
 const { io } = require('socket.io-client');
-const API = 'http://localhost:4000';
+const API = 'http://localhost:4300';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
@@ -38,9 +44,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 (async () => {
   const stamp = Date.now();
   const [A, B, C] = await Promise.all([
-    req('/api/auth/register', { method: 'POST', body: { username: `alice_${stamp}`, phone: `+91${stamp}1`, name: 'Alice', password: 'pass1234' } }),
-    req('/api/auth/register', { method: 'POST', body: { username: `bob_${stamp}`, phone: `+91${stamp}2`, name: 'Bob', password: 'pass1234' } }),
-    req('/api/auth/register', { method: 'POST', body: { username: `carol_${stamp}`, phone: `+91${stamp}3`, name: 'Carol', password: 'pass1234' } }),
+    req('/api/auth/register', { method: 'POST', body: { username: `alice_${stamp}`, phone: `+91${stamp}1`, name: 'Alice', password: 'Pass!1234' } }),
+    req('/api/auth/register', { method: 'POST', body: { username: `bob_${stamp}`, phone: `+91${stamp}2`, name: 'Bob', password: 'Pass!1234' } }),
+    req('/api/auth/register', { method: 'POST', body: { username: `carol_${stamp}`, phone: `+91${stamp}3`, name: 'Carol', password: 'Pass!1234' } }),
   ]);
   const ta = A.token, tb = B.token, tc = C.token;
   const ua = A.user, ub = B.user, uc = C.user;

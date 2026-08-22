@@ -1,89 +1,50 @@
-/* Pure local-first merge/backoff checks. No database. */
+/* Pure local-first merge/backoff checks. No database.
+ *
+ * These functions live in the APP bundle (app/src/messaging/messageState.js).
+ * Instead of mirroring the logic (which drifts), this file loads the real ESM
+ * source and strips only the module syntax — pure functions, no bundler
+ * needed, and the checks run against exactly what the app ships.
+ */
+const fs = require('fs');
+const path = require('path');
+
+function loadPureEsm(filePath, seen = new Map()) {
+  const resolved = path.resolve(filePath);
+  if (seen.has(resolved)) return seen.get(resolved);
+  let src = fs.readFileSync(resolved, 'utf8');
+  const mod = { exports: {} };
+  seen.set(resolved, mod.exports);
+  const load = (spec) => {
+    const dep = path.resolve(path.dirname(resolved), spec);
+    return loadPureEsm(dep.endsWith('.js') ? dep : `${dep}.js`, seen);
+  };
+  // ESM → CJS: strip `import X from '…'` (resolved via load) and
+  // `export const/fn/class X` / `export default X`.
+  const exported = [];
+  // ESM default imports resolve to the module's `default` export when one
+  // exists; plain module-object imports fall back to the whole exports.
+  src = src.replace(/import\s+([A-Za-z0-9_]+)\s+from\s+['"]([^'"]+)['"];?/g,
+    (_, name, spec) => `const ${name} = (() => { const m = __load(${JSON.stringify(spec)}); return m && m.default !== undefined ? m.default : m; })();`);
+  src = src.replace(/export\s+default\s+([A-Za-z0-9_]+);?/g, (_, name) => {
+    exported.push(`module.exports.default = ${name};`);
+    return '';
+  });
+  src = src.replace(/export\s+(class|function|const|let|var)\s+([A-Za-z0-9_]+)/g, (_, kind, name) => {
+    exported.push(`module.exports.${name} = ${name};`);
+    return `${kind} ${name}`;
+  });
+  src = `${src}\n${exported.join('\n')}\n`;
+  const fn = new Function('module', 'exports', '__load', `${src}\nreturn module.exports;`);
+  fn(mod, mod.exports, load);
+  seen.set(resolved, mod.exports);
+  return mod.exports;
+}
+
 const {
   sortMessages, mergeMessageLists, upsertMessageList, higherStatus,
   nextBackoffMs, isPermanentSendError, boundMessages, dropExpiredMessages,
-} = (() => {
-  // Mirror app/src/messaging/messageState.js so this file runs in plain Node.
-  const STATUS_RANK = { failed: -1, queued: 0, sending: 1, sent: 2, delivered: 3, read: 4 };
-  const isOutboxStatus = (s) => s === 'queued' || s === 'sending';
-  const isPendingMessage = (m) => !!m?.pending || isOutboxStatus(m?.status);
-  const messageTime = (m) => Number(m?.clientCreatedAt || m?.createdAt || 0);
-  const sortMessages = (list) => [...(list || [])].sort((a, b) => {
-    const ta = messageTime(a); const tb = messageTime(b);
-    if (ta !== tb) return ta - tb;
-    return String(a?.id || '').localeCompare(String(b?.id || ''));
-  });
-  const higherStatus = (current, incoming) => {
-    if (!incoming) return current || 'sent';
-    if (!current) return incoming;
-    if (current === 'failed' && incoming !== 'failed') return incoming;
-    if (incoming === 'failed' && isOutboxStatus(current)) return current;
-    return (STATUS_RANK[incoming] ?? 0) >= (STATUS_RANK[current] ?? 0) ? incoming : current;
-  };
-  const sameMessage = (a, b) => a && b && (
-    (a.id && b.id && a.id === b.id)
-    || (a.clientId && b.clientId && a.clientId === b.clientId)
-    || (a.id && b.clientId && a.id === b.clientId)
-    || (a.clientId && b.id && a.clientId === b.id)
-  );
-  const findMessageIndex = (list, incoming, replaceId) =>
-    (list || []).findIndex((item) => sameMessage(item, incoming) || (replaceId && (item.id === replaceId || item.clientId === replaceId)));
-  const mergeMessage = (local, incoming, { replaceId } = {}) => {
-    if (!local) return incoming;
-    if (!incoming) return local;
-    const status = higherStatus(local.status, incoming.status);
-    return {
-      ...local, ...incoming,
-      id: incoming.id || local.id,
-      clientId: incoming.clientId || local.clientId || incoming.id || local.id,
-      clientCreatedAt: local.clientCreatedAt || incoming.clientCreatedAt || local.createdAt,
-      status,
-      pending: isOutboxStatus(status) ? (incoming.pending ?? local.pending) : false,
-    };
-  };
-  const upsertMessageList = (list, incoming, { replaceId } = {}) => {
-    const current = Array.isArray(list) ? list : [];
-    const idx = findMessageIndex(current, incoming, replaceId);
-    if (idx === -1) return sortMessages([...current, incoming]);
-    const next = current.slice();
-    next[idx] = mergeMessage(current[idx], incoming, { replaceId });
-    return sortMessages(next);
-  };
-  const mergeMessageLists = (local, remote) => {
-    const byId = new Map();
-    const remember = (message) => {
-      if (!message?.id && !message?.clientId) return;
-      const existing = [...byId.values()].find((item) => sameMessage(item, message));
-      if (existing) {
-        const merged = mergeMessage(existing, message);
-        byId.delete(existing.id || existing.clientId);
-        byId.set(merged.id || merged.clientId, merged);
-        return;
-      }
-      byId.set(message.id || message.clientId, message);
-    };
-    (local || []).forEach(remember);
-    (remote || []).forEach(remember);
-    return sortMessages([...byId.values()]);
-  };
-  const dropExpiredMessages = (list, now = Date.now()) =>
-    (list || []).filter((m) => isPendingMessage(m) || !m.expiresAt || Number(m.expiresAt) > now);
-  const boundMessages = (list, limit = 400) => {
-    const messages = sortMessages(list || []);
-    if (messages.length <= limit) return messages;
-    const pending = messages.filter(isPendingMessage);
-    const rest = messages.filter((m) => !isPendingMessage(m)).slice(-limit);
-    const pendingMissing = pending.filter((item) => !rest.some((other) => sameMessage(other, item)));
-    return sortMessages([...rest, ...pendingMissing]);
-  };
-  const nextBackoffMs = (retryCount) => {
-    const exponent = Math.min(Math.max(0, Number(retryCount) || 0), 6);
-    return Math.min(60_000, 1000 * (2 ** exponent));
-  };
-  const isPermanentSendError = (error) =>
-    /not a member|can't message this person|blocked|accept this message request/i.test(String(error?.message || error || ''));
-  return { sortMessages, mergeMessageLists, upsertMessageList, higherStatus, nextBackoffMs, isPermanentSendError, boundMessages, dropExpiredMessages };
-})();
+} = loadPureEsm(path.join(__dirname, '..', 'app', 'src', 'messaging', 'messageState.js'));
+const TextOperation = loadPureEsm(path.join(__dirname, '..', 'app', 'src', 'ot', 'TextOperation.js')).default;
 
 let passed = 0;
 function pass(name, cond) {
@@ -109,7 +70,14 @@ pass('queued messages keep send order by clientCreatedAt', ordered[0].id === a.i
 const both = mergeMessageLists([a, second], [ack]);
 pass('merge keeps both the acked row and the still-queued neighbour', both.length === 2);
 
-pass('backoff grows exponentially and caps', nextBackoffMs(0) === 1000 && nextBackoffMs(3) === 8000 && nextBackoffMs(20) === 60000);
+{
+  // Real implementation adds 0–249ms jitter and caps the base at 60s.
+  const b0 = nextBackoffMs(0);
+  const b3 = nextBackoffMs(3);
+  const b20 = nextBackoffMs(20);
+  pass('backoff grows exponentially, jitters and caps',
+    b0 >= 1000 && b0 < 1250 && b3 >= 8000 && b3 < 8250 && b20 >= 60000 && b20 < 60250);
+}
 pass('timeouts are not permanent failures', isPermanentSendError({ message: 'ACK_TIMEOUT' }) === false);
 pass('blocked/not-a-member errors are permanent', isPermanentSendError('Not a member') === true);
 
@@ -125,5 +93,45 @@ const bounded = boundMessages([
   { id: 'pending', createdAt: 0, status: 'queued', pending: true },
 ], 5);
 pass('bounding history never drops the outbox', bounded.some((m) => m.id === 'pending') && bounded.length <= 6);
+
+// ---- real-module-only behaviours (the old mirror never exercised these) ----
+pass('permanent errors include every server-side rejection',
+  isPermanentSendError('Cannot message this person') === true
+  && isPermanentSendError('unknown user') === true
+  && isPermanentSendError('Message cannot be empty') === true
+  && isPermanentSendError({ message: 'connect ECONNREFUSED' }) === false);
+
+const otBase = {
+  id: 'ot1', clientId: 'ot1', clientCreatedAt: 1, createdAt: 1,
+  status: 'sent', body: 'hello world', otVersion: 0,
+};
+// Full-document op: retain 5, insert "XY", retain the remaining 6.
+const op = new TextOperation().retain(5).insert('XY').retain(6);
+const otMerged = mergeMessageLists([otBase], [{
+  id: 'ot1', status: 'sent', body: null,
+  otVersion: 1, otOperation: op.toJSON(), edited: true,
+}]);
+pass('OT message edit merges by applying the operation to local body',
+  otMerged.length === 1 && otMerged[0].body === 'helloXY world'
+  && otMerged[0].otVersion === 1 && otMerged[0].edited === true);
+
+const keepPendingOff = mergeMessageLists(
+  [{ id: 'todo', clientId: 'todo', clientCreatedAt: 5, status: 'queued', pending: true }],
+  [{ id: 'done', clientId: 'done', clientCreatedAt: 6, status: 'sent' }],
+  { keepPending: false },
+);
+pass('mergeMessageLists can drop the queued outbox when asked',
+  keepPendingOff.length === 1 && keepPendingOff[0].id === 'done');
+
+const mediaOptimistic = {
+  id: 'media1', clientId: 'media1', createdAt: 1, status: 'sending', pending: true,
+  body: 'pic', localMediaUri: 'file:///tmp/photo.jpg',
+};
+const remoteAspect = upsertMessageList([mediaOptimistic], {
+  id: 'media1', status: 'sent', mediaUrl: '/uploads/x.png',
+}, { replaceId: 'media1' });
+pass('server-confirmed media replaces the local temp URI',
+  remoteAspect[0].mediaUrl === '/uploads/x.png' && remoteAspect[0].localMediaUri === null
+  && remoteAspect[0].pending === false && remoteAspect[0].status === 'sent');
 
 console.log(`\n${passed} local message-state checks passed.`);
