@@ -26,13 +26,15 @@ import { ChatProvider } from './src/store/ChatContext';
 import { ChatThemeProvider } from './src/store/ChatThemeContext';
 import { ThemeProvider, useTheme } from './src/store/ThemeContext';
 import Navigation from './src/Navigation';
-import PushController from './src/push/PushController';
 import OrientationManager from './src/components/OrientationManager';
-import CallOverlay from './src/components/CallOverlay';
-import DailyAIGreeting from './src/components/DailyAIGreeting';
 import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 import VercelObservability from './src/web/VercelObservability';
 import { WEB_BUILD, startUpdateLifecycle } from './src/updates';
+import { lazyComponent } from './src/lazy';
+
+const PushController = lazyComponent(() => import('./src/push/PushController'));
+const CallOverlay = lazyComponent(() => import('./src/components/CallOverlay'));
+const DailyAIGreeting = lazyComponent(() => import('./src/components/DailyAIGreeting'));
 
 /**
  * Keep +one current without the user thinking about it.
@@ -162,8 +164,8 @@ function Root() {
       {/* Registers this device for push, syncs the unread badge, and routes
           notification taps to the exact screen. No-op on web. */}
       {user && <PushController />}
-      <DailyAIGreeting />
-      <CallOverlay />
+      {user && <DailyAIGreeting />}
+      {user && <CallOverlay />}
     </>
   );
 }

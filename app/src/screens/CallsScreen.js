@@ -102,7 +102,7 @@ export default function CallsScreen({ navigation, embedded = false }) {
                 android_ripple={rippleFor(theme)}
                 style={({ pressed }) => [s.row, pressed && marker(theme, 1)]}
               >
-                <Avatar uri={item.with.avatar} name={item.with.name} id={item.with.id} size={48} />
+                <Avatar uri={item.with.avatar} name={item.with.name} id={item.with.id} size={48} profileId={item.with.id} />
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>

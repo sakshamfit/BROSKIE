@@ -86,6 +86,66 @@ export function consumePendingCommunity() {
   return id;
 }
 
+/* Profiles & posts — tapping any avatar opens that person's profile, and
+ * tapping a "liked your post" activity row opens the post itself. On phones
+ * these are real stack screens (UserProfile / PostDetail) reached through
+ * navigationRef; the desktop/tablet split shell registers a handler instead
+ * and shows them as overlay panels. `will-open` listeners let modal hosts
+ * (comments sheet, community detail) close themselves so the destination is
+ * actually visible. */
+const profileHandlers = new Set();
+const postHandlers = new Set();
+const willOpenListeners = new Set();
+
+export function onOpenProfileRequest(fn) {
+  profileHandlers.add(fn);
+  return () => profileHandlers.delete(fn);
+}
+export function onOpenPostRequest(fn) {
+  postHandlers.add(fn);
+  return () => postHandlers.delete(fn);
+}
+/** Fired right before a profile or post opens — modal hosts should close. */
+export function onProfileWillOpen(fn) {
+  willOpenListeners.add(fn);
+  return () => willOpenListeners.delete(fn);
+}
+function announceWillOpen() {
+  willOpenListeners.forEach((fn) => {
+    try { fn(); } catch {}
+  });
+}
+
+/** Open a user's profile from anywhere in the app. */
+export function openProfile(userId) {
+  if (!userId) return;
+  announceWillOpen();
+  if (profileHandlers.size) {
+    profileHandlers.forEach((fn) => {
+      try { fn(userId); } catch {}
+    });
+    return;
+  }
+  if (navigationRef.isReady()) {
+    navigationRef.navigate('UserProfile', { userId });
+  }
+}
+
+/** Open a single post (deep link target for "liked your post" etc.). */
+export function openPost(postId) {
+  if (!postId) return;
+  announceWillOpen();
+  if (postHandlers.size) {
+    postHandlers.forEach((fn) => {
+      try { fn(postId); } catch {}
+    });
+    return;
+  }
+  if (navigationRef.isReady()) {
+    navigationRef.navigate('PostDetail', { postId });
+  }
+}
+
 function routeKey(data) {
   return `${data.route || ''}:${data.chatId || ''}:${data.postId || ''}:${data.messageId || ''}`;
 }
@@ -119,6 +179,11 @@ export function flushPendingRoute() {
         break;
       case 'network':
       case 'post':
+        // Like/comment pushes carry the post id — land directly on the post.
+        if (data.postId) {
+          navigationRef.navigate('PostDetail', { postId: data.postId });
+          break;
+        }
         requestHomeTab('network');
         navigationRef.navigate('Home');
         break;

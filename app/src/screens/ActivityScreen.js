@@ -12,6 +12,7 @@ import { confirm } from '../hooks/confirm';
 import {
   Avatar, EmptyState, formatChatTime, handleFor, GoldTick, hasGoldTick,
 } from '../components/common';
+import { openPost, openProfile } from '../push/routing';
 import { type, inkBox, marker, stroke } from '../theme';
 
 const INSTAGRAM_HEART = '#ED4956';
@@ -171,8 +172,22 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
   const renderItem = ({ item }) => {
     const person = item.user || {};
     const ic = iconFor(item);
+    // Every row deep-links somewhere: like/comment rows open the post that
+    // was liked or commented on, call rows open that conversation, request
+    // rows open the requester's profile (the buttons still accept/decline).
+    const rowTarget = item.postId
+      ? () => openPost(item.postId)
+      : item.type === 'call' && item.chatId
+        ? () => openChat(item.chatId)
+        : (item.type === 'colleague_request' || item.type === 'community_request') && person.id
+          ? () => openProfile(person.id)
+          : null;
     return (
-      <View style={s.row}>
+      <Pressable
+        onPress={rowTarget || undefined}
+        disabled={!rowTarget}
+        style={({ pressed }) => [s.row, pressed && rowTarget && marker(theme, 1)]}
+      >
         <View style={s.avatarWrap}>
           {(item.users?.length || 0) > 1 ? (
             // A little stack of the most recent faces — the count text
@@ -180,12 +195,12 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
             <View style={s.avatarStack}>
               {item.users.slice(0, 3).map((u, i) => (
                 <View key={u.id || i} style={[s.avatarStackItem, { zIndex: 3 - i, marginLeft: i ? -14 : 0 }]}>
-                  <Avatar uri={u.avatar} name={u.name} id={u.id} size={i === 0 ? 44 : 38} />
+                  <Avatar uri={u.avatar} name={u.name} id={u.id} size={i === 0 ? 44 : 38} profileId={u.id} />
                 </View>
               ))}
             </View>
           ) : (
-            <Avatar uri={person.avatar} name={person.name} id={person.id} size={48} />
+            <Avatar uri={person.avatar} name={person.name} id={person.id} size={48} profileId={person.id} />
           )}
           <View style={[s.typeBadge, { backgroundColor: theme.bg, borderColor: theme.ink }]}>
             <Icon name={ic.name} size={10} color={ic.color} />
@@ -205,6 +220,14 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
             <EmojiText style={[type.bodySm, { color: theme.subtext, marginTop: 4 }]} numberOfLines={2}>
               {item.preview}
             </EmojiText>
+          )}
+          {(item.type === 'like_group' || item.type === 'like') && !!item.preview && (
+            <EmojiText style={[type.bodySm, { color: theme.subtext, marginTop: 4 }]} numberOfLines={1}>
+              {item.preview}
+            </EmojiText>
+          )}
+          {!!item.postId && (
+            <Text style={[type.labelXs, { color: theme.muted, marginTop: 4 }]}>TAP TO OPEN THE POST</Text>
           )}
           <Text style={[type.labelXs, { color: theme.muted, marginTop: 5 }]}>{formatChatTime(item.createdAt)}</Text>
         </View>
@@ -273,7 +296,10 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
         {item.type === 'like' && (
           <Icon name="heart" size={18} color={INSTAGRAM_HEART} />
         )}
-      </View>
+        {!!item.postId && (
+          <Icon name="chevron-forward-outline" size={16} color={theme.muted} style={{ marginTop: 14 }} />
+        )}
+      </Pressable>
     );
   };
 
@@ -311,7 +337,7 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
           ItemSeparatorComponent={() => <View style={s.sep} />}
           ListHeaderComponent={items.length ? (
             <Text style={[type.bodySm, { color: theme.subtext, marginBottom: 16 }]}>
-              Message requests, likes, comments and calls — the same place Instagram keeps activity.
+              Message requests, likes, comments and calls. Tap a like or comment to open the post — tap any avatar to open a profile.
             </Text>
           ) : null}
           ListEmptyComponent={

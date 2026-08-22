@@ -412,6 +412,22 @@ export function ChatProvider({ children }) {
       });
     });
 
+    // "Delete for me" — the server hid a single message only for this user,
+    // so drop it locally with no tombstone.
+    socket.on('message:hidden', ({ chatId, messageId }) => {
+      const engine = engineRef.current;
+      if (engine) {
+        engine.store.removeMessages(chatId, [messageId]);
+        return;
+      }
+      setMessages((prev) => {
+        const list = prev[chatId];
+        if (!list) return prev;
+        const next = list.filter((m) => m.id !== messageId && m.clientId !== messageId);
+        return next.length === list.length ? prev : { ...prev, [chatId]: next };
+      });
+    });
+
     socket.on('chat:removed', ({ chatId }) => {
       const engine = engineRef.current;
       if (engine) engine.store.removeChat(chatId);
@@ -850,8 +866,30 @@ export function ChatProvider({ children }) {
     socketRef.current?.emit('message:react', { messageId, emoji });
   }, []);
 
-  const deleteMessage = useCallback((messageId) => {
-    socketRef.current?.emit('message:delete', { messageId });
+  // scope: 'everyone' (default) removes the sender's message for all;
+  //        'me' hides it only on this user's devices (row stays for others).
+  // Resolves with the server acknowledgement ({ ok } | { error }).
+  const deleteMessage = useCallback((messageId, scope = 'everyone') => {
+    return new Promise((resolve) => {
+      const socket = socketRef.current;
+      if (!socket) return resolve({ error: 'Not connected' });
+      socket.emit('message:delete', { messageId, scope }, (res) => resolve(res || { ok: true }));
+    });
+  }, []);
+
+  // Remove a message from local state entirely (used by "Delete for me" —
+  // no tombstone, unlike the global delete which shows "message deleted").
+  const removeMessageLocal = useCallback((chatId, messageId) => {
+    const engine = engineRef.current;
+    if (engine) {
+      engine.store.removeMessages(chatId, [messageId]);
+      return;
+    }
+    setMessages((prev) => {
+      const list = prev[chatId];
+      if (!list) return prev;
+      return { ...prev, [chatId]: list.filter((m) => m.id !== messageId && m.clientId !== messageId) };
+    });
   }, []);
 
   /** Edit one of my own text messages with OT. Resolves with the updated message. */
@@ -954,7 +992,7 @@ export function ChatProvider({ children }) {
         typing, connected, activityUnread,
         documents, otReady,
         refreshChats, refreshActivity, loadMessages, loadOlderMessages, sendMessage, markRead,
-        setTypingState, react, deleteMessage, editMessage, editMessageOT, createPoll, votePoll,
+        setTypingState, react, deleteMessage, removeMessageLocal, editMessage, editMessageOT, createPoll, votePoll,
         upsertChat, onPostEvent, onStatusEvent, onCommunityEvent, onColleagueEvent, onChatRequestEvent,
         onChatThemeEvent, onDocEvent,
         refreshDocuments, createDocument,
