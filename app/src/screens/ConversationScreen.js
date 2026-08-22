@@ -642,7 +642,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
             </Pressable>
           )}
           <Pressable style={s.headerInfo} onPress={() => navigation.navigate('ChatInfo', { chatId })}>
-            <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={42} />
+            <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={42} profileId={chat.type === 'group' ? null : chat.otherUserId} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{chat.name}</EmojiText>

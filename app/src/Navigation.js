@@ -37,6 +37,8 @@ import HelpScreen from './screens/HelpScreen';
 import CallsScreen from './screens/CallsScreen';
 import StarredMessagesScreen from './screens/StarredMessagesScreen';
 import AdminSafetyScreen from './screens/AdminSafetyScreen';
+import UserProfileScreen from './screens/UserProfileScreen';
+import PostDetailScreen from './screens/PostDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -271,6 +273,8 @@ export default function Navigation() {
           <>
             <Stack.Screen name="Home" component={HomeTabs} />
             <Stack.Screen name="Activity" component={ActivityScreen} />
+            <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+            <Stack.Screen name="PostDetail" component={PostDetailScreen} />
             <Stack.Screen name="Conversation" component={ConversationScreen} />
             <Stack.Screen name="NewChat" component={NewChatScreen} />
             <Stack.Screen name="ChatInfo" component={ChatInfoScreen} />
