@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
 const http = require('http');
 const cors = require('cors');
 const path = require('path');
@@ -58,6 +59,11 @@ function passwordError(value) {
 }
 
 const app = express();
+// Gzip every compressible response (JS/CSS bundles, API JSON). The web
+// bundle drops from ~1.4 MB to ~380 KB over the wire — the single biggest
+// win for slow connections. Socket.IO traffic is unaffected (it attaches to
+// the raw HTTP server), and tiny responses skip compression via `threshold`.
+app.use(compression({ threshold: 1024 }));
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '25mb' }));
 

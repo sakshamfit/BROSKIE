@@ -28,9 +28,16 @@ export default function VercelObservability() {
   // delay first paint. Once the page is idle we fetch it in the background,
   // which means by the time the user opens a chat or the emoji picker the
   // vector glyphs are usually already there — the app feels faster without
-  // paying for it up front.
+  // paying for it up front. On constrained connections (Save-Data, 2G) we
+  // skip the ~900 KB prefetch entirely: the system emoji fallback is fine,
+  // and the bandwidth is better spent on the screens the user is opening.
+  // The table still loads on demand the first time the picker needs it.
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.requestIdleCallback !== 'function' && typeof window.setTimeout !== 'function') {
+      return undefined;
+    }
+    const conn = typeof navigator !== 'undefined' ? navigator.connection : null;
+    if (conn && (conn.saveData || /(^|-)2g$/.test(conn.effectiveType || ''))) {
       return undefined;
     }
     const prefetch = () => loadEmojiData().catch(() => {});
