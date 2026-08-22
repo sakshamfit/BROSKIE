@@ -12,9 +12,16 @@ const { customAlphabet } = require('nanoid');
 const db = require('./db');
 const { sign, verify, requireAuth } = require('./auth');
 const jamendo = require('./jamendo');
+const TextOperation = require('./ot/textOperation');
+const OTStore = require('./ot/otStore');
 
 const nano = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 16);
 const now = () => Date.now();
+
+// OT store for collaborative editing
+const otStore = new OTStore(db);
+try { otStore.ensureTables(); } catch {}
+console.log('[ot] Operational Transformation enabled — collaborative docs & message edit OT');
 
 /* ------------------------------------------------------------------ */
 /* per-conversation chat themes                                        */
@@ -164,18 +171,6 @@ const ADMIN_USERNAME_KEYS = (process.env.ADMIN_USERNAMES || 'saksham')
 db.prepare(`UPDATE users SET role = 'admin' WHERE username_key IN (${ADMIN_USERNAME_KEYS.map(() => '?').join(',')}) AND role != 'admin'`)
   .run(...ADMIN_USERNAME_KEYS);
 
-// The gold verification tick (yellow badge) is a server-side flag on the
-// user row, so the client's `hasGoldTick`/`GoldTick` badge is data-driven.
-// Like ADMIN_USERNAMES, who holds it is configurable via GOLD_TICK_USERNAMES
-// (comma-separated) and is re-asserted idempotently at every boot. The
-// default keeps the original owner verified and grants the tick to @jai.
-const GOLD_TICK_USERNAME_KEYS = (process.env.GOLD_TICK_USERNAMES || 'saksham,jai')
-  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-if (GOLD_TICK_USERNAME_KEYS.length) {
-  db.prepare(`UPDATE users SET gold_tick = 1 WHERE username_key IN (${GOLD_TICK_USERNAME_KEYS.map(() => '?').join(',')}) AND gold_tick != 1`)
-    .run(...GOLD_TICK_USERNAME_KEYS);
-}
-
 /** Server-side authorization for EVERY admin API request. */
 function requireAdmin(req, res, next) {
   const u = getUser(req.userId);
@@ -251,7 +246,6 @@ const publicUser = (u) =>
     lastSeen: u.last_seen,
     isOnline: !!u.is_online,
     createdAt: u.created_at,
-    goldTick: !!u.gold_tick,
   };
 
 const MAX_USERNAME_LENGTH = 64;
@@ -611,9 +605,6 @@ function chatSummary(chatId, viewerId) {
     avatar: chat.type === 'group' ? chat.avatar : other ? other.avatar : null,
     about: other ? other.about : null,
     otherUserId: other ? other.id : null,
-    // Direct-chat gold tick: lets the forward sheet / chat rows render the
-    // yellow verification badge for the peer even where only the summary is in hand.
-    goldTick: chat.type === 'direct' && other ? !!other.gold_tick : false,
     isOnline: otherPresence.isOnline,
     lastSeen: otherPresence.lastSeen,
     muted: me ? !!me.muted : false,
@@ -925,14 +916,6 @@ app.post('/api/auth/register', (req, res) => {
   if (ADMIN_USERNAME_KEYS.includes(canonicalUsername)) {
     db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(user.id);
     user.role = 'admin';
-  }
-
-  // Same for the gold verification tick — a configured username registers
-  // already verified (mirrors the boot-time grant so it isn't lost if the
-  // account is created between boots).
-  if (GOLD_TICK_USERNAME_KEYS.includes(canonicalUsername)) {
-    db.prepare("UPDATE users SET gold_tick = 1 WHERE id = ?").run(user.id);
-    user.gold_tick = 1;
   }
 
   res.json({ token: sign(user), user: accountUser(user) });
@@ -1604,6 +1587,159 @@ app.post('/api/blocked/:userId', requireAuth, (req, res) => {
 app.delete('/api/blocked/:userId', requireAuth, (req, res) => {
   db.prepare('DELETE FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?').run(req.userId, req.params.userId);
   res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ */
+/* Operational Transformation — collaborative documents                */
+/* ------------------------------------------------------------------ */
+
+// List documents for a chat (collaborative notes)
+app.get('/api/chats/:id/documents', requireAuth, (req, res) => {
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(req.params.id, req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Not a member of this chat' });
+  const docs = otStore.listDocumentsForChat(req.params.id);
+  res.json({ documents: docs });
+});
+
+// Get single document with full content and version
+app.get('/api/documents/:id', requireAuth, (req, res) => {
+  const doc = otStore.getDocument(req.params.id);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  if (doc.chatId) {
+    const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(doc.chatId, req.userId);
+    if (!isMember) return res.status(403).json({ error: 'Not a member' });
+  }
+  if (doc.communityId) {
+    const role = communityRole(doc.communityId, req.userId);
+    if (!role) return res.status(403).json({ error: 'Not a member of this community' });
+  }
+  const ops = db.prepare('SELECT * FROM document_operations WHERE document_id = ? ORDER BY version ASC LIMIT 100').all(req.params.id);
+  res.json({
+    document: doc,
+    operations: ops.map(r => ({
+      userId: r.user_id,
+      operation: JSON.parse(r.operation),
+      baseVersion: r.base_version,
+      version: r.version,
+      createdAt: r.created_at
+    }))
+  });
+});
+
+// Create document (collaborative note in chat)
+app.post('/api/chats/:id/documents', requireAuth, (req, res) => {
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
+  if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Not a member' });
+  const { title = '', content = '' } = req.body || {};
+  if (String(title).length > 120) return res.status(400).json({ error: 'Title too long' });
+  if (String(content).length > 50000) return res.status(400).json({ error: 'Content too long (50k max)' });
+  const doc = otStore.createDocument({
+    chatId: chat.id,
+    title: String(title).trim(),
+    content: String(content),
+    createdBy: req.userId,
+    meta: { createdByName: getUser(req.userId)?.name }
+  });
+  // Notify chat members about new doc
+  memberIds(chat.id).forEach(uid => emitToUser(uid, 'doc:created', { chatId: chat.id, document: doc }));
+  insertSystemMessage(chat.id, `${getUser(req.userId).name} created a collaborative note: \"${doc.title || 'Untitled'}\"`);
+  res.json({ document: doc });
+});
+
+// Update document title (non-OT, simple)
+app.patch('/api/documents/:id', requireAuth, (req, res) => {
+  const doc = otStore.getDocument(req.params.id);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  if (doc.chatId) {
+    const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(doc.chatId, req.userId);
+    if (!isMember) return res.status(403).json({ error: 'Not a member' });
+  }
+  const { title } = req.body || {};
+  if (title != null) {
+    if (String(title).length > 120) return res.status(400).json({ error: 'Title too long' });
+    db.prepare('UPDATE documents SET title = ?, updated_at = ? WHERE id = ?').run(String(title).trim(), now(), doc.id);
+  }
+  const updated = otStore.getDocument(req.params.id);
+  if (updated.chatId) {
+    memberIds(updated.chatId).forEach(uid => emitToUser(uid, 'doc:updated', { documentId: updated.id, title: updated.title }));
+  }
+  res.json({ document: updated });
+});
+
+// Delete document
+app.delete('/api/documents/:id', requireAuth, (req, res) => {
+  const doc = otStore.getDocument(req.params.id);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  const chat = doc.chatId ? db.prepare('SELECT * FROM chats WHERE id = ?').get(doc.chatId) : null;
+  if (chat) {
+    const me = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
+    if (!me) return res.status(403).json({ error: 'Not a member' });
+    // Only creator or admin can delete
+    if (doc.createdBy !== req.userId && me.role !== 'admin') {
+      return res.status(403).json({ error: 'Only creator or admin can delete' });
+    }
+  } else if (doc.createdBy !== req.userId) {
+    return res.status(403).json({ error: 'Only creator can delete' });
+  }
+  db.prepare('DELETE FROM documents WHERE id = ?').run(doc.id);
+  otStore.docManager.delete(doc.id);
+  if (doc.chatId) {
+    memberIds(doc.chatId).forEach(uid => emitToUser(uid, 'doc:deleted', { documentId: doc.id, chatId: doc.chatId }));
+  }
+  res.json({ ok: true });
+});
+
+// OT operation REST fallback (when socket not available, e.g. offline sync)
+app.post('/api/documents/:id/operation', requireAuth, (req, res) => {
+  const doc = otStore.getDocument(req.params.id);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  if (doc.chatId) {
+    const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(doc.chatId, req.userId);
+    if (!isMember) return res.status(403).json({ error: 'Not a member' });
+  }
+  const { operation, baseVersion } = req.body || {};
+  if (!operation) return res.status(400).json({ error: 'Missing operation' });
+  try {
+    const op = TextOperation.fromJSON(operation);
+    const result = otStore.submitDocumentOperation(doc.id, op, req.userId, baseVersion != null ? Number(baseVersion) : undefined);
+    // Broadcast to chat members
+    if (doc.chatId) {
+      memberIds(doc.chatId).filter(id => id !== req.userId).forEach(uid => {
+        emitToUser(uid, 'doc:operation', {
+          documentId: doc.id,
+          operation: result.operation.operation.toJSON(),
+          version: result.snapshot.version,
+          userId: req.userId,
+          userName: getUser(req.userId)?.name
+        });
+      });
+    }
+    res.json({ version: result.snapshot.version, content: result.snapshot.content, operation: result.operation.operation.toJSON() });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Message edit OT history
+app.get('/api/messages/:id/edits', requireAuth, (req, res) => {
+  const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(req.params.id);
+  if (!m) return res.status(404).json({ error: 'Message not found' });
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(m.chat_id, req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Not a member' });
+  const history = otStore.getMessageEditHistory(req.params.id);
+  res.json({
+    messageId: req.params.id,
+    version: history.length,
+    edits: history.map(h => ({
+      userId: h.userId,
+      operation: h.operation.toJSON(),
+      version: h.version,
+      baseVersion: h.baseVersion,
+      createdAt: h.createdAt
+    }))
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -2512,12 +2648,6 @@ function deliverUserMessage(uid, data) {
     clientId = null, clientCreatedAt = null,
   } = data || {};
   if (!chatId) return { error: 'Missing chat', status: 400 };
-
-  // Enforcement: a restricted / suspended / banned account cannot author new
-  // messages, so an admin's Restrict action is actually enforced server-side
-  // rather than being cosmetic.
-  const gate = moderation.moderationGate(uid);
-  if (gate.blocked) return { error: gate.error, status: 403 };
 
   const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
   if (!isMember) return { error: 'Not a member', status: 403 };
@@ -3662,16 +3792,7 @@ app.get('/api/admin/moderation/cases', requireAuth, requireAdmin, (req, res) => 
   const params = [];
   if (severity && moderation.SEVERITIES.includes(severity.toUpperCase())) { sql += ' AND severity = ?'; params.push(severity.toUpperCase()); }
   if (category && moderation.CATEGORIES.includes(category)) { sql += ' AND category = ?'; params.push(category); }
-  // `status` may be a single value ("CLOSED") or a CSV list the client sends
-  // for the "ACTIVE" filter ("OPEN,UNDER_REVIEW,ESCALATED"). Accept both so
-  // the ACTIVE chip actually narrows to open cases instead of silently
-  // returning every status.
-  if (status) {
-    const statuses = String(status).split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
-      .filter((s) => moderation.CASE_STATUSES.includes(s));
-    if (statuses.length === 1) { sql += ' AND status = ?'; params.push(statuses[0]); }
-    else if (statuses.length > 1) { sql += ` AND status IN (${statuses.map(() => '?').join(',')})`; params.push(...statuses); }
-  }
+  if (status && moderation.CASE_STATUSES.includes(status.toUpperCase())) { sql += ' AND status = ?'; params.push(status.toUpperCase()); }
   if (source && ['auto', 'user', 'mixed'].includes(source)) { sql += ' AND source = ?'; params.push(source); }
   if (sort === 'unreviewed') sql += " AND status = 'OPEN'";
   if (q) {
@@ -3720,7 +3841,7 @@ app.get('/api/admin/moderation/cases/:id', requireAuth, requireAdmin, (req, res)
     .map(caseSummary);
   res.json({
     case: caseSummary(row),
-    user: user ? { id: user.id, username: user.username, name: user.name, avatar: user.avatar, moderation: user.moderation, role: user.role, goldTick: !!user.gold_tick, createdAt: user.created_at } : null,
+    user: user ? { id: user.id, username: user.username, name: user.name, avatar: user.avatar, moderation: user.moderation, role: user.role, createdAt: user.created_at } : null,
     reports,
     actions,
     message: message ? { id: message.id, body: message.body, type: message.type, deleted: !!message.deleted, createdAt: message.created_at } : null,
@@ -3800,7 +3921,7 @@ app.get('/api/admin/moderation/users/:id', requireAuth, requireAdmin, (req, res)
   if (!u) return res.status(404).json({ error: 'User not found' });
   const cases = db.prepare('SELECT * FROM moderation_cases WHERE user_id = ? ORDER BY created_at DESC LIMIT 25').all(u.id).map(caseSummary);
   res.json({
-    user: { id: u.id, username: u.username, name: u.name, avatar: u.avatar, role: u.role, moderation: u.moderation, goldTick: !!u.gold_tick, suspendedUntil: u.suspended_until, createdAt: u.created_at, lastSeen: u.last_seen, isOnline: u.is_online },
+    user: { id: u.id, username: u.username, name: u.name, avatar: u.avatar, role: u.role, moderation: u.moderation, suspendedUntil: u.suspended_until, createdAt: u.created_at, lastSeen: u.last_seen, isOnline: u.is_online },
     cases,
     counts: {
       total: cases.length,
@@ -3841,25 +3962,6 @@ app.post('/api/admin/moderation/users/:id/action', requireAuth, requireAdmin, (r
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
-});
-
-/** Grant/revoke the gold (yellow) verification tick for a user. */ 
-app.post('/api/admin/moderation/users/:id/gold-tick', requireAuth, requireAdmin, (req, res) => {
-  const user = getUser(req.params.id);
-  if (!user) return res.status(404).json({ error: 'User not found' });
-  const tick = !!req.body?.tick;
-  db.prepare('UPDATE users SET gold_tick = ? WHERE id = ?').run(tick ? 1 : 0, user.id);
-  const admin = getUser(req.userId);
-  moderation.writeAudit({
-    adminId: req.userId, adminName: admin?.username,
-    action: tick ? 'user:gold_tick:grant' : 'user:gold_tick:revoke',
-    target: `@${user.username}`,
-    detail: 'Gold verification tick (yellow badge)',
-  });
-  const updated = getUser(req.params.id);
-  // Broadcast so the badge updates everywhere (profile, chats, network) live.
-  io.emit('user:updated', publicUser(updated));
-  res.json({ ok: true, goldTick: !!updated.gold_tick, user: publicUser(updated) });
 });
 
 app.get('/api/admin/moderation/audit', requireAuth, requireAdmin, (req, res) => {
@@ -3995,22 +4097,185 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('message:edit', ({ messageId, body }, ack) => {
+  // Legacy edit (full body replacement) — now converted to OT operation for consistency
+  socket.on('message:edit', ({ messageId, body, baseVersion, operation }, ack) => {
     try {
       const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
       if (!m || m.deleted) return ack?.({ error: 'Message not found' });
       if (m.sender_id !== uid) return ack?.({ error: "You can only edit your own messages" });
       if (m.type !== 'text') return ack?.({ error: 'Only text messages can be edited' });
-      const text = String(body || '').trim();
-      if (!text) return ack?.({ error: 'Message cannot be empty' });
-      db.prepare('UPDATE messages SET body = ?, edited = 1, updated_at = ? WHERE id = ?').run(text.slice(0, 5000), now(), messageId);
+
+      let result;
+      if (operation) {
+        // OT path: operation provided
+        const op = TextOperation.fromJSON(operation);
+        result = otStore.submitMessageEditOperation(messageId, op, uid, baseVersion != null ? Number(baseVersion) : undefined);
+      } else {
+        // Legacy path: full body — convert to OT diff
+        const text = String(body || '').trim();
+        if (!text) return ack?.({ error: 'Message cannot be empty' });
+        if (text.length > 5000) return ack?.({ error: 'Message too long' });
+        result = otStore.submitMessageEditLegacy(messageId, m.body, text, uid, baseVersion != null ? Number(baseVersion) : undefined);
+      }
+
       const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
-      emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
+      emitToChat(m.chat_id, 'message:updated', (viewer) => ({
+        ...hydrateMessage(fresh, viewer),
+        otVersion: result.version,
+        otOperation: result.operation.toJSON()
+      }));
       emitToChat(m.chat_id, 'chat:updated', (viewer) => chatSummary(m.chat_id, viewer));
-      ack?.({ message: hydrateMessage(fresh, uid) });
+      ack?.({ message: hydrateMessage(fresh, uid), version: result.version, operation: result.operation.toJSON() });
     } catch (e) {
       ack?.({ error: e.message });
     }
+  });
+
+  // New OT-specific message edit event (explicit OT)
+  socket.on('message:edit:ot', ({ messageId, operation, baseVersion, body }, ack) => {
+    try {
+      const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+      if (!m || m.deleted) return ack?.({ error: 'Message not found' });
+      if (m.sender_id !== uid) return ack?.({ error: "Only sender can edit" });
+      if (m.type !== 'text') return ack?.({ error: 'Only text messages' });
+
+      let result;
+      if (operation) {
+        const op = TextOperation.fromJSON(operation);
+        result = otStore.submitMessageEditOperation(messageId, op, uid, baseVersion != null ? Number(baseVersion) : undefined);
+      } else if (body != null) {
+        result = otStore.submitMessageEditLegacy(messageId, m.body, String(body), uid, baseVersion != null ? Number(baseVersion) : undefined);
+      } else {
+        return ack?.({ error: 'Missing operation or body' });
+      }
+
+      const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+      // Broadcast OT edit
+      emitToChat(m.chat_id, 'message:edit:ot', {
+        messageId,
+        operation: result.operation.toJSON(),
+        version: result.version,
+        body: result.body,
+        userId: uid
+      });
+      emitToChat(m.chat_id, 'message:updated', (viewer) => ({
+        ...hydrateMessage(fresh, viewer),
+        otVersion: result.version
+      }));
+      ack?.({ message: hydrateMessage(fresh, uid), version: result.version, operation: result.operation.toJSON(), body: result.body });
+    } catch (e) {
+      ack?.({ error: e.message });
+    }
+  });
+
+  // OT Document collaboration
+  socket.on('doc:join', ({ documentId, chatId }, ack) => {
+    try {
+      let doc;
+      if (documentId) {
+        doc = otStore.getDocument(documentId);
+        if (!doc) return ack?.({ error: 'Document not found' });
+        if (doc.chatId) {
+          const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(doc.chatId, uid);
+          if (!isMember) return ack?.({ error: 'Not a member' });
+          socket.join(`doc:${doc.id}`);
+          socket.join(`chat:${doc.chatId}`);
+        }
+      } else if (chatId) {
+        const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
+        if (!isMember) return ack?.({ error: 'Not a member' });
+        const docs = otStore.listDocumentsForChat(chatId);
+        // Return list if no specific doc requested
+        return ack?.({ documents: docs });
+      } else {
+        return ack?.({ error: 'Missing documentId or chatId' });
+      }
+
+      const docSnap = otStore.docManager.getOrCreate(doc.id, doc.content, doc.meta).getSnapshot();
+      ack?.({ content: docSnap.content, version: docSnap.version, document: doc, id: doc.id });
+
+      // Notify others that user joined
+      if (doc.chatId) {
+        memberIds(doc.chatId).filter(id => id !== uid).forEach(otherId => {
+          emitToUser(otherId, 'doc:user:joined', { documentId: doc.id, userId: uid, userName: getUser(uid)?.name });
+        });
+      }
+    } catch (e) {
+      ack?.({ error: e.message });
+    }
+  });
+
+  socket.on('doc:operation', ({ documentId, operation, baseVersion, selection }, ack) => {
+    try {
+      const doc = otStore.getDocument(documentId);
+      if (!doc) return ack?.({ error: 'Document not found' });
+      if (doc.chatId) {
+        const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(doc.chatId, uid);
+        if (!isMember) return ack?.({ error: 'Not a member' });
+      }
+
+      const op = TextOperation.fromJSON(operation);
+      const result = otStore.submitDocumentOperation(documentId, op, uid, baseVersion != null ? Number(baseVersion) : undefined);
+
+      // Ack to sender
+      ack?.({ version: result.snapshot.version, operation: result.operation.operation.toJSON() });
+
+      // Broadcast to others in same chat/doc
+      const payload = {
+        documentId,
+        operation: result.operation.operation.toJSON(),
+        version: result.snapshot.version,
+        baseVersion: result.operation.meta.baseVersion,
+        userId: uid,
+        userName: getUser(uid)?.name,
+        selection: selection || null
+      };
+
+      if (doc.chatId) {
+        memberIds(doc.chatId).filter(id => id !== uid).forEach(otherId => {
+          emitToUser(otherId, 'doc:operation', payload);
+        });
+      } else {
+        socket.broadcast.emit('doc:operation', payload);
+      }
+
+      // Update doc updated_at for ordering
+      db.prepare('UPDATE documents SET updated_at = ? WHERE id = ?').run(now(), documentId);
+    } catch (e) {
+      ack?.({ error: e.message });
+    }
+  });
+
+  socket.on('doc:selection', ({ documentId, selection, cursor }) => {
+    try {
+      const doc = otStore.getDocument(documentId);
+      if (!doc) return;
+      if (doc.chatId) {
+        const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(doc.chatId, uid);
+        if (!isMember) return;
+        memberIds(doc.chatId).filter(id => id !== uid).forEach(otherId => {
+          emitToUser(otherId, 'doc:selection', {
+            documentId,
+            userId: uid,
+            userName: getUser(uid)?.name,
+            selection,
+            cursor
+          });
+        });
+      }
+    } catch {}
+  });
+
+  socket.on('doc:leave', ({ documentId }) => {
+    try {
+      socket.leave(`doc:${documentId}`);
+      const doc = otStore.getDocument(documentId);
+      if (doc?.chatId) {
+        memberIds(doc.chatId).filter(id => id !== uid).forEach(otherId => {
+          emitToUser(otherId, 'doc:user:left', { documentId, userId: uid });
+        });
+      }
+    } catch {}
   });
 
   socket.on('poll:create', (data, ack) => {

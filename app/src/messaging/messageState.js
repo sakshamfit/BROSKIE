@@ -1,6 +1,8 @@
 /** Pure helpers for local-first message merge, ordering, and status.
  * No React / storage imports — safe to reason about in isolation. */
 
+import TextOperation from '../ot/TextOperation';
+
 export const STATUS_RANK = {
   failed: -1,
   queued: 0,
@@ -68,6 +70,33 @@ export function mergeMessage(local, incoming, { replaceId } = {}) {
   const status = higherStatus(local.status, incoming.status);
   const pending = isOutboxStatus(status) ? (incoming.pending ?? local.pending) : false;
   const remoteMedia = incoming.mediaUrl && !isLikelyLocal(incoming.mediaUrl);
+
+  // OT-aware merging: handle otVersion and otOperation for conflict-free edits
+  let body = incoming.body ?? local.body;
+  let otVersion = incoming.otVersion ?? local.otVersion ?? 0;
+  let edited = incoming.edited ?? local.edited ?? false;
+
+  if (incoming.otOperation && local.body && incoming.body == null) {
+    try {
+      const op = TextOperation.fromJSON(incoming.otOperation);
+      body = op.apply(local.body);
+      otVersion = incoming.otVersion != null ? incoming.otVersion : local.otVersion || 0;
+      edited = true;
+    } catch {
+      body = incoming.body || local.body;
+    }
+  } else if (incoming.otVersion != null && local.otVersion != null) {
+    if (incoming.otVersion >= local.otVersion) {
+      body = incoming.body != null ? incoming.body : local.body;
+      otVersion = incoming.otVersion;
+    } else {
+      body = local.body;
+      otVersion = local.otVersion;
+    }
+  } else if (incoming.otVersion != null) {
+    otVersion = incoming.otVersion;
+  }
+
   return {
     ...local,
     ...incoming,
@@ -75,9 +104,11 @@ export function mergeMessage(local, incoming, { replaceId } = {}) {
     clientId: incoming.clientId || local.clientId || incoming.id || local.id,
     clientCreatedAt: local.clientCreatedAt || incoming.clientCreatedAt || local.createdAt,
     createdAt: incoming.createdAt || local.createdAt,
+    body,
+    otVersion,
+    edited,
     status,
     pending,
-    // A real ack replacing our optimistic copy is not a "new" arrival.
     _new: replaceId || isPendingMessage(local) ? false : (incoming._new || local._new),
     localMediaUri: remoteMedia ? null : (incoming.localMediaUri || local.localMediaUri || null),
     uploadProgress: remoteMedia ? null : (incoming.uploadProgress ?? local.uploadProgress ?? null),
@@ -145,7 +176,7 @@ export function boundMessages(list, limit = 400) {
 
 export function nextBackoffMs(retryCount) {
   const exponent = Math.min(Math.max(0, Number(retryCount) || 0), 6);
-  const base = 1000 * (2 ** exponent); // 1s, 2s, 4s, …, 64s
+  const base = 1000 * (2 ** exponent);
   const jitter = Math.floor(Math.random() * 250);
   return Math.min(60_000, base) + jitter;
 }

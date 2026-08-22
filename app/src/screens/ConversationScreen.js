@@ -33,6 +33,8 @@ import { api, mediaUrl } from '../api';
 import { setViewedChat } from '../push/notifications';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
 import { throttle, useDebouncedCallback } from '../rateLimit';
+import CollabDocumentView from '../components/CollabDocumentView';
+import TextOperation from '../ot/TextOperation';
 
 function ConversationContent({ route, navigation, embedded = false, themePicker = null }) {
   const { chatId, initialChat = null } = route.params || {};
@@ -40,7 +42,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     chats, messages, messagesLoaded, messagesLoading, messageErrors,
     typing, refreshChats, loadMessages, loadOlderMessages, sendMessage, markRead, setTypingState,
     react, deleteMessage, editMessage, createPoll, votePoll, startCall, call, setMessages,
+    socketRef,
   } = useChat();
+  const socket = socketRef?.current || null;
   const { user } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -128,10 +132,13 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
 
-  // forward + timer + poll modals
+  // forward + timer + poll + docs modals
   const [forwardMsg, setForwardMsg] = useState(null);
   const [timerMsg, setTimerMsg] = useState(null);
   const [pollOpen, setPollOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
+  const [otEditingVersion, setOtEditingVersion] = useState({});
+  const loadingOlderRef = useRef(false);
 
   // ⋯ overflow menu (Theme lives here, per the familiar chat-menu flow)
   const [overflowOpen, setOverflowOpen] = useState(false);
@@ -301,15 +308,12 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const send = () => {
     const body = text.trim();
     if (!body) return;
-    haptic('impact'); // subtle send acknowledgement
+    haptic('impact');
     if (editing) {
-      (async () => {
-        try {
-          await editMessage(editing.id, body);
-        } catch (e) {
-          console.warn('edit failed', e.message);
-        }
-      })();
+      const baseVersion = otEditingVersion[editing.id] || editing.otVersion || 0;
+      editMessage(editing.id, body, { baseVersion })
+        .then(() => {})
+        .catch((e) => console.warn('edit failed', e.message));
       setEditing(null);
       setText('');
       setTypingState(chatId, false);
@@ -535,6 +539,15 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     setEditing(message);
     setText(message.body || '');
     setShowEmoji(false);
+    if (message.otVersion != null) {
+      setOtEditingVersion(prev => ({ ...prev, [message.id]: message.otVersion }));
+    } else {
+      api.getMessageEditHistory(message.id).then(r => {
+        setOtEditingVersion(prev => ({ ...prev, [message.id]: r.version || 0 }));
+      }).catch(() => {
+        setOtEditingVersion(prev => ({ ...prev, [message.id]: 0 }));
+      });
+    }
   };
 
   const toggleStar = async (message) => {
@@ -656,6 +669,12 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
             active={searchOpen}
             onPress={() => { setSearchOpen((v) => !v); setSearchQ(''); setSearchResults([]); }}
           />
+          <InkIconButton
+            name="document-text-outline"
+            size={36}
+            iconSize={17}
+            onPress={() => setDocsOpen(true)}
+          />
           {chat.type === 'group' && (
             <InkIconButton
               name="bar-chart-outline"
@@ -771,16 +790,12 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
           if (loadingOlderRef.current || !loadOlderMessages) return;
           loadingOlderRef.current = true;
           suppressScrollToEnd.current = true;
-          (async () => {
-            try {
-              await loadOlderMessages(chatId);
-            } finally {
-              setTimeout(() => {
-                suppressScrollToEnd.current = false;
-                loadingOlderRef.current = false;
-              }, 400);
-            }
-          })();
+          Promise.resolve(loadOlderMessages(chatId)).finally(() => {
+            setTimeout(() => {
+              suppressScrollToEnd.current = false;
+              loadingOlderRef.current = false;
+            }, 400);
+          });
         }}
         scrollEventThrottle={80}
         onContentSizeChange={() => {
@@ -1127,6 +1142,19 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
           await createPoll(chatId, question, options);
         }}
       />
+
+      {/* OT collaborative documents */}
+      <Modal visible={docsOpen} animationType="slide" onRequestClose={() => setDocsOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: 20 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 2, borderBottomColor: theme.ink }}>
+            <Text style={[type.headlineSm, { color: theme.text }]}>COLLABORATIVE NOTES</Text>
+            <Pressable onPress={() => setDocsOpen(false)} style={[inkBox(theme, 'thin'), { paddingHorizontal: 12, paddingVertical: 8 }]}>
+              <Text style={[type.labelSm, { color: theme.ink }]}>CLOSE</Text>
+            </Pressable>
+          </View>
+          <CollabDocumentView chatId={chatId} socket={socket} embedded />
+        </View>
+      </Modal>
 
       {/* ⋯ overflow menu — Theme sits here, clearly visible, not dominant */}
       <Modal visible={overflowOpen} transparent animationType="fade" onRequestClose={() => setOverflowOpen(false)}>

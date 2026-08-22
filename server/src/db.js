@@ -357,10 +357,6 @@ addColumnIfMissing('posts', 'media_aspect', 'media_aspect REAL');
 addColumnIfMissing('users', 'role', "role TEXT DEFAULT 'user'");
 addColumnIfMissing('users', 'moderation', "moderation TEXT DEFAULT 'active'"); // active|warned|restricted|suspended|banned
 addColumnIfMissing('users', 'suspended_until', 'suspended_until INTEGER');
-// Gold verification tick (the yellow badge) shown next to a username.
-// Admin-granted via the Safety Center user panel; drives `goldTick` in
-// publicUser so the client's `GoldTick`/`hasGoldTick` badge is server-driven.
-addColumnIfMissing('users', 'gold_tick', "gold_tick INTEGER DEFAULT 0");
 
 // Phase 3: community invite links — short unique code per community; admins
 // can regenerate it. A valid code joins regardless of join_policy.
@@ -575,6 +571,47 @@ CREATE TABLE IF NOT EXISTS poll_votes (
   FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+/* ---- Operational Transformation: collaborative documents & message edit history ---- */
+CREATE TABLE IF NOT EXISTS documents (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT,
+  community_id TEXT,
+  post_id TEXT,
+  title TEXT DEFAULT '',
+  content TEXT DEFAULT '',
+  version INTEGER DEFAULT 0,
+  created_by TEXT,
+  meta TEXT DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_documents_chat ON documents(chat_id);
+CREATE INDEX IF NOT EXISTS idx_documents_community ON documents(community_id);
+
+CREATE TABLE IF NOT EXISTS document_operations (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  base_version INTEGER NOT NULL,
+  version INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_doc_ops_doc ON document_operations(document_id, version);
+
+CREATE TABLE IF NOT EXISTS message_edit_operations (
+  id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  base_version INTEGER NOT NULL,
+  version INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_msg_edit_ops_msg ON message_edit_operations(message_id, version);
 `);
 
 module.exports = db;
