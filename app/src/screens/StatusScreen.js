@@ -11,6 +11,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
 import { Avatar, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
+import BrandHeader from '../components/BrandHeader';
 import { AUDIENCE } from '../components/audienceMeta';
 import SongCard from '../components/SongCard';
 import { radius, type, inkBox, marker, stroke, raised } from '../theme';
@@ -40,7 +41,7 @@ function foregroundFor(status) {
   return ['#1c1b1b', '#5d5f5b', '#39444c'].includes(status.bg) ? '#ffffff' : '#1c1b1b';
 }
 
-export default function StatusScreen() {
+export default function StatusScreen({ navigation }) {
   const { user } = useAuth();
   const { theme } = useTheme();
   const { onStatusEvent } = useChat();
@@ -230,6 +231,7 @@ export default function StatusScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <BrandHeader navigation={navigation} />
       <View style={[s.header, { borderBottomColor: theme.ink }]}>
         <View>
           <Text style={s.title}>Status</Text>

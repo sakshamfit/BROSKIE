@@ -100,7 +100,7 @@ function HomeTabs({ navigation }) {
             render: () => {
               if (p.key === 'chats') return <ChatListScreen navigation={navigation} />;
               if (p.key === 'network') return <NetworkScreen navigation={navigation} onOpenChat={openChat} />;
-              if (p.key === 'colleagues') return <ColleaguesScreen onOpenChat={openChat} />;
+              if (p.key === 'colleagues') return <ColleaguesScreen navigation={navigation} onOpenChat={openChat} />;
               return <StatusScreen navigation={navigation} />;
             },
           }))}

@@ -293,6 +293,10 @@ Uploaded images currently use the active storage backend:
 1. Supabase Storage, when `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are configured correctly; otherwise
 2. the durable Railway volume at `/data/uploads`.
 
+### Viewing your own profile
+
+The **+one wordmark** in the top-left opens your own public profile from every main phone tab (Network, See, Chats, Colleagues) and from the tablet/desktop sidebar. Settings also has a **My public profile** row under Account Settings for the same destination (an overlay panel on tablets/desktop).
+
 ---
 
 ## 6. Colleagues and affiliations

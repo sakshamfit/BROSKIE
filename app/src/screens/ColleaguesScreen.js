@@ -13,6 +13,7 @@ import useResponsive from '../hooks/useResponsive';
 import { AFFILIATION_TYPES, affiliationType } from '../components/affiliationMeta';
 import TodayStrip from '../components/TodayStrip';
 import { Avatar, InkField, TapeChip, handleFor, rippleFor, GoldTick, hasGoldTick } from '../components/common';
+import BrandHeader from '../components/BrandHeader';
 import { openNetworkFeed } from '../push/routing';
 import { useDebouncedCallback } from '../rateLimit';
 import { type, inkBox, marker, dashedRule, raised } from '../theme';
@@ -30,7 +31,7 @@ const CARD_TILTS = ['0.5deg', '-0.8deg', '1deg'];
  * organization or workplace. Connection requests turn that shared context
  * into an accepted friend/contact relationship.
  */
-export default function ColleaguesScreen({ onOpenChat }) {
+export default function ColleaguesScreen({ navigation, onOpenChat }) {
   const { theme } = useTheme();
   const { user, refreshUser } = useAuth();
   const { upsertChat, onColleagueEvent } = useChat();
@@ -171,6 +172,7 @@ export default function ColleaguesScreen({ onOpenChat }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <BrandHeader navigation={navigation} />
       <Animated.ScrollView
         contentContainerStyle={[s.content, isTablet && s.contentWide]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.ink} />}
