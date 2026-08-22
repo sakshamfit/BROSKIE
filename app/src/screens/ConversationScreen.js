@@ -32,6 +32,7 @@ import { FadeSlide, TypingDots, FloatLoop, SheetSpringIn, SpringPressable, Pop, 
 import { api, mediaUrl } from '../api';
 import { setViewedChat } from '../push/notifications';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
+import { throttle, useDebouncedCallback } from '../rateLimit';
 
 function ConversationContent({ route, navigation, embedded = false, themePicker = null }) {
   const { chatId, initialChat = null } = route.params || {};
@@ -112,6 +113,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const typingTimer = useRef(null);
+  // Socket "typing: true" emits are throttled (see onChangeText) so a fast
+  // typist doesn't fire one packet per keystroke.
+  const typingThrottle = useRef(null);
   // Reply focus / quote-tap must not trigger the composer's usual
   // scroll-to-bottom jump — keep the user on the message they swiped.
   const suppressFocusScroll = useRef(false);
@@ -123,7 +127,6 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const [searchQ, setSearchQ] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
-  const searchTimer = useRef(null);
 
   // forward + timer + poll modals
   const [forwardMsg, setForwardMsg] = useState(null);
@@ -241,13 +244,24 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       if (audioRecorder.getStatus()?.isRecording) audioRecorder.stop().catch(() => {});
     } catch {}
     setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+    typingThrottle.current?.cancel();
   }, [audioRecorder]);
 
   const typers = Object.values(typing[chatId] || {});
 
   const onChangeText = (v) => {
     setText(v);
-    setTypingState(chatId, true);
+    // Throttle the "typing: true" socket emit to one packet per 2s while the
+    // user keeps typing. Trailing is off, so the debounced "typing: false"
+    // below always lands after the last true — the indicator can't get stuck.
+    if (!typingThrottle.current) {
+      typingThrottle.current = throttle(
+        (id) => setTypingState(id, true),
+        2000,
+        { leading: true, trailing: false },
+      );
+    }
+    typingThrottle.current(chatId);
     clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => setTypingState(chatId, false), 1600);
   };
@@ -427,19 +441,36 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const cancelRecording = () => stopRecording(false);
 
   /* ---- in-chat search ---- */
+  // Debounced: one /api/search per typing pause instead of one per
+  // keystroke. The input and spinner update instantly; only the network
+  // request waits. `chatId` is passed per call so results can never bleed
+  // across a chat switch; `searchSeq` discards out-of-order responses.
+  const searchSeq = useRef(0);
+  const searchInChat = useDebouncedCallback(async (q, chatIdFor, seq) => {
+    try {
+      const { messages: res } = await api.search(q.trim(), chatIdFor);
+      if (searchSeq.current === seq) setSearchResults(res);
+    } catch {
+      if (searchSeq.current === seq) setSearchResults([]);
+    } finally {
+      if (searchSeq.current === seq) setSearching(false);
+    }
+  }, 250);
+
   const runInChatSearch = useCallback((q) => {
     setSearchQ(q);
-    clearTimeout(searchTimer.current);
-    if (q.trim().length < 2) { setSearchResults([]); return; }
+    const seq = ++searchSeq.current;
+    if (q.trim().length < 2) {
+      // Clearing the box cancels any pending search and settles the
+      // spinner immediately (it would otherwise spin forever).
+      setSearchResults([]);
+      setSearching(false);
+      searchInChat.cancel();
+      return;
+    }
     setSearching(true);
-    searchTimer.current = setTimeout(async () => {
-      try {
-        const { messages: res } = await api.search(q.trim(), chatId);
-        setSearchResults(res);
-      } catch { setSearchResults([]); }
-      finally { setSearching(false); }
-    }, 250);
-  }, [chatId]);
+    searchInChat(q, chatId, seq);
+  }, [searchInChat, chatId]);
 
   const rows = useMemo(() => {
     const out = [];

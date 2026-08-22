@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, Pressable, StyleSheet, ScrollView, TextInput, FlatList,
   ActivityIndicator, Modal, RefreshControl, KeyboardAvoidingView, Platform,
@@ -13,6 +13,7 @@ import { Avatar, PaperCard, TapeChip, Rule, InkButton, InkField, GoldTick, hasGo
 import { type, inkBox, marker, dashedRule, radius, raised } from '../theme';
 import { haptic } from '../motion';
 import { confirm } from '../hooks/confirm';
+import { useDebouncedCallback } from '../rateLimit';
 
 /* ------------------------------------------------------------------ */
 /* Admin Safety & Moderation Center                                    */
@@ -82,7 +83,6 @@ export default function AdminSafetyScreen({ navigation }) {
   const [source, setSource] = useState('');
   const [sort, setSort] = useState('new');
   const [q, setQ] = useState('');
-  const qTimer = useRef(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -125,12 +125,13 @@ export default function AdminSafetyScreen({ navigation }) {
     });
   }, [onModerationEvent, refreshAll, openCase]);
 
+  // Debounced case search: the filter box pauses 250ms before the
+  // moderation API is hit, instead of one request per keystroke. Filter
+  // chips (severity/category/status) reload through the same path.
+  const debouncedLoadCases = useDebouncedCallback(() => loadCases(), 250);
   useEffect(() => {
-    const t = qTimer.current;
-    if (t) clearTimeout(t);
-    qTimer.current = setTimeout(() => { loadCases(); }, 250);
-    return () => clearTimeout(qTimer.current);
-  }, [q, loadCases]);
+    debouncedLoadCases();
+  }, [q, loadCases, debouncedLoadCases]);
 
   if (!isAdmin) {
     return (

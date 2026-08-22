@@ -8,6 +8,7 @@ import Svg, { Defs, Pattern, Circle, Rect } from 'react-native-svg';
 import Icon from '../icons/Icon';
 import { useAuth } from '../store/AuthContext';
 import { api, authErrorMessage } from '../api';
+import { useDebouncedCallback } from '../rateLimit';
 
 /**
  * Auth must not subscribe to the live window height. Android and mobile web
@@ -106,31 +107,36 @@ export default function AuthScreen() {
 
   const [checking, setChecking] = useState(false);
   const [availability, setAvailability] = useState(null); // { available, error }
-  const checkTimer = useRef(null);
   const checkSequence = useRef(0);
 
+  // Debounced username availability probe: one server call per typing
+  // pause (450ms) instead of one per keystroke. `checkSequence` bumps on
+  // every keystroke (here, in the effect), so any response that no longer
+  // matches the current candidate — out-of-order or stale — is discarded.
+  const checkAvailability = useDebouncedCallback(async (candidate, sequence) => {
+    try {
+      const result = await api.usernameAvailable(candidate);
+      if (checkSequence.current === sequence) setAvailability(result);
+    } catch {
+      if (checkSequence.current === sequence) setAvailability(null);
+    } finally {
+      if (checkSequence.current === sequence) setChecking(false);
+    }
+  }, 450);
+
   useEffect(() => {
-    clearTimeout(checkTimer.current);
     const sequence = ++checkSequence.current;
     const candidate = username.trim();
     if (mode !== 'register' || !candidate || candidate.length > MAX_USERNAME_LENGTH) {
+      checkAvailability.cancel();
       setChecking(false);
       setAvailability(null);
       return undefined;
     }
     setChecking(true);
-    checkTimer.current = setTimeout(async () => {
-      try {
-        const result = await api.usernameAvailable(candidate);
-        if (checkSequence.current === sequence) setAvailability(result);
-      } catch {
-        if (checkSequence.current === sequence) setAvailability(null);
-      } finally {
-        if (checkSequence.current === sequence) setChecking(false);
-      }
-    }, 450);
-    return () => clearTimeout(checkTimer.current);
-  }, [username, mode]);
+    checkAvailability(candidate, sequence);
+    return () => checkAvailability.cancel();
+  }, [username, mode, checkAvailability]);
 
   const submit = async () => {
     if (submittingRef.current) return;
