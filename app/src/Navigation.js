@@ -12,31 +12,33 @@ import useResponsive from './hooks/useResponsive';
 import { Loading, CountBead } from './components/common';
 import { marker, stroke } from './theme';
 import { haptic, usePressScale } from './motion';
-import SplitLayout from './DesktopLayout';
+import { lazyScreen, lazyComponent, idlePreload } from './lazy';
 import PageSwipePager from './components/PageSwipePager';
 import { navigationRef, onHomeTabRequest, flushPendingRoute } from './push/routing';
 import { setupDeepLinks } from './push/links';
 
-import AuthScreen from './screens/AuthScreen';
-import ChatListScreen from './screens/ChatListScreen';
-import ConversationScreen from './screens/ConversationScreen';
-import NewChatScreen from './screens/NewChatScreen';
-import StatusScreen from './screens/StatusScreen';
-import NetworkScreen from './screens/NetworkScreen';
-import ColleaguesScreen from './screens/ColleaguesScreen';
-import SettingsScreen from './screens/SettingsScreen';
-import ChatInfoScreen from './screens/ChatInfoScreen';
-import PersonalInfoScreen from './screens/PersonalInfoScreen';
-import SecurityScreen from './screens/SecurityScreen';
-import AppearanceScreen from './screens/AppearanceScreen';
-import NotificationsScreen from './screens/NotificationsScreen';
-import ActivityScreen from './screens/ActivityScreen';
-import PrivacyScreen from './screens/PrivacyScreen';
-import BlockedUsersScreen from './screens/BlockedUsersScreen';
-import HelpScreen from './screens/HelpScreen';
-import CallsScreen from './screens/CallsScreen';
-import StarredMessagesScreen from './screens/StarredMessagesScreen';
-import AdminSafetyScreen from './screens/AdminSafetyScreen';
+const SplitLayout = lazyComponent(() => import('./DesktopLayout'), { label: 'Desktop' });
+
+const AuthScreen = lazyScreen(() => import('./screens/AuthScreen'), { label: 'Sign In' });
+const ChatListScreen = lazyScreen(() => import('./screens/ChatListScreen'), { label: 'Chats' });
+const ConversationScreen = lazyScreen(() => import('./screens/ConversationScreen'), { label: 'Conversation' });
+const NewChatScreen = lazyScreen(() => import('./screens/NewChatScreen'), { label: 'New Chat' });
+const StatusScreen = lazyScreen(() => import('./screens/StatusScreen'), { label: 'See' });
+const NetworkScreen = lazyScreen(() => import('./screens/NetworkScreen'), { label: 'Network' });
+const ColleaguesScreen = lazyScreen(() => import('./screens/ColleaguesScreen'), { label: 'Colleagues' });
+const SettingsScreen = lazyScreen(() => import('./screens/SettingsScreen'), { label: 'Settings' });
+const ChatInfoScreen = lazyScreen(() => import('./screens/ChatInfoScreen'), { label: 'Chat Info' });
+const PersonalInfoScreen = lazyScreen(() => import('./screens/PersonalInfoScreen'), { label: 'Personal Info' });
+const SecurityScreen = lazyScreen(() => import('./screens/SecurityScreen'), { label: 'Security' });
+const AppearanceScreen = lazyScreen(() => import('./screens/AppearanceScreen'), { label: 'Appearance' });
+const NotificationsScreen = lazyScreen(() => import('./screens/NotificationsScreen'), { label: 'Notifications' });
+const ActivityScreen = lazyScreen(() => import('./screens/ActivityScreen'), { label: 'Activity' });
+const PrivacyScreen = lazyScreen(() => import('./screens/PrivacyScreen'), { label: 'Privacy' });
+const BlockedUsersScreen = lazyScreen(() => import('./screens/BlockedUsersScreen'), { label: 'Blocked Contacts' });
+const HelpScreen = lazyScreen(() => import('./screens/HelpScreen'), { label: 'Help' });
+const CallsScreen = lazyScreen(() => import('./screens/CallsScreen'), { label: 'Calls' });
+const StarredMessagesScreen = lazyScreen(() => import('./screens/StarredMessagesScreen'), { label: 'Starred' });
+const AdminSafetyScreen = lazyScreen(() => import('./screens/AdminSafetyScreen'), { label: 'Safety & Reports' });
 
 const Stack = createNativeStackNavigator();
 
@@ -76,6 +78,11 @@ function HomeTabs({ navigation }) {
   useEffect(() => onHomeTabRequest((requested) => {
     if (PAGES.some((p) => p.key === requested) && requested !== tab) setTab(requested);
   }), [tab]);
+
+  useEffect(() => {
+    idlePreload(() => import('./screens/ConversationScreen'));
+    idlePreload(() => import('./screens/SettingsScreen'));
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>

@@ -11,16 +11,18 @@ import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
-import { AUDIENCE } from '../components/AudiencePicker';
+import { AUDIENCE } from '../components/audienceMeta';
 import BrandHeader from '../components/BrandHeader';
 import SongCard from '../components/SongCard';
 import TodayStrip from '../components/TodayStrip';
-import NewPostScreen from './NewPostScreen';
-import CommunitiesScreen from './CommunitiesScreen';
 import { type, inkBox, marker, dashedRule, stroke, radius, raised } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
 import { onNetworkFilterRequest, consumePendingNetworkFilter, onOpenCommunity, consumePendingCommunity } from '../push/routing';
+import { lazyComponent } from '../lazy';
+
+const NewPostScreen = lazyComponent(() => import('./NewPostScreen'));
+const CommunitiesScreen = lazyComponent(() => import('./CommunitiesScreen'));
 
 /* Sticky notes alternate their tilt, like scraps pinned to a board. */
 const tiltFor = (i) => (i % 2 === 0 ? '-0.8deg' : '0.7deg');
