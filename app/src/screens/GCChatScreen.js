@@ -507,20 +507,23 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
         <FadeSlide key={`gchdr-${chatId}`} from="down" distance={8} duration={260}>
           <View style={[s.headerWrap, !embedded && { paddingTop: 18 + insets.top }]}>
             <View style={s.header}>
-              {!embedded && (
-                <SpringPressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Back to GC"
-                  onPress={() => navigation.goBack()}
-                  hitSlop={8}
-                  scaleTo={motion.scale.icon}
-                  haptic="selection"
-                  style={s.backBtn}
-                >
-                  <Icon name="arrow-back" size={22} color={theme.primary} />
-                </SpringPressable>
-              )}
-              <Pressable style={s.headerInfo} onPress={openInfo}>
+              <SpringPressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to GC"
+                onPress={() => navigation?.goBack?.()}
+                hitSlop={8}
+                scaleTo={motion.scale.icon}
+                haptic="selection"
+                style={s.backBtn}
+              >
+                <Icon name="arrow-back" size={22} color={theme.primary} />
+              </SpringPressable>
+              <Pressable
+                style={s.headerInfo}
+                onPress={openInfo}
+                accessibilityRole="button"
+                accessibilityLabel={`GC ${chat.name}, ${chat.members?.length || 1} members`}
+              >
                 <Avatar uri={chat.avatar} name={chat.name} id={chat.id} group size={42} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -536,7 +539,7 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
                     </View>
                   ) : (
                     <Text style={[type.bodySm, { fontSize: 12.5, color: theme.subtext }]} numberOfLines={1}>
-                      {chat.members.length} members · {subtitle}
+                      {chat.members?.length || 1} member{chat.members?.length === 1 ? '' : 's'}{subtitle ? ` · ${subtitle}` : ''}
                     </Text>
                   )}
                 </View>

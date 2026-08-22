@@ -166,7 +166,13 @@ export default function GCDetailScreen({ route, navigation, embedded = false, on
       leaveGCRoom(chatId);
       await api.leaveGroup(chatId);
       await refreshGCs().catch(() => {});
-      back();
+      if (onClose) {
+        onClose();
+      } else if (navigation?.navigate) {
+        navigation.navigate('Home');
+      } else {
+        back();
+      }
     } catch (e) {
       console.warn(e.message);
     } finally {
