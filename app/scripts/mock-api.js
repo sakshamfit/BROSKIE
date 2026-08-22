@@ -75,6 +75,7 @@ const gcChat = (i) => ({
   type: 'gc',
   name: i === 0 ? 'Gaming Hub' : 'College Friends',
   avatar: null,
+  role: 'member',
   members: [me, other, { id: 'u3', username: 'katherine', name: 'Katherine Johnson', avatar: null, role: 'member' }],
   unread: i === 0 ? 2 : 0,
   pinned: false,

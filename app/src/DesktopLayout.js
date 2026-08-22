@@ -51,10 +51,12 @@ export default function SplitLayout() {
   const { insets, isWeb } = useResponsive();
   const [tab, setTab] = useState('network');
   const [selectedChatId, setSelectedChatId] = useState(null);
-  // GC environment lives INSIDE the GC pane: list → detail → chat. It never
-  // switches the pane to Chats, so direct chats are untouched.
+  // GC environment lives INSIDE the GC pane: list → chat (for joined GCs)
+  // → detail (via chat header). It never switches the pane to Chats, so direct
+  // chats are untouched.
   const [gcSelectedId, setGcSelectedId] = useState(null);
   const [gcSub, setGcSub] = useState(null); // null | 'detail' | 'chat'
+  const [gcPrevSub, setGcPrevSub] = useState(null);
   const [overlay, setOverlay] = useState(null); // { name, params }
 
   // On native tablets the sidebar sits inside the device's safe area
@@ -123,17 +125,45 @@ export default function SplitLayout() {
     replace(name, params) { this.navigate(name, params); },
   };
 
-  // GC sub-navigation: GC list → GCDetail → GCChat, always inside tab 'gc'.
+  // GC sub-navigation: GC list → GCChat (direct into chat for joined GCs)
+  // → GCDetail (info/members from chat header), always inside tab 'gc'.
   const gcNav = {
     navigate: (name, params) => {
-      if (name === 'GCDetail') { setGcSelectedId(params.chatId); setGcSub('detail'); }
-      else if (name === 'GCChat') { setGcSelectedId(params.chatId); setGcSub('chat'); }
+      if (name === 'GCDetail') {
+        if (params?.chatId) setGcSelectedId(params.chatId);
+        setGcPrevSub(gcSub);
+        setGcSub('detail');
+      } else if (name === 'GCChat') {
+        if (params?.chatId) setGcSelectedId(params.chatId);
+        setGcPrevSub(gcSub);
+        setGcSub('chat');
+      }
     },
-    // Chat → detail → list (never Chats).
-    goBack: () => setGcSub((sub) => (sub === 'chat' ? 'detail' : null)),
+    // Detail (opened from chat header) → chat → list (never Chats).
+    goBack: () => {
+      if (gcSub === 'detail') {
+        if (gcPrevSub === 'chat') {
+          setGcSub('chat');
+          setGcPrevSub(null);
+        } else {
+          setGcSub(null);
+          setGcSelectedId(null);
+          setGcPrevSub(null);
+        }
+      } else if (gcSub === 'chat') {
+        setGcSub(null);
+        setGcSelectedId(null);
+        setGcPrevSub(null);
+      }
+    },
     replace: (name, params) => {
-      if (name === 'GCDetail') { setGcSelectedId(params.chatId); setGcSub('detail'); }
-      else if (name === 'GCChat') { setGcSelectedId(params.chatId); setGcSub('chat'); }
+      if (name === 'GCDetail') {
+        if (params?.chatId) setGcSelectedId(params.chatId);
+        setGcSub('detail');
+      } else if (name === 'GCChat') {
+        if (params?.chatId) setGcSelectedId(params.chatId);
+        setGcSub('chat');
+      }
     },
   };
 
@@ -184,12 +214,21 @@ export default function SplitLayout() {
         setTab('network');
         return true;
       }
-      if (tab === 'gc' && gcSub === 'chat') {
-        setGcSub('detail');
+      if (tab === 'gc' && gcSub === 'detail') {
+        if (gcPrevSub === 'chat') {
+          setGcSub('chat');
+          setGcPrevSub(null);
+        } else {
+          setGcSub(null);
+          setGcSelectedId(null);
+          setGcPrevSub(null);
+        }
         return true;
       }
-      if (tab === 'gc' && gcSub === 'detail') {
+      if (tab === 'gc' && gcSub === 'chat') {
         setGcSub(null);
+        setGcSelectedId(null);
+        setGcPrevSub(null);
         return true;
       }
       if (selectedChatId) {
@@ -199,7 +238,7 @@ export default function SplitLayout() {
       return false;
     });
     return () => sub.remove();
-  }, [overlay, tab, settingsSub, selectedChatId, gcSub]);
+  }, [overlay, tab, settingsSub, selectedChatId, gcSub, gcPrevSub]);
 
   return (
     <View style={[s.root, { backgroundColor: theme.bg }]}>
@@ -209,7 +248,7 @@ export default function SplitLayout() {
         onNavigate={(key) => {
           if (key === 'activity') { openOverlay('Activity'); return; }
           setSettingsSub(null);
-          if (key !== 'gc') { setGcSub(null); setGcSelectedId(null); }
+          if (key !== 'gc') { setGcSub(null); setGcSelectedId(null); setGcPrevSub(null); }
           setTab(key);
         }}
         onNewChat={() => openOverlay('NewChat')}
@@ -252,8 +291,9 @@ export default function SplitLayout() {
         )}
 
         {/* GCs — Instagram-style group chats, kept entirely inside the GC
-            pane: list → GC detail → GC chat. Opening or messaging a GC never
-            switches to the Chats pane and never touches direct chats. */}
+            pane: list → GC chat (for joined GCs) → GC detail (via header).
+            Opening or messaging a GC never switches to the Chats pane and
+            never touches direct chats. */}
         {tab === 'gc' && (
           <View style={[s.fullPane, s.centeredPane]}>
             {gcSub === 'chat' && gcSelectedId ? (
@@ -271,7 +311,11 @@ export default function SplitLayout() {
             ) : (
               <GCScreen
                 navigation={gcNav}
-                onOpenChat={(chatId, isMember) => { setGcSelectedId(chatId); setGcSub(isMember ? 'chat' : 'detail'); }}
+                onOpenChat={(chatId, isMember) => {
+                  setGcSelectedId(chatId);
+                  setGcPrevSub(null);
+                  setGcSub(isMember ? 'chat' : 'detail');
+                }}
               />
             )}
           </View>

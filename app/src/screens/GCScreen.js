@@ -84,8 +84,9 @@ export default function GCScreen({ navigation, onOpenChat }) {
 
   const openChat = (chat) => {
     haptic('selection');
-    if (onOpenChat) onOpenChat(chat.id, !!chat.isMember || !!chat.role);
-    else navigation?.navigate?.(chat.isMember || chat.role ? 'GCChat' : 'GCDetail', { chatId: chat.id });
+    const isMember = !!(chat.isMember || chat.role || chat.members?.some((m) => m.id === user?.id) || myGCs.some((g) => g.id === chat.id));
+    if (onOpenChat) onOpenChat(chat.id, isMember);
+    else navigation?.navigate?.(isMember ? 'GCChat' : 'GCDetail', { chatId: chat.id });
   };
 
   const [joinError, setJoinError] = useState('');
@@ -196,9 +197,8 @@ export default function GCScreen({ navigation, onOpenChat }) {
           {!!item.unread && <CountBead label={item.unread > 9 ? '9+' : String(item.unread)} small />}
           {reqCount > 0 && (
             <Pressable
-              accessibilityRole="button"
               accessibilityLabel={`${reqCount} join request${reqCount === 1 ? '' : 's'}`}
-              onPress={() => { haptic('selection'); setRequestsFor(item.id); }}
+              onPress={(e) => { e?.stopPropagation?.(); haptic('selection'); setRequestsFor(item.id); }}
               hitSlop={6}
               style={({ pressed }) => [s.requestChip, { borderColor: theme.ink, backgroundColor: pressed ? theme.highlighterWash : theme.highlighter }]}
             >

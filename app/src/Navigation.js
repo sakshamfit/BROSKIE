@@ -84,8 +84,9 @@ function HomeTabs({ navigation }) {
   const swipeProgress = useRef(new Animated.Value(0)).current;
 
   // A GC NEVER opens the normal Chats tab or the Conversation screen. Its
-  // flow stays entirely inside the GC environment: GC list → GCDetail →
-  // GCChat. The Chats tab keeps its own state and its own chats untouched.
+  // flow stays entirely inside the GC environment: joined GCs open directly
+  // into GCChat; GCDetail (info/members) is accessed from the chat header.
+  // The Chats tab keeps its own state and its own chats untouched.
   const openDirectChat = (chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); };
   const openGC = (chatId, isMember) => { navigation.navigate(isMember ? 'GCChat' : 'GCDetail', { chatId }); };
 

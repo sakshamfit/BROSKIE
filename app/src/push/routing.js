@@ -167,11 +167,11 @@ export function flushPendingRoute() {
         }
         break;
       case 'gc':
-        // GC notifications open the GC environment (GCDetail) — the Chats
-        // tab is never activated by a GC message.
+        // GC notifications open the GC environment directly in chat (GCChat)
+        // — the Chats tab is never activated by a GC message.
         if (data.chatId) {
           requestHomeTab('gc');
-          navigationRef.navigate('GCDetail', { chatId: data.chatId });
+          navigationRef.navigate('GCChat', { chatId: data.chatId });
         }
         break;
       case 'activity':
