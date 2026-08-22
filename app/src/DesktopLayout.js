@@ -28,6 +28,7 @@ import BlockedUsersScreen from './screens/BlockedUsersScreen';
 import HelpScreen from './screens/HelpScreen';
 import CallsScreen from './screens/CallsScreen';
 import StarredMessagesScreen from './screens/StarredMessagesScreen';
+import AdminSafetyScreen from './screens/AdminSafetyScreen';
 
 /**
  * Split shell for wide viewports — desktop web AND real tablets/foldables
@@ -60,7 +61,7 @@ export default function SplitLayout() {
   // Network) — NOT a popup — with its own little navigation stack for the
   // Personal Information / Security / Privacy / Notifications / Appearance
   // / Blocked Contacts drill-downs.
-  const SETTINGS_SUBSCREENS = ['PersonalInfo', 'Security', 'Privacy', 'Notifications', 'Appearance', 'BlockedUsers', 'Starred'];
+  const SETTINGS_SUBSCREENS = ['PersonalInfo', 'Security', 'Privacy', 'Notifications', 'Appearance', 'BlockedUsers', 'Starred', 'AdminSafety'];
   const [settingsSub, setSettingsSub] = useState(null);
 
   const settingsNav = {
@@ -236,6 +237,7 @@ export default function SplitLayout() {
             {settingsSub === 'Notifications' && <NotificationsScreen navigation={settingsNav} embedded />}
             {settingsSub === 'Appearance' && <AppearanceScreen navigation={settingsNav} embedded />}
             {settingsSub === 'Starred' && <StarredMessagesScreen navigation={starredNav} embedded />}
+            {settingsSub === 'AdminSafety' && <AdminSafetyScreen navigation={settingsNav} embedded />}
             {!settingsSub && <SettingsScreen navigation={settingsNav} embedded />}
           </View>
         )}
