@@ -14,15 +14,25 @@ import { Avatar, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTi
 import { AUDIENCE } from './audienceMeta';
 import SongCard from './SongCard';
 import { radius, type, marker, stroke, raised } from '../theme';
-import { FadeSlide, Skeleton, motion, SpringPressable, haptic, useReducedMotion } from '../motion';
+import { FadeSlide, Skeleton, motion, SpringPressable, haptic, useReducedMotion, Pop, Stagger } from '../motion';
 import { lazyComponent } from '../lazy';
 import { editorConfigFor } from '../imageEditor/config';
+import GridPaper from './GridPaper';
+import StatusRing from './StatusRing';
+import Emoji from '../icons/Emoji';
 
 const AudiencePicker = lazyComponent(() => import('./AudiencePicker'));
 const UniversalImageEditor = lazyComponent(() => import('./UniversalImageEditor'));
 const SongPicker = lazyComponent(() => import('./SongPicker'));
 
 const BG_COLORS = ['#FFE24D', '#fdf8f8', '#e2e3de', '#5d5f5b', '#1c1b1b', '#39444c'];
+const REACTIONS = ['❤️', '😂', '🔥', '😮', '👏'];
+const STICKERS = [
+  { id: 'love', glyph: '💛' }, { id: 'fire', glyph: '🔥' }, { id: 'party', glyph: '🎉' },
+  { id: 'travel', glyph: '✈️' }, { id: 'food', glyph: '🍜' }, { id: 'work', glyph: '✏️' },
+  { id: 'sport', glyph: '⚽' }, { id: 'sun', glyph: '☀️' }, { id: 'laugh', glyph: '😂' },
+];
+const TEXT_ALIGNS = ['center', 'left', 'right'];
 
 // WhatsApp-style status privacy, with +one's public option retained. The
 // existing status_recipients table stores inclusions for "selected" and
@@ -80,55 +90,145 @@ export default function StoriesRow({ reloadKey = 0 }) {
   const others = [...data.others].sort((a, b) => Number(!!a.allViewed) - Number(!!b.allViewed));
   const hasMine = !!data.mine?.items?.length;
 
+  const latestMine = hasMine ? data.mine.items[data.mine.items.length - 1] : null;
+
   return (
     <View style={s.storiesWrap}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.storiesRow}
+      <View style={s.statusHead}>
+        <Text style={[type.labelSm, { color: theme.muted }]}>STATUS</Text>
+        <SpringPressable
+          accessibilityRole="button"
+          accessibilityLabel="Add a status update"
+          onPress={() => { haptic('selection'); setComposerMode('choose'); }}
+          style={s.statusAddBtn}
+          scaleTo={motion.scale.chip}
+          haptic="selection"
+        >
+          <Icon name="add" size={16} color={theme.ink} />
+        </SpringPressable>
+      </View>
+
+      <GridPaper
+        color={theme.graphiteLine}
+        opacity={theme.dark ? 0.28 : 0.22}
+        style={[s.heroCard, { borderColor: theme.ink, backgroundColor: theme.card }]}
       >
-        {/* Your circle — tap to view your update, tap the + to upload one. */}
-        <StoryCircle
+        <SpringPressable
+          accessibilityRole="button"
           accessibilityLabel={hasMine ? 'View your status update' : 'Add a status update'}
           onPress={() => (hasMine ? setViewerGroup(data.mine) : setComposerMode('choose'))}
-          ringStyle={hasMine ? s.ringMine : s.ringEmpty}
-          avatar={user ? { uri: user.avatar, name: user.name, id: user.id } : {}}
-          label={hasMine ? 'Your story' : 'Add status'}
-          theme={theme}
-          styles={s}
-          badge={(
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add a status update"
-              onPress={() => { haptic('selection'); setComposerMode('choose'); }}
-              hitSlop={4}
-              style={[s.plusBadge, { backgroundColor: '#050505', borderColor: theme.bg }]}
-            >
-              <Icon name="add" size={13} color="#ffffff" />
-            </Pressable>
-          )}
-        />
-
-        {others.map((group) => (
-          <StoryCircle
-            key={group.user.id}
-            accessibilityLabel={`View ${group.user.name}'s status update`}
-            onPress={() => setViewerGroup(group)}
-            ringStyle={group.allViewed ? s.ringSeen : s.ringNew}
-            avatar={group.user}
-            label={group.user.name}
-            theme={theme}
-            styles={s}
-          />
-        ))}
-
-        {loading && [0, 1, 2, 3].map((i) => (
-          <View key={`sk-${i}`} style={s.circleCol}>
-            <Skeleton width={68} height={68} radius={999} />
-            <Skeleton width={44} height={9} radius={4} />
+          style={s.heroInner}
+          scaleTo={motion.scale.row}
+          haptic="selection"
+        >
+          <StatusRing
+            size={72}
+            segments={data.mine?.items?.length || 1}
+            seen={false}
+            empty={!hasMine}
+            active={hasMine}
+            color={theme.ink}
+            seenColor={theme.graphiteLine}
+          >
+            <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={56} />
+          </StatusRing>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[type.headlineSm, { color: theme.text }]}>Your status</Text>
+            <Text style={[type.bodySm, { color: theme.subtext, marginTop: 2 }]} numberOfLines={1}>
+              {hasMine
+                ? `${data.mine.items.length} live · ${formatChatTime(latestMine.createdAt)}`
+                : 'Share a photo, a line, or a moment'}
+            </Text>
           </View>
-        ))}
-      </ScrollView>
+          <SpringPressable
+            onPress={() => setComposerMode('choose')}
+            style={[s.heroCta, { backgroundColor: theme.ink }]}
+            scaleTo={motion.scale.chip}
+            haptic="selection"
+          >
+            <Icon name="add" size={14} color={theme.onPrimary} />
+            <Text style={[type.labelXs, { color: theme.onPrimary }]}>ADD</Text>
+          </SpringPressable>
+        </SpringPressable>
+      </GridPaper>
+
+      {(others.length > 0 || loading) && (
+        <>
+          <Text style={[type.labelXs, { color: theme.muted, marginTop: 16, marginBottom: 8 }]}>RECENT</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.storiesRow}
+          >
+            {others.map((group, i) => (
+              <Stagger key={group.user.id} index={i}>
+                <StoryCircle
+                  accessibilityLabel={`View ${group.user.name}'s status update`}
+                  onPress={() => setViewerGroup(group)}
+                  segments={group.items.length}
+                  seen={!!group.allViewed}
+                  avatar={group.user}
+                  label={group.user.name}
+                  theme={theme}
+                  styles={s}
+                />
+              </Stagger>
+            ))}
+            {loading && [0, 1, 2, 3].map((i) => (
+              <View key={`sk-${i}`} style={s.circleCol}>
+                <Skeleton width={68} height={68} radius={999} />
+                <Skeleton width={44} height={9} radius={4} />
+              </View>
+            ))}
+          </ScrollView>
+        </>
+      )}
+
+      {others.length > 0 && (
+        <>
+          <Text style={[type.labelXs, { color: theme.muted, marginTop: 16, marginBottom: 8 }]}>PEOPLE</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.cardRow}>
+            {others.slice(0, 12).map((group) => {
+              const last = group.items[group.items.length - 1];
+              return (
+                <SpringPressable
+                  key={`card-${group.user.id}`}
+                  onPress={() => setViewerGroup(group)}
+                  style={[s.personCard, { borderColor: theme.ink, backgroundColor: theme.card }]}
+                  scaleTo={motion.scale.card}
+                  haptic="selection"
+                >
+                  <GridPaper color={theme.graphiteLine} opacity={0.16} animate={false} style={s.personPreview}>
+                    {last?.type === 'image' && last.mediaUrl ? (
+                      <Image source={{ uri: mediaUrl(last.mediaUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    ) : (
+                      <View style={[StyleSheet.absoluteFill, { backgroundColor: last?.bg || theme.highlighter, alignItems: 'center', justifyContent: 'center', padding: 8 }]}>
+                        <EmojiText style={[type.labelXs, { color: foregroundFor(last), textAlign: 'center' }]} numberOfLines={4}>
+                          {last?.body || 'Status'}
+                        </EmojiText>
+                      </View>
+                    )}
+                  </GridPaper>
+                  <View style={s.personMeta}>
+                    <StatusRing
+                      size={28}
+                      segments={group.items.length}
+                      seen={!!group.allViewed}
+                      color={theme.ink}
+                      seenColor={theme.graphiteLine}
+                    >
+                      <Avatar uri={group.user.avatar} name={group.user.name} id={group.user.id} size={20} />
+                    </StatusRing>
+                    <EmojiText style={[type.labelXs, { color: theme.text, flex: 1 }]} numberOfLines={1}>
+                      {group.user.name}
+                    </EmojiText>
+                  </View>
+                </SpringPressable>
+              );
+            })}
+          </ScrollView>
+        </>
+      )}
 
       <StatusComposer
         visible={!!composerMode}
@@ -143,7 +243,7 @@ export default function StoriesRow({ reloadKey = 0 }) {
 }
 
 /** One avatar ring in the strip. `badge` (your own +) overlays the ring. */
-function StoryCircle({ accessibilityLabel, onPress, ringStyle, avatar, label, badge, theme, styles: s }) {
+function StoryCircle({ accessibilityLabel, onPress, avatar, label, badge, theme, styles: s, segments = 1, seen = false, empty = false }) {
   return (
     <View style={s.circleCol}>
       <SpringPressable
@@ -154,9 +254,16 @@ function StoryCircle({ accessibilityLabel, onPress, ringStyle, avatar, label, ba
         haptic="selection"
         style={({ pressed }) => [s.circlePress, pressed && { opacity: 0.72 }]}
       >
-        <View style={[s.ring, ringStyle]}>
-          <Avatar uri={avatar?.uri} name={avatar?.name} id={avatar?.id} size={54} />
-        </View>
+        <StatusRing
+          size={68}
+          segments={segments}
+          seen={seen}
+          empty={empty}
+          color={theme.ink}
+          seenColor={theme.graphiteLine}
+        >
+          <Avatar uri={avatar?.uri || avatar?.avatar} name={avatar?.name} id={avatar?.id} size={54} />
+        </StatusRing>
         {badge}
       </SpringPressable>
       <EmojiText style={[type.labelXs, { color: theme.subtext }]} numberOfLines={1} ellipsizeMode="tail">
@@ -182,6 +289,7 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
   const [replySending, setReplySending] = useState(false);
   const [replyFeedback, setReplyFeedback] = useState('');
   const [replyFocused, setReplyFocused] = useState(false);
+  const [burst, setBurst] = useState(null);
   const [kbHeight, setKbHeight] = useState(0);
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
@@ -252,6 +360,21 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group?.user?.id]);
+
+  const sendReaction = async (emoji) => {
+    if (!current || isOwnStatus) return;
+    setBurst(emoji);
+    haptic('selection');
+    try {
+      await api.replyToStatus(current.id, emoji);
+      setReplyFeedback(`${emoji} sent`);
+      setTimeout(() => setReplyFeedback(''), 1800);
+    } catch {
+      setReplyFeedback('Could not react');
+      setTimeout(() => setReplyFeedback(''), 2000);
+    }
+    setTimeout(() => setBurst(null), 900);
+  };
 
   const sendStatusReply = async () => {
     const text = replyText.trim();
@@ -463,6 +586,12 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
           </View>
 
           {/* ── gentle update: reply composer (not a rebuild) ── */}
+          {burst ? (
+            <View pointerEvents="none" style={s.reactBurst}>
+              <Pop trigger={burst}><Emoji char={burst} size={64} /></Pop>
+            </View>
+          ) : null}
+
           {isOwnStatus ? (
             <View style={[s.replyHintWrap, { paddingBottom: (Platform.OS === 'android' && kbHeight > 0 ? kbHeight + 10 : Math.max(insets.bottom, 12)) }]} pointerEvents="none">
               <Text style={[type.labelXs, { color: foregroundFor(current), opacity: 0.72, textAlign: 'center' }]}>
@@ -475,6 +604,20 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
               enabled={Platform.OS === 'ios'}
               style={[s.replyBarWrap, { paddingBottom: (Platform.OS === 'android' && kbHeight > 0 ? kbHeight + 10 : Math.max(insets.bottom, 12)) }]}
             >
+              <View style={s.reactRow}>
+                {REACTIONS.map((emoji) => (
+                  <SpringPressable
+                    key={emoji}
+                    onPress={() => sendReaction(emoji)}
+                    style={s.reactChip}
+                    scaleTo={motion.scale.chip}
+                    haptic="selection"
+                    accessibilityLabel={`React ${emoji}`}
+                  >
+                    <Emoji char={emoji} size={22} />
+                  </SpringPressable>
+                ))}
+              </View>
               <View style={s.replyBar}>
                 <TextInput
                   value={replyText}
@@ -542,6 +685,13 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState('');
+  const [tool, setTool] = useState(null); // stickers | mention | location | style
+  const [align, setAlign] = useState('center');
+  const [fontScale, setFontScale] = useState(1);
+  const [locationLabel, setLocationLabel] = useState('');
+  const [mentionQ, setMentionQ] = useState('');
+  const [mentionHits, setMentionHits] = useState([]);
+  const [overlays, setOverlays] = useState([]); // stickers + location chips in body extras
 
   const reset = useCallback(() => {
     setMode('choose');
@@ -556,6 +706,13 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
     setRecipientIds([]);
     setPrivacyOpen(false);
     setError('');
+    setTool(null);
+    setAlign('center');
+    setFontScale(1);
+    setLocationLabel('');
+    setMentionQ('');
+    setMentionHits([]);
+    setOverlays([]);
   }, []);
 
   useEffect(() => {
@@ -593,8 +750,70 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
     setBg(BG_COLORS[(index + 1) % BG_COLORS.length]);
   };
 
+  const composeCaption = () => {
+    const bits = [body.trim()];
+    overlays.forEach((o) => {
+      if (o.kind === 'sticker') bits.push(o.glyph);
+      if (o.kind === 'location') bits.push(`📍 ${o.label}`);
+    });
+    return bits.filter(Boolean).join(' ').trim();
+  };
+
+  useEffect(() => {
+    if (tool !== 'mention') return undefined;
+    const q = mentionQ.replace(/^@/, '').trim();
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const r = await api.users(q, { contactsOnly: true });
+        if (!cancelled) setMentionHits((r.users || []).slice(0, 8));
+      } catch {
+        if (!cancelled) setMentionHits([]);
+      }
+    }, 180);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [tool, mentionQ]);
+
+  const addMention = (u) => {
+    const handle = `@${u.username || u.name}`;
+    setBody((prev) => `${prev}${prev && !prev.endsWith(' ') ? ' ' : ''}${handle} `);
+    setTool(null);
+    setMentionQ('');
+  };
+
+  const addSticker = (sticker) => {
+    setOverlays((prev) => [...prev, { kind: 'sticker', glyph: sticker.glyph, id: `${sticker.id}-${prev.length}` }]);
+    setTool(null);
+  };
+
+  const applyLocation = async () => {
+    if (locationLabel.trim()) {
+      setOverlays((prev) => [...prev.filter((o) => o.kind !== 'location'), { kind: 'location', label: locationLabel.trim() }]);
+      setTool(null);
+      return;
+    }
+    try {
+      const Location = require('expo-location');
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== 'granted') {
+        setError('Location needs permission — or type a city name.');
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const geo = await Location.reverseGeocodeAsync(pos.coords);
+      const place = geo?.[0];
+      const city = place?.city || place?.subregion || place?.region || 'Nearby';
+      setLocationLabel(city);
+      setOverlays((prev) => [...prev.filter((o) => o.kind !== 'location'), { kind: 'location', label: city }]);
+      setTool(null);
+    } catch {
+      setError('Could not read location. Type a city instead.');
+    }
+  };
+
   const submit = async () => {
-    if (!body.trim() && !image && !song) {
+    const caption = composeCaption();
+    if (!caption && !image && !song) {
       setError(mode === 'photo' ? 'Choose a photo first.' : 'Write something or attach a song.');
       return;
     }
@@ -618,7 +837,7 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
       }
       await api.postStatus({
         type: image ? 'image' : 'text',
-        body: body.trim(),
+        body: caption,
         mediaUrl: uploadedUrl,
         mediaAspect: image?.displayAspect || null,
         bg,
@@ -768,9 +987,9 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                 onChangeText={(text) => { setBody(text); setError(''); }}
                 placeholder="Type a status"
                 placeholderTextColor={foreground === '#ffffff' ? 'rgba(255,255,255,0.45)' : 'rgba(28,27,27,0.42)'}
-                style={[s.statusTextInput, { color: foreground }]}
+                style={[s.statusTextInput, { color: foreground, fontSize: 29 * fontScale, lineHeight: 40 * fontScale }]}
                 multiline
-                textAlign="center"
+                textAlign={align}
                 maxLength={700}
               />
               {!!song && (
@@ -781,6 +1000,111 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                   </Pressable>
                 </View>
               )}
+            </View>
+          )}
+
+          {mode !== 'choose' && overlays.length > 0 && (
+            <View style={s.overlayChips}>
+              {overlays.map((o) => (
+                <View key={o.id || o.label} style={s.overlayChip}>
+                  <Text style={[type.labelXs, { color: '#ffffff' }]}>
+                    {o.kind === 'location' ? `📍 ${o.label}` : o.glyph}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {mode !== 'choose' && (
+            <View style={s.toolRail}>
+              {[
+                { key: 'style', icon: 'color-palette-outline', label: 'Style' },
+                { key: 'stickers', icon: 'happy-outline', label: 'Sticker' },
+                { key: 'mention', icon: 'person-outline', label: 'Mention' },
+                { key: 'location', icon: 'pin', label: 'Place' },
+              ].map((item) => (
+                <SpringPressable
+                  key={item.key}
+                  onPress={() => setTool((cur) => (cur === item.key ? null : item.key))}
+                  style={[s.toolBtn, tool === item.key && { backgroundColor: 'rgba(255,255,255,0.16)' }]}
+                  scaleTo={motion.scale.chip}
+                  haptic="selection"
+                >
+                  <Icon name={item.icon} size={16} color={foreground} />
+                  <Text style={[type.labelXs, { color: foreground, opacity: 0.8 }]}>{item.label}</Text>
+                </SpringPressable>
+              ))}
+              <SpringPressable
+                onPress={() => setBody((prev) => `${prev}${prev && !prev.endsWith(' ') ? ' ' : ''}#`)}
+                style={s.toolBtn}
+                scaleTo={motion.scale.chip}
+                haptic="selection"
+              >
+                <Text style={[type.labelXs, { color: foreground }]}># Tag</Text>
+              </SpringPressable>
+            </View>
+          )}
+
+          {tool === 'stickers' && (
+            <View style={s.stickerSheet}>
+              {STICKERS.map((st) => (
+                <SpringPressable key={st.id} onPress={() => addSticker(st)} style={s.stickerCell} scaleTo={0.9} haptic="selection">
+                  <Text style={{ fontSize: 28 }}>{st.glyph}</Text>
+                </SpringPressable>
+              ))}
+            </View>
+          )}
+          {tool === 'style' && mode === 'text' && (
+            <View style={s.styleSheet}>
+              <SpringPressable onPress={cycleBackground} style={s.styleChip} scaleTo={motion.scale.chip}>
+                <Text style={[type.labelXs, { color: foreground }]}>BG</Text>
+              </SpringPressable>
+              <SpringPressable
+                onPress={() => setAlign((a) => TEXT_ALIGNS[(TEXT_ALIGNS.indexOf(a) + 1) % TEXT_ALIGNS.length])}
+                style={s.styleChip}
+                scaleTo={motion.scale.chip}
+              >
+                <Text style={[type.labelXs, { color: foreground }]}>{align.toUpperCase()}</Text>
+              </SpringPressable>
+              <SpringPressable
+                onPress={() => setFontScale((n) => (n >= 1.35 ? 0.85 : +(n + 0.15).toFixed(2)))}
+                style={s.styleChip}
+                scaleTo={motion.scale.chip}
+              >
+                <Text style={[type.labelXs, { color: foreground }]}>Aa</Text>
+              </SpringPressable>
+            </View>
+          )}
+          {tool === 'mention' && (
+            <View style={s.mentionSheet}>
+              <TextInput
+                autoFocus
+                value={mentionQ}
+                onChangeText={setMentionQ}
+                placeholder="@username"
+                placeholderTextColor="rgba(255,255,255,0.45)"
+                style={s.mentionInput}
+              />
+              {mentionHits.map((u) => (
+                <Pressable key={u.id} onPress={() => addMention(u)} style={s.mentionHit}>
+                  <Avatar uri={u.avatar} name={u.name} id={u.id} size={26} />
+                  <Text style={[type.bodySm, { color: '#ffffff' }]}>@{u.username || u.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {tool === 'location' && (
+            <View style={s.mentionSheet}>
+              <TextInput
+                value={locationLabel}
+                onChangeText={setLocationLabel}
+                placeholder="City name (no exact pin)"
+                placeholderTextColor="rgba(255,255,255,0.45)"
+                style={s.mentionInput}
+              />
+              <SpringPressable onPress={applyLocation} style={s.locGo} scaleTo={motion.scale.chip} haptic="selection">
+                <Text style={[type.labelSm, { color: '#050505' }]}>ADD PLACE</Text>
+              </SpringPressable>
             </View>
           )}
 
@@ -876,6 +1200,15 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
 const makeStyles = (t) => StyleSheet.create({
   /* story ring strip */
   storiesWrap: { marginTop: 14 },
+  statusHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  statusAddBtn: { width: 32, height: 32, borderWidth: 1.5, borderColor: t.ink, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  heroCard: { borderWidth: 2, borderRadius: 14, overflow: 'hidden' },
+  heroInner: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
+  heroCta: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999 },
+  cardRow: { flexDirection: 'row', gap: 10, paddingBottom: 4 },
+  personCard: { width: 132, borderWidth: 1.5, borderRadius: 12, overflow: 'hidden' },
+  personPreview: { height: 148 },
+  personMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 8 },
   storiesRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 2 },
   circleCol: { alignItems: 'center', width: 70 },
   circlePress: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
@@ -933,4 +1266,19 @@ const makeStyles = (t) => StyleSheet.create({
   replyInput: { flex: 1, ...type.bodyMd, color: '#1c1b1b', paddingVertical: 6, outlineStyle: 'none' },
   replySend: { width: 38, height: 38, borderRadius: radius.full, backgroundColor: '#FFE24D', borderWidth: 2, borderColor: '#1c1b1b', alignItems: 'center', justifyContent: 'center' },
   replyHintWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 10, zIndex: 4, alignItems: 'center' },
+});
+: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
+  reactBurst: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 8 },
+  overlayChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, marginBottom: 6 },
+  overlayChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.45)' },
+  toolRail: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10, paddingBottom: 6, flexWrap: 'wrap' },
+  toolBtn: { alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 10 },
+  stickerSheet: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingBottom: 8, gap: 4 },
+  stickerCell: { width: '18%', alignItems: 'center', paddingVertical: 6 },
+  styleSheet: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
+  styleChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.35)' },
+  mentionSheet: { paddingHorizontal: 16, paddingBottom: 8, gap: 6 },
+  mentionInput: { ...type.bodyMd, color: '#ffffff', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.28)', paddingVertical: 8, outlineStyle: 'none' },
+  mentionHit: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  locGo: { alignSelf: 'flex-start', backgroundColor: '#FFE24D', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginTop: 6 },
 });

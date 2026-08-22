@@ -284,9 +284,7 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
 
       {SectionToggle}
 
-      {/* Status stories — the See section lives here now, Instagram-style.
-          Your profile circle comes first (tap to view, + to upload), then a
-          ring for everyone with a live 24-hour update. */}
+      {/* BROSKIE Status — grid-lined home, segmented rings, immersive viewer. */}
       <StoriesRow reloadKey={todayReload} />
 
       {/* Today at your place — who's around/online from your college or
