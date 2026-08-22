@@ -3,21 +3,20 @@ import { View, Text, Pressable, StyleSheet, TextInput, FlatList } from 'react-na
 import Icon from '../icons/Icon';
 import Emoji from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
-import { FadeSlide, SpringPressable } from '../motion';
-import { inkBox, marker, type, dashedRule } from '../theme';
+import { FadeSlide, SpringPressable, haptic } from '../motion';
+import { inkBox, type } from '../theme';
 import META from '../icons/emojiMeta.json';
 
 /**
- * Real, full-vector emoji picker — every glyph is rendered by <Emoji> from
- * the (now 1445-strong) Twemoji SVG set, so nothing here ever falls back to
- * a system font glyph (the old 32-emoji picker + regex fallback meant most
- * emoji people actually reach for rendered as ugly, inconsistent system
- * glyphs mixed in with the hand-picked vector ones — this fixes that by
- * covering the vast majority of commonly-used emoji as real SVGs).
+ * Full-vector emoji picker. Every glyph renders through <Emoji> from the
+ * complete Twemoji table — the entire RGI set (flags, keycaps, ZWJ
+ * families, newest emoji), so nothing ever falls back to inconsistent
+ * system font art.
  *
- * Tabbed by category (Smileys, People, Nature, Food, Travel, Activities,
- * Objects, Symbols) with a search box that matches against each emoji's
- * official CLDR name, so "fire" finds 🔥 even without knowing the tab.
+ * Tabbed by category (Smileys … Symbols, Flags), CLDR-name + keyword-tag
+ * search ("fire" finds 🔥, "lit" finds it too), and WhatsApp-style
+ * skin-tone variants: long-press any person/hand emoji to slide open the
+ * tone strip, then tap the exact tone you want.
  */
 const CATEGORIES = [
   { key: 'smileys', label: 'Smileys', icon: 'happy-outline' },
@@ -28,6 +27,7 @@ const CATEGORIES = [
   { key: 'activities', label: 'Activities', icon: 'football-outline' },
   { key: 'objects', label: 'Objects', icon: 'bulb-outline' },
   { key: 'symbols', label: 'Symbols', icon: 'heart-outline' },
+  { key: 'flags', label: 'Flags', icon: 'flag-outline' },
 ];
 
 const ALL_CHARS = CATEGORIES.flatMap((c) => META.categories[c.key] || []);
@@ -36,17 +36,24 @@ export default function EmojiPicker({ visible, onSelect }) {
   const { theme } = useTheme();
   const [tab, setTab] = useState('smileys');
   const [query, setQuery] = useState('');
+  const [toneFor, setToneFor] = useState(null); // base char whose tone strip is open
   const s = makeStyles(theme);
 
   const grid = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q) {
-      return ALL_CHARS.filter((ch) => (META.names[ch] || '').toLowerCase().includes(q)).slice(0, 200);
+      return ALL_CHARS.filter((ch) => {
+        if ((META.names[ch] || '').toLowerCase().includes(q)) return true;
+        const tags = META.tags?.[ch];
+        return !!tags && tags.some((t) => t.includes(q));
+      }).slice(0, 240);
     }
     return META.categories[tab] || [];
   }, [tab, query]);
 
   if (!visible) return null;
+
+  const toneChoices = toneFor ? [toneFor, ...(META.tones?.[toneFor] || [])] : null;
 
   return (
     <FadeSlide from="up" distance={14} duration={220}>
@@ -55,7 +62,7 @@ export default function EmojiPicker({ visible, onSelect }) {
         <Icon name="search" size={15} color={theme.muted} />
         <TextInput
           value={query}
-          onChangeText={setQuery}
+          onChangeText={(t) => { setQuery(t); if (t) setToneFor(null); }}
           placeholder="Search emoji…"
           placeholderTextColor={theme.muted}
           style={[styles.searchInput, { color: theme.text }]}
@@ -74,13 +81,36 @@ export default function EmojiPicker({ visible, onSelect }) {
             return (
               <Pressable
                 key={c.key}
-                onPress={() => setTab(c.key)}
+                onPress={() => { setTab(c.key); setToneFor(null); }}
+                accessibilityLabel={c.label}
+                accessibilityRole="button"
                 style={[styles.tabBtn, active && { backgroundColor: theme.highlighterWash }]}
               >
                 <Icon name={c.icon} size={16} color={active ? theme.ink : theme.muted} />
               </Pressable>
             );
           })}
+        </View>
+      )}
+
+      {toneChoices && (
+        <View style={[styles.toneBar, { borderBottomColor: theme.graphiteLine, backgroundColor: theme.cardAlt || theme.card }]}>
+          <Text style={[type.labelXs, { color: theme.muted }]}>TONE</Text>
+          <View style={styles.toneOpts}>
+            {toneChoices.map((ch) => (
+              <SpringPressable
+                key={ch}
+                onPress={() => { haptic('selection'); onSelect(ch); setToneFor(null); }}
+                style={styles.toneBtn}
+                scaleTo={0.82}
+              >
+                <Emoji char={ch} size={26} />
+              </SpringPressable>
+            ))}
+          </View>
+          <Pressable onPress={() => setToneFor(null)} hitSlop={8} style={styles.toneClose}>
+            <Icon name="close" size={14} color={theme.muted} />
+          </Pressable>
         </View>
       )}
 
@@ -92,9 +122,16 @@ export default function EmojiPicker({ visible, onSelect }) {
         style={styles.grid}
         contentContainerStyle={styles.gridContent}
         keyboardShouldPersistTaps="handled"
+        initialNumToRender={64}
         renderItem={({ item }) => (
-          <SpringPressable onPress={() => onSelect(item)} style={styles.emojiBtn} scaleTo={0.82}>
-            <Emoji char={item} size={26} />
+          <SpringPressable
+            onPress={() => onSelect(item)}
+            onLongPress={META.tones?.[item] ? () => { haptic('selection'); setToneFor(item); } : undefined}
+            delayLongPress={260}
+            style={styles.emojiBtn}
+            scaleTo={0.82}
+          >
+            <Emoji char={item} size={27} />
           </SpringPressable>
         )}
         ListEmptyComponent={
@@ -117,6 +154,14 @@ const styles = StyleSheet.create({
   wrap: { marginHorizontal: 16, marginBottom: 8, overflow: 'hidden' },
   tabRow: { flexDirection: 'row', borderBottomWidth: 1, borderStyle: 'dashed' },
   tabBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 9 },
+  toneBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderBottomWidth: 1, borderStyle: 'dashed',
+  },
+  toneOpts: { flex: 1, flexDirection: 'row', justifyContent: 'space-evenly' },
+  toneBtn: { alignItems: 'center', justifyContent: 'center', padding: 3 },
+  toneClose: { padding: 4 },
   grid: { maxHeight: 220 },
   gridContent: { paddingVertical: 6, paddingHorizontal: 4 },
   emojiBtn: { width: '12.5%', alignItems: 'center', paddingVertical: 6 },

@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, Image, Pressable, StyleSheet, Modal, Animated, PanResponder, Platform, ActivityIndicator } from 'react-native';
 import Icon from '../icons/Icon';
-import Emoji, { EmojiText } from '../icons/Emoji';
+import Emoji, { EmojiText, jumboEmojiChars } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
 import { Ticks, formatTime, PaperCard, Rule, FrostedBackdrop, GoldTick, hasGoldTick } from './common';
 import { mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 import { alpha } from '../chatThemes';
 import { confirm } from '../hooks/confirm';
-import { Pop, SheetSpringIn, HeartBurst, haptic, useReducedMotion, motion } from '../motion';
+import { Pop, SheetSpringIn, LikeBurst, haptic, useReducedMotion, motion } from '../motion';
 import { MESSAGE_SWIPE, messageTravel, shouldClaimMessageSwipe, isTouchInput, hasTouchScreen } from '../gestures';
 import VoiceNote from './VoiceNote';
 
@@ -94,11 +94,24 @@ export default function MessageBubble({
   const appearScale = appear.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
 
   // ---- double-tap → heart burst + ❤️ reaction (original +one interaction) ----
+  // Medium haptic + a quick bubble pulse make the like land with a physical
+  // thump; the burst itself is the gradient LikeBurst above the bubble.
+  const pulse = useRef(new Animated.Value(1)).current;
+  const pulseNow = () => {
+    if (reduced) return;
+    pulse.setValue(1);
+    Animated.sequence([
+      Animated.spring(pulse, { toValue: 1.055, ...motion.springPress, useNativeDriver: true }),
+      Animated.spring(pulse, { toValue: 1, ...motion.springBack, useNativeDriver: true }),
+    ]).start();
+  };
   const handleTap = () => {
     const now = Date.now();
     if (now - lastTapAt.current < 320) {
       lastTapAt.current = 0;
-      haptic('impact');
+      if (message.deleted) return;
+      haptic('medium');
+      pulseNow();
       setBurst(true);
       onReact?.(message.id, '❤️');
     } else {
@@ -258,13 +271,19 @@ export default function MessageBubble({
 
   const liftY = lift.interpolate({ inputRange: [0, 1], outputRange: [0, -3] });
   const liftScale = lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] });
-  // Compose the swipe translateX with the entrance + long-press lift so a
-  // single native-driven transform drives all three (they never overlap).
+  // Compose the swipe translateX with the entrance + long-press lift +
+  // double-tap pulse so a single native-driven transform drives them all.
   const bubbleTransform = [
     { translateX },
     ...(shouldAnimateIn ? [{ translateY: appearY }, { scale: appearScale }] : []),
     ...(menu && !reduced ? [{ translateY: liftY }, { scale: liftScale }] : []),
+    { scale: pulse },
   ];
+
+  // Emoji-only messages (≤3 glyphs) show jumbo — the premium chat-app touch.
+  const jumbo = !message.deleted && (message.type === 'text' || !message.type)
+    ? jumboEmojiChars(message.body)
+    : null;
 
   return (
     <>
@@ -324,7 +343,7 @@ export default function MessageBubble({
               pointerEvents="none"
               style={[s.highlightWash, shape, { opacity: hlOpacity, backgroundColor: theme.highlighterWash }]}
             />
-            {burst && <HeartBurst onDone={() => setBurst(false)} reduced={reduced} />}
+            {burst && <LikeBurst onDone={() => setBurst(false)} reduced={reduced} />}
           {isGroup && !isMine && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 }}>
               <Text style={[type.labelXs, { color: theme.graphite }]}>{String(senderName || 'Unknown').toUpperCase()}</Text>
@@ -431,6 +450,12 @@ export default function MessageBubble({
             </Pressable>
           ) : message.type === 'voice' ? (
             <VoiceNote uri={mediaUrl(message.mediaUrl)} duration={message.duration} isMine={isMine} onLongPress={openMenu} />
+          ) : jumbo ? (
+            <View style={s.jumboRow}>
+              {jumbo.map((ch, i) => (
+                <Emoji key={`${ch}-${i}`} char={ch} size={jumbo.length === 1 ? 56 : jumbo.length === 2 ? 44 : 36} />
+              ))}
+            </View>
           ) : (
             <EmojiText style={[type.bodyMd, { color: ink }]}>{message.body}</EmojiText>
           )}
@@ -625,6 +650,7 @@ const makeStyles = (t) => StyleSheet.create({
   },
   meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 5, marginTop: 5 },
   reply: { borderLeftWidth: 2, paddingLeft: 8, paddingVertical: 2, marginBottom: 7 },
+  jumboRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
   reactions: {
     position: 'absolute', bottom: -12, left: 10, flexDirection: 'row', gap: 4,
     paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1,
