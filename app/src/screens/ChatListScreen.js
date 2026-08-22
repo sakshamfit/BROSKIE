@@ -49,6 +49,11 @@ export default function ChatListScreen({ navigation }) {
   const [sheetChat, setSheetChat] = useState(null); // long-press action sheet
   const [sheetBusy, setSheetBusy] = useState(false);
 
+  // Opens the short window in which rows are allowed to cascade in
+  // (see ChatRowEntrance). Runs before the first rows render.
+  const firstPaint = useRef(true);
+  if (firstPaint.current) { firstPaint.current = false; listOpenedAt.t = Date.now(); }
+
   const s = makeStyles(theme);
 
   const onRefresh = useCallback(async () => {
@@ -368,6 +373,23 @@ function SheetRow({ icon, label, onPress, danger = false, disabled = false }) {
  * avatar pulses, the unread mark pops, and a brief highlight washes across
  * the card — "something new happened here" without shaking the row.
  */
+/**
+ * Rows cascade in when the list first paints — and only then.
+ *
+ * FlatList unmounts rows that scroll far out of view and re-mounts them on
+ * the way back, so a naive mount animation makes the list flicker every time
+ * the user scrolls up. This gates the entrance on a short window after the
+ * screen appears: first paint gets the cascade, everything afterwards is
+ * simply there.
+ */
+const listOpenedAt = { t: 0 };
+
+function ChatRowEntrance({ index, style, children }) {
+  const animate = useRef(Date.now() - listOpenedAt.t < 600).current;
+  if (!animate) return <View style={style}>{children}</View>;
+  return <MotionIn delay={staggerDelay(index)} distance={8} style={style}>{children}</MotionIn>;
+}
+
 function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, style: s }) {
   const pulse = useRef(new Animated.Value(0)).current;   // avatar scale pulse
   const wash = useRef(new Animated.Value(0)).current;    // highlight wash
@@ -383,13 +405,16 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
     // `prev !== 0` skips the very first mount — only genuinely new arrivals react.
     if (!isIncoming || prev === 0) return;
     haptic('selection');
+    // A new message should catch the eye, then get out of the way. The old
+    // 10% avatar jump and 1.5s wash were doing a victory lap for something
+    // that happens constantly in a messenger.
     Animated.sequence([
-      Animated.spring(pulse, { toValue: 1, friction: 5, tension: 150, useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.spring(pulse, { toValue: 1, ...motion.springPop, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 520, easing: Easing.out(Easing.quad), useNativeDriver: true }),
     ]).start();
     Animated.sequence([
-      Animated.timing(wash, { toValue: 1, duration: 140, useNativeDriver: true }),
-      Animated.timing(wash, { toValue: 0, duration: 1100, delay: 260, useNativeDriver: true }),
+      Animated.timing(wash, { toValue: 1, duration: 120, useNativeDriver: true }),
+      Animated.timing(wash, { toValue: 0, duration: 620, delay: 180, useNativeDriver: true }),
     ]).start();
   }, [item.lastMessage?.createdAt, item.updatedAt, item.lastMessage, user?.id, pulse, wash]);
 
@@ -412,8 +437,8 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
   const lm = item.lastMessage;
   const isMine = lm && lm.senderId === user.id;
   const hasUnread = item.unread > 0;
-  const avatarScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] });
-  const washOpacity = wash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.5] });
+  const avatarScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
+  const washOpacity = wash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.38] });
 
   let preview = 'no messages yet';
   let senderPrefix = null;
@@ -431,7 +456,7 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
   }
 
   return (
-    <MotionIn delay={staggerDelay(index)} distance={8} style={s.rowWrap}>
+    <ChatRowEntrance index={index} style={s.rowWrap}>
       {/* A hard offset plate plus a soft shadow gives the black card real
           depth on Android, iOS and web without adding another native module. */}
       <View pointerEvents="none" style={[s.rowDepth, hasUnread && { backgroundColor: '#8d7900' }]} />
@@ -538,7 +563,7 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
           </View>
         </View>
       </AnimatedPressable>
-    </MotionIn>
+    </ChatRowEntrance>
   );
 }
 

@@ -118,6 +118,30 @@ export function useReducedMotion() {
 }
 
 /* ------------------------------------------------------------------ */
+/* off-screen gate — never animate what nobody can see                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The page pager keeps the current page's neighbours mounted so a swipe
+ * reveals real content instead of a blank gap. Without a gate, every
+ * skeleton shimmer, typing indicator and floating empty state on those
+ * neighbours would keep running forever, burning frames off-screen.
+ *
+ * `MotionActive` marks a subtree as visible or not; the looping primitives
+ * below subscribe and simply stop when it goes false.
+ */
+const MotionActiveContext = React.createContext(true);
+
+export function MotionActive({ active, children }) {
+  return <MotionActiveContext.Provider value={active}>{children}</MotionActiveContext.Provider>;
+}
+
+/** True when this subtree is on screen (see MotionActive). */
+export function useMotionActive() {
+  return React.useContext(MotionActiveContext);
+}
+
+/* ------------------------------------------------------------------ */
 /* haptics — subtle feedback for important interactions only           */
 /* ------------------------------------------------------------------ */
 
@@ -350,10 +374,11 @@ export function TypingDots({ color, size = 5, reduced: reducedProp }) {
   // Hook must run unconditionally; the prop only overrides its result.
   const reducedAuto = useReducedMotion();
   const reduced = reducedProp ?? reducedAuto;
+  const onScreen = useMotionActive();
   const dots = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
 
   useEffect(() => {
-    if (reduced) return undefined;
+    if (reduced || !onScreen) return undefined;
     const loops = dots.map((dot, i) => Animated.loop(Animated.sequence([
       Animated.delay(i * 170),
       Animated.timing(dot, { toValue: 1, duration: 460, easing: motion.easing.inOut, useNativeDriver: true }),
@@ -363,7 +388,7 @@ export function TypingDots({ color, size = 5, reduced: reducedProp }) {
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduced]);
+  }, [reduced, onScreen]);
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: Math.max(2, size * 0.5) }}>
@@ -394,10 +419,11 @@ export function Skeleton({ width = '100%', height = 14, radius = 5, style, reduc
   // Hook must run unconditionally; the prop only overrides its result.
   const reducedAuto = useReducedMotion();
   const reduced = reducedProp ?? reducedAuto;
+  const onScreen = useMotionActive();
   const o = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
-    if (reduced) return undefined;
+    if (reduced || !onScreen) return undefined;
     const loop = Animated.loop(Animated.sequence([
       Animated.timing(o, { toValue: 0.95, duration: 780, easing: motion.easing.inOut, useNativeDriver: true }),
       Animated.timing(o, { toValue: 0.5, duration: 780, easing: motion.easing.inOut, useNativeDriver: true }),
@@ -405,7 +431,7 @@ export function Skeleton({ width = '100%', height = 14, radius = 5, style, reduc
     loop.start();
     return () => loop.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduced]);
+  }, [reduced, onScreen]);
 
   const { theme } = useTheme();
   return (
@@ -423,10 +449,11 @@ export function FloatLoop({ children, amplitude = 4, duration = 3400, style, red
   // Hook must run unconditionally; the prop only overrides its result.
   const reducedAuto = useReducedMotion();
   const reduced = reducedProp ?? reducedAuto;
+  const onScreen = useMotionActive();
   const y = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (reduced) return undefined;
+    if (reduced || !onScreen) return undefined;
     const loop = Animated.loop(Animated.sequence([
       Animated.timing(y, { toValue: -amplitude, duration, easing: motion.easing.inOut, useNativeDriver: true }),
       Animated.timing(y, { toValue: amplitude, duration, easing: motion.easing.inOut, useNativeDriver: true }),
@@ -435,7 +462,7 @@ export function FloatLoop({ children, amplitude = 4, duration = 3400, style, red
     loop.start();
     return () => loop.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduced]);
+  }, [reduced, onScreen]);
 
   return <Animated.View style={[{ transform: [{ translateY: reduced ? 0 : y }] }, style]}>{children}</Animated.View>;
 }
@@ -463,13 +490,15 @@ export function HeartBurst({ color = '#e5484d', onDone, reduced: reducedProp }) 
         .start(() => onDone?.());
       return undefined;
     }
+    // One arrival, one departure. The old version bounced three times before
+    // it left, which read as a cartoon rather than a reaction.
+    scale.setValue(0.3);
     Animated.sequence([
-      Animated.spring(scale, { toValue: 1, friction: 5, tension: 130, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 0.84, friction: 6, tension: 220, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, friction: 5, tension: 170, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, ...motion.springPop, useNativeDriver: true }),
+      Animated.delay(240),
       Animated.parallel([
-        Animated.timing(scale, { toValue: 1.4, duration: 240, easing: motion.easing.out, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0, duration: 300, easing: motion.easing.out, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1.3, duration: 220, easing: motion.easing.out, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0, duration: 240, easing: motion.easing.out, useNativeDriver: true }),
       ]),
     ]).start(() => onDone?.());
     // eslint-disable-next-line react-hooks/exhaustive-deps

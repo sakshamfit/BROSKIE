@@ -320,19 +320,26 @@ export function InkCheckbox({ checked, size = 20, onPress }) {
 export function HandDrawnToggle({ value, onToggle, disabled }) {
   const { theme } = useTheme();
   const reduced = useReducedMotion();
-  const v = useRef(new Animated.Value(value ? 1 : 0)).current;
+  // Two values on purpose: the thumb travels on the native driver (never
+  // drops a frame), while only the track colour — which the native driver
+  // cannot interpolate — runs on the JS side.
+  const slide = useRef(new Animated.Value(value ? 1 : 0)).current;
+  const tint = useRef(new Animated.Value(value ? 1 : 0)).current;
 
   useEffect(() => {
-    if (reduced) { v.setValue(value ? 1 : 0); return undefined; }
-    const anim = Animated.spring(v, {
-      toValue: value ? 1 : 0, ...motion.springBack, useNativeDriver: false,
-    });
+    if (reduced) { slide.setValue(value ? 1 : 0); tint.setValue(value ? 1 : 0); return undefined; }
+    const anim = Animated.parallel([
+      Animated.spring(slide, { toValue: value ? 1 : 0, ...motion.springBack, useNativeDriver: true }),
+      Animated.timing(tint, {
+        toValue: value ? 1 : 0, duration: motion.fast, easing: motion.easing.out, useNativeDriver: false,
+      }),
+    ]);
     anim.start();
     return () => anim.stop();
-  }, [value, reduced, v]);
+  }, [value, reduced, slide, tint]);
 
-  const translateX = v.interpolate({ inputRange: [0, 1], outputRange: [0, 22] });
-  const backgroundColor = v.interpolate({
+  const translateX = slide.interpolate({ inputRange: [0, 1], outputRange: [0, 22] });
+  const backgroundColor = tint.interpolate({
     inputRange: [0, 1], outputRange: [theme.cardAlt, theme.highlighter],
   });
 
