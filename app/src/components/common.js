@@ -6,7 +6,7 @@ import {
   colorFor, initials, AVATAR_INK, radius, type, tokens, stroke,
   inkBox, sketchBox, sketchAvatarFrame, pencilBox, inkUnderline, dashedRule, marker, pressedInk, raised,
 } from '../theme';
-import { usePressScale, Pop, FloatLoop } from '../motion';
+import { usePressScale, Pop, FloatLoop, FadeSlide, motion, haptic, useReducedMotion } from '../motion';
 import { mediaUrl } from '../api';
 import { useTheme } from '../store/ThemeContext';
 import { openProfile } from '../push/routing';
@@ -54,19 +54,19 @@ export function FrostedBackdrop({ intensity = 60, dim = 0.2, style }) {
   );
 }
 
-/** Subtle entrance motion for panels and screen content. */
-export function MotionIn({ children, delay = 0, distance = 10, style }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(distance)).current;
-  useEffect(() => {
-    const animation = Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 220, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 280, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-    ]);
-    animation.start();
-    return () => animation.stop();
-  }, [delay, opacity, translateY]);
-  return <Animated.View style={[{ opacity, transform: [{ translateY }] }, style]}>{children}</Animated.View>;
+/**
+ * Subtle entrance motion for panels and screen content.
+ *
+ * Delegates to the shared FadeSlide so panels use the same arrival curve,
+ * the same 8px travel and the same reduced-motion gate as the rest of the
+ * app — there is exactly one entrance in this product, not two similar ones.
+ */
+export function MotionIn({ children, delay = 0, distance = 8, style }) {
+  return (
+    <FadeSlide delay={delay} distance={distance} duration={motion.normal} style={style}>
+      {children}
+    </FadeSlide>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -102,48 +102,60 @@ function DogEar({ size = 14 }) {
   );
 }
 
-/** Pressable paper row; highlighter washes in on press. */
+/**
+ * Pressable paper row. The whole sheet compresses very slightly (1.5%) and
+ * settles back with the standard spring — full-width surfaces must move
+ * *less* than buttons or the row reads as broken rather than pressed. The
+ * highlighter wash still washes in on top for the ink identity.
+ */
 export function PaperSurface({ children, onPress, onLongPress, style, weight = 'pencil', disabled, dogEar }) {
   const { theme } = useTheme();
   const outline = weight === 'ink' ? inkBox(theme, 'ink') : pencilBox(theme);
-  return (
-    <Pressable
-      onPress={onPress}
-      onLongPress={onLongPress}
-      disabled={disabled}
-      android_ripple={rippleFor(theme)}
-      style={({ pressed }) => [
-        { backgroundColor: theme.card },
-        raised(theme, weight === 'ink' ? 2 : 1),
-        outline,
-        pressed && Platform.OS !== 'android' ? [pressedInk(theme), { transform: [{ translateY: 2 }] }] : null,
-        disabled && { opacity: 0.5 },
-        style,
-      ]}
-    >
-      {children}
-      {dogEar && <DogEar />}
-    </Pressable>
-  );
-}
-
-/** Button: 2px ink box; press floods it with highlighter. */
-export function InkButton({ label, onPress, icon, style, textStyle, disabled, busy, filled = false, danger = false }) {
-  const { theme } = useTheme();
-  const lineColor = danger ? theme.danger : theme.ink;
-  const fg = filled ? theme.onPrimary : danger ? theme.danger : theme.ink;
-  const isAndroid = Platform.OS === 'android';
-  const scale = useRef(new Animated.Value(1)).current;
-  const setPressed = (pressed) => Animated.spring(scale, {
-    toValue: pressed ? 0.965 : 1, useNativeDriver: true, speed: 38, bounciness: 5,
-  }).start();
+  const { scale, onPressIn, onPressOut } = usePressScale(motion.scale.row);
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable
         onPress={onPress}
-        onPressIn={() => setPressed(true)}
-        onPressOut={() => setPressed(false)}
-        disabled={disabled || busy}
+        onLongPress={onLongPress}
+        onPressIn={disabled ? undefined : onPressIn}
+        onPressOut={onPressOut}
+        disabled={disabled}
+        android_ripple={rippleFor(theme)}
+        style={({ pressed }) => [
+          { backgroundColor: theme.card },
+          raised(theme, weight === 'ink' ? 2 : 1),
+          outline,
+          pressed && Platform.OS !== 'android' ? pressedInk(theme) : null,
+          disabled && { opacity: 0.5 },
+          style,
+        ]}
+      >
+        {children}
+        {dogEar && <DogEar />}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+/** Button: 2px ink box; press floods it with highlighter. */
+export function InkButton({
+  label, onPress, icon, style, textStyle, disabled, busy, filled = false, danger = false,
+  haptic: hapticKind = 'selection',
+}) {
+  const { theme } = useTheme();
+  const lineColor = danger ? theme.danger : theme.ink;
+  const fg = filled ? theme.onPrimary : danger ? theme.danger : theme.ink;
+  const isAndroid = Platform.OS === 'android';
+  const inert = disabled || busy;
+  // Same spring as every other button in the app — buttons must feel related.
+  const { scale, onPressIn, onPressOut } = usePressScale(motion.scale.button);
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPress={(e) => { if (hapticKind) haptic(hapticKind); onPress?.(e); }}
+        onPressIn={() => { if (!inert) onPressIn(); }}
+        onPressOut={onPressOut}
+        disabled={inert}
         android_ripple={rippleFor(theme, { color: filled ? 'rgba(255,255,255,0.25)' : theme.ripple })}
         style={({ pressed }) => [
           styles.btn,
@@ -153,7 +165,7 @@ export function InkButton({ label, onPress, icon, style, textStyle, disabled, bu
           filled && { backgroundColor: lineColor },
           pressed && !filled && !isAndroid ? marker(theme, 2) : null,
           pressed && filled && !isAndroid ? { opacity: 0.82 } : null,
-          (disabled || busy) && { opacity: 0.45 },
+          inert && { opacity: 0.45 },
           style,
         ]}
       >
@@ -171,20 +183,24 @@ export function InkButton({ label, onPress, icon, style, textStyle, disabled, bu
 }
 
 /** Square-ish icon button drawn in ink, with a physical press-scale spring. */
-export function InkIconButton({ name, onPress, size = 40, iconSize = 19, iconColor, style, weight = 'ink', disabled, active }) {
+export function InkIconButton({
+  name, onPress, size = 40, iconSize = 19, iconColor, style, weight = 'ink', disabled, active,
+  haptic: hapticKind = 'selection',
+}) {
   const { theme } = useTheme();
   const isAndroid = Platform.OS === 'android';
-  const { scale, onPressIn, onPressOut } = usePressScale(0.94);
+  // Icons are small, so they need the deepest press of the ladder to read.
+  const { scale, onPressIn, onPressOut } = usePressScale(motion.scale.icon);
   // Real devices need a minimum ~44dp tap target (Apple HIG / Material both
   // recommend this) even when the drawn box itself is smaller — hitSlop
   // widens the touchable area without changing the visual size.
   const slop = Math.max(0, Math.ceil((44 - size) / 2));
   return (
     <Pressable
-      onPress={onPress}
+      onPress={(e) => { if (hapticKind) haptic(hapticKind); onPress?.(e); }}
       disabled={disabled}
       hitSlop={Math.max(slop, 6)}
-      onPressIn={onPressIn}
+      onPressIn={() => { if (!disabled) onPressIn(); }}
       onPressOut={onPressOut}
       android_ripple={rippleFor(theme, { borderless: true, radius: size * 0.8 })}
       style={({ pressed }) => [
@@ -206,11 +222,44 @@ export function InkIconButton({ name, onPress, size = 40, iconSize = 19, iconCol
 }
 
 /** Input treatment: a single ink line, no box. */
+/**
+ * Input treatment: a single ink line, no box.
+ *
+ * Focus used to swap the border width, which snapped between two thicknesses.
+ * Now the base line stays put and a heavier line is *drawn over* it — fading
+ * in while it widens from 88% — so focusing a field reads as a pen stroke
+ * landing rather than a value flipping. Native driver, no layout work.
+ */
 export function InkField({ children, style, focused }) {
   const { theme } = useTheme();
+  const reduced = useReducedMotion();
+  const v = useRef(new Animated.Value(focused ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (reduced) { v.setValue(focused ? 1 : 0); return undefined; }
+    const anim = Animated.timing(v, {
+      toValue: focused ? 1 : 0,
+      duration: focused ? motion.fast : motion.micro,
+      easing: motion.easing.out,
+      useNativeDriver: true,
+    });
+    anim.start();
+    return () => anim.stop();
+  }, [focused, reduced, v]);
+
   return (
-    <View style={[styles.field, inkUnderline(theme, focused ? 'bold' : 'ink'), style]}>
+    <View style={[styles.field, inkUnderline(theme, 'ink'), style]}>
       {children}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute', left: 0, right: 0, bottom: -stroke.bold,
+          height: stroke.bold,
+          backgroundColor: theme.ink,
+          opacity: v,
+          transform: [{ scaleX: v.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) }],
+        }}
+      />
     </View>
   );
 }
@@ -268,37 +317,89 @@ export function CountBead({ label, style, small }) {
 /** Literal X inside a hand-sketched square. */
 export function InkCheckbox({ checked, size = 20, onPress }) {
   const { theme } = useTheme();
+  const { scale, onPressIn, onPressOut } = usePressScale(motion.scale.chip);
   return (
-    <Pressable onPress={onPress} hitSlop={8} style={[{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }, inkBox(theme, 'ink')]}>
-      {checked && <Icon name="close" size={size * 0.82} color={theme.ink} />}
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: !!checked }}
+      onPress={() => { haptic('selection'); onPress?.(); }}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      hitSlop={8}
+    >
+      <Animated.View
+        style={[
+          { width: size, height: size, alignItems: 'center', justifyContent: 'center', transform: [{ scale }] },
+          inkBox(theme, 'ink'),
+        ]}
+      >
+        {/* the mark is struck into the box with a spring, never cut in */}
+        {checked && (
+          <Pop trigger={checked} from={0.5}>
+            <Icon name="close" size={size * 0.82} color={theme.ink} />
+          </Pop>
+        )}
+      </Animated.View>
     </Pressable>
   );
 }
 
-/** Hand-drawn pill toggle — ink outline, sketch-square thumb. */
+/**
+ * Hand-drawn pill toggle. The thumb is finger-weighted: it springs across
+ * the track (a single small overshoot at the end of the travel) while the
+ * track colour crossfades underneath, so the switch reads as one physical
+ * object moving rather than two properties changing at once.
+ */
 export function HandDrawnToggle({ value, onToggle, disabled }) {
   const { theme } = useTheme();
+  const reduced = useReducedMotion();
+  // Two values on purpose: the thumb travels on the native driver (never
+  // drops a frame), while only the track colour — which the native driver
+  // cannot interpolate — runs on the JS side.
+  const slide = useRef(new Animated.Value(value ? 1 : 0)).current;
+  const tint = useRef(new Animated.Value(value ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (reduced) { slide.setValue(value ? 1 : 0); tint.setValue(value ? 1 : 0); return undefined; }
+    const anim = Animated.parallel([
+      Animated.spring(slide, { toValue: value ? 1 : 0, ...motion.springBack, useNativeDriver: true }),
+      Animated.timing(tint, {
+        toValue: value ? 1 : 0, duration: motion.fast, easing: motion.easing.out, useNativeDriver: false,
+      }),
+    ]);
+    anim.start();
+    return () => anim.stop();
+  }, [value, reduced, slide, tint]);
+
+  const translateX = slide.interpolate({ inputRange: [0, 1], outputRange: [0, 22] });
+  const backgroundColor = tint.interpolate({
+    inputRange: [0, 1], outputRange: [theme.cardAlt, theme.highlighter],
+  });
+
   return (
     <Pressable
       accessibilityRole="switch"
       accessibilityState={{ checked: !!value, disabled: !!disabled }}
-      onPress={onToggle}
+      onPress={() => { if (!disabled) { haptic('selection'); onToggle?.(); } }}
       disabled={disabled}
       hitSlop={8}
-      style={{
-        width: 52, height: 28, borderRadius: radius.full, padding: 3, justifyContent: 'center',
-        borderWidth: 2, borderColor: theme.ink,
-        backgroundColor: value ? theme.highlighter : theme.cardAlt,
-        opacity: disabled ? 0.45 : 1,
-      }}
     >
-      <View
+      <Animated.View
         style={{
-          width: 20, height: 20, borderRadius: radius.full, backgroundColor: theme.ink,
-          borderWidth: 1, borderColor: theme.ink,
-          transform: [{ translateX: value ? 22 : 0 }],
+          width: 52, height: 28, borderRadius: radius.full, padding: 3, justifyContent: 'center',
+          borderWidth: 2, borderColor: theme.ink,
+          backgroundColor,
+          opacity: disabled ? 0.45 : 1,
         }}
-      />
+      >
+        <Animated.View
+          style={{
+            width: 20, height: 20, borderRadius: radius.full, backgroundColor: theme.ink,
+            borderWidth: 1, borderColor: theme.ink,
+            transform: [{ translateX }],
+          }}
+        />
+      </Animated.View>
     </Pressable>
   );
 }
@@ -419,14 +520,22 @@ export function Avatar({ uri, name, id, size = 48, group = false, online = false
   // Pass `profileId` (a user id) to enable it, or a custom `onPress`.
   const press = onPress || (profileId ? () => openProfile(profileId) : null);
   if (!press) return body;
+  return <PressableAvatar onPress={press} name={name}>{body}</PressableAvatar>;
+}
+
+/** Avatar press wrapper — springs so tapping a face feels like a real target. */
+function PressableAvatar({ onPress, name, children }) {
+  const { scale, onPressIn, onPressOut } = usePressScale(0.92);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={name ? `View ${name}'s profile` : 'View profile'}
-      onPress={press}
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       hitSlop={4}
     >
-      {body}
+      <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>
     </Pressable>
   );
 }
@@ -457,11 +566,37 @@ export function Screen({ children, style }) {
   return <View style={[{ flex: 1, backgroundColor: theme.bg }, style]}>{children}</View>;
 }
 
+/**
+ * Full-screen boot / busy state.
+ *
+ * A bare spinner on an empty screen reads as "stuck". The mark breathes
+ * instead: a slow, low-amplitude pulse that says the app is alive without
+ * competing for attention, plus the label. Reduced motion gets the static
+ * mark and the platform spinner only.
+ */
 export function Loading({ label }) {
   const { theme } = useTheme();
+  const reduced = useReducedMotion();
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduced) return undefined;
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 900, easing: motion.easing.inOut, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 900, easing: motion.easing.inOut, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [pulse, reduced]);
+
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] });
+
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg, gap: 14 }}>
-      <ActivityIndicator size="large" color={theme.ink} />
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg, gap: 18 }}>
+      <Animated.View style={reduced ? null : { transform: [{ scale }], opacity }}>
+        <ActivityIndicator size="large" color={theme.ink} />
+      </Animated.View>
       {!!label && <Text style={[type.labelSm, { color: theme.muted }]}>{label}</Text>}
     </View>
   );
@@ -486,16 +621,22 @@ export function EmptyState({ icon = 'chatbubbles-outline', title, subtitle }) {
   );
 }
 
-export function IconButton({ name, onPress, size = 22, color, style }) {
+export function IconButton({ name, onPress, size = 22, color, style, haptic: hapticKind = 'selection', disabled }) {
   const { theme } = useTheme();
+  const { scale, onPressIn, onPressOut } = usePressScale(motion.scale.icon);
   return (
     <Pressable
-      onPress={onPress}
+      onPress={(e) => { if (hapticKind) haptic(hapticKind); onPress?.(e); }}
+      disabled={disabled}
+      onPressIn={() => { if (!disabled) onPressIn(); }}
+      onPressOut={onPressOut}
       android_ripple={rippleFor(theme, { borderless: true, radius: 24 })}
-      style={({ pressed }) => [{ padding: 8, opacity: pressed && Platform.OS !== 'android' ? 0.55 : 1 }, style]}
+      style={[{ padding: 8 }, disabled && { opacity: 0.4 }, style]}
       hitSlop={6}
     >
-      <Icon name={name} size={size} color={color || theme.ink} />
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Icon name={name} size={size} color={color || theme.ink} />
+      </Animated.View>
     </Pressable>
   );
 }

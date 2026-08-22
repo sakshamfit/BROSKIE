@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { type, inkBox, marker, stroke } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 const RATIOS = [
   { key: 'original', label: 'Original', note: 'Fit', aspect: null, pair: null, preview: 1.25 },
@@ -66,7 +67,7 @@ export default function PhotoCropPicker({ visible, onClose, onPick, title = 'Fra
 
           <View style={s.grid}>
             {RATIOS.map((option, index) => (
-              <Pressable
+              <SpringPressable
                 key={option.key}
                 onPress={() => choose(option)}
                 disabled={!!busy}
@@ -77,6 +78,8 @@ export default function PhotoCropPicker({ visible, onClose, onPick, title = 'Fra
                   !!busy && busy !== option.key && { opacity: 0.4 },
                   { transform: [{ rotate: index % 2 ? '0.5deg' : '-0.5deg' }] },
                 ]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <View style={s.previewArea}>
                   <View
@@ -97,7 +100,7 @@ export default function PhotoCropPicker({ visible, onClose, onPick, title = 'Fra
                 </View>
                 <Text style={[type.bodyStrong, { color: theme.text, textAlign: 'center' }]}>{option.label}</Text>
                 <Text style={[type.labelXs, { color: theme.muted, textAlign: 'center', marginTop: 3 }]}>{option.note}</Text>
-              </Pressable>
+              </SpringPressable>
             ))}
           </View>
 

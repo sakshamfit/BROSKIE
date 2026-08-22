@@ -4,6 +4,7 @@ import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { radius, type, inkBox, marker, tokens } from '../theme';
 import { alpha } from '../chatThemes';
+import { SpringPressable, motion } from '../motion';
 
 /** Ink voice note: drawn play box + graphite waveform. */
 export default function VoiceNote({ uri, duration = 0, isMine, onLongPress }) {
@@ -53,7 +54,7 @@ export default function VoiceNote({ uri, duration = 0, isMine, onLongPress }) {
 
   return (
     <View style={s.wrap}>
-      <Pressable
+      <SpringPressable
         accessibilityRole="button"
         accessibilityLabel={playing ? 'Pause voice note' : 'Play voice note'}
         onPress={toggle}
@@ -64,9 +65,11 @@ export default function VoiceNote({ uri, duration = 0, isMine, onLongPress }) {
           inkBox(theme, 'ink', isMine ? theme.onBubbleOut : theme.ink),
           pressed ? marker(theme, 2) : null,
         ]}
+        scaleTo={motion.scale.row}
+        haptic="selection"
       >
         <Icon name={playing ? 'pause' : 'play'} size={15} color={isMine ? theme.onBubbleOut : theme.ink} />
-      </Pressable>
+      </SpringPressable>
       <Pressable
         style={{ flex: 1 }}
         onLongPress={onLongPress}

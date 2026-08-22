@@ -11,6 +11,7 @@ import useResponsive from '../hooks/useResponsive';
 import SongCard from '../components/SongCard';
 import { rippleFor } from '../components/common';
 import { dashedRule, marker, radius, type, raised } from '../theme';
+import { SpringPressable, motion } from '../motion';
 import { lazyComponent } from '../lazy';
 
 const AudiencePicker = lazyComponent(() => import('../components/AudiencePicker'));
@@ -165,37 +166,43 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
 
         {/* -------- action row: Photo / Song -------- */}
         <View style={s.actionRow}>
-          <Pressable
+          <SpringPressable
             onPress={pickImage}
             style={({ pressed }) => [
               s.actionBtn, raised(theme, 1), { borderColor: theme.graphiteLine, backgroundColor: theme.card, transform: [{ rotate: '-1deg' }] },
               pressed ? marker(theme, 1) : null,
             ]}
+            scaleTo={motion.scale.row}
+            haptic="selection"
           >
             <Icon name="image-outline" size={18} color={theme.text} />
             <Text style={[type.labelSm, { color: theme.text }]}>PHOTO</Text>
-          </Pressable>
-          <Pressable
+          </SpringPressable>
+          <SpringPressable
             onPress={() => setSongPicker(true)}
             style={({ pressed }) => [
               s.actionBtn, raised(theme, 1), { borderColor: theme.graphiteLine, backgroundColor: theme.card, transform: [{ rotate: '1deg' }] },
               pressed ? marker(theme, 1) : null,
             ]}
+            scaleTo={motion.scale.row}
+            haptic="selection"
           >
             <Icon name="musical-notes-outline" size={18} color={theme.text} />
             <Text style={[type.labelSm, { color: theme.text }]}>SONG</Text>
-          </Pressable>
-          <Pressable
+          </SpringPressable>
+          <SpringPressable
             onPress={() => setShowTagInput((v) => !v)}
             style={({ pressed }) => [
               s.actionBtn, raised(theme, 1), { borderColor: theme.graphiteLine, backgroundColor: theme.card, transform: [{ rotate: '-0.6deg' }] },
               pressed ? marker(theme, 1) : null,
               showTagInput && { backgroundColor: theme.highlighterWash },
             ]}
+            scaleTo={motion.scale.row}
+            haptic="selection"
           >
             <Icon name="pricetag-outline" size={17} color={theme.text} />
             <Text style={[type.labelSm, { color: theme.text }]}>TAG</Text>
-          </Pressable>
+          </SpringPressable>
         </View>
 
         {showTagInput && (
@@ -238,7 +245,7 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
       {/* -------- transmit footer -------- */}
       <View style={[s.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={isTablet ? s.footerInnerWide : s.footerInner}>
-          <Pressable
+          <SpringPressable
             onPress={submit}
             disabled={posting}
             android_ripple={rippleFor(theme, { color: 'rgba(255,255,255,0.25)' })}
@@ -248,6 +255,8 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
               Platform.OS !== 'android' && pressed ? { opacity: 0.85 } : null,
               posting && { opacity: 0.6 },
             ]}
+            scaleTo={motion.scale.row}
+            haptic="selection"
           >
             {posting ? (
               <ActivityIndicator color={theme.onPrimary} />
@@ -259,7 +268,7 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
                 </Text>
               </>
             )}
-          </Pressable>
+          </SpringPressable>
         </View>
       </View>
 

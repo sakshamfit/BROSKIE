@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, TextInput, Pressable, StyleSheet, Image,
-  ActivityIndicator, Modal, Platform, KeyboardAvoidingView,
+  View, Text, FlatList, TextInput, Pressable, StyleSheet,
+  ActivityIndicator, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -12,7 +12,9 @@ import { useTheme } from '../store/ThemeContext';
 import { confirm } from '../hooks/confirm';
 import PostCard from '../components/PostCard';
 import { Avatar, EmptyState, handleFor, formatChatTime, GoldTick, hasGoldTick } from '../components/common';
+import ImageLightbox from '../components/ImageLightbox';
 import { type, inkBox, stroke } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 /**
  * One post, full screen — the destination when you tap a "liked your post" /
@@ -187,7 +189,7 @@ export default function PostDetailScreen({ navigation, route, embedded = false }
                 }
               }}
             />
-            <Pressable
+            <SpringPressable
               onPress={send}
               disabled={busy || !text.trim()}
               style={({ pressed }) => [
@@ -196,18 +198,18 @@ export default function PostDetailScreen({ navigation, route, embedded = false }
                 { backgroundColor: pressed ? theme.highlighter : theme.ink },
                 (busy || !text.trim()) && { opacity: 0.4 },
               ]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <Icon name="send" size={15} color={theme.onPrimary} />
-            </Pressable>
+            </SpringPressable>
           </View>
         </KeyboardAvoidingView>
       ) : null}
 
-      <Modal visible={!!lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(null)}>
-        <Pressable style={s.lightbox} onPress={() => setLightbox(null)}>
-          <Image source={{ uri: lightbox }} style={{ width: '92%', height: '78%' }} resizeMode="contain" />
-        </Pressable>
-      </Modal>
+      {/* shared viewer: springs open, drag it away in any vertical
+          direction, backdrop fades with the finger */}
+      <ImageLightbox uri={lightbox} onClose={() => setLightbox(null)} />
     </View>
   );
 }
@@ -228,5 +230,4 @@ const makeStyles = (t) => StyleSheet.create({
   },
   commentInput: { flex: 1, ...type.bodyMd, color: t.text, maxHeight: 90, paddingVertical: 8, outlineStyle: 'none' },
   commentSend: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  lightbox: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput, RefreshControl,
-  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Keyboard, Animated, Easing,
+  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Keyboard, Animated, Easing, PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -14,7 +14,7 @@ import { Avatar, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTi
 import { AUDIENCE } from '../components/audienceMeta';
 import SongCard from '../components/SongCard';
 import { radius, type, inkBox, marker, stroke, raised } from '../theme';
-import { FadeSlide, Skeleton, motion } from '../motion';
+import { FadeSlide, Skeleton, motion, SpringPressable, haptic, useReducedMotion } from '../motion';
 import { lazyComponent } from '../lazy';
 
 const AudiencePicker = lazyComponent(() => import('../components/AudiencePicker'));
@@ -137,6 +137,7 @@ export default function StatusScreen() {
   const current = viewer?.group.items[viewer.index];
   const isOwnStatus = viewer?.group.user.id === user?.id;
   const [held, setHeld] = useState(false); // story hold-to-pause
+  const reducedMotion = useReducedMotion();
   const progress = useRef(new Animated.Value(0)).current;
   const progressVal = useRef(0);
   const segIdRef = useRef(null);
@@ -173,6 +174,56 @@ export default function StatusScreen() {
 
   const progressScaleX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
 
+  /* ---- story viewer gestures ----
+     `dismissY` follows a downward drag 1:1 (upward is heavily resisted) and
+     the story scales down as it travels, so letting go feels like handing
+     the card back. Holding to pause eases the same scale slightly, giving
+     the pause a visible state as well as a felt one. */
+  const dismissY = useRef(new Animated.Value(0)).current;
+  const holdScale = useRef(new Animated.Value(1)).current;
+  const closeViewerRef = useRef(closeViewer);
+  closeViewerRef.current = closeViewer;
+
+  useEffect(() => {
+    if (reducedMotion) { holdScale.setValue(1); return undefined; }
+    const anim = Animated.spring(holdScale, {
+      toValue: held ? 0.985 : 1, ...motion.springBack, useNativeDriver: true,
+    });
+    anim.start();
+    return () => anim.stop();
+  }, [held, holdScale, reducedMotion]);
+
+  useEffect(() => { dismissY.setValue(0); }, [viewer?.group?.user?.id, dismissY]);
+
+  const viewerPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (e, g) => g.dy > 12 && g.dy > Math.abs(g.dx) * 1.4,
+      onPanResponderGrant: () => { dismissY.stopAnimation(); },
+      onPanResponderMove: (e, g) => dismissY.setValue(g.dy > 0 ? g.dy : g.dy * 0.1),
+      onPanResponderRelease: (e, g) => {
+        if (g.dy > 110 || g.vy > 0.7) {
+          haptic('selection');
+          Animated.timing(dismissY, {
+            toValue: 700, duration: motion.fast, easing: motion.easing.out, useNativeDriver: true,
+          }).start(() => { dismissY.setValue(0); closeViewerRef.current(); });
+          return;
+        }
+        Animated.spring(dismissY, { toValue: 0, velocity: g.vy, ...motion.springBack, useNativeDriver: true }).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dismissY, { toValue: 0, ...motion.springBack, useNativeDriver: true }).start();
+      },
+      onPanResponderTerminationRequest: () => false,
+    }),
+  ).current;
+
+  // Drag distance also shrinks the story, so the gesture reads as physical.
+  const dragScale = dismissY.interpolate({
+    inputRange: [0, 320], outputRange: [1, 0.88], extrapolate: 'clamp',
+  });
+  const viewerScale = Animated.multiply(holdScale, dragScale);
+
   const recent = data.others.filter((group) => !group.allViewed);
   const viewed = data.others.filter((group) => group.allViewed);
   const myLatest = data.mine?.items?.[data.mine.items.length - 1];
@@ -184,13 +235,15 @@ export default function StatusScreen() {
           <Text style={s.title}>Status</Text>
           <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>Updates disappear after 24 hours</Text>
         </View>
-        <Pressable
+        <SpringPressable
           onPress={() => setComposerMode('choose')}
           hitSlop={8}
           style={({ pressed }) => [s.headerAdd, { borderColor: theme.ink }, pressed && marker(theme, 1)]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Icon name="add" size={20} color={theme.ink} />
-        </Pressable>
+        </SpringPressable>
       </View>
 
       {loading ? (
@@ -207,9 +260,11 @@ export default function StatusScreen() {
           }
         >
           <View style={[s.myStatus, { backgroundColor: theme.card, borderColor: theme.graphiteLine }]}>
-            <Pressable
+            <SpringPressable
               onPress={() => (data.mine ? openViewer(data.mine) : setComposerMode('choose'))}
               style={({ pressed }) => [s.myStatusMain, pressed && { opacity: 0.72 }]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <View style={s.myAvatarWrap}>
                 <Avatar uri={user?.avatar} name={user?.name} id={user?.id} size={58} />
@@ -225,22 +280,26 @@ export default function StatusScreen() {
                     : 'Tap to add a status update'}
                 </Text>
               </View>
-            </Pressable>
+            </SpringPressable>
             <View style={s.myQuickActions}>
-              <Pressable
+              <SpringPressable
                 accessibilityLabel="Create text status"
                 onPress={() => setComposerMode('text')}
                 style={({ pressed }) => [s.quickButton, { backgroundColor: theme.cardAlt, borderColor: theme.graphiteLine }, pressed && marker(theme, 1)]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="create-outline" size={18} color={theme.ink} />
-              </Pressable>
-              <Pressable
+              </SpringPressable>
+              <SpringPressable
                 accessibilityLabel="Create photo status"
                 onPress={() => setComposerMode('photo')}
                 style={({ pressed }) => [s.quickButton, { backgroundColor: '#050505', borderColor: '#000000' }, pressed && { backgroundColor: '#242321' }]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="camera-outline" size={18} color="#ffffff" />
-              </Pressable>
+              </SpringPressable>
             </View>
           </View>
 
@@ -274,7 +333,7 @@ export default function StatusScreen() {
       )}
 
       <View style={s.fabStack} pointerEvents="box-none">
-        <Pressable
+        <SpringPressable
           accessibilityLabel="Create text status"
           onPress={() => setComposerMode('text')}
           style={({ pressed }) => [
@@ -282,17 +341,21 @@ export default function StatusScreen() {
             { backgroundColor: theme.cardAlt, borderColor: theme.ink },
             pressed && marker(theme, 1),
           ]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Icon name="create-outline" size={19} color={theme.ink} />
-        </Pressable>
-        <Pressable
+        </SpringPressable>
+        <SpringPressable
           accessibilityLabel="Create photo status"
           onPress={() => setComposerMode('photo')}
           android_ripple={rippleFor(theme, { borderless: false, radius: 30 })}
           style={({ pressed }) => [s.fab, { backgroundColor: pressed && Platform.OS !== 'android' ? '#242321' : '#050505' }]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Icon name="camera-outline" size={22} color="#ffffff" />
-        </Pressable>
+        </SpringPressable>
       </View>
 
       <StatusComposer
@@ -307,13 +370,19 @@ export default function StatusScreen() {
           // Viewer opens with a soft scale/settle — the avatar's story
           // "expands" into the full screen without a jarring pop.
           <FadeSlide key={`story-${viewer.group.user.id}`} from="up" distance={16} scale={0.985} duration={motion.normal} style={{ flex: 1 }}>
-          <View
+          {/* The story itself is draggable: pull it down and it follows the
+              finger, shrinking slightly, then lets go past ~110px. Holding
+              to pause also eases it back a touch, so "paused" is something
+              you can see as well as feel. */}
+          <Animated.View
+            {...viewerPan.panHandlers}
             style={[
               s.viewer,
               {
                 backgroundColor: current.type === 'image' ? '#090909' : current.bg,
                 paddingTop: Math.max(insets.top, 14) + 14,
                 paddingBottom: Math.max(insets.bottom, 16),
+                transform: [{ translateY: dismissY }, { scale: viewerScale }],
               },
             ]}
           >
@@ -432,7 +501,7 @@ export default function StatusScreen() {
                     editable={!replySending}
                     maxLength={700}
                   />
-                  <Pressable
+                  <SpringPressable
                     onPress={sendStatusReply}
                     disabled={replySending || !replyText.trim()}
                     style={({ pressed }) => [
@@ -440,13 +509,15 @@ export default function StatusScreen() {
                       (replySending || !replyText.trim()) && { opacity: 0.42 },
                       pressed && { opacity: 0.82 },
                     ]}
+                    scaleTo={motion.scale.row}
+                    haptic="selection"
                   >
                     {replySending ? (
                       <ActivityIndicator color="#050505" size="small" />
                     ) : (
                       <Icon name="send" size={18} color="#050505" />
                     )}
-                  </Pressable>
+                  </SpringPressable>
                 </View>
                 {!!replyFeedback && (
                   <Text style={[type.labelXs, { color: '#ffffff', textAlign: 'center', marginTop: 7, opacity: 0.94 }]}>
@@ -455,7 +526,7 @@ export default function StatusScreen() {
                 )}
               </KeyboardAvoidingView>
             )}
-          </View>
+          </Animated.View>
           </FadeSlide>
         )}
       </Modal>
@@ -502,8 +573,12 @@ function StatusRow({ group, onPress, theme, viewed }) {
   const latest = group.items[group.items.length - 1];
   const ringColor = viewed ? theme.graphiteLine : theme.ink;
   return (
-    <Pressable
+    <SpringPressable
+      accessibilityRole="button"
+      accessibilityLabel={`View ${group.user.name}'s status`}
       onPress={onPress}
+      scaleTo={motion.scale.row}
+      haptic="selection"
       style={({ pressed }) => [
         stylesStatic.statusRow,
         { backgroundColor: pressed ? theme.cardAlt : theme.card, borderBottomColor: theme.graphiteLine },
@@ -522,7 +597,7 @@ function StatusRow({ group, onPress, theme, viewed }) {
         </Text>
       </View>
       <Icon name={privacyMeta(latest.audience).icon} size={16} color={theme.muted} />
-    </Pressable>
+    </SpringPressable>
   );
 }
 
@@ -670,9 +745,11 @@ function StatusComposer({ visible, initialMode, onClose, onPosted }) {
               <Text style={[type.bodyMd, { color: theme.subtext, textAlign: 'center', marginTop: 8, marginBottom: 28 }]}>
                 Preview it, crop it and choose exactly who can see it before posting.
               </Text>
-              <Pressable
+              <SpringPressable
                 onPress={startPhoto}
                 style={({ pressed }) => [s.chooseCard, { backgroundColor: '#050505', borderColor: '#000000' }, pressed && { backgroundColor: '#242321' }]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <View style={[s.chooseIcon, { backgroundColor: '#ffffff' }]}>
                   <Icon name="camera-outline" size={24} color="#050505" />
@@ -682,10 +759,12 @@ function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                   <Text style={[type.bodySm, { color: '#c7c3c1', marginTop: 3 }]}>Choose a frame, crop and preview</Text>
                 </View>
                 <Icon name="chevron-forward-outline" size={20} color="#ffffff" />
-              </Pressable>
-              <Pressable
+              </SpringPressable>
+              <SpringPressable
                 onPress={() => setMode('text')}
                 style={({ pressed }) => [s.chooseCard, { backgroundColor: theme.card, borderColor: theme.ink }, pressed && marker(theme, 1)]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <View style={[s.chooseIcon, { backgroundColor: theme.highlighter }]}>
                   <Icon name="create-outline" size={22} color="#1c1b1b" />
@@ -695,7 +774,7 @@ function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                   <Text style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]}>Write on a colour background</Text>
                 </View>
                 <Icon name="chevron-forward-outline" size={20} color={theme.ink} />
-              </Pressable>
+              </SpringPressable>
             </View>
           )}
 
@@ -781,22 +860,26 @@ function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                 </View>
               )}
               <View style={s.sendRow}>
-                <Pressable
+                <SpringPressable
                   onPress={() => setPrivacyOpen(true)}
                   style={({ pressed }) => [s.privacyPill, pressed && { backgroundColor: 'rgba(255,255,255,0.18)' }]}
+                  scaleTo={motion.scale.row}
+                  haptic="selection"
                 >
                   <Icon name={meta.icon} size={16} color="#ffffff" />
                   <Text style={[type.labelSm, { color: '#ffffff', flexShrink: 1 }]} numberOfLines={1}>{meta.label}</Text>
                   <Icon name="chevron-down-outline" size={14} color="#ffffff" />
-                </Pressable>
-                <Pressable
+                </SpringPressable>
+                <SpringPressable
                   onPress={submit}
                   disabled={posting}
                   android_ripple={rippleFor(theme, { borderless: false, radius: 30 })}
                   style={({ pressed }) => [s.sendButton, pressed && Platform.OS !== 'android' && { opacity: 0.82 }, posting && { opacity: 0.55 }]}
+                  scaleTo={motion.scale.row}
+                  haptic="selection"
                 >
                   {posting ? <ActivityIndicator color="#050505" /> : <Icon name="send" size={21} color="#050505" />}
-                </Pressable>
+                </SpringPressable>
               </View>
             </View>
           )}

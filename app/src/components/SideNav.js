@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { SpringPressable, IconSwap, motion } from '../motion';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { useAuth } from '../store/AuthContext';
@@ -72,7 +73,7 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
         </Pressable>
       </View>
 
-      <Pressable
+      <SpringPressable
         accessibilityRole="button"
         accessibilityLabel="find +ones"
         onPress={onNewChat}
@@ -83,32 +84,44 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
           inkBox(theme, 'ink'),
           pressed ? marker(theme, 2) : null,
         ]}
+        scaleTo={motion.scale.row}
+        haptic="selection"
       >
         <Icon name="search" size={17} color={theme.ink} />
         {!railOnly && <Text style={[type.bodyStrong, { color: theme.ink }]}>find +ones</Text>}
-      </Pressable>
+      </SpringPressable>
 
       <View style={s.nav}>
         {ITEMS.map((item) => {
           const isActive = active === item.key;
           return (
-            <Pressable
+            <SpringPressable
               key={item.key}
               accessibilityRole="button"
               accessibilityLabel={item.label}
               onPress={() => (item.key === 'settings' ? onSettings?.() : onNavigate?.(item.key))}
               hitSlop={4}
+              scaleTo={motion.scale.row}
+              haptic="selection"
               style={({ pressed, hovered }) => [
                 s.navItem,
                 railOnly && s.navItemRail,
                 (pressed || hovered) && !isActive ? marker(theme, 1) : null,
               ]}
             >
-              <Icon
-                name={item.outlineOnly ? item.icon : isActive ? item.icon : `${item.icon}-outline`}
-                size={19}
-                color={isActive ? theme.ink : theme.graphite}
-              />
+              {/* same outline → filled morph as the phone tab bar, so the two
+                  navigations feel like the same product */}
+              {item.outlineOnly ? (
+                <Icon name={item.icon} size={19} color={isActive ? theme.ink : theme.graphite} />
+              ) : (
+                <IconSwap
+                  active={isActive}
+                  size={19}
+                  pop={false}
+                  on={<Icon name={item.icon} size={19} color={theme.ink} />}
+                  off={<Icon name={`${item.icon}-outline`} size={19} color={theme.graphite} />}
+                />
+              )}
               {!railOnly && (
                 <Text
                   style={[
@@ -120,20 +133,20 @@ export default function SideNav({ active, onNavigate, onNewChat, onSettings, onH
                   {item.label}
                 </Text>
               )}
-            </Pressable>
+            </SpringPressable>
           );
         })}
       </View>
 
       <View style={[s.footer, railOnly && s.footerRail, { borderTopColor: theme.graphiteLine }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Help" onPress={onHelp} hitSlop={4} style={({ pressed }) => [s.footerRow, railOnly && s.footerRowRail, pressed ? { opacity: 0.6 } : null]}>
+        <SpringPressable accessibilityRole="button" accessibilityLabel="Help" onPress={onHelp} hitSlop={4} scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.footerRow, railOnly && s.footerRowRail, pressed ? { opacity: 0.6 } : null]}>
           <Icon name="help-circle-outline" size={18} color={theme.graphite} />
           {!railOnly && <Text style={[type.bodyMd, { color: theme.graphite }]}>Help</Text>}
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Logout" onPress={onLogout} hitSlop={4} style={({ pressed }) => [s.footerRow, railOnly && s.footerRowRail, pressed ? { opacity: 0.6 } : null]}>
+        </SpringPressable>
+        <SpringPressable accessibilityRole="button" accessibilityLabel="Logout" onPress={onLogout} hitSlop={4} scaleTo={motion.scale.row} haptic="warning" style={({ pressed }) => [s.footerRow, railOnly && s.footerRowRail, pressed ? { opacity: 0.6 } : null]}>
           <Icon name="log-out-outline" size={18} color={theme.graphite} />
           {!railOnly && <Text style={[type.bodyMd, { color: theme.graphite }]}>Logout</Text>}
-        </Pressable>
+        </SpringPressable>
       </View>
     </View>
   );

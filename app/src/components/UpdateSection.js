@@ -5,6 +5,7 @@ import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { type, inkBox, dashedRule } from '../theme';
 import { InkButton, HandDrawnToggle } from './common';
+import { SpringPressable, motion } from '../motion';
 import {
   useAppUpdates,
   checkForUpdate,
@@ -127,7 +128,7 @@ export default function UpdateSection() {
                 filled={pending}
               />
             </View>
-            <Pressable
+            <SpringPressable
               onPress={runCheck}
               disabled={working}
               hitSlop={6}
@@ -137,9 +138,11 @@ export default function UpdateSection() {
                 (pressed || hovered) && { backgroundColor: theme.cardAlt },
                 working && { opacity: 0.45 },
               ]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <Text style={[type.labelSm, { color: theme.subtext }]}>CHECK</Text>
-            </Pressable>
+            </SpringPressable>
           </View>
         )}
       </View>

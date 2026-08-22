@@ -11,7 +11,7 @@ import { useChat } from './store/ChatContext';
 import useResponsive from './hooks/useResponsive';
 import { Loading, CountBead } from './components/common';
 import { marker, stroke } from './theme';
-import { haptic, usePressScale } from './motion';
+import { haptic, usePressScale, useReducedMotion, motion, IconSwap } from './motion';
 import { lazyScreen, lazyComponent, idlePreload } from './lazy';
 import PageSwipePager from './components/PageSwipePager';
 import { navigationRef, onHomeTabRequest, flushPendingRoute } from './push/routing';
@@ -137,7 +137,8 @@ function HomeTabs({ navigation }) {
                   if (!active) haptic('selection'); // acknowledge the switch, not every tap
                   setTab(t.key);
                 }}
-                icon={t.outlineOnly ? t.icon : active ? t.icon : `${t.icon}-outline`}
+                icon={t.icon}
+                outlineOnly={t.outlineOnly}
                 color={active ? theme.ink : theme.muted}
                 badge={t.badge}
                 theme={theme}
@@ -161,17 +162,17 @@ function HomeTabs({ navigation }) {
  * the outgoing tab's icon eases down, the incoming tab's icon rises, driven
  * by the pager's shared Animated progress (no re-renders, 60fps).
  */
-function TabButton({ label, active, onPress, icon, color, badge, theme, progress, rel }) {
-  const { scale, onPressIn, onPressOut } = usePressScale(0.9);
-  const activePop = useRef(new Animated.Value(active ? 1 : 0)).current;
+function TabButton({ label, active, onPress, icon, outlineOnly, color, badge, theme, progress, rel }) {
+  const { scale, onPressIn, onPressOut } = usePressScale(motion.scale.icon);
+  const activePop = useRef(new Animated.Value(1)).current;
   const wasActive = useRef(active);
   useEffect(() => {
     if (active && !wasActive.current) {
       wasActive.current = true;
-      Animated.sequence([
-        Animated.spring(activePop, { toValue: 1.18, friction: 4, tension: 200, useNativeDriver: true }),
-        Animated.spring(activePop, { toValue: 1, friction: 6, tension: 180, useNativeDriver: true }),
-      ]).start();
+      // One spring, one small overshoot. The old two-stage 1.18 hop read as
+      // a bounce; the icon should *land* on the tab, not jump off it.
+      activePop.setValue(0.88);
+      Animated.spring(activePop, { toValue: 1, ...motion.springPop, useNativeDriver: true }).start();
     } else if (!active) {
       wasActive.current = false;
       activePop.setValue(1);
@@ -183,14 +184,14 @@ function TabButton({ label, active, onPress, icon, color, badge, theme, progress
   const swipeScale = progress && rel !== null
     ? progress.interpolate({
         inputRange: [-1, 0, 1],
-        outputRange: rel === 1 ? [1.1, 1, 1] : rel === -1 ? [1, 1, 1.1] : [0.9, 1, 0.9],
+        outputRange: rel === 1 ? [1.06, 1, 1] : rel === -1 ? [1, 1, 1.06] : [0.93, 1, 0.93],
         extrapolate: 'clamp',
       })
     : 1;
   const swipeOpacity = progress && rel === 0
     ? progress.interpolate({
         inputRange: [-1, 0, 1],
-        outputRange: [0.82, 1, 0.82],
+        outputRange: [0.75, 1, 0.75],
         extrapolate: 'clamp',
       })
     : 1;
@@ -212,7 +213,19 @@ function TabButton({ label, active, onPress, icon, color, badge, theme, progress
     >
       <Animated.View style={{ transform: [{ scale }, { scale: activePop }, { scale: swipeScale }], opacity: swipeOpacity }}>
         <View>
-          <Icon name={icon} size={23} color={color} />
+          {/* outline → filled is a morph, not a cut: the two glyphs cross-
+              fade and counter-scale so the icon appears to fill in */}
+          {outlineOnly ? (
+            <Icon name={icon} size={23} color={color} />
+          ) : (
+            <IconSwap
+              active={active}
+              size={23}
+              pop={false}
+              on={<Icon name={icon} size={23} color={theme.ink} />}
+              off={<Icon name={`${icon}-outline`} size={23} color={theme.muted} />}
+            />
+          )}
           {!!badge && badge > 0 && (
             <View style={s.tabBadge}>
               <CountBead label={badge > 9 ? '9+' : String(badge)} small />
@@ -228,6 +241,7 @@ export default function Navigation() {
   const { user, booting } = useAuth();
   const { theme, mode } = useTheme();
   const { isSplitCapable } = useResponsive();
+  const reduced = useReducedMotion();
 
   // Incoming links: plusone:// routes natively, and https://…/c/<code>
   // community invites on the web (they join first, then open the detail).
@@ -267,7 +281,15 @@ export default function Navigation() {
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
-          animation: Platform.OS === 'web' ? 'none' : 'default',
+          // One push transition for the whole app, on every platform: the
+          // new screen slides in from the right over the old one. iOS got
+          // this for free from `default`; Android used to get a different
+          // fade-from-bottom, so pushing a profile felt like a different
+          // app depending on the device. 260ms is fast enough to stay out
+          // of the way and long enough to show the spatial relationship.
+          // Reduced motion collapses it to a short crossfade.
+          animation: reduced ? 'fade' : Platform.OS === 'web' ? 'fade' : 'slide_from_right',
+          animationDuration: reduced ? 120 : 260,
           contentStyle: { backgroundColor: theme.bg },
           // iOS: native swipe-back gesture; Android: system back button already works.
           gestureEnabled: Platform.OS === 'ios',

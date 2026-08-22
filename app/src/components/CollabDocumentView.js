@@ -7,6 +7,7 @@ import Icon from '../icons/Icon';
 import { PaperCard, Avatar, Rule } from './common';
 import { type, inkBox, alpha, radius } from '../theme';
 import { api } from '../api';
+import { SpringPressable, motion } from '../motion';
 import { lazyComponent } from '../lazy';
 
 const CollabEditor = lazyComponent(() => import('./CollabEditor'));
@@ -165,10 +166,10 @@ export function CollabDocumentView({ chatId, embedded = false, socket: socketPro
       )}
 
       <View style={s.toolbar}>
-        <Pressable onPress={() => setShowCreate(true)} style={({ pressed }) => [s.createBtn, inkBox(theme, 'thin'), { backgroundColor: pressed ? theme.highlighter : theme.card }]}>
+        <SpringPressable onPress={() => setShowCreate(true)} style={({ pressed }) => [s.createBtn, inkBox(theme, 'thin'), { backgroundColor: pressed ? theme.highlighter : theme.card }]} scaleTo={motion.scale.row} haptic="selection">
           <Icon name="add" size={18} color={theme.ink} />
           <Text style={[type.labelSm, { color: theme.ink }]}>NEW NOTE</Text>
-        </Pressable>
+        </SpringPressable>
         <Pressable onPress={loadDocuments} style={s.refreshBtn}>
           <Icon name="refresh" size={18} color={theme.muted} />
         </Pressable>

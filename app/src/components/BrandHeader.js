@@ -5,6 +5,7 @@ import { useTheme } from '../store/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { useChat } from '../store/ChatContext';
 import { type, stroke } from '../theme';
+import { SpringPressable, motion } from '../motion';
 import { openProfile } from '../push/routing';
 
 /**
@@ -30,26 +31,30 @@ export default function BrandHeader({ navigation, onOpenActivity, bordered = tru
 
   return (
     <View style={[s.header, bordered && { borderBottomWidth: stroke.ink, borderBottomColor: theme.ink }]}>
-      <Pressable
+      <SpringPressable
         accessibilityRole="button"
         accessibilityLabel="Open your profile"
         onPress={openOwnProfile}
         hitSlop={8}
-        style={({ pressed }) => [s.wordmarkHit, pressed && { opacity: 0.55 }]}
+        style={({ pressed }) => [s.wordmarkHit, pressed && { opacity: 0.7 }]}
+        scaleTo={motion.scale.chip}
+        haptic="selection"
       >
         <Text style={s.wordmark}>+one</Text>
-      </Pressable>
+      </SpringPressable>
       <View style={{ flex: 1 }} />
-      <Pressable
+      <SpringPressable
         accessibilityRole="button"
         accessibilityLabel="Activity"
         onPress={openActivity}
         hitSlop={8}
-        style={({ pressed }) => [s.heartHit, pressed && { opacity: 0.55 }]}
+        style={s.heartHit}
+        scaleTo={motion.scale.icon}
+        haptic="selection"
       >
         <Icon name="heart-outline" size={26} color={theme.ink} />
         {unread > 0 && <View style={[s.dot, { backgroundColor: '#ED4956', borderColor: theme.bg }]} />}
-      </Pressable>
+      </SpringPressable>
     </View>
   );
 }

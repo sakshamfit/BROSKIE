@@ -24,11 +24,12 @@ import MessageBubble, { DISAPPEAR_OPTIONS } from '../components/MessageBubble';
 import ReplyBar from '../components/ReplyBar';
 import ChatBackground from '../components/ChatBackground';
 import { ThemeRegistry, alpha } from '../chatThemes';
-import { FadeSlide, TypingDots, FloatLoop, SheetSpringIn, SpringPressable, Pop, haptic, motion } from '../motion';
+import { FadeSlide, TypingDots, FloatLoop, SheetSpringIn, SpringPressable, IconSwap, Pop, haptic, motion } from '../motion';
 import { api, mediaUrl } from '../api';
 import { setViewedChat } from '../push/notifications';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
 import { throttle } from '../rateLimit';
+import ImageLightbox from '../components/ImageLightbox';
 import { lazyComponent } from '../lazy';
 
 const EmojiPicker = lazyComponent(() => import('../components/EmojiPicker'));
@@ -603,9 +604,17 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       <View style={[s.headerWrap, !embedded && { paddingTop: 18 + insets.top }]}>
         <View style={s.header}>
           {!embedded && (
-            <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={s.backBtn}>
+            <SpringPressable
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+              onPress={() => navigation.goBack()}
+              hitSlop={8}
+              scaleTo={motion.scale.icon}
+              haptic="selection"
+              style={s.backBtn}
+            >
               <Icon name="arrow-back" size={22} color={theme.primary} />
-            </Pressable>
+            </SpringPressable>
           )}
           <Pressable style={s.headerInfo} onPress={() => navigation.navigate('ChatInfo', { chatId })}>
             <Avatar uri={chat.avatar} name={chat.name} id={chat.otherUserId || chat.id} group={chat.type === 'group'} size={42} profileId={chat.type === 'group' ? null : chat.otherUserId} />
@@ -752,13 +761,15 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               <Icon name="alert-circle-outline" size={26} color={theme.danger} />
               <Text style={[type.bodyStrong, { color: theme.text, marginTop: 10 }]}>Unable to load messages</Text>
               <Text style={[type.bodySm, { color: theme.muted, marginTop: 4, textAlign: 'center' }]}>Your conversation was not erased.</Text>
-              <Pressable
+              <SpringPressable
                 onPress={() => loadMessages(chatId).catch(() => {})}
                 style={({ pressed }) => [s.historyRetry, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="refresh" size={15} color={theme.ink} />
                 <Text style={[type.labelSm, { color: theme.ink }]}>RETRY</Text>
-              </Pressable>
+              </SpringPressable>
             </View>
           ) : (
             <View style={s.emptyChat}>
@@ -831,9 +842,22 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
           </InkField>
         ) : (
           <InkField style={s.inputBar}>
-            <Pressable onPress={() => setShowEmoji((v) => !v)} hitSlop={6}>
-              <Icon name={showEmoji ? 'keypad-outline' : 'happy-outline'} size={23} color={theme.muted} />
-            </Pressable>
+            <SpringPressable
+              accessibilityRole="button"
+              accessibilityLabel={showEmoji ? 'Show keyboard' : 'Show emoji'}
+              onPress={() => setShowEmoji((v) => !v)}
+              hitSlop={6}
+              scaleTo={motion.scale.icon}
+              haptic="selection"
+            >
+              <IconSwap
+                active={showEmoji}
+                size={23}
+                spin={30}
+                on={<Icon name="keypad-outline" size={23} color={theme.muted} />}
+                off={<Icon name="happy-outline" size={23} color={theme.muted} />}
+              />
+            </SpringPressable>
             <TextInput
               ref={inputRef}
               style={s.input}
@@ -858,16 +882,16 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               }}
             />
             {!editing && (
-              <Pressable onPress={pickImage} hitSlop={6} disabled={uploading}>
+              <SpringPressable accessibilityRole="button" accessibilityLabel="Attach a photo" onPress={pickImage} hitSlop={6} disabled={uploading} scaleTo={motion.scale.icon} haptic="selection">
                 {uploading
                   ? <ActivityIndicator size="small" color={theme.muted} />
                   : <Icon name="attach" size={22} color={theme.muted} style={{ transform: [{ rotate: '45deg' }] }} />}
-              </Pressable>
+              </SpringPressable>
             )}
             {!editing && !text.trim() && (
-              <Pressable onPress={pickImage} hitSlop={6}>
+              <SpringPressable accessibilityRole="button" accessibilityLabel="Take a photo" onPress={pickImage} hitSlop={6} scaleTo={motion.scale.icon} haptic="selection">
                 <Icon name="camera-outline" size={22} color={theme.muted} />
-              </Pressable>
+              </SpringPressable>
             )}
           </InkField>
         )}
@@ -915,11 +939,16 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
           {voiceBusy ? (
             <ActivityIndicator size="small" color={theme.onSendButton} />
           ) : (
-            <Icon
-              name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
-              size={18}
-              color={theme.onSendButton}
-            />
+            // The composer's icon changes meaning as you type (mic → send).
+            // A pop on every change makes the button feel like it *became*
+            // something else, instead of silently swapping glyphs.
+            <Pop trigger={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'} firstStatic from={0.7}>
+              <Icon
+                name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
+                size={18}
+                color={theme.onSendButton}
+              />
+            </Pop>
           )}
         </SpringPressable>
         </View>
@@ -929,7 +958,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       {/* -------- safety: report a message -------- */}
       <Modal visible={!!reportMsg} transparent animationType="fade" onRequestClose={() => setReportMsg(null)}>
         {reportMsg && (
-          <Pressable style={s.lightbox} onPress={() => setReportMsg(null)}>
+          <Pressable style={s.dimOverlay} onPress={() => setReportMsg(null)}>
             <Pressable style={[s.reportSheet, inkBox(theme, 'ink'), { backgroundColor: theme.bg }]} onPress={() => {}}>
               <Text style={[type.headlineSm, { color: theme.text }]}>Report this message</Text>
               <Text style={[type.bodySm, { color: theme.muted, marginTop: 4 }]}>
@@ -976,14 +1005,9 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         )}
       </Modal>
 
-      <Modal visible={!!lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(null)}>
-        <Pressable style={s.lightbox} onPress={() => setLightbox(null)}>
-          <Image source={{ uri: lightbox }} style={s.lightboxImg} resizeMode="contain" />
-          <Pressable style={s.lightboxClose} onPress={() => setLightbox(null)}>
-            <Icon name="close" size={26} color="#fff" />
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* shared viewer: springs open, drag it away in any vertical
+          direction, backdrop fades with the finger */}
+      <ImageLightbox uri={lightbox} onClose={() => setLightbox(null)} />
 
       {/* forward picker */}
       <ForwardSheet visible={!!forwardMsg} message={forwardMsg} onClose={() => setForwardMsg(null)} />
@@ -1007,24 +1031,28 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
                 const isActive = (sec) => (sec === 0 ? remaining === 0 : Math.abs(remaining - sec) < Math.max(2, sec * 0.05));
                 return (
                   <>
-                    <Pressable
+                    <SpringPressable
                       style={({ pressed }) => [s.timerOpt, inkBox(theme, 'thin'), pressed ? marker(theme, 1) : null]}
                       onPress={() => { setMessageTimer(timerMsg, 0); setTimerMsg(null); }}
+                      scaleTo={motion.scale.row}
+                      haptic="selection"
                     >
                       <Icon name="time-outline" size={18} color={theme.ink} />
                       <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]}>Off — keep forever</Text>
                       {isActive(0) && <Icon name="checkmark" size={18} color={theme.ink} />}
-                    </Pressable>
+                    </SpringPressable>
                     {DISAPPEAR_OPTIONS.map((o) => (
-                      <Pressable
+                      <SpringPressable
                         key={o.seconds}
                         style={({ pressed }) => [s.timerOpt, inkBox(theme, 'thin'), pressed ? marker(theme, 1) : null]}
                         onPress={() => { setMessageTimer(timerMsg, o.seconds); setTimerMsg(null); }}
+                        scaleTo={motion.scale.row}
+                        haptic="selection"
                       >
                         <Icon name="timer-outline" size={18} color={theme.ink} />
                         <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]}>{o.label}</Text>
                         {isActive(o.seconds) && <Icon name="checkmark" size={18} color={theme.ink} />}
-                      </Pressable>
+                      </SpringPressable>
                     ))}
                   </>
                 );
@@ -1062,9 +1090,11 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setOverflowOpen(false)}>
           <FrostedBackdrop />
           <PaperCard weight="ink" style={s.overflowMenu}>
-            <Pressable
+            <SpringPressable
               style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
               onPress={() => { setOverflowOpen(false); themePicker?.setPickerOpen(true); }}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <View style={[s.menuIcon, { backgroundColor: alpha(theme.accent, 0.16) }]}>
                 <Icon name="color-palette-outline" size={18} color={theme.accent} />
@@ -1075,30 +1105,36 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
                   {ThemeRegistry.get(theme.chatThemeId || 'graphite').name}
                 </Text>
               </View>
-            </Pressable>
+            </SpringPressable>
             <Rule style={{ marginVertical: 6 }} />
-            <Pressable
+            <SpringPressable
               style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
               onPress={() => { setOverflowOpen(false); navigation.navigate('ChatInfo', { chatId }); }}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <Icon name="information-circle-outline" size={18} color={theme.ink} style={{ width: 26 }} />
               <Text style={[type.bodyMd, { color: theme.text }]}>Chat info</Text>
-            </Pressable>
-            <Pressable
+            </SpringPressable>
+            <SpringPressable
               style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
               onPress={() => { setOverflowOpen(false); navigation.navigate('ChatInfo', { chatId }); }}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <Icon name="timer-outline" size={18} color={theme.ink} style={{ width: 26 }} />
               <Text style={[type.bodyMd, { color: theme.text }]}>Disappearing messages</Text>
-            </Pressable>
+            </SpringPressable>
             {!embedded && (
-              <Pressable
+              <SpringPressable
                 style={({ pressed }) => [s.menuRow, pressed ? marker(theme, 1) : null]}
                 onPress={() => { setOverflowOpen(false); navigation.navigate('Starred'); }}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="star-outline" size={18} color={theme.ink} style={{ width: 26 }} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>Starred messages</Text>
-              </Pressable>
+              </SpringPressable>
             )}
           </PaperCard>
         </Pressable>
@@ -1310,12 +1346,10 @@ const makeStyles = (t) => StyleSheet.create({
   input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },
   sendBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   recDot: { width: 9, height: 9, borderRadius: radius.full },
+  dimOverlay: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
   reportSheet: { width: '92%', maxWidth: 460, borderRadius: radius.md, padding: 18 },
   reportChip: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
   reportBtn: { flex: 1, alignItems: 'center', borderWidth: 1.5, borderRadius: 999, paddingVertical: 10 },
-  lightbox: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
-  lightboxImg: { width: '92%', height: '78%' },
-  lightboxClose: { position: 'absolute', top: 44, right: 22, padding: 8 },
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
   timerSheet: {
     width: '100%', maxWidth: 360, borderWidth: 3, padding: 20,

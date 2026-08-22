@@ -56,10 +56,15 @@
     "web": "expo start --web",
     "build:ios": "eas build -p ios --profile preview",
     "build:android": "eas build -p android --profile preview",
-    "submit:ios": "eas submit -p ios --profile production"
+    "submit:ios": "eas submit -p ios --profile production",
+    "mock-api": "node scripts/mock-api.js",
+    "smoke": "node scripts/smoke-web.js",
+    "smoke:app": "SMOKE_LOGGED_IN=1 node scripts/smoke-web.js",
+    "check": "./scripts/check.sh"
   },
   "private": true,
   "devDependencies": {
-    "@config-plugins/react-native-webrtc": "15.0.2"
+    "@config-plugins/react-native-webrtc": "15.0.2",
+    "jsdom": "^30.0.1"
   }
 }

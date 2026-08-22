@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Keyboard, PanResponder, Platform, StyleSheet, View } from 'react-native';
 import { useTheme } from '../store/ThemeContext';
-import { haptic, useReducedMotion } from '../motion';
+import { haptic, useReducedMotion, MotionActive } from '../motion';
 import { PAGE_SWIPE, resolveGesture, rubberBand, shouldCommitPageSwipe, isTouchInput } from '../gestures';
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
@@ -201,7 +201,11 @@ export default function PageSwipePager({
             const mounted = Math.abs(i - index) <= 1;
             return (
               <View key={p.key} style={{ width, height: '100%' }}>
-                {mounted ? p.render() : null}
+                {/* Neighbours stay mounted for an instant swipe, but their
+                    looping motion (skeleton shimmers, typing dots, floating
+                    empty states) is switched off while they are off-screen —
+                    a page you cannot see must not cost frames. */}
+                {mounted ? <MotionActive active={i === index}>{p.render()}</MotionActive> : null}
               </View>
             );
           })}

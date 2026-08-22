@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, TextInput, Pressable, StyleSheet, Image,
+  View, Text, FlatList, TextInput, Pressable, StyleSheet, Image, Animated,
   ActivityIndicator, RefreshControl, Modal, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,9 @@ import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFo
 import BrandHeader from '../components/BrandHeader';
 import TodayStrip from '../components/TodayStrip';
 import PostCard from '../components/PostCard';
+import ImageLightbox from '../components/ImageLightbox';
+import { PostSkeletonList } from '../components/PostSkeleton';
+import { SpringPressable, motion, haptic, useReducedMotion } from '../motion';
 import { type, inkBox, stroke, raised } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
@@ -57,6 +60,36 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
   const [lightbox, setLightbox] = useState(null);
 
   const s = makeStyles(theme);
+  const reducedMotion = useReducedMotion();
+
+  /* --------- scroll-aware compose button ---------
+     Reading is the primary action in a feed, so the compose button retreats
+     while the thumb is pulling content up and returns on any upward scroll.
+     Direction is tracked with a dead-zone so a jittery finger never flickers
+     it, and the whole thing is one native-driven spring — no re-renders. */
+  const fabY = useRef(new Animated.Value(0)).current;
+  const fabOpacity = useRef(new Animated.Value(1)).current;
+  const lastScrollY = useRef(0);
+  const fabHidden = useRef(false);
+
+  const setFabHidden = useCallback((hidden) => {
+    if (fabHidden.current === hidden || reducedMotion) return;
+    fabHidden.current = hidden;
+    Animated.parallel([
+      Animated.spring(fabY, { toValue: hidden ? 96 : 0, ...motion.springSettle, useNativeDriver: true }),
+      Animated.timing(fabOpacity, {
+        toValue: hidden ? 0 : 1, duration: motion.fast, easing: motion.easing.out, useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fabY, fabOpacity, reducedMotion]);
+
+  const onFeedScroll = useCallback((e) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const dy = y - lastScrollY.current;
+    if (Math.abs(dy) < 6) return;          // dead zone: ignore finger jitter
+    lastScrollY.current = y;
+    setFabHidden(dy > 0 && y > 120);       // never hide at the top of the feed
+  }, [setFabHidden]);
 
   /* ---------------- data ---------------- */
 
@@ -220,14 +253,24 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
 
   const SectionToggle = (
     <View style={s.sectionRow}>
-      <Pressable onPress={() => setSection('feed')} style={[s.sectionBtn, section === 'feed' && s.sectionActive, { borderColor: theme.ink }]}>
+      <SpringPressable
+        onPress={() => setSection('feed')}
+        scaleTo={motion.scale.chip}
+        haptic="selection"
+        style={[s.sectionBtn, section === 'feed' && s.sectionActive, { borderColor: theme.ink }]}
+      >
         <Icon name="albums-outline" size={14} color={section === 'feed' ? theme.onPrimary : theme.text} />
         <Text style={[type.labelSm, { color: section === 'feed' ? theme.onPrimary : theme.text }]}>FEED</Text>
-      </Pressable>
-      <Pressable onPress={() => setSection('communities')} style={[s.sectionBtn, section === 'communities' && s.sectionActive, { borderColor: theme.ink }]}>
+      </SpringPressable>
+      <SpringPressable
+        onPress={() => setSection('communities')}
+        scaleTo={motion.scale.chip}
+        haptic="selection"
+        style={[s.sectionBtn, section === 'communities' && s.sectionActive, { borderColor: theme.ink }]}
+      >
         <Icon name="people-outline" size={14} color={section === 'communities' ? theme.onPrimary : theme.text} />
         <Text style={[type.labelSm, { color: section === 'communities' ? theme.onPrimary : theme.text }]}>COMMUNITIES</Text>
-      </Pressable>
+      </SpringPressable>
     </View>
   );
 
@@ -256,28 +299,35 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
 
       <View style={s.filterRow}>
         {FEED_FILTERS.map((f) => (
-          <Pressable
+          <SpringPressable
             key={f.key}
             accessibilityRole="button"
             onPress={() => setActiveFilter(f.key)}
+            scaleTo={motion.scale.chip}
+            haptic="selection"
             style={[s.filterBtn, activeFilter === f.key && s.filterBtnActive, { borderColor: theme.ink }]}
           >
             <Text style={[type.labelSm, { color: activeFilter === f.key ? theme.onPrimary : theme.text }]}>
               {f.label}
             </Text>
-          </Pressable>
+          </SpringPressable>
         ))}
       </View>
 
       {tags.length > 0 && (
         <View style={s.tagsWrap}>
-          <Pressable onPress={() => setActiveTag(null)}>
+          <SpringPressable onPress={() => setActiveTag(null)} scaleTo={motion.scale.chip} haptic="selection">
             <TapeChip label="ALL" tone={!activeTag ? 'accent' : 'ink'} />
-          </Pressable>
+          </SpringPressable>
           {tags.map((t) => (
-            <Pressable key={t.tag} onPress={() => setActiveTag(t.tag === activeTag ? null : t.tag)}>
+            <SpringPressable
+              key={t.tag}
+              onPress={() => setActiveTag(t.tag === activeTag ? null : t.tag)}
+              scaleTo={motion.scale.chip}
+              haptic="selection"
+            >
               <TapeChip label={`#${t.tag} ${t.count}`} tone={t.tag === activeTag ? 'accent' : 'ink'} />
-            </Pressable>
+            </SpringPressable>
           ))}
         </View>
       )}
@@ -305,12 +355,13 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
   // so Network only toggles between feed and communities
 
   if (loading) {
+    // Placeholders in the shape of real posts, not a spinner in the middle
+    // of an empty screen: the feed looks like it is already arriving, and
+    // nothing shifts when it does.
     return (
       <View style={{ flex: 1, backgroundColor: theme.bg }}>
         <BrandHeader navigation={navigation} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={theme.ink} />
-        </View>
+        <PostSkeletonList count={3} style={[s.list, isTablet && s.listWide]} />
       </View>
     );
   }
@@ -325,6 +376,8 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         ListHeaderComponent={ListHeader}
         contentContainerStyle={[s.list, isTablet && s.listWide]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.ink} />}
+        onScroll={onFeedScroll}
+        scrollEventThrottle={16}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         ListFooterComponent={
@@ -344,16 +397,24 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         }
       />
 
-      <Pressable
-        onPress={() => setComposerOpen(true)}
-        android_ripple={rippleFor(theme, { borderless: false, radius: 30 })}
-        style={({ pressed }) => [
-          s.fab,
-          { backgroundColor: pressed && Platform.OS !== 'android' ? '#242321' : '#050505', borderColor: '#000000' },
-        ]}
-      >
-        <Icon name="create-outline" size={21} color="#ffffff" />
-      </Pressable>
+      {/* Compose gets out of the way while you are reading down the feed
+          and comes straight back the moment you scroll up. */}
+      <Animated.View style={[s.fabWrap, { transform: [{ translateY: fabY }], opacity: fabOpacity }]}>
+        <SpringPressable
+          accessibilityRole="button"
+          accessibilityLabel="Write a post"
+          onPress={() => setComposerOpen(true)}
+          scaleTo={motion.scale.button}
+          haptic="impact"
+          android_ripple={rippleFor(theme, { borderless: false, radius: 30 })}
+          style={({ pressed }) => [
+            s.fab,
+            { backgroundColor: pressed && Platform.OS !== 'android' ? '#242321' : '#050505', borderColor: '#000000' },
+          ]}
+        >
+          <Icon name="create-outline" size={21} color="#ffffff" />
+        </SpringPressable>
+      </Animated.View>
 
       <NewPostScreen
         visible={composerOpen}
@@ -367,11 +428,9 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         onCounted={(id, n) => setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, comments: n } : p)))}
       />
 
-      <Modal visible={!!lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(null)}>
-        <Pressable style={s.lightbox} onPress={() => setLightbox(null)}>
-          <Image source={{ uri: lightbox }} style={{ width: '92%', height: '78%' }} resizeMode="contain" />
-        </Pressable>
-      </Modal>
+      {/* shared viewer: springs open, drag it away in any vertical
+          direction, backdrop fades with the finger */}
+      <ImageLightbox uri={lightbox} onClose={() => setLightbox(null)} />
     </View>
   );
 }
@@ -482,7 +541,7 @@ function CommentsSheet({ post, onClose, onCounted }) {
                 }
               }}
             />
-            <Pressable
+            <SpringPressable
               onPress={send}
               disabled={busy || !text.trim()}
               style={({ pressed }) => [
@@ -491,9 +550,11 @@ function CommentsSheet({ post, onClose, onCounted }) {
                 { backgroundColor: pressed ? theme.highlighter : theme.ink },
                 (busy || !text.trim()) && { opacity: 0.4 },
               ]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <Icon name="send" size={15} color={theme.onPrimary} />
-            </Pressable>
+            </SpringPressable>
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -520,13 +581,13 @@ const makeStyles = (t) => StyleSheet.create({
   sectionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 8 },
   sectionActive: { backgroundColor: t.ink },
 
+  fabWrap: { position: 'absolute', right: 24, bottom: 26 },
   fab: {
-    position: 'absolute', right: 24, bottom: 26, width: 58, height: 58,
+    width: 58, height: 58,
     alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderRadius: 14,
     overflow: 'hidden',
   },
 
-  lightbox: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
 
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
   sheet: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24, maxHeight: '85%' },

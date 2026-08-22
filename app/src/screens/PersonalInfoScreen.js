@@ -10,6 +10,7 @@ import { confirm } from '../hooks/confirm';
 import { affiliationType } from '../components/affiliationMeta';
 import { PaperCard, InkField, InkButton, TapeChip, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import { type, inkBox, marker } from '../theme';
+import { SpringPressable, motion } from '../motion';
 import { lazyComponent } from '../lazy';
 
 const AffiliationPicker = lazyComponent(() => import('../components/AffiliationPicker'));
@@ -71,9 +72,11 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
   };
 
   const Row = ({ icon, label, value, onPress, verified = false }) => (
-    <Pressable
+    <SpringPressable
       style={({ pressed, hovered }) => [s.row, inkBox(theme, 'thin'), (pressed || hovered) ? { backgroundColor: theme.cardAlt } : null]}
       onPress={onPress}
+      scaleTo={motion.scale.row}
+      haptic="selection"
     >
       <Icon name={icon} size={19} color={theme.graphite} style={{ width: 26 }} />
       <View style={{ flex: 1 }}>
@@ -84,7 +87,7 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
         </View>
       </View>
       <Icon name="chevron-forward-outline" size={16} color={theme.muted} />
-    </Pressable>
+    </SpringPressable>
   );
 
   return (
@@ -144,9 +147,11 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
             );
           })}
 
-          <Pressable
+          <SpringPressable
             onPress={() => setAffiliationPicker(true)}
             style={({ pressed }) => [s.addAffiliation, inkBox(theme, 'ink'), pressed && marker(theme, 1)]}
+            scaleTo={motion.scale.row}
+            haptic="selection"
           >
             <View style={[s.addIcon, { backgroundColor: theme.ink }]}>
               <Icon name="add" size={18} color={theme.onPrimary} />
@@ -156,7 +161,7 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
               <Text style={[type.labelXs, { color: theme.muted, marginTop: 3 }]}>INSTITUTION · ORGANIZATION · WORKPLACE</Text>
             </View>
             <Icon name="chevron-forward-outline" size={17} color={theme.muted} />
-          </Pressable>
+          </SpringPressable>
         </View>
       </ScrollView>
 

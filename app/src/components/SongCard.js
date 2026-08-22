@@ -3,6 +3,7 @@ import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { type, inkBox, marker } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 /**
  * A "song sketched onto paper" card — album art behind an ink frame, with a
@@ -51,12 +52,14 @@ export default function SongCard({ song, compact = false, tint }) {
         <Text style={[type.labelXs, { color: fg, opacity: 0.65, marginTop: 2 }]} numberOfLines={1}>{song.artist}</Text>
       </View>
       {!!song.previewUrl && (
-        <Pressable
+        <SpringPressable
           onPress={toggle}
           style={({ pressed }) => [s.play, inkBox(theme, 'ink', fg), pressed ? marker(theme, 1) : null]}
+          scaleTo={motion.scale.row}
+          haptic="selection"
         >
           <Icon name={playing ? 'pause' : 'play'} size={13} color={fg} />
-        </Pressable>
+        </SpringPressable>
       )}
     </View>
   );

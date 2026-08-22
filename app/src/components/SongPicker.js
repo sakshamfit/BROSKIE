@@ -7,6 +7,7 @@ import { api } from '../api';
 import { useDebouncedCallback } from '../rateLimit';
 import SongCard from './SongCard';
 import { type, inkBox, marker, dashedRule } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 /**
  * Full-screen Jamendo song search sheet — shared by the Status composer and
@@ -94,9 +95,9 @@ export default function SongPicker({ visible, onClose, onSelect }) {
             contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
             ItemSeparatorComponent={() => <View style={[dashedRule(theme), { marginVertical: 2 }]} />}
             renderItem={({ item }) => (
-              <Pressable onPress={() => onSelect(item)} style={({ pressed }) => [pressed ? marker(theme, 1) : null]}>
+              <SpringPressable onPress={() => onSelect(item)} style={({ pressed }) => [pressed ? marker(theme, 1) : null]} scaleTo={motion.scale.row} haptic="selection">
                 <SongCard song={item} />
-              </Pressable>
+              </SpringPressable>
             )}
           />
         )}

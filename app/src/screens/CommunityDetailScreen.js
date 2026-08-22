@@ -11,6 +11,7 @@ import { Avatar, PaperCard, TapeChip, handleFor, Rule, InkButton, rippleFor, Fro
 import { categoryMeta, JOIN_POLICY } from '../components/communityMeta';
 import { radius, type, inkBox, marker, raised } from '../theme';
 import { confirm } from '../hooks/confirm';
+import { SpringPressable, motion } from '../motion';
 
 /**
  * Full-screen community detail: hero (category badge, name, description,
@@ -194,23 +195,27 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
         </PaperCard>
 
         {community.isMember && (
-          <Pressable
+          <SpringPressable
             onPress={() => onOpenChat?.(community.chatId)}
             android_ripple={rippleFor(theme)}
             style={({ pressed }) => [s.chatRow, inkBox(theme, 'ink'), pressed && marker(theme, 1)]}
+            scaleTo={motion.scale.row}
+            haptic="selection"
           >
             <Icon name="chatbubbles-outline" size={19} color={theme.ink} />
             <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]}>Open group chat</Text>
             <Icon name="chevron-forward-outline" size={16} color={theme.muted} />
-          </Pressable>
+          </SpringPressable>
         )}
 
         {community.role === 'admin' && inviteUrl && (
-          <Pressable
+          <SpringPressable
             onPress={shareInvite}
             onLongPress={rotateInvite}
             android_ripple={rippleFor(theme)}
             style={({ pressed }) => [s.chatRow, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}
+            scaleTo={motion.scale.row}
+            haptic="selection"
           >
             <Icon name="share-outline" size={19} color={theme.ink} />
             <View style={{ flex: 1 }}>
@@ -220,21 +225,23 @@ export default function CommunityDetailScreen({ communityId, onClose, onOpenChat
               </Text>
             </View>
             <Icon name="chevron-forward-outline" size={16} color={theme.muted} />
-          </Pressable>
+          </SpringPressable>
         )}
 
         {community.role === 'admin' && community.requestCount > 0 && (
-          <Pressable
+          <SpringPressable
             onPress={() => setShowRequests(true)}
             android_ripple={rippleFor(theme)}
             style={({ pressed }) => [s.chatRow, inkBox(theme, 'thin'), { backgroundColor: theme.highlighterWash }, pressed && marker(theme, 1)]}
+            scaleTo={motion.scale.row}
+            haptic="selection"
           >
             <Icon name="hourglass-outline" size={19} color={theme.ink} />
             <Text style={[type.bodyMd, { color: theme.text, flex: 1 }]}>
               {community.requestCount} pending {community.requestCount === 1 ? 'request' : 'requests'}
             </Text>
             <Icon name="chevron-forward-outline" size={16} color={theme.muted} />
-          </Pressable>
+          </SpringPressable>
         )}
 
         <PaperCard>

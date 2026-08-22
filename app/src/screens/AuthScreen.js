@@ -9,6 +9,7 @@ import Icon from '../icons/Icon';
 import { useAuth } from '../store/AuthContext';
 import { api, authErrorMessage } from '../api';
 import { useDebouncedCallback } from '../rateLimit';
+import { SpringPressable, Shake, motion, haptic } from '../motion';
 
 /**
  * Auth must not subscribe to the live window height. Android and mobile web
@@ -138,22 +139,33 @@ export default function AuthScreen() {
     return () => checkAvailability.cancel();
   }, [username, mode, checkAvailability]);
 
+  // Every rejection lands the same way: the card shakes once and the phone
+  // taps back. `errorTick` advances on each failure so two identical
+  // messages in a row still register as two separate refusals.
+  const [errorTick, setErrorTick] = useState(0);
+  const fail = (message) => {
+    setError(message);
+    setErrorTick((n) => n + 1);
+    haptic('error');
+  };
+
   const submit = async () => {
     if (submittingRef.current) return;
     setError('');
     const candidate = username.trim();
-    if (!candidate) return setError('Username is required.');
-    if (candidate.length > MAX_USERNAME_LENGTH) return setError(`Username must be ${MAX_USERNAME_LENGTH} characters or fewer.`);
-    if (!password) return setError(mode === 'register' ? PASSWORD_HINT : 'Password is required.');
-    if (mode === 'register' && !name.trim()) return setError('Please enter your name.');
-    if (mode === 'register' && password.length < 8) return setError(PASSWORD_HINT);
+    if (!candidate) return fail('Username is required.');
+    if (candidate.length > MAX_USERNAME_LENGTH) return fail(`Username must be ${MAX_USERNAME_LENGTH} characters or fewer.`);
+    if (!password) return fail(mode === 'register' ? PASSWORD_HINT : 'Password is required.');
+    if (mode === 'register' && !name.trim()) return fail('Please enter your name.');
+    if (mode === 'register' && password.length < 8) return fail(PASSWORD_HINT);
     submittingRef.current = true;
     setBusy(true);
     try {
       if (mode === 'login') await login(candidate, password);
       else await register(candidate, name.trim(), password, phone.trim() || undefined);
+      haptic('success');
     } catch (e) {
-      setError(authErrorMessage(e, mode));
+      fail(authErrorMessage(e, mode));
     } finally {
       submittingRef.current = false;
       setBusy(false);
@@ -229,10 +241,12 @@ export default function AuthScreen() {
                     {['login', 'register'].map((m) => {
                       const active = mode === m;
                       return (
-                        <Pressable
+                        <SpringPressable
                           key={m}
                           onPress={() => { setMode(m); setError(''); setShowPassword(false); }}
                           disabled={busy}
+                          scaleTo={motion.scale.chip}
+                          haptic="selection"
                           android_ripple={{ color: 'rgba(255,226,77,0.22)' }}
                           style={({ pressed }) => [
                             s.modeTab,
@@ -243,7 +257,7 @@ export default function AuthScreen() {
                           <Text style={[s.modeTabText, active && s.modeTabTextActive]}>
                             {m === 'login' ? 'SIGN IN' : 'SIGN UP'}
                           </Text>
-                        </Pressable>
+                        </SpringPressable>
                       );
                     })}
                   </View>
@@ -352,15 +366,19 @@ export default function AuthScreen() {
                   {mode === 'register' && <Text style={s.passwordHint}>{PASSWORD_HINT}</Text>}
 
                   {!!error && (
-                    <View style={s.errorRow}>
-                      <Icon name="alert-circle" size={17} color={CARD.error} />
-                      <Text style={s.errorText}>{error}</Text>
-                    </View>
+                    <Shake trigger={errorTick}>
+                      <View style={s.errorRow}>
+                        <Icon name="alert-circle" size={17} color={CARD.error} />
+                        <Text style={s.errorText}>{error}</Text>
+                      </View>
+                    </Shake>
                   )}
 
-                  <Pressable
+                  <SpringPressable
                     onPress={submit}
                     disabled={busy}
+                    scaleTo={motion.scale.button}
+                    haptic="impact"
                     android_ripple={{ color: 'rgba(0,0,0,0.2)' }}
                     style={({ pressed }) => [
                       s.submitBtn,
@@ -379,7 +397,7 @@ export default function AuthScreen() {
                         <Icon name="arrow-forward" size={20} color={CARD.bgDeep} />
                       </>
                     )}
-                  </Pressable>
+                  </SpringPressable>
                 </View>
               </View>
             </View>

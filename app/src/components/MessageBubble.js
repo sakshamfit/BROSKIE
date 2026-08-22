@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, Image, Pressable, StyleSheet, Modal, Animated, PanResponder, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, Image, Pressable, StyleSheet, Animated, PanResponder, Platform, ActivityIndicator } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText, jumboEmojiChars } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
@@ -8,7 +8,7 @@ import { mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 import { alpha } from '../chatThemes';
 import { confirm } from '../hooks/confirm';
-import { Pop, SheetSpringIn, LikeBurst, haptic, useReducedMotion, motion } from '../motion';
+import { Pop, BottomSheet, SpringPressable, LikeBurst, haptic, useReducedMotion, motion } from '../motion';
 import { MESSAGE_SWIPE, messageTravel, shouldClaimMessageSwipe, isTouchInput, hasTouchScreen } from '../gestures';
 import VoiceNote from './VoiceNote';
 
@@ -304,7 +304,7 @@ export default function MessageBubble({
           )}
           {isWeb && !message.deleted && (
             <Animated.View pointerEvents="box-none" style={[s.hoverBadge, { opacity: hoverOpacity }]}>
-              <Pressable
+              <SpringPressable
                 accessibilityLabel="Reply"
                 accessibilityRole="button"
                 onPress={() => onReply?.(message)}
@@ -314,9 +314,11 @@ export default function MessageBubble({
                   { borderColor: theme.ink, backgroundColor: theme.replyPreview },
                   pressed && { backgroundColor: theme.highlighterSoft },
                 ]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="arrow-undo-outline" size={16} color={theme.ink} />
-              </Pressable>
+              </SpringPressable>
             </Animated.View>
           )}
           <Pressable
@@ -388,7 +390,7 @@ export default function MessageBubble({
           )}
 
           {message.replyTo && (
-            <Pressable
+            <SpringPressable
               accessibilityRole="button"
               accessibilityLabel="View original message"
               onPress={() => onOpenReply?.(message.replyTo.id)}
@@ -397,6 +399,8 @@ export default function MessageBubble({
                 { borderLeftColor: isMine ? subInk : theme.graphiteLine },
                 pressed && { backgroundColor: alpha(ink, 0.06) },
               ]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Icon name="arrow-undo-outline" size={11} color={isMine ? subInk : theme.graphite} />
@@ -416,7 +420,7 @@ export default function MessageBubble({
                   {message.replyTo.body}
                 </EmojiText>
               )}
-            </Pressable>
+            </SpringPressable>
           )}
 
           {message.deleted ? (
@@ -490,55 +494,67 @@ export default function MessageBubble({
         </View>
       </View>
 
-      <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)}>
-        <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setMenu(false)}>
-          <FrostedBackdrop />
-          <SheetSpringIn style={{ width: '100%', maxWidth: 340, alignItems: 'center' }}>
+      {/* Long-press menu: springs in over a blurred backdrop, can be pushed
+          away with a downward drag, and animates out instead of vanishing. */}
+      <BottomSheet
+        visible={menu}
+        onClose={() => setMenu(false)}
+        centered
+        backdrop={<FrostedBackdrop />}
+        style={{ paddingHorizontal: 22 }}
+      >
+        <View style={{ width: '100%', maxWidth: 340, alignItems: 'center' }}>
           <PaperCard weight="ink" style={s.menu}>
             <View style={s.quickRow}>
               {QUICK.map((e) => (
-                <Pressable
+                <SpringPressable
                   key={e}
+                  accessibilityRole="button"
+                  accessibilityLabel={`React ${e}`}
                   onPress={() => { onReact(message.id, e); setMenu(false); }}
+                  scaleTo={0.86}
+                  haptic="impact"
                   style={({ pressed }) => [s.quickBtn, inkBox(theme, 'thin'), pressed ? marker(theme, 2) : null]}
                 >
                   <Emoji char={e} size={22} />
-                </Pressable>
+                </SpringPressable>
               ))}
             </View>
             <Rule style={{ marginVertical: 10 }} />
             {!message.deleted && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReply(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReply(message); setMenu(false); }}>
                 <Icon name="arrow-undo-outline" size={18} color={theme.ink} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>Reply</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {canForward && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onForward(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onForward(message); setMenu(false); }}>
                 <Icon name="arrow-redo-outline" size={18} color={theme.ink} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>Forward</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {!message.deleted && message.type !== 'poll' && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onStar(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onStar(message); setMenu(false); }}>
                 <Icon name={message.starred ? 'star' : 'star-outline'} size={18} color={message.starred ? theme.highlighter : theme.ink} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>{message.starred ? 'Unstar message' : 'Star message'}</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {canEdit && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onEdit(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onEdit(message); setMenu(false); }}>
                 <Icon name="create-outline" size={18} color={theme.ink} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>Edit</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {!message.deleted && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onSetTimer(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="selection" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onSetTimer(message); setMenu(false); }}>
                 <Icon name="timer-outline" size={18} color={theme.ink} />
                 <Text style={[type.bodyMd, { color: theme.text }]}>Disappear in…</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {!message.deleted && isMine && (
-              <Pressable
+              <SpringPressable
+                scaleTo={motion.scale.row}
+                haptic="warning"
                 style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]}
                 onPress={async () => {
                   setMenu(false);
@@ -550,27 +566,28 @@ export default function MessageBubble({
               >
                 <Icon name="trash-outline" size={18} color={theme.danger} />
                 <Text style={[type.bodyMd, { color: theme.danger }]}>Delete for everyone</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {!message.deleted && (
-              <Pressable
+              <SpringPressable
+                scaleTo={motion.scale.row}
+                haptic="warning"
                 style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]}
                 onPress={() => { onDeleteForMe?.(message); setMenu(false); }}
               >
                 <Icon name="eye-off-outline" size={18} color={theme.danger} />
                 <Text style={[type.bodyMd, { color: theme.danger }]}>Delete for me</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {!isMine && !message.deleted && onReport && (
-              <Pressable style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReport(message); setMenu(false); }}>
+              <SpringPressable scaleTo={motion.scale.row} haptic="warning" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onReport(message); setMenu(false); }}>
                 <Icon name="flag-outline" size={18} color={theme.danger} />
                 <Text style={[type.bodyMd, { color: theme.danger }]}>Report</Text>
-              </Pressable>
+              </SpringPressable>
             )}
           </PaperCard>
-          </SheetSpringIn>
-        </Pressable>
-      </Modal>
+        </View>
+      </BottomSheet>
     </>
   );
 }
@@ -595,7 +612,7 @@ function PollBody({ messageId, poll, ink, isMine, onVotePoll }) {
         const mine = poll?.myVote === opt.index;
         const pct = totalVotes ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0;
         return (
-          <Pressable
+          <SpringPressable
             key={opt.index}
             onPress={() => onVotePoll?.(messageId, poll.id, opt.index)}
             style={({ pressed }) => [
@@ -604,6 +621,8 @@ function PollBody({ messageId, poll, ink, isMine, onVotePoll }) {
               mine ? { backgroundColor: theme.highlighterSoft, borderColor: theme.ink } : null,
               pressed ? marker(theme, 1) : null,
             ]}
+            scaleTo={motion.scale.row}
+            haptic="selection"
           >
             <View style={s.pollOptionTop}>
               <EmojiText style={[type.bodyMd, { color: ink, flex: 1 }]} numberOfLines={2}>{opt.text}</EmojiText>
@@ -617,7 +636,7 @@ function PollBody({ messageId, poll, ink, isMine, onVotePoll }) {
             {mine && (
               <Text style={[type.labelXs, { color: theme.ink, marginTop: 4 }]}>YOUR VOTE ✓</Text>
             )}
-          </Pressable>
+          </SpringPressable>
         );
       })}
 

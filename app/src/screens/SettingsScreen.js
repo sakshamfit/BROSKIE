@@ -9,6 +9,7 @@ import { useTheme } from '../store/ThemeContext';
 import { useChat } from '../store/ChatContext';
 import useResponsive from '../hooks/useResponsive';
 import { Avatar, InkButton, InkField, PaperCard, TapeChip, handleFor, MotionIn, FrostedBackdrop, GoldTick, hasGoldTick, HandDrawnToggle } from '../components/common';
+import { SpringPressable, motion } from '../motion';
 import UpdateSection from '../components/UpdateSection';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
@@ -73,9 +74,9 @@ export default function SettingsScreen({ navigation, embedded = false }) {
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[s.header, !embedded && { paddingTop: 20 + insets.top }]}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={{ padding: 6 }}>
+        <SpringPressable onPress={() => navigation.goBack()} hitSlop={8} scaleTo={motion.scale.icon} haptic="selection" style={{ padding: 6 }}>
           <Icon name="arrow-back" size={22} color={theme.ink} />
-        </Pressable>
+        </SpringPressable>
         <Text style={[type.headlineMd, { color: theme.text }]}>Settings</Text>
       </View>
 
@@ -192,10 +193,12 @@ export default function SettingsScreen({ navigation, embedded = false }) {
 
         {/* -------- Danger zone -------- */}
         <SectionHeading theme={theme} label="Danger Zone" tilt="1deg" />
-        <Pressable
+        <SpringPressable
           accessibilityRole="button"
           accessibilityLabel="Delete One ID"
           onPress={() => setDeleteOpen(true)}
+          scaleTo={motion.scale.row}
+          haptic="warning"
           style={({ pressed }) => [
             s.deleteRow,
             inkBox(theme, 'ink', theme.danger),
@@ -208,7 +211,7 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             <Text style={[type.labelXs, { color: theme.subtext, marginTop: 3 }]}>PASSWORD CONFIRMATION REQUIRED · PERMANENT</Text>
           </View>
           <Icon name="chevron-forward-outline" size={17} color={theme.danger} />
-        </Pressable>
+        </SpringPressable>
 
         <InkButton label="Log out" icon="log-out-outline" onPress={handleLogout} danger style={{ marginTop: 18 }} />
 
@@ -389,8 +392,13 @@ function SectionHeading({ theme, label, tilt }) {
 function NavRow({ theme, icon, title, subtitle, onPress }) {
   const s = makeStyles(theme);
   return (
-    <Pressable
+    // Settings is a wall of identical rows, so the press has to carry the
+    // feedback: the row compresses 1.5% under the finger and springs back.
+    <SpringPressable
+      accessibilityRole="button"
       onPress={onPress}
+      scaleTo={motion.scale.row}
+      haptic="selection"
       style={({ pressed, hovered }) => [s.row, inkBox(theme, 'thin'), (pressed || hovered) ? { backgroundColor: theme.cardAlt } : null]}
     >
       <Icon name={icon} size={19} color={theme.graphite} style={{ width: 26 }} />
@@ -399,7 +407,7 @@ function NavRow({ theme, icon, title, subtitle, onPress }) {
         <Text style={[type.labelXs, { color: theme.graphite, marginTop: 3 }]}>{subtitle.toUpperCase()}</Text>
       </View>
       <Icon name="chevron-forward-outline" size={17} color={theme.muted} />
-    </Pressable>
+    </SpringPressable>
   );
 }
 

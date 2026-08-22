@@ -14,7 +14,10 @@ import {
   FrostedBackdrop, GoldTick, hasGoldTick,
 } from '../components/common';
 import { type, inkBox, marker, radius, stroke } from '../theme';
-import { Skeleton, TypingDots, SheetSpringIn, SpringPressable, FadeSlide, Pop, haptic, motion } from '../motion';
+import { Skeleton, TypingDots, SpringPressable, FadeSlide, Pop, haptic, motion, BottomSheet, staggerDelay, useReducedMotion } from '../motion';
+
+/** Pressable that can carry a native-driven animated transform. */
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 import { api } from '../api';
 import { confirm } from '../hooks/confirm';
 import { useDebouncedCallback } from '../rateLimit';
@@ -47,6 +50,11 @@ export default function ChatListScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [sheetChat, setSheetChat] = useState(null); // long-press action sheet
   const [sheetBusy, setSheetBusy] = useState(false);
+
+  // Opens the short window in which rows are allowed to cascade in
+  // (see ChatRowEntrance). Runs before the first rows render.
+  const firstPaint = useRef(true);
+  if (firstPaint.current) { firstPaint.current = false; listOpenedAt.t = Date.now(); }
 
   const s = makeStyles(theme);
 
@@ -177,10 +185,12 @@ export default function ChatListScreen({ navigation }) {
               <View style={s.resultsWrap}>
                 <Text style={[type.labelXs, { color: theme.muted, marginBottom: 8 }]}>MESSAGES</Text>
                 {msgResults.slice(0, 6).map((m) => (
-                  <Pressable
+                  <SpringPressable
                     key={m.id}
                     style={({ pressed }) => [s.resultRow, pressed ? marker(theme, 1) : null]}
                     onPress={() => { setQuery(''); setMsgResults([]); searchMessages.cancel(); navigation.navigate('Conversation', { chatId: m.chatId }); }}
+                    scaleTo={motion.scale.row}
+                    haptic="selection"
                   >
                     <Icon name="chatbubble-outline" size={15} color={theme.graphite} />
                     <View style={{ flex: 1 }}>
@@ -188,7 +198,7 @@ export default function ChatListScreen({ navigation }) {
                       <EmojiText style={[type.bodySm, { color: theme.subtext }]} numberOfLines={1}>{m.body}</EmojiText>
                     </View>
                     <Text style={s.time}>{formatChatTime(m.createdAt)}</Text>
-                  </Pressable>
+                  </SpringPressable>
                 ))}
                 <Rule />
               </View>
@@ -203,17 +213,17 @@ export default function ChatListScreen({ navigation }) {
             )}
 
             {!showArchived && archivedCount > 0 && (
-              <Pressable style={({ pressed }) => [s.archiveRow, pressed ? marker(theme, 1) : null]} onPress={() => setShowArchived(true)}>
+              <SpringPressable style={({ pressed }) => [s.archiveRow, pressed ? marker(theme, 1) : null]} onPress={() => setShowArchived(true)} scaleTo={motion.scale.row} haptic="selection">
                 <Icon name="archive-outline" size={17} color={theme.ink} />
                 <Text style={[type.bodyMd, { flex: 1, color: theme.text }]}>Archived</Text>
                 <Text style={[type.labelSm, { color: theme.muted }]}>{archivedCount}</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             {showArchived && (
-              <Pressable style={({ pressed }) => [s.archiveRow, pressed ? marker(theme, 1) : null]} onPress={() => setShowArchived(false)}>
+              <SpringPressable style={({ pressed }) => [s.archiveRow, pressed ? marker(theme, 1) : null]} onPress={() => setShowArchived(false)} scaleTo={motion.scale.row} haptic="selection">
                 <Icon name="arrow-back" size={17} color={theme.ink} />
                 <Text style={[type.bodyMd, { flex: 1, color: theme.text }]}>Back to chats</Text>
-              </Pressable>
+              </SpringPressable>
             )}
             </View>
           </MotionIn>
@@ -228,14 +238,16 @@ export default function ChatListScreen({ navigation }) {
                 title="Unable to load conversations"
                 subtitle="Your history was not erased. Check your connection and retry."
               />
-              <Pressable
+              <SpringPressable
                 accessibilityRole="button"
                 onPress={() => refreshChats().catch(() => {})}
                 style={({ pressed }) => [s.retryButton, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
               >
                 <Icon name="refresh" size={16} color={theme.ink} />
                 <Text style={[type.labelSm, { color: theme.ink }]}>RETRY</Text>
-              </Pressable>
+              </SpringPressable>
             </View>
           ) : (
             <EmptyState
@@ -274,11 +286,19 @@ export default function ChatListScreen({ navigation }) {
       </SpringPressable>
 
       {/* long-press action sheet */}
-      <Modal visible={!!sheetChat} transparent animationType="fade" onRequestClose={() => !sheetBusy && setSheetChat(null)}>
-        <View style={[s.overlay, { backgroundColor: theme.dark ? 'rgba(0,0,0,0.28)' : 'rgba(28,27,27,0.18)' }]}>
-          <FrostedBackdrop intensity={65} dim={0.16} />
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => !sheetBusy && setSheetChat(null)} />
-          <SheetSpringIn style={{ width: '100%', maxWidth: 360 }}>
+      {/* Long-press actions. One shared sheet behaviour: the backdrop dims
+          as it springs in, a downward drag pushes it away with the finger,
+          and dismissing always animates out rather than cutting. */}
+      <BottomSheet
+        visible={!!sheetChat}
+        onClose={() => setSheetChat(null)}
+        dismissible={!sheetBusy}
+        centered
+        backdrop={<FrostedBackdrop intensity={65} dim={0.16} />}
+        backdropStyle={{ backgroundColor: theme.dark ? 'rgba(0,0,0,0.28)' : 'rgba(28,27,27,0.18)' }}
+        style={{ paddingHorizontal: 22 }}
+      >
+        <View style={{ width: '100%', maxWidth: 360 }}>
           <PaperCard weight="ink" style={[s.sheet, { backgroundColor: theme.dark ? 'rgba(31,30,30,0.96)' : 'rgba(253,248,248,0.96)' }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6 }}>
               <Avatar
@@ -331,9 +351,8 @@ export default function ChatListScreen({ navigation }) {
               onPress={() => deleteChat(sheetChat)}
             />
           </PaperCard>
-          </SheetSpringIn>
         </View>
-      </Modal>
+      </BottomSheet>
     </View>
   );
 }
@@ -342,14 +361,16 @@ function SheetRow({ icon, label, onPress, danger = false, disabled = false }) {
   const { theme } = useTheme();
   const color = danger ? theme.danger : theme.ink;
   return (
-    <Pressable
+    <SpringPressable
       style={({ pressed }) => [s2.row, pressed ? marker(theme, 1) : null, disabled && { opacity: 0.45 }]}
       onPress={onPress}
       disabled={disabled}
+      scaleTo={motion.scale.row}
+      haptic="selection"
     >
       <Icon name={icon} size={18} color={color} />
       <Text style={[type.bodyMd, { color }]}>{label}</Text>
-    </Pressable>
+    </SpringPressable>
   );
 }
 
@@ -358,6 +379,23 @@ function SheetRow({ icon, label, onPress, danger = false, disabled = false }) {
  * avatar pulses, the unread mark pops, and a brief highlight washes across
  * the card — "something new happened here" without shaking the row.
  */
+/**
+ * Rows cascade in when the list first paints — and only then.
+ *
+ * FlatList unmounts rows that scroll far out of view and re-mounts them on
+ * the way back, so a naive mount animation makes the list flicker every time
+ * the user scrolls up. This gates the entrance on a short window after the
+ * screen appears: first paint gets the cascade, everything afterwards is
+ * simply there.
+ */
+const listOpenedAt = { t: 0 };
+
+function ChatRowEntrance({ index, style, children }) {
+  const animate = useRef(Date.now() - listOpenedAt.t < 600).current;
+  if (!animate) return <View style={style}>{children}</View>;
+  return <MotionIn delay={staggerDelay(index)} distance={8} style={style}>{children}</MotionIn>;
+}
+
 function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, style: s }) {
   const pulse = useRef(new Animated.Value(0)).current;   // avatar scale pulse
   const wash = useRef(new Animated.Value(0)).current;    // highlight wash
@@ -373,22 +411,40 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
     // `prev !== 0` skips the very first mount — only genuinely new arrivals react.
     if (!isIncoming || prev === 0) return;
     haptic('selection');
+    // A new message should catch the eye, then get out of the way. The old
+    // 10% avatar jump and 1.5s wash were doing a victory lap for something
+    // that happens constantly in a messenger.
     Animated.sequence([
-      Animated.spring(pulse, { toValue: 1, friction: 5, tension: 150, useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.spring(pulse, { toValue: 1, ...motion.springPop, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 520, easing: Easing.out(Easing.quad), useNativeDriver: true }),
     ]).start();
     Animated.sequence([
-      Animated.timing(wash, { toValue: 1, duration: 140, useNativeDriver: true }),
-      Animated.timing(wash, { toValue: 0, duration: 1100, delay: 260, useNativeDriver: true }),
+      Animated.timing(wash, { toValue: 1, duration: 120, useNativeDriver: true }),
+      Animated.timing(wash, { toValue: 0, duration: 620, delay: 180, useNativeDriver: true }),
     ]).start();
   }, [item.lastMessage?.createdAt, item.updatedAt, item.lastMessage, user?.id, pulse, wash]);
+
+  // Row press physics. Native-driven, one value, no re-render per press.
+  const reduced = useReducedMotion();
+  const press = useRef(new Animated.Value(0)).current;
+  const onRowPressIn = useCallback(() => {
+    if (reduced) { press.setValue(1); return; }
+    Animated.spring(press, { toValue: 1, ...motion.springPress, useNativeDriver: true }).start();
+  }, [press, reduced]);
+  const onRowPressOut = useCallback(() => {
+    if (reduced) { press.setValue(0); return; }
+    Animated.spring(press, { toValue: 0, ...motion.springBack, useNativeDriver: true }).start();
+  }, [press, reduced]);
+  const pressX = press.interpolate({ inputRange: [0, 1], outputRange: [0, 2] });
+  const pressY = press.interpolate({ inputRange: [0, 1], outputRange: [0, 4] });
+  const pressTint = press.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
 
   const typers = Object.values(typing || {});
   const lm = item.lastMessage;
   const isMine = lm && lm.senderId === user.id;
   const hasUnread = item.unread > 0;
-  const avatarScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] });
-  const washOpacity = wash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.5] });
+  const avatarScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
+  const washOpacity = wash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.38] });
 
   let preview = 'no messages yet';
   let senderPrefix = null;
@@ -406,28 +462,41 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
   }
 
   return (
-    <MotionIn delay={Math.min(index, 8) * 28} distance={10} style={s.rowWrap}>
+    <ChatRowEntrance index={index} style={s.rowWrap}>
       {/* A hard offset plate plus a soft shadow gives the black card real
           depth on Android, iOS and web without adding another native module. */}
       <View pointerEvents="none" style={[s.rowDepth, hasUnread && { backgroundColor: '#8d7900' }]} />
-      <Pressable
-        onPress={() => navigation.navigate('Conversation', { chatId: item.id })}
+      {/* Pressing slides the tile down onto its own depth plate — the same
+          2/4px offset as before, but sprung instead of snapped, so the card
+          reads as being physically pushed into the page and released. */}
+      <AnimatedPressable
+        // No accessibilityRole here: the row already contains the avatar's
+        // own "view profile" button, and a button inside a button is invalid
+        // (and confuses screen readers). The label is enough.
+        accessibilityLabel={`Open chat with ${item.name}`}
+        onPress={() => { haptic('selection'); navigation.navigate('Conversation', { chatId: item.id }); }}
+        onPressIn={onRowPressIn}
+        onPressOut={onRowPressOut}
         onLongPress={() => onOpenSheet(item)}
         delayLongPress={280}
-        style={({ pressed }) => [
+        style={[
           s.row,
           hasUnread ? s.rowUnread : s.rowRead,
           {
             borderColor: hasUnread ? theme.highlighter : CHAT_TILE_LINE,
             transform: [
               { rotate: hasUnread ? '-0.18deg' : '0.1deg' },
-              { translateX: pressed ? 2 : 0 },
-              { translateY: pressed ? 4 : 0 },
+              { translateX: pressX },
+              { translateY: pressY },
             ],
           },
-          pressed ? { backgroundColor: CHAT_TILE_PRESSED } : null,
         ]}
       >
+        {/* pressed tint, driven by the same value as the offset */}
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: CHAT_TILE_PRESSED, opacity: pressTint }]}
+        />
         <View pointerEvents="none" style={s.rowSheen} />
         <View pointerEvents="none" style={s.rowEdge} />
         {/* brief "new thing happened" wash across the card */}
@@ -499,8 +568,8 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
             {item.muted && <Icon name="volume-mute" size={14} color={CHAT_TILE_MUTED} style={{ marginLeft: 8 }} />}
           </View>
         </View>
-      </Pressable>
-    </MotionIn>
+      </AnimatedPressable>
+    </ChatRowEntrance>
   );
 }
 

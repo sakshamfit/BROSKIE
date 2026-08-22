@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
 import Icon from '../icons/Icon';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, InkCheckbox, InkButton, EmptyState, Rule, FrostedBackdrop, GoldTick, hasGoldTick } from './common';
-import { SheetSpringIn } from '../motion';
+import { BottomSheet, SpringPressable, motion } from '../motion';
 import { type, inkBox, marker, radius, raised } from '../theme';
 import { api } from '../api';
 
@@ -45,11 +45,15 @@ export default function ForwardSheet({ visible, message, onClose }) {
   const close = () => { setSelected([]); onClose(); };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
-      <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={close}>
-        <FrostedBackdrop />
-        <SheetSpringIn style={{ width: '100%', maxWidth: 420 }}>
-        <Pressable style={[s.sheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
+    <BottomSheet
+      visible={visible}
+      onClose={close}
+      centered
+      backdrop={<FrostedBackdrop />}
+      style={{ paddingHorizontal: 28 }}
+    >
+      <View style={{ width: '100%', maxWidth: 420 }}>
+        <View style={[s.sheet, raised(theme, 2), { backgroundColor: theme.bg, borderColor: theme.ink }]}>
           <View style={s.head}>
             <View style={{ flex: 1 }}>
               <Text style={[type.headlineSm, { color: theme.text }]}>Forward to…</Text>
@@ -57,9 +61,16 @@ export default function ForwardSheet({ visible, message, onClose }) {
                 {selected.length ? `${selected.length} selected` : 'Pick chats'}
               </Text>
             </View>
-            <Pressable onPress={close} hitSlop={8}>
+            <SpringPressable
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              onPress={close}
+              hitSlop={8}
+              scaleTo={motion.scale.icon}
+              haptic="selection"
+            >
               <Icon name="close" size={22} color={theme.muted} />
-            </Pressable>
+            </SpringPressable>
           </View>
 
           <FlatList
@@ -71,7 +82,12 @@ export default function ForwardSheet({ visible, message, onClose }) {
             renderItem={({ item }) => {
               const on = selected.includes(item.id);
               return (
-                <Pressable style={({ pressed }) => [s.row, pressed ? marker(theme, 1) : null]} onPress={() => toggle(item.id)}>
+                <SpringPressable
+                  scaleTo={motion.scale.row}
+                  haptic="selection"
+                  style={({ pressed }) => [s.row, pressed ? marker(theme, 1) : null]}
+                  onPress={() => toggle(item.id)}
+                >
                   <Avatar uri={item.avatar} name={item.name} id={item.otherUserId || item.id} group={item.type === 'group'} size={42} />
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     <Text style={[type.bodyMd, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{item.name}</Text>
@@ -79,7 +95,7 @@ export default function ForwardSheet({ visible, message, onClose }) {
                   </View>
                   {item.muted && <Icon name="volume-mute" size={14} color={theme.muted} style={{ marginRight: 10 }} />}
                   <InkCheckbox checked={on} onPress={() => toggle(item.id)} size={22} />
-                </Pressable>
+                </SpringPressable>
               );
             }}
           />
@@ -92,15 +108,13 @@ export default function ForwardSheet({ visible, message, onClose }) {
             disabled={!selected.length}
             busy={busy}
           />
-        </Pressable>
-        </SheetSpringIn>
-      </Pressable>
-    </Modal>
+        </View>
+      </View>
+    </BottomSheet>
   );
 }
 
 const makeStyles = (t) => StyleSheet.create({
-  overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
   sheet: {
     width: '100%', maxWidth: 420, maxHeight: '78%',
     borderWidth: 3, padding: 18, gap: 12,

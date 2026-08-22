@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, Modal } from 'react-nativ
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { InkButton, InkField, Rule, FrostedBackdrop } from './common';
-import { SheetSpringIn } from '../motion';
+import { SheetSpringIn, SpringPressable, motion } from '../motion';
 import { type, inkBox, marker, raised } from '../theme';
 
 const MAX_OPTIONS = 6;
@@ -90,13 +90,15 @@ export default function PollComposer({ visible, onClose, onCreate }) {
           ))}
 
           {options.length < MAX_OPTIONS && (
-            <Pressable
+            <SpringPressable
               style={({ pressed }) => [s.addRow, pressed ? marker(theme, 1) : null]}
               onPress={() => setOptions((prev) => [...prev, ''])}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               <Icon name="add-circle-outline" size={18} color={theme.ink} />
               <Text style={[type.bodySm, { color: theme.ink }]}>Add option</Text>
-            </Pressable>
+            </SpringPressable>
           )}
 
           {!!error && <Text style={[type.bodySm, { color: theme.danger }]}>{error}</Text>}

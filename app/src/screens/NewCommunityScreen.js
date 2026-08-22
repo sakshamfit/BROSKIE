@@ -11,6 +11,7 @@ import useResponsive from '../hooks/useResponsive';
 import { rippleFor } from '../components/common';
 import { CATEGORY_LIST, JOIN_POLICY_LIST } from '../components/communityMeta';
 import { dashedRule, marker, radius, type, raised } from '../theme';
+import { SpringPressable, motion } from '../motion';
 
 /**
  * Full-screen "New Community" composer — mirrors NewPostScreen's structure
@@ -113,7 +114,7 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
               {CATEGORY_LIST.map((c) => {
                 const active = category === c.key;
                 return (
-                  <Pressable
+                  <SpringPressable
                     key={c.key}
                     onPress={() => setCategory(c.key)}
                     style={({ pressed }) => [
@@ -123,10 +124,12 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
                       active && { backgroundColor: theme.highlighter, borderColor: theme.ink },
                       pressed && !active ? marker(theme, 1) : null,
                     ]}
+                    scaleTo={motion.scale.row}
+                    haptic="selection"
                   >
                     <Icon name={c.icon} size={20} color={theme.text} />
                     <Text style={[type.labelSm, { color: theme.text, marginTop: 6, textAlign: 'center' }]}>{c.label}</Text>
-                  </Pressable>
+                  </SpringPressable>
                 );
               })}
             </View>
@@ -138,7 +141,7 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
               {JOIN_POLICY_LIST.map((p) => {
                 const active = joinPolicy === p.key;
                 return (
-                  <Pressable
+                  <SpringPressable
                     key={p.key}
                     onPress={() => setJoinPolicy(p.key)}
                     style={({ pressed }) => [
@@ -148,6 +151,8 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
                       active && { backgroundColor: theme.highlighter, borderColor: theme.ink },
                       pressed && !active ? marker(theme, 1) : null,
                     ]}
+                    scaleTo={motion.scale.row}
+                    haptic="selection"
                   >
                     <Icon name={p.icon} size={18} color={theme.text} />
                     <View style={{ flex: 1 }}>
@@ -155,7 +160,7 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
                       <Text style={[type.bodySm, { color: theme.subtext, marginTop: 1 }]}>{p.blurb}</Text>
                     </View>
                     {active && <Icon name="checkmark-circle" size={18} color={theme.ink} />}
-                  </Pressable>
+                  </SpringPressable>
                 );
               })}
             </View>
@@ -177,7 +182,7 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
 
         <View style={[s.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={isTablet ? s.footerInnerWide : s.footerInner}>
-            <Pressable
+            <SpringPressable
               onPress={submit}
               disabled={busy}
               android_ripple={rippleFor(theme, { color: 'rgba(255,255,255,0.25)' })}
@@ -187,6 +192,8 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
                 { backgroundColor: pressed && Platform.OS !== 'android' ? '#242321' : '#050505', borderColor: '#000000' },
                 busy && { opacity: 0.6 },
               ]}
+              scaleTo={motion.scale.row}
+              haptic="selection"
             >
               {busy ? (
                 <ActivityIndicator color="#ffffff" />
@@ -198,7 +205,7 @@ export default function NewCommunityScreen({ visible, onClose, onCreated }) {
                   </Text>
                 </>
               )}
-            </Pressable>
+            </SpringPressable>
           </View>
         </View>
       </KeyboardAvoidingView>

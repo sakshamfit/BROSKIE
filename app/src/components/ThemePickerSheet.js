@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, Modal, ScrollView, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import useResponsive from '../hooks/useResponsive';
 import { ThemeRegistry, resolveChatTheme, alpha } from '../chatThemes';
-import { SpringPressable, Pop, haptic } from '../motion';
+import { SpringPressable, Pop, haptic, BottomSheet, SheetHandle, motion } from '../motion';
 import { type, inkBox, marker, raised } from '../theme';
 
 /**
@@ -42,9 +42,18 @@ export default function ThemePickerSheet({
   const s = styles;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={[s.overlay, isTablet ? s.overlayCenter : s.overlayBottom]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close theme picker" />
+    // Finger-driven sheet: springs up from the bottom, tracks a downward
+    // drag 1:1 and flings away past ~28% of its height. The backdrop dims in
+    // step with the drag, so the sheet and the screen behind it feel like
+    // one connected surface.
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      centered={isTablet}
+      backdropStyle={{ backgroundColor: 'rgba(0,0,0,0.32)' }}
+      style={isTablet ? { paddingHorizontal: 24 } : { maxHeight: '88%' }}
+    >
+      <View style={isTablet ? s.overlayCenter : null}>
         <View
           style={[
             s.sheet,
@@ -53,10 +62,11 @@ export default function ThemePickerSheet({
               backgroundColor: g.bg,
               borderColor: g.ink,
               paddingBottom: Math.max(insets.bottom, 16),
-              maxHeight: isTablet ? 640 : '88%',
+              maxHeight: isTablet ? 640 : undefined,
             },
           ]}
         >
+          <SheetHandle color={g.ink} />
           {/* header */}
           <View style={s.header}>
             <View style={{ flex: 1 }}>
@@ -65,9 +75,17 @@ export default function ThemePickerSheet({
                 Choose a vibe for this chat
               </Text>
             </View>
-            <Pressable onPress={onClose} hitSlop={8} style={({ pressed }) => [s.closeBtn, pressed ? marker(g, 1) : null]}>
+            <SpringPressable
+              accessibilityRole="button"
+              accessibilityLabel="Close theme picker"
+              onPress={onClose}
+              hitSlop={8}
+              scaleTo={motion.scale.icon}
+              haptic="selection"
+              style={({ pressed }) => [s.closeBtn, pressed ? marker(g, 1) : null]}
+            >
               <Icon name="close" size={20} color={g.ink} />
-            </Pressable>
+            </SpringPressable>
           </View>
 
           {/* category chips */}
@@ -79,9 +97,10 @@ export default function ThemePickerSheet({
             {ThemeRegistry.categories.map((c) => {
               const active = category === c && !mood;
               return (
-                <Pressable
+                <SpringPressable
                   key={c}
-                  onPress={() => { setCategory(c); setMood(null); }}
+                  onPress={() => { haptic('selection'); setCategory(c); setMood(null); }}
+                  scaleTo={motion.scale.chip}
                   style={({ pressed }) => [
                     s.chip,
                     inkBox(g, active ? 'bold' : 'thin'),
@@ -90,7 +109,7 @@ export default function ThemePickerSheet({
                   ]}
                 >
                   <Text style={[type.labelXs, { color: g.ink, letterSpacing: 0.5 }]}>{c.toUpperCase()}</Text>
-                </Pressable>
+                </SpringPressable>
               );
             })}
           </ScrollView>
@@ -104,9 +123,10 @@ export default function ThemePickerSheet({
             {ThemeRegistry.moods.map((m) => {
               const active = mood === m.id;
               return (
-                <Pressable
+                <SpringPressable
                   key={m.id}
-                  onPress={() => setMood(active ? null : m.id)}
+                  onPress={() => { haptic('selection'); setMood(active ? null : m.id); }}
+                  scaleTo={motion.scale.chip}
                   style={({ pressed }) => [
                     s.moodChip,
                     active ? { borderColor: g.ink, backgroundColor: g.highlighterWash } : { borderColor: g.graphiteLine },
@@ -116,7 +136,7 @@ export default function ThemePickerSheet({
                   <Text style={[type.labelXs, { color: g.ink }]}>
                     {m.emoji} {m.label.toUpperCase()}
                   </Text>
-                </Pressable>
+                </SpringPressable>
               );
             })}
           </ScrollView>
@@ -187,7 +207,7 @@ export default function ThemePickerSheet({
           </View>
         </View>
       </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 
