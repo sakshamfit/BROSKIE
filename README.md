@@ -302,6 +302,26 @@ once every other member has a read receipt — so it works identically for group
 
 ## Notes & limits
 
+- **Web rendering (CSR/SSR).** The web build is client-rendered by design:
+  this app uses `react-navigation`, and Expo's static/server rendering
+  requires `expo-router`, so `web.output` stays `"single"` (one JS bundle, no
+  per-route HTML). Everything around that is rendering-safe end to end:
+  - **SSR-safe app tree** — the whole app (every screen module imports) can be
+    imported and rendered to HTML in a browser-less Node environment: no
+    browser-only global is touched at import or first-render time
+    (`SafeAreaProvider` gets seeded web metrics, dimensions/reduced-motion
+    resolve deterministically on the first render pass, browser APIs are
+    guarded or effect-only), so any future pre-renderer/SSR host works.
+  - **Branded first paint** — `app/public/index.html` ships a static
+    `LOADING +ONE` boot shell inside `#root`, so the page paints the paper
+    spinner while the bundle downloads instead of a blank screen. React 19's
+    `createRoot` replaces the shell's children on mount, no cleanup needed.
+  - **Smoke tests** — `npm run test:ssr` bundles the real app through Expo's
+    own export pipeline, evaluates it in a Node VM **without**
+    `window`/`document`, and renders the full `<App />` tree with
+    `react-dom/server`; `npm run test:csr` runs the real exported bundle in
+    jsdom and asserts the app mounts over the boot shell with no client
+    errors. Both fail loudly on any regression.
 - **Push notifications** reach **web browsers too** — Chrome/Edge/Firefox (and
   Safari 16.4+ with the PWA installed). Web pushes are signed with VAPID keys
   the server generates itself on first boot (persisted on the /data volume);

@@ -38,6 +38,7 @@ export function handleDeepLink(url) {
  *  the user is signed in (invite joins need auth). Returns a cleanup fn. */
 export function setupDeepLinks() {
   if (Platform.OS === 'web') {
+    if (typeof window === 'undefined') return () => {};
     try {
       const path = window.location.pathname;
       if (/^\/c\/[a-z0-9]+\/?$/i.test(path)) {

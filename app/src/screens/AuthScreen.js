@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, Pattern, Circle, Rect } from 'react-native-svg';
+import useIsomorphicLayoutEffect from '../hooks/useIsomorphicLayoutEffect';
 import Icon from '../icons/Icon';
 import { useAuth } from '../store/AuthContext';
 import { api, authErrorMessage } from '../api';
@@ -15,24 +16,35 @@ import { api, authErrorMessage } from '../api';
  * frames into the auth component re-renders controlled TextInputs and can
  * make their caret visibly flash or jump. Width/orientation changes are the
  * only layout changes this screen needs.
+ *
+ * SSR/hydration safety: the first render sees "unknown" (0) dimensions —
+ * identical on the server and during the client's hydration pass — and the
+ * real values are committed by a pre-paint layout effect, so pre-rendered
+ * HTML always matches and nothing flashes.
  */
 function useAuthLayout() {
-  const screenRef = useRef(Dimensions.get('screen'));
-  const [width, setWidth] = useState(() => Dimensions.get('window').width);
+  const [width, setWidth] = useState(0);
+  const [shortSide, setShortSide] = useState(0);
 
-  useEffect(() => {
-    const subscription = Dimensions.addEventListener('change', ({ window }) => {
-      setWidth((previousWidth) => previousWidth === window.width ? previousWidth : window.width);
-    });
+  useIsomorphicLayoutEffect(() => {
+    const read = () => {
+      const win = Dimensions.get('window');
+      const screen = Dimensions.get('screen');
+      setWidth((previousWidth) => (previousWidth === win.width ? previousWidth : win.width));
+      setShortSide((previous) => {
+        const next = Math.min(screen.width || win.width, screen.height || win.height);
+        return previous === next ? previous : next;
+      });
+    };
+    read();
+    const subscription = Dimensions.addEventListener('change', read);
     return () => subscription?.remove();
   }, []);
 
-  const screen = screenRef.current;
-  const shortSide = Math.min(screen.width || width, screen.height || width);
   return {
     width,
     isWeb: Platform.OS === 'web',
-    isSmallPhone: shortSide < 360,
+    isSmallPhone: shortSide > 0 && shortSide < 360,
     isSplitCapable: width >= 840 && shortSide >= 600,
   };
 }

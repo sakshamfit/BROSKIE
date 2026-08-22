@@ -94,7 +94,8 @@ function consumeLaunchPushFromUrl(onRoute) {
  * `onRoute(data)` is called when the user taps a notification.
  */
 export async function registerPushNotifications({ onRoute }) {
-  if (typeof navigator === 'undefined'
+  if (typeof window === 'undefined'
+    || typeof navigator === 'undefined'
     || !('serviceWorker' in navigator)
     || !('PushManager' in window)
     || typeof Notification === 'undefined') {

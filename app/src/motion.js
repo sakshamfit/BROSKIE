@@ -49,22 +49,18 @@ export const motion = {
 /* reduced motion                                                      */
 /* ------------------------------------------------------------------ */
 
-function readReduced() {
-  if (Platform.OS === 'web') {
-    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-      return !!window.matchMedia('(prefers-reduced-motion: reduce)')?.matches;
-    }
-    return false;
-  }
-  return false;
-}
-
 /**
  * Live `prefers-reduced-motion` flag. Web reads the CSS media query; native
  * reads AccessibilityInfo. Components gate their motion on this.
+ *
+ * The first render is deterministically `false` so a server/static render
+ * and the client's hydration pass produce identical markup; the real
+ * preference is applied by the effect below (on the client this runs before
+ * first paint, so reduced-motion users still get their setting honored
+ * immediately).
  */
 export function useReducedMotion() {
-  const [reduced, setReduced] = useState(readReduced);
+  const [reduced, setReduced] = useState(false);
 
   useEffect(() => {
     if (Platform.OS === 'web') {

@@ -587,6 +587,7 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 | current | **Phase 3**: live WebRTC calls on Android, **web push parity** (VAPID, zero-config), community invite links + deep links, hold-to-record voice notes, grouped Activity rows, GitHub Actions CI; `test-phase3.js` (27 checks). |
 | current | Per-conversation chat themes (13 themes, realtime sync, picker with live preview). |
 | current | Centralized motion system (`src/motion.js`): press springs, tab/section transitions, animated message entrances, double-tap ❤️, typing dots, skeleton chat list, story progress bars with hold-to-pause, spring sheets, reduced-motion + haptics support. |
+| current | **CSR/SSR hardening**: the whole app renders to HTML in browser-less environments (SafeAreaProvider seeded web metrics — it previously rendered an empty `<div/>` server-side; deterministic first render for dimensions/reduced-motion via `useIsomorphicLayoutEffect`; browser APIs guarded in push/confirm/deep-links); branded static `LOADING +ONE` boot shell in `public/index.html` replaces the blank pre-JS paint (React 19 clears it on mount); new smoke tests `npm run test:ssr` (Node VM + `react-dom/server`, no window/document) and `npm run test:csr` (real bundle in jsdom, asserts mount + boot-shell takeover). |
 
 ---
 

@@ -8,6 +8,9 @@ import { Alert, Platform } from 'react-native';
  */
 export function confirm(message, { title = '', confirmLabel = 'OK', destructive = false } = {}) {
   if (Platform.OS === 'web') {
+    // No window (server render / non-DOM context): treat as cancelled —
+    // destructive actions must never silently proceed.
+    if (typeof window === 'undefined') return Promise.resolve(false);
     return Promise.resolve(window.confirm(message));
   }
   return new Promise((resolve) => {

@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Platform, useWindowDimensions, PixelRatio, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import useIsomorphicLayoutEffect from './useIsomorphicLayoutEffect';
 
 /**
  * Breakpoints, in dp width. Chosen to line up with real device classes:
@@ -18,10 +19,32 @@ export const BREAKPOINTS = {
 /**
  * One hook for every screen-size / platform decision so we don't scatter
  * `Platform.OS === 'ios'` / magic breakpoint numbers across every screen.
+ *
+ * Rendering rules that keep server (SSR/static) HTML and the client's
+ * hydration pass byte-for-byte identical:
+ *   - The FIRST render always sees "unknown" dimensions (width/height 0).
+ *     A server render has no window to measure, and react-native-web's
+ *     `useWindowDimensions` already reports real pixels on the client's very
+ *     first render — feeding those straight into layout would make the
+ *     hydrated tree structurally different from the pre-rendered HTML
+ *     (compact phone layout vs desktop split) and force React to throw the
+ *     server markup away.
+ *   - A layout effect (pre-paint, client only) then commits the real
+ *     dimensions, so the browser never paints the unknown state and desktop
+ *     users still get the split layout on the first visible frame.
  */
 export default function useResponsive() {
-  const { width, height, fontScale } = useWindowDimensions();
+  const live = useWindowDimensions();
   const insets = useSafeAreaInsets();
+
+  const [hasRealDimensions, setHasRealDimensions] = useState(false);
+  useIsomorphicLayoutEffect(() => {
+    if (!hasRealDimensions) setHasRealDimensions(true);
+  }, [hasRealDimensions]);
+
+  const { width, height, fontScale } = hasRealDimensions
+    ? live
+    : { width: 0, height: 0, fontScale: live.fontScale };
 
   return useMemo(() => {
     // Android's adjustResize changes the *window* height every time the IME
@@ -29,17 +52,21 @@ export default function useResponsive() {
     // therefore oscillated while typing: a normal phone temporarily became a
     // "small phone", card padding changed, and the focused field/cursor jumped
     // up and down. Screen dimensions remain stable while the keyboard opens.
-    const screen = Dimensions.get('screen');
+    const screen = hasRealDimensions ? Dimensions.get('screen') : { width: 0, height: 0 };
     const deviceWidth = screen.width || width;
     const deviceHeight = screen.height || height;
-    const orientation = deviceWidth >= deviceHeight ? 'landscape' : 'portrait';
+    // Unknown dimensions (first pass) resolve to the phone-like default so
+    // server and hydration renders agree.
+    const orientation = !deviceWidth && !deviceHeight
+      ? 'portrait'
+      : deviceWidth >= deviceHeight ? 'landscape' : 'portrait';
     const deviceShortSide = Math.min(deviceWidth, deviceHeight);
 
     // Tablet heuristic: physical short-side >= 600dp is the same rule Android
     // uses for its "sw600dp" resource qualifier; the IME cannot change it.
     const isTablet = deviceShortSide >= 600;
     const isLargePhone = deviceShortSide >= 400 && deviceShortSide < 600; // Pro Max / Ultra class phones
-    const isSmallPhone = deviceShortSide < 360; // SE-class phones
+    const isSmallPhone = deviceShortSide > 0 && deviceShortSide < 360; // SE-class phones
 
     let breakpoint = 'compact';
     if (width >= BREAKPOINTS.large) breakpoint = 'large';
@@ -72,5 +99,5 @@ export default function useResponsive() {
       clampedFontScale: Math.min(Math.max(fontScale, 0.9), 1.3),
       pixelRatio: PixelRatio.get(),
     };
-  }, [width, height, fontScale, insets.top, insets.bottom, insets.left, insets.right]);
+  }, [width, height, fontScale, hasRealDimensions, insets.top, insets.bottom, insets.left, insets.right]);
 }

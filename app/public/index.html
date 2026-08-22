@@ -72,6 +72,33 @@
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <!-- The root element for your Expo app. -->
-    <div id="root"></div>
+    <div id="root">
+      <!--
+        Static boot shell — the branded first paint before the JS bundle
+        arrives. Mirrors the in-app <Loading label="LOADING +ONE"> state
+        (paper bg, ink arc spinner, mono label). React 19's createRoot()
+        replaces the container's children on first render, so the app simply
+        takes over from this; nothing needs to remove it by hand. Bots and
+        no-JS visitors see a branded page instead of a blank one.
+      -->
+      <div id="static-boot" role="status" aria-label="Loading +one" style="display:flex;flex:1;height:100%;align-items:center;justify-content:center;background-color:#fdf8f8;gap:14px;flex-direction:column;">
+        <style>
+          #static-boot .boot-arc {
+            animation: boot-spin 0.9s linear infinite;
+          }
+          @keyframes boot-spin {
+            to { transform: rotate(360deg); }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            #static-boot .boot-arc { animation: none; }
+          }
+        </style>
+        <svg class="boot-arc" width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" fill="none" r="14" stroke-width="4" style="stroke:#000000;opacity:0.2"></circle>
+          <circle cx="16" cy="16" fill="none" r="14" stroke-width="4" style="stroke:#000000;stroke-dasharray:80;stroke-dashoffset:60"></circle>
+        </svg>
+        <div style="font-family:JetBrainsMono,'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:13px;letter-spacing:0.55px;color:#747878;">LOADING +ONE</div>
+      </div>
+    </div>
   </body>
 </html>

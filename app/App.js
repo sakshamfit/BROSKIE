@@ -44,6 +44,12 @@ import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 import VercelObservability from './src/web/VercelObservability';
 import { WEB_BUILD, startUpdateLifecycle } from './src/updates';
 
+/** Seed metrics for SafeAreaProvider on web (see usage in App below). */
+const WEB_INITIAL_METRICS = {
+  insets: { top: 0, bottom: 0, left: 0, right: 0 },
+  frame: { x: 0, y: 0, width: 0, height: 0 },
+};
+
 /**
  * Keep +one current without the user thinking about it.
  *
@@ -232,7 +238,18 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppErrorBoundary>
-        <SafeAreaProvider>
+        {/* Seed zero insets on web so the provider renders its children on the
+            very first pass. Without initialMetrics, SafeAreaProvider starts
+            with null insets and renders NOTHING until its measurement effect
+            runs — invisible in the browser (effect fires right after mount)
+            but fatal for server/static renders, which never run effects: the
+            entire app pre-rendered to an empty <div/>. Real insets arrive via
+            the effect immediately after hydration; on web they are CSS env()
+            values, so 0/0/0/0 is the correct seed. Native keeps the default
+            (native measurement) behaviour. */}
+        <SafeAreaProvider
+          initialMetrics={Platform.OS === 'web' ? WEB_INITIAL_METRICS : undefined}
+        >
           <ThemeProvider>
             {canRenderApp ? (
               <AuthProvider>
