@@ -55,8 +55,10 @@ export default function CommunitiesScreen({ onOpenChat }) {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
-    load(scope, activeCategory).finally(() => setLoading(false));
+    (async () => {
+      setLoading(true);
+      try { await load(scope, activeCategory); } finally { setLoading(false); }
+    })();
   }, [scope, activeCategory, load]);
 
   useEffect(() => {

@@ -73,11 +73,15 @@ export function AuthProvider({ children }) {
 
     // Removing the remembered token is best-effort; a failure here must not
     // prevent the current session from ending.
-    return AsyncStorage.removeItem(TOKEN_KEY).catch((error) => {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.warn('Could not clear remembered session:', error?.message);
+    return (async () => {
+      try {
+        await AsyncStorage.removeItem(TOKEN_KEY);
+      } catch (error) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn('Could not clear remembered session:', error?.message);
+        }
       }
-    });
+    })();
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -94,18 +98,20 @@ export function AuthProvider({ children }) {
 
     let disposed = false;
     let refreshing = false;
-    const refreshOnForeground = () => {
+    const refreshOnForeground = async () => {
       if (disposed || refreshing) return;
       refreshing = true;
-      refreshUser()
-        .catch((error) => {
-          // A temporary offline period must not log the user out or interrupt
-          // the current screen; the next foreground transition retries it.
-          if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            console.warn('Could not refresh account settings:', error?.technicalMessage || error?.message);
-          }
-        })
-        .finally(() => { refreshing = false; });
+      try {
+        await refreshUser();
+      } catch (error) {
+        // A temporary offline period must not log the user out or interrupt
+        // the current screen; the next foreground transition retries it.
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn('Could not refresh account settings:', error?.technicalMessage || error?.message);
+        }
+      } finally {
+        refreshing = false;
+      }
     };
 
     const subscription = AppState.addEventListener('change', (nextState) => {

@@ -2489,6 +2489,11 @@ function deliverUserMessage(uid, data) {
   } = data || {};
   if (!chatId) return { error: 'Missing chat', status: 400 };
 
+  // Moderation enforcement: banned/suspended/restricted users can still read
+  // their conversations but must not send — same gate as the REST endpoints.
+  const gate = moderation.moderationGate(uid);
+  if (gate.blocked) return { error: gate.error, status: 403 };
+
   const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
   if (!isMember) return { error: 'Not a member', status: 403 };
 
@@ -4226,9 +4231,15 @@ function shutdownWithBackup(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[shutdown] ${signal} received — backing up before exit…`);
-  backupNow()
-    .catch((e) => console.error('[backup]', e.message))
-    .finally(() => process.exit(0));
+  (async () => {
+    try {
+      await backupNow();
+    } catch (e) {
+      console.error('[backup]', e.message);
+    } finally {
+      process.exit(0);
+    }
+  })();
 }
 process.on('SIGTERM', () => shutdownWithBackup('SIGTERM'));
 process.on('SIGINT', () => shutdownWithBackup('SIGINT'));

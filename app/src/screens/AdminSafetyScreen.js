@@ -109,7 +109,11 @@ export default function AdminSafetyScreen({ navigation }) {
     await Promise.all([loadOverview(), loadCases()]);
   }, [loadOverview, loadCases]);
 
-  useEffect(() => { refreshAll().finally(() => setLoading(false)); }, [refreshAll]);
+  useEffect(() => {
+    (async () => {
+      try { await refreshAll(); } finally { setLoading(false); }
+    })();
+  }, [refreshAll]);
 
   // realtime safety alerts — dashboard refreshes itself, no pull needed.
   useEffect(() => {
@@ -120,7 +124,12 @@ export default function AdminSafetyScreen({ navigation }) {
       }
       refreshAll();
       if (openCase && payload.caseId === openCase.case?.id) {
-        api.adminModerationCase(openCase.case.id).then(setOpenCase).catch(() => {});
+        (async () => {
+          try {
+            const updated = await api.adminModerationCase(openCase.case.id);
+            setOpenCase(updated);
+          } catch {}
+        })();
       }
     });
   }, [onModerationEvent, refreshAll, openCase]);

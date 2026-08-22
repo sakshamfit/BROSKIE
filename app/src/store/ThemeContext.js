@@ -25,9 +25,10 @@ export function ThemeProvider({ children }) {
   const [preference, setPreference] = useState('light');
 
   useEffect(() => {
-    AsyncStorage.getItem(KEY).then((v) => {
+    (async () => {
+      const v = await AsyncStorage.getItem(KEY);
       if (v === 'light' || v === 'dark' || v === 'kinetic' || v === 'system') setPreference(v);
-    });
+    })();
   }, []);
 
   const mode = preference === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : preference;
