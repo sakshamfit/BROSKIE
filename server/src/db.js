@@ -372,6 +372,7 @@ db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)
 db.exec("UPDATE users SET username_key = lower(trim(username)) WHERE username IS NOT NULL AND (username_key IS NULL OR username_key = '')");
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_key ON users(username_key) WHERE username_key IS NOT NULL');
 addColumnIfMissing('gcs', 'rules', "rules TEXT DEFAULT '[]'");
+addColumnIfMissing('messages', 'mentions', "mentions TEXT DEFAULT '[]'");
 addColumnIfMissing('statuses', 'song', 'song TEXT');
 addColumnIfMissing('statuses', 'audience', "audience TEXT DEFAULT 'public'");
 addColumnIfMissing('statuses', 'media_aspect', 'media_aspect REAL');

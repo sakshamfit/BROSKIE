@@ -592,6 +592,7 @@ function hydrateMessage(m, viewerId) {
     statusReply,
     status,
     reactions: reactions.map((r) => ({ userId: r.user_id, emoji: r.emoji })),
+    mentions: (() => { try { return JSON.parse(m.mentions || '[]'); } catch { return []; } })(),
   };
 }
 
@@ -3004,6 +3005,7 @@ const persistMessageTx = db.transaction((msg, chatId) => {
     poll_id: msg.poll_id ?? null,
     status_id: msg.status_id ?? null,
     status_snapshot: msg.status_snapshot ?? null,
+    mentions: msg.mentions ?? '[]',
     media_thumb_url: msg.media_thumb_url ?? null,
     client_id: msg.client_id ?? msg.id,
     client_created_at: msg.client_created_at ?? msg.created_at,
@@ -3019,8 +3021,8 @@ const persistMessageTx = db.transaction((msg, chatId) => {
 
   try {
     db.prepare(
-      `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, media_thumb_url, duration, reply_to, expires_at, edited, forwarded_from, poll_id, status_id, status_snapshot, client_id, client_created_at, updated_at, created_at)
-       VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @media_thumb_url, @duration, @reply_to, @expires_at, @edited, @forwarded_from, @poll_id, @status_id, @status_snapshot, @client_id, @client_created_at, @updated_at, @created_at)`
+      `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, media_thumb_url, duration, reply_to, expires_at, edited, forwarded_from, poll_id, status_id, status_snapshot, mentions, client_id, client_created_at, updated_at, created_at)
+       VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @media_thumb_url, @duration, @reply_to, @expires_at, @edited, @forwarded_from, @poll_id, @status_id, @status_snapshot, @mentions, @client_id, @client_created_at, @updated_at, @created_at)`
     ).run(payload);
   } catch (error) {
     if (String(error.message || '').includes('UNIQUE')) {
@@ -3058,7 +3060,7 @@ function deliverUserMessage(uid, data) {
   const {
     chatId, type = 'text', body = '', mediaUrl = null, mediaThumbUrl = null,
     duration = 0, replyTo = null, tempId, pollId = null, disappearAt = null,
-    clientId = null, clientCreatedAt = null,
+    clientId = null, clientCreatedAt = null, mentions = [],
   } = data || {};
   if (!chatId) return { error: 'Missing chat', status: 400 };
 
@@ -3070,6 +3072,22 @@ function deliverUserMessage(uid, data) {
   if (chat.type === 'direct') {
     const otherId = memberIds(chatId).find((x) => x !== uid);
     if (otherId && blockedEitherWay(uid, otherId)) return { error: "You can't message this person", status: 403 };
+  }
+
+  let safeMentions = [];
+  if (chat.type === 'gc' && Array.isArray(mentions)) {
+    const members = db.prepare('SELECT u.id, u.username FROM users u JOIN chat_members cm ON cm.user_id = u.id WHERE cm.chat_id = ?').all(chatId);
+    const byId = new Map(members.map((m) => [m.id, m]));
+    for (const mention of mentions.slice(0, 50)) {
+      const member = byId.get(String(mention?.userId || ''));
+      if (!member) return { error: 'Mentioned user is not a current GC member', status: 400 };
+      safeMentions.push({ userId: member.id, username: member.username });
+    }
+    if (safeMentions.some((m) => safeMentions.filter((x) => x.userId === m.userId).length > 1)) safeMentions = [...new Map(safeMentions.map((m) => [m.userId, m])).values()];
+    if (String(body).toLowerCase().includes('@everyone')) {
+      if (isMember.role !== 'admin') return { error: 'Only GC admins can use @everyone', status: 403 };
+      safeMentions = [...safeMentions, { userId: 'everyone', username: 'everyone' }];
+    }
   }
 
   let request = pendingChatRequest(chatId);
@@ -3120,6 +3138,7 @@ function deliverUserMessage(uid, data) {
     edited: 0,
     forwarded_from: null,
     poll_id: pollId || null,
+    mentions: JSON.stringify(safeMentions),
     client_id: normalizedId || id,
     client_created_at: clientCreated,
     updated_at: created,
