@@ -17,32 +17,33 @@ import { useTheme } from '../store/ThemeContext';
 import { useChatTheme, ChatThemeScope } from '../store/ChatThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import {
-  Avatar, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor, formatTime,
+  Avatar, formatDayLabel, lastSeenText, InkField, InkIconButton, Rule, rippleFor,
   FrostedBackdrop, GoldTick, hasGoldTick, PaperCard,
 } from '../components/common';
-import EmojiPicker from '../components/EmojiPicker';
 import MessageBubble, { DISAPPEAR_OPTIONS } from '../components/MessageBubble';
 import ReplyBar from '../components/ReplyBar';
-import ForwardSheet from '../components/ForwardSheet';
-import PollComposer from '../components/PollComposer';
 import ChatBackground from '../components/ChatBackground';
-import ThemePickerSheet from '../components/ThemePickerSheet';
 import { ThemeRegistry, alpha } from '../chatThemes';
 import { FadeSlide, TypingDots, FloatLoop, SheetSpringIn, SpringPressable, IconSwap, Pop, haptic, motion } from '../motion';
 import { api, mediaUrl } from '../api';
 import { setViewedChat } from '../push/notifications';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
-import { throttle, useDebouncedCallback } from '../rateLimit';
-import CollabDocumentView from '../components/CollabDocumentView';
+import { throttle } from '../rateLimit';
 import ImageLightbox from '../components/ImageLightbox';
-import TextOperation from '../ot/TextOperation';
+import { lazyComponent } from '../lazy';
+
+const EmojiPicker = lazyComponent(() => import('../components/EmojiPicker'));
+const ForwardSheet = lazyComponent(() => import('../components/ForwardSheet'));
+const PollComposer = lazyComponent(() => import('../components/PollComposer'));
+const ThemePickerSheet = lazyComponent(() => import('../components/ThemePickerSheet'));
+const CollabDocumentView = lazyComponent(() => import('../components/CollabDocumentView'));
 
 function ConversationContent({ route, navigation, embedded = false, themePicker = null }) {
   const { chatId, initialChat = null } = route.params || {};
   const {
     chats, messages, messagesLoaded, messagesLoading, messageErrors,
     typing, refreshChats, loadMessages, loadOlderMessages, sendMessage, markRead, setTypingState,
-    react, deleteMessage, editMessage, createPoll, votePoll, startCall, call, setMessages,
+    react, deleteMessage, removeMessageLocal, editMessage, createPoll, votePoll, startCall, call, setMessages,
     socketRef,
   } = useChat();
   const socket = socketRef?.current || null;
@@ -126,12 +127,6 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const suppressFocusScroll = useRef(false);
   const suppressScrollToEnd = useRef(false);
   const recSecs = Math.max(0, Math.floor((audioRecorderState.durationMillis || 0) / 1000));
-
-  // in-chat search
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQ, setSearchQ] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching] = useState(false);
 
   // forward + timer + poll + docs modals
   const [forwardMsg, setForwardMsg] = useState(null);
@@ -449,37 +444,14 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
 
   const cancelRecording = () => stopRecording(false);
 
-  /* ---- in-chat search ---- */
-  // Debounced: one /api/search per typing pause instead of one per
-  // keystroke. The input and spinner update instantly; only the network
-  // request waits. `chatId` is passed per call so results can never bleed
-  // across a chat switch; `searchSeq` discards out-of-order responses.
-  const searchSeq = useRef(0);
-  const searchInChat = useDebouncedCallback(async (q, chatIdFor, seq) => {
-    try {
-      const { messages: res } = await api.search(q.trim(), chatIdFor);
-      if (searchSeq.current === seq) setSearchResults(res);
-    } catch {
-      if (searchSeq.current === seq) setSearchResults([]);
-    } finally {
-      if (searchSeq.current === seq) setSearching(false);
-    }
-  }, 250);
-
-  const runInChatSearch = useCallback((q) => {
-    setSearchQ(q);
-    const seq = ++searchSeq.current;
-    if (q.trim().length < 2) {
-      // Clearing the box cancels any pending search and settles the
-      // spinner immediately (it would otherwise spin forever).
-      setSearchResults([]);
-      setSearching(false);
-      searchInChat.cancel();
-      return;
-    }
-    setSearching(true);
-    searchInChat(q, chatId, seq);
-  }, [searchInChat, chatId]);
+  // "Delete for me" hides a single message only on this user's devices.
+  // The socket 'message:hidden' reply removes it from local state; we also
+  // drop it immediately for instant feedback.
+  const handleDeleteForMe = useCallback((message) => {
+    if (!message) return;
+    removeMessageLocal(chatId, message.id);
+    deleteMessage(message.id, 'me');
+  }, [chatId, deleteMessage, removeMessageLocal]);
 
   const rows = useMemo(() => {
     const out = [];
@@ -492,12 +464,6 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     });
     return out;
   }, [list]);
-
-  const scrollToMessage = useCallback((messageId) => {
-    const idx = rows.findIndex((r) => r._type === 'msg' && r.id === messageId);
-    if (idx === -1) return;
-    listRef.current?.scrollToIndex({ index: idx, viewPosition: 0.4, animated: true });
-  }, [rows]);
 
   // Tapping a reply quote scrolls to the original (animated) and briefly
   // highlights it with a theme-highlighter wash; missing originals show a
@@ -672,13 +638,6 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
             </View>
           </Pressable>
           <InkIconButton
-            name="search"
-            size={36}
-            iconSize={16}
-            active={searchOpen}
-            onPress={() => { setSearchOpen((v) => !v); setSearchQ(''); setSearchResults([]); }}
-          />
-          <InkIconButton
             name="document-text-outline"
             size={36}
             iconSize={17}
@@ -693,22 +652,13 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
             />
           )}
           {chat.type === 'direct' && (
-            <>
-              <InkIconButton
-                name="videocam"
-                size={36}
-                iconSize={17}
-                disabled={!!call}
-                onPress={() => startCall(chatId, chat.otherUserId, 'video')}
-              />
-              <InkIconButton
-                name="call"
-                size={36}
-                iconSize={15}
-                disabled={!!call}
-                onPress={() => startCall(chatId, chat.otherUserId, 'audio')}
-              />
-            </>
+            <InkIconButton
+              name="call"
+              size={36}
+              iconSize={16}
+              disabled={!!call}
+              onPress={() => startCall(chatId, chat.otherUserId, 'audio')}
+            />
           )}
           <InkIconButton
             name="ellipsis-horizontal"
@@ -720,58 +670,6 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         <Rule style={{ marginHorizontal: 20, marginTop: 10, marginBottom: 0 }} />
       </View>
       </FadeSlide>
-
-      {/* in-chat search bar + results — expands in smoothly */}
-      {searchOpen && (
-        <FadeSlide from="down" distance={6} duration={motion.fast}>
-        <View style={[s.searchWrap, { borderBottomWidth: stroke.thin, borderBottomColor: theme.graphiteLine }]}>
-          <View style={s.searchRow}>
-            <Icon name="search" size={17} color={theme.graphite} />
-            <TextInput
-              autoFocus
-              value={searchQ}
-              onChangeText={runInChatSearch}
-              placeholder={`Search in ${chat.name}…`}
-              placeholderTextColor={theme.muted}
-              style={[s.searchInput, { color: theme.text }]}
-            />
-            {searching && <ActivityIndicator size="small" color={theme.muted} />}
-            {!!searchQ && (
-              <Pressable onPress={() => runInChatSearch('')} hitSlop={8}>
-                <Icon name="close-circle" size={18} color={theme.muted} />
-              </Pressable>
-            )}
-          </View>
-          {searchResults.length > 0 && (
-            <View style={s.searchResults}>
-              <Text style={[type.labelXs, { color: theme.muted, paddingHorizontal: 4, marginBottom: 6 }]}>
-                {searchResults.length} FOUND
-              </Text>
-              {searchResults.slice(0, 8).map((m) => (
-                <SpringPressable
-                  key={m.id}
-                  style={({ pressed }) => [s.resultRow, pressed ? marker(theme, 1) : null]}
-                  onPress={() => scrollToMessage(m.id)}
-                  scaleTo={motion.scale.row}
-                  haptic="selection"
-                >
-                  <View style={{ flex: 1 }}>
-                    <EmojiText style={[type.bodyMd, { color: theme.text }]} numberOfLines={1}>
-                      {m.type === 'image' ? '📷 Photo' : m.type === 'voice' ? '🎤 Voice message' : m.body}
-                    </EmojiText>
-                    {m.type === 'text' && <Text style={[type.labelXs, { color: theme.muted }]}>{m.senderId === user.id ? 'You' : nameFor(m.senderId)}</Text>}
-                  </View>
-                  <Text style={[type.labelXs, { color: theme.muted }]}>{formatTime(m.createdAt)}</Text>
-                </SpringPressable>
-              ))}
-            </View>
-          )}
-          {searchQ.trim().length >= 2 && !searching && searchResults.length === 0 && (
-            <Text style={[type.bodySm, { color: theme.muted, padding: 8, paddingHorizontal: 4 }]}>No matches</Text>
-          )}
-        </View>
-        </FadeSlide>
-      )}
 
       {!!messageHistoryError && list.length > 0 && (
         <View style={[s.historyError, { backgroundColor: theme.dangerContainer, borderColor: theme.danger }]}>
@@ -841,6 +739,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               highlighted={replyHighlightId === item.id}
               onReact={react}
               onDelete={deleteMessage}
+              onDeleteForMe={handleDeleteForMe}
               onImagePress={setLightbox}
               onEdit={startEdit}
               onForward={setForwardMsg}
@@ -1458,9 +1357,4 @@ const makeStyles = (t) => StyleSheet.create({
     borderBottomRightRadius: 6, borderBottomLeftRadius: 10,
   },
   timerOpt: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 11 },
-  searchWrap: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 10 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  searchInput: { flex: 1, ...type.bodyLg, paddingVertical: 6, outlineStyle: 'none' },
-  searchResults: { marginTop: 10, gap: 4 },
-  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 4 },
 });

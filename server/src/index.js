@@ -170,6 +170,14 @@ const OWNER_ADMIN_USERNAME_KEY = 'saksham';
 db.prepare("UPDATE users SET role = CASE WHEN username_key = ? THEN 'admin' ELSE 'user' END WHERE role = 'admin' OR username_key = ?")
   .run(OWNER_ADMIN_USERNAME_KEY, OWNER_ADMIN_USERNAME_KEY);
 
+// Accounts granted the backend admin role at registration (owner first).
+// Keep this in sync with the sole username that requireAdmin() accepts.
+const ADMIN_USERNAME_KEYS = (process.env.ADMIN_USERNAMES || OWNER_ADMIN_USERNAME_KEY)
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+if (!ADMIN_USERNAME_KEYS.includes(OWNER_ADMIN_USERNAME_KEY)) {
+  ADMIN_USERNAME_KEYS.unshift(OWNER_ADMIN_USERNAME_KEY);
+}
+
 // Optional one-time bootstrap list. Afterwards verification is managed in the
 // Admin Safety Center and persists in the database.
 const GOLD_TICK_USERNAME_KEYS = (process.env.GOLD_TICK_USERNAMES || 'saksham')
@@ -464,8 +472,29 @@ function hydrateChatRequest(row, viewerId) {
   };
 }
 
+/** True when `viewerId` has hidden this message via "Delete for me". */
+function isHiddenForMe(m, viewerId) {
+  if (!viewerId || !m.hidden_for) return false;
+  return m.hidden_for.split(',').filter(Boolean).includes(viewerId);
+}
+
+/**
+ * SQL fragment that excludes messages a user hid via "Delete for me".
+ * Returns an array [expression, param] to AND into a query. Because
+ * `hidden_for` is a plain comma-separated list (mirroring `archived_by`),
+ * the delimiter-wrapped LIKE matches whole ids without a costly table.
+ */
+function notHiddenFor(viewerId, alias = 'm') {
+  const needle = `%,${viewerId},%`;
+  return [`(',' || ${alias}.hidden_for || ',') NOT LIKE ?`, needle];
+}
+
 function hydrateMessage(m, viewerId) {
   if (!m) return null;
+  // A message hidden via "Delete for me" never leaves the server for that
+  // viewer. The row still exists for everyone else (and for "delete for
+  // everyone", which uses the separate `deleted` flag).
+  if (isHiddenForMe(m, viewerId)) return null;
   const reactions = db.prepare('SELECT user_id, emoji FROM reactions WHERE message_id = ?').all(m.id);
   const receipts = db.prepare('SELECT user_id, state FROM receipts WHERE message_id = ?').all(m.id);
   const others = memberIds(m.chat_id).filter((id) => id !== m.sender_id);
@@ -589,18 +618,21 @@ function chatSummary(chatId, viewerId) {
   const me = members.find((m) => m.id === viewerId);
   const other = chat.type === 'direct' ? members.find((m) => m.id !== viewerId) : null;
   const clearedAt = me?.cleared_at || 0;
+  const [notHiddenMessagesSql, notHiddenMessagesParam] = notHiddenFor(viewerId, 'messages');
+  const [notHiddenMSql, notHiddenMParam] = notHiddenFor(viewerId, 'm');
 
   const last = db
-    .prepare('SELECT * FROM messages WHERE chat_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT 1')
-    .get(chatId, clearedAt);
+    .prepare(`SELECT * FROM messages WHERE chat_id = ? AND created_at > ? AND ${notHiddenMessagesSql} ORDER BY created_at DESC LIMIT 1`)
+    .get(chatId, clearedAt, notHiddenMessagesParam);
 
   const unread = db
     .prepare(
       `SELECT COUNT(*) c FROM messages m
        WHERE m.chat_id = ? AND m.sender_id != ? AND m.sender_id != 'system' AND m.created_at > ?
+         AND ${notHiddenMSql}
          AND NOT EXISTS (SELECT 1 FROM receipts r WHERE r.message_id = m.id AND r.user_id = ? AND r.state='read')`
     )
-    .get(chatId, viewerId, clearedAt, viewerId).c;
+    .get(chatId, viewerId, clearedAt, notHiddenMParam, viewerId).c;
 
   const archived = (chat.archived_by || '').split(',').filter(Boolean).includes(viewerId);
   const otherPresence = other ? presenceFor(other, viewerId) : { isOnline: false, lastSeen: 0 };
@@ -2402,6 +2434,8 @@ app.post('/api/messages/:id/disappear', requireAuth, (req, res) => {
 
 /** Copy a message into one or more of the user's chats. */
 app.post('/api/messages/forward', requireAuth, (req, res) => {
+  const gate = moderation.moderationGate(req.userId);
+  if (gate.blocked) return res.status(403).json({ error: gate.error });
   const { messageId, chatIds = [] } = req.body || {};
   const src = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
   if (!src || src.deleted) return res.status(404).json({ error: 'Message not found' });
@@ -2464,6 +2498,8 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
   const afterId = String(req.query.afterId || '');
   const before = req.query.before != null && req.query.before !== '' ? Number(req.query.before) : null;
   const beforeId = String(req.query.beforeId || '');
+  // Hide messages this user removed via "Delete for me" (row stays for everyone else).
+  const [notHiddenSql, notHiddenParam] = notHiddenFor(req.userId, 'messages');
 
   let rows;
   let hasMore = false;
@@ -2472,9 +2508,10 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
       `SELECT * FROM messages
        WHERE chat_id = ? AND created_at > ?
          AND (created_at > ? OR (created_at = ? AND id > ?))
+         AND ${notHiddenSql}
        ORDER BY created_at ASC, id ASC
        LIMIT ?`
-    ).all(req.params.id, clearedAt, after, after, afterId, limit + 1);
+    ).all(req.params.id, clearedAt, after, after, afterId, notHiddenParam, limit + 1);
     hasMore = rows.length > limit;
     if (hasMore) rows = rows.slice(0, limit);
   } else if (before != null && Number.isFinite(before)) {
@@ -2482,17 +2519,19 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
       `SELECT * FROM messages
        WHERE chat_id = ? AND created_at > ?
          AND (created_at < ? OR (created_at = ? AND id < ?))
+         AND ${notHiddenSql}
        ORDER BY created_at DESC, id DESC
        LIMIT ?`
-    ).all(req.params.id, clearedAt, before, before, beforeId, limit + 1);
+    ).all(req.params.id, clearedAt, before, before, beforeId, notHiddenParam, limit + 1);
     hasMore = rows.length > limit;
     if (hasMore) rows = rows.slice(0, limit);
     rows.reverse();
   } else {
     rows = db.prepare(
       `SELECT * FROM messages WHERE chat_id = ? AND created_at > ?
+         AND ${notHiddenSql}
        ORDER BY created_at DESC, id DESC LIMIT ?`
-    ).all(req.params.id, clearedAt, limit + 1);
+    ).all(req.params.id, clearedAt, notHiddenParam, limit + 1);
     hasMore = rows.length > limit;
     if (hasMore) rows = rows.slice(0, limit);
     rows.reverse();
@@ -2501,7 +2540,7 @@ app.get('/api/chats/:id/messages', requireAuth, (req, res) => {
   const newest = rows[rows.length - 1];
   const oldest = rows[0];
   res.json({
-    messages: rows.map((m) => hydrateMessage(m, req.userId)),
+    messages: rows.map((m) => hydrateMessage(m, req.userId)).filter(Boolean),
     hasMore,
     cursor: {
       after: newest ? newest.created_at : after,
@@ -2530,23 +2569,25 @@ app.post('/api/chats/:id/messages', requireAuth, (req, res) => {
 app.get('/api/sync/messages', requireAuth, (req, res) => {
   const after = Number(req.query.after) || 0;
   const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+  const [notHiddenSql, notHiddenParam] = notHiddenFor(req.userId, 'm');
   const rows = db.prepare(
     `SELECT m.* FROM messages m
      JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
      LEFT JOIN chat_requests cr ON cr.chat_id = m.chat_id
      WHERE COALESCE(m.updated_at, m.created_at) > ?
        AND m.created_at > COALESCE(cm.cleared_at, 0)
+       AND ${notHiddenSql}
        AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
      ORDER BY COALESCE(m.updated_at, m.created_at) ASC, m.id ASC
      LIMIT ?`
-  ).all(req.userId, after, req.userId, limit + 1);
+  ).all(req.userId, after, notHiddenParam, req.userId, limit + 1);
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const cursor = page.length
     ? page.reduce((max, row) => Math.max(max, row.updated_at || row.created_at || 0), after)
     : after;
   res.json({
-    messages: page.map((m) => hydrateMessage(m, req.userId)),
+    messages: page.map((m) => hydrateMessage(m, req.userId)).filter(Boolean),
     cursor,
     hasMore,
   });
@@ -2567,25 +2608,28 @@ app.get('/api/search', requireAuth, (req, res) => {
       return res.status(403).json({ error: 'Accept this message request before searching it' });
     }
   }
+  const [notHiddenSql, notHiddenParam] = notHiddenFor(req.userId, 'm');
   const sql = chatId
     ? `SELECT m.* FROM messages m
        WHERE m.chat_id = ? AND m.created_at > ? AND m.deleted = 0 AND m.body LIKE ?
+         AND ${notHiddenSql}
        ORDER BY m.created_at DESC LIMIT 100`
     : `SELECT m.* FROM messages m
        JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
        LEFT JOIN chat_requests cr ON cr.chat_id = m.chat_id
        WHERE m.deleted = 0 AND m.body LIKE ?
          AND m.created_at > COALESCE(cm.cleared_at, 0)
+         AND ${notHiddenSql}
          AND (cr.chat_id IS NULL OR cr.status != 'pending' OR cr.receiver_id != ?)
        ORDER BY m.created_at DESC LIMIT 50`;
   const rows = chatId
-    ? db.prepare(sql).all(chatId, clearedAt, `%${q}%`)
-    : db.prepare(sql).all(req.userId, `%${q}%`, req.userId);
+    ? db.prepare(sql).all(chatId, clearedAt, `%${q}%`, notHiddenParam)
+    : db.prepare(sql).all(req.userId, `%${q}%`, notHiddenParam, req.userId);
   res.json({
     messages: rows.map((m) => ({
       ...hydrateMessage(m, req.userId),
       chatName: chatSummary(m.chat_id, req.userId)?.name,
-    })),
+    })).filter((m) => m.id),
   });
 });
 
@@ -2686,12 +2730,24 @@ function touchMessage(id) {
 
 /** Shared send path for Socket.IO and REST. Idempotent on clientId. */
 function deliverUserMessage(uid, data) {
+  // Enforcement gate (banned/suspended/restricted) — checked on EVERY write
+  // path, not just login, so an existing socket or HTTP session cannot post
+  // after a moderation action takes effect.
+  const gate = moderation.moderationGate(uid);
+  if (gate.blocked) return { error: gate.error, status: 403 };
+
   const {
     chatId, type = 'text', body = '', mediaUrl = null, mediaThumbUrl = null,
     duration = 0, replyTo = null, tempId, pollId = null, disappearAt = null,
     clientId = null, clientCreatedAt = null,
   } = data || {};
   if (!chatId) return { error: 'Missing chat', status: 400 };
+
+  // Moderation enforcement applies to all message content paths (sending
+  // via socket or REST, edits, polls, forwards, status replies) — not just
+  // to login. Restricted/suspended/banned users cannot write messages.
+  const gate = moderation.moderationGate(uid);
+  if (gate.blocked) return { error: gate.error, status: 403 };
 
   const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
   if (!isMember) return { error: 'Not a member', status: 403 };
@@ -2764,10 +2820,11 @@ function deliverUserMessage(uid, data) {
 function fanoutNewMessage(outcome, uid, tempId) {
   const { row, duplicate, chatId, request, chat } = outcome;
   if (duplicate || !row) return;
-  emitToChat(chatId, 'message:new', (viewer) => ({
-    message: hydrateMessage(row, viewer),
-    tempId: viewer === uid ? tempId : undefined,
-  }));
+  emitToChat(chatId, 'message:new', (viewer) => {
+    const hydrated = hydrateMessage(row, viewer);
+    if (!hydrated) return null;
+    return { message: hydrated, tempId: viewer === uid ? tempId : undefined };
+  });
   if (request) {
     emitToUser(request.sender_id, 'chat:updated', chatSummary(chatId, request.sender_id));
     emitToUser(request.receiver_id, 'chat:request', hydrateChatRequest(request, request.receiver_id));
@@ -2962,6 +3019,8 @@ app.post('/api/status/:id/view', requireAuth, (req, res) => {
 // existing chat inbox, push/socket plumbing and disappearing-message
 // machinery handle it without a new standalone inbox or a native rebuild.
 app.post('/api/status/:id/reply', requireAuth, (req, res) => {
+  const statusGate = moderation.moderationGate(req.userId);
+  if (statusGate.blocked) return res.status(403).json({ error: statusGate.error });
   const statusId = String(req.params.id || '');
   const s = db.prepare('SELECT * FROM statuses WHERE id = ?').get(statusId);
   if (!s) return res.status(404).json({ error: 'Status not found' });
@@ -4105,6 +4164,9 @@ const sockets = new Map(); // userId -> Set<socketId>
 const activeCalls = new Map(); // userId -> callId, for busy-detection and cleanup on disconnect
 
 function emitToUser(userId, event, payload) {
+  // A null payload (e.g. a message the target hid via "Delete for me")
+  // means "don't send anything to this user".
+  if (payload == null) return;
   const set = sockets.get(userId);
   if (!set) return;
   set.forEach((sid) => io.to(sid).emit(event, payload));
@@ -4141,6 +4203,18 @@ io.use((socket, next) => {
   next();
 });
 
+/** Map an unexpected socket-handler exception to a user-safe ack.
+ *  Deliberate validation errors are short human phrases and pass through;
+ *  system/technical failures are logged and replaced so the UI never shows
+ *  raw SQL/SQLite/stack text. */
+function socketFailure(e) {
+  const msg = String(e?.message || '');
+  if (msg) console.error('[socket handler]', msg);
+  const technical = /SQLITE|database|ECONN|ETIMEDOUT|ENOTFOUND|EHOSTUNREACH|at .*\.js:|Operation apply failed|Cannot read|is not a function|undefined is not/i.test(msg);
+  if (msg && !technical && msg.length <= 120 && !/^\s*\{/.test(msg)) return { error: msg };
+  return { error: 'Something went wrong. Please try again.' };
+}
+
 io.on('connection', (socket) => {
   const uid = socket.userId;
   if (!sockets.has(uid)) sockets.set(uid, new Set());
@@ -4172,13 +4246,15 @@ io.on('connection', (socket) => {
       fanoutNewMessage(outcome, uid, tempId);
       ack?.({ message: hydrateMessage(outcome.row, uid), tempId, duplicate: !!outcome.duplicate });
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
   // Legacy edit (full body replacement) — now converted to OT operation for consistency
   socket.on('message:edit', ({ messageId, body, baseVersion, operation }, ack) => {
     try {
+      const gate = moderation.moderationGate(uid);
+      if (gate.blocked) return ack?.({ error: gate.error });
       const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
       if (!m || m.deleted) return ack?.({ error: 'Message not found' });
       if (m.sender_id !== uid) return ack?.({ error: "You can only edit your own messages" });
@@ -4198,21 +4274,23 @@ io.on('connection', (socket) => {
       }
 
       const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
-      emitToChat(m.chat_id, 'message:updated', (viewer) => ({
-        ...hydrateMessage(fresh, viewer),
-        otVersion: result.version,
-        otOperation: result.operation.toJSON()
-      }));
+      emitToChat(m.chat_id, 'message:updated', (viewer) => {
+        const hydrated = hydrateMessage(fresh, viewer);
+        if (!hydrated) return null;
+        return { ...hydrated, otVersion: result.version, otOperation: result.operation.toJSON() };
+      });
       emitToChat(m.chat_id, 'chat:updated', (viewer) => chatSummary(m.chat_id, viewer));
       ack?.({ message: hydrateMessage(fresh, uid), version: result.version, operation: result.operation.toJSON() });
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
   // New OT-specific message edit event (explicit OT)
   socket.on('message:edit:ot', ({ messageId, operation, baseVersion, body }, ack) => {
     try {
+      const gate = moderation.moderationGate(uid);
+      if (gate.blocked) return ack?.({ error: gate.error });
       const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
       if (!m || m.deleted) return ack?.({ error: 'Message not found' });
       if (m.sender_id !== uid) return ack?.({ error: "Only sender can edit" });
@@ -4237,13 +4315,14 @@ io.on('connection', (socket) => {
         body: result.body,
         userId: uid
       });
-      emitToChat(m.chat_id, 'message:updated', (viewer) => ({
-        ...hydrateMessage(fresh, viewer),
-        otVersion: result.version
-      }));
+      emitToChat(m.chat_id, 'message:updated', (viewer) => {
+        const hydrated = hydrateMessage(fresh, viewer);
+        if (!hydrated) return null;
+        return { ...hydrated, otVersion: result.version };
+      });
       ack?.({ message: hydrateMessage(fresh, uid), version: result.version, operation: result.operation.toJSON(), body: result.body });
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
@@ -4280,7 +4359,7 @@ io.on('connection', (socket) => {
         });
       }
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
@@ -4321,7 +4400,7 @@ io.on('connection', (socket) => {
       // Update doc updated_at for ordering
       db.prepare('UPDATE documents SET updated_at = ? WHERE id = ?').run(now(), documentId);
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
@@ -4359,7 +4438,11 @@ io.on('connection', (socket) => {
 
   socket.on('poll:create', (data, ack) => {
     try {
+      const gate = moderation.moderationGate(uid);
+      if (gate.blocked) return ack?.({ error: gate.error });
       const { chatId, question, options = [] } = data || {};
+      const gate = moderation.moderationGate(uid);
+      if (gate.blocked) return ack?.({ error: gate.error });
       const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, uid);
       if (!isMember) return ack?.({ error: 'Not a member' });
       const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
@@ -4391,7 +4474,7 @@ io.on('connection', (socket) => {
       push.notifyMessage({ chatId, chat, message: row, senderId: uid });
       ack?.({ message: hydrateMessage(row, uid) });
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
@@ -4411,7 +4494,7 @@ io.on('connection', (socket) => {
       emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
       ack?.({ message: hydrateMessage(fresh, uid) });
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 
@@ -4437,7 +4520,11 @@ io.on('connection', (socket) => {
     if (rows.length) {
       rows.forEach((m) => {
         const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(m.id);
-        emitToChat(chatId, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
+        emitToChat(chatId, 'message:updated', (viewer) => {
+          // Never re-push a message this viewer hid via "Delete for me".
+          if (isHiddenForMe(fresh, viewer)) return null;
+          return hydrateMessage(fresh, viewer);
+        });
       });
     }
     emitToChat(chatId, 'chat:updated', (viewer) => chatSummary(chatId, viewer));
@@ -4459,15 +4546,37 @@ io.on('connection', (socket) => {
     emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(m, viewer));
   });
 
-  socket.on('message:delete', ({ messageId }) => {
+  // Delete a message. `scope`:
+  //   'everyone' (default) — sender-only, hides the message for all participants.
+  //   'me'               — any member, removes it only on the requester's devices.
+  socket.on('message:delete', ({ messageId, scope }, ack) => {
     const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
-    if (!m || m.sender_id !== uid) return;
+    if (!m) return ack?.({ error: 'Message not found' });
+    const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(m.chat_id, uid);
+    if (!isMember) return ack?.({ error: 'Not a member of this chat' });
+
+    if (scope === 'me') {
+      // Add this user to the per-message hide list (csv), mirroring
+      // chats.archived_by. The row (and everyone else's view) is untouched.
+      const hidden = new Set((m.hidden_for || '').split(',').filter(Boolean));
+      hidden.add(uid);
+      db.prepare('UPDATE messages SET hidden_for = ?, updated_at = ? WHERE id = ?')
+        .run([...hidden].join(','), now(), messageId);
+      // Only the requester's devices drop the message — no tombstone.
+      emitToUser(uid, 'message:hidden', { chatId: m.chat_id, messageId });
+      emitToUser(uid, 'chat:updated', chatSummary(m.chat_id, uid));
+      return ack?.({ ok: true, scope: 'me' });
+    }
+
+    // "Delete for everyone" — sender only.
+    if (m.sender_id !== uid) return ack?.({ error: 'You can only delete your own messages for everyone' });
     db.prepare('UPDATE messages SET deleted = 1, updated_at = ? WHERE id = ?').run(now(), messageId);
     // A poll "deleted for everyone" takes its votes with it.
     if (m.type === 'poll' && m.poll_id) db.prepare('DELETE FROM polls WHERE id = ?').run(m.poll_id);
     const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
     emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
     emitToChat(m.chat_id, 'chat:updated', (viewer) => chatSummary(m.chat_id, viewer));
+    ack?.({ ok: true, scope: 'everyone' });
   });
 
   /* ------------------------------------------------------------------ */
@@ -4529,7 +4638,7 @@ io.on('connection', (socket) => {
         if (c && c.status === 'ringing') endCall(id, 'missed');
       }, 45000);
     } catch (e) {
-      ack?.({ error: e.message });
+      ack?.(socketFailure(e));
     }
   });
 

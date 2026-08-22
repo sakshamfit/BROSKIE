@@ -14,8 +14,6 @@ import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFo
 import BrandHeader from '../components/BrandHeader';
 import TodayStrip from '../components/TodayStrip';
 import PostCard from '../components/PostCard';
-import NewPostScreen from './NewPostScreen';
-import CommunitiesScreen from './CommunitiesScreen';
 import ImageLightbox from '../components/ImageLightbox';
 import { PostSkeletonList } from '../components/PostSkeleton';
 import { SpringPressable, motion, haptic, useReducedMotion } from '../motion';
@@ -23,6 +21,10 @@ import { type, inkBox, stroke, raised } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
 import { onNetworkFilterRequest, consumePendingNetworkFilter, onOpenCommunity, consumePendingCommunity, onProfileWillOpen } from '../push/routing';
+import { lazyComponent } from '../lazy';
+
+const NewPostScreen = lazyComponent(() => import('./NewPostScreen'));
+const CommunitiesScreen = lazyComponent(() => import('./CommunitiesScreen'));
 
 /* Phase 2 feed lenses: the whole world, your college/workplace people, or
  * just the authors you follow. */

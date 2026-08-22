@@ -94,23 +94,28 @@ function consumeLaunchPushFromUrl(onRoute) {
  * `onRoute(data)` is called when the user taps a notification.
  */
 export async function registerPushNotifications({ onRoute }) {
-  if (typeof navigator === 'undefined'
-    || !('serviceWorker' in navigator)
-    || !('PushManager' in window)
-    || typeof Notification === 'undefined') {
-    return null;
-  }
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
   try {
     attachServiceWorkerMessages(onRoute);
     attachViewingSync();
     consumeLaunchPushFromUrl(onRoute);
 
+    // Register the service worker first and UNCONDITIONALLY. It powers the
+    // offline shell cache and PWA installability even when the user declines
+    // notification permission — only the push subscription below is gated on
+    // their choice. (Previously a denied prompt also disabled offline mode.)
+    let registration = null;
+    try {
+      registration = await navigator.serviceWorker.register('/service-worker.js');
+      await navigator.serviceWorker.ready;
+    } catch (e) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[push:web] service worker registration failed:', e?.message);
+    }
+
+    if (!('PushManager' in window) || typeof Notification === 'undefined') return null;
     let permission = Notification.permission;
     if (permission === 'default') permission = await Notification.requestPermission();
-    if (permission !== 'granted') return null;
-
-    const registration = await navigator.serviceWorker.register('/service-worker.js');
-    await navigator.serviceWorker.ready;
+    if (permission !== 'granted' || !registration) return null;
 
     const config = await api.webPushConfig();
     if (!config?.enabled || !config?.publicKey) return null;

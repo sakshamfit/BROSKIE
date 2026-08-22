@@ -21,6 +21,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 import { api } from '../api';
 import { confirm } from '../hooks/confirm';
 import { useDebouncedCallback } from '../rateLimit';
+import { idlePreload } from '../lazy';
 
 /* each divider leans a slightly different way, like a hand-ruled line */
 const TILTS = [-0.5, 0.8, -0.3, 0.6, -0.7, 0.4];
@@ -36,6 +37,10 @@ const CHAT_TILE_LINE = '#000000';
 
 export default function ChatListScreen({ navigation }) {
   const { chats, chatsLoaded, chatsError, refreshChats, typing, markRead } = useChat();
+
+  useEffect(() => {
+    idlePreload(() => import('./ConversationScreen'));
+  }, []);
   const { user } = useAuth();
   const { theme } = useTheme();
   const [query, setQuery] = useState('');

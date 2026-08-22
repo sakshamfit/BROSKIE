@@ -24,7 +24,7 @@ jobs:
         run: npm ci
       - name: Syntax check every source file
         run: for f in src/*.js test-*.js; do node --check "$f"; done
-      - name: Push notifications suite (31 checks)
+      - name: Push notifications suite (33 checks)
         run: node test-push.js
       - name: Phase 2 campus loop suite (39 checks)
         run: node test-phase2.js
@@ -32,18 +32,16 @@ jobs:
         run: node test-phase3.js
       - name: Chat history suite (14 checks)
         run: node test-chat-history.js
-      - name: Feature suite (boots the server on :4000)
-        run: |
-          node src/index.js > server.log 2>&1 &
-          SERVER_PID=$!
-          for i in $(seq 1 40); do
-            curl -sf http://localhost:4000/api/health > /dev/null && break
-            sleep 1
-          done
-          node test-features.js
-          EXIT=$?
-          kill $SERVER_PID 2>/dev/null || true
-          exit $EXIT
+      - name: Offline messaging suite (14 checks)
+        run: node test-offline-messaging.js
+      - name: Local message-state suite (15 checks)
+        run: node test-message-state.js
+      - name: Moderation & safety suite (61 checks)
+        run: node test-moderation.js
+      - name: Operational Transformation suite (33 checks, incl. client⇄server parity)
+        run: node test-ot.js
+      - name: Feature suite (27 checks — boot + realtime flows)
+        run: node test-features.js
 
   app:
     name: App — bundle checks (web + android)

@@ -7,7 +7,7 @@ import { alpha } from '../chatThemes';
 import { SpringPressable, motion } from '../motion';
 
 /** Ink voice note: drawn play box + graphite waveform. */
-export default function VoiceNote({ uri, duration = 0, isMine }) {
+export default function VoiceNote({ uri, duration = 0, isMine, onLongPress }) {
   const { theme } = useTheme();
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -58,6 +58,8 @@ export default function VoiceNote({ uri, duration = 0, isMine }) {
         accessibilityRole="button"
         accessibilityLabel={playing ? 'Pause voice note' : 'Play voice note'}
         onPress={toggle}
+        onLongPress={onLongPress}
+        delayLongPress={280}
         style={({ pressed }) => [
           s.play,
           inkBox(theme, 'ink', isMine ? theme.onBubbleOut : theme.ink),
@@ -68,7 +70,11 @@ export default function VoiceNote({ uri, duration = 0, isMine }) {
       >
         <Icon name={playing ? 'pause' : 'play'} size={15} color={isMine ? theme.onBubbleOut : theme.ink} />
       </SpringPressable>
-      <View style={{ flex: 1 }}>
+      <Pressable
+        style={{ flex: 1 }}
+        onLongPress={onLongPress}
+        delayLongPress={280}
+      >
         <View style={s.wave}>
           {bars.map((h, i) => (
             <View
@@ -83,7 +89,7 @@ export default function VoiceNote({ uri, duration = 0, isMine }) {
         <Text style={[type.labelXs, { fontSize: 9.5, color: metaColor, marginTop: 4 }]}>
           {fmt(playing ? duration * progress : duration)}
         </Text>
-      </View>
+      </Pressable>
       <Icon name="mic" size={14} color={metaColor} />
     </View>
   );

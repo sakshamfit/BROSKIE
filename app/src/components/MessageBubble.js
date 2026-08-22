@@ -1,15 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, Image, Pressable, StyleSheet, Animated, PanResponder, Platform, ActivityIndicator } from 'react-native';
 import Icon from '../icons/Icon';
-import Emoji, { EmojiText } from '../icons/Emoji';
+import Emoji, { EmojiText, jumboEmojiChars } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
 import { Ticks, formatTime, PaperCard, Rule, FrostedBackdrop, GoldTick, hasGoldTick } from './common';
 import { mediaUrl } from '../api';
 import { radius, type, inkBox, marker, dashedRule, stroke } from '../theme';
 import { alpha } from '../chatThemes';
-import { Pop, BottomSheet, SpringPressable, HeartBurst, haptic, useReducedMotion, motion } from '../motion';
+import { confirm } from '../hooks/confirm';
+import { Pop, BottomSheet, SpringPressable, LikeBurst, haptic, useReducedMotion, motion } from '../motion';
 import { MESSAGE_SWIPE, messageTravel, shouldClaimMessageSwipe, isTouchInput, hasTouchScreen } from '../gestures';
 import VoiceNote from './VoiceNote';
+
+const confirmDeleteForEveryone = () => confirm(
+  'Delete this message for everyone? This cannot be undone.',
+  { title: 'Delete for everyone', confirmLabel: 'Delete', destructive: true }
+);
 
 const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -42,7 +48,7 @@ export const disappearLabel = (seconds) =>
 
 export default function MessageBubble({
   message, isMine, isGroup, senderName, senderUser,
-  onReply, onReact, onDelete, onImagePress,
+  onReply, onReact, onDelete, onDeleteForMe, onImagePress,
   onEdit, onForward, onStar, onSetTimer, onVotePoll, onReport,
   onOpenReply, highlighted,
 }) {
@@ -52,6 +58,11 @@ export default function MessageBubble({
   const [burst, setBurst] = useState(false);
   const lastTapAt = useRef(0);
   const s = makeStyles(theme);
+
+  // Long-press anywhere on a message (text, photo or voice note) opens the
+  // same context menu. The outer bubble Pressable handles text; image and
+  // voice-note Pressables call this too so their tap-to-open/play still works.
+  const openMenu = () => { haptic('selection'); setMenu(true); };
 
   // ---- long-press lift: the message rises slightly out of the thread while
   // its context menu is open, then settles back when it closes ----
@@ -83,11 +94,24 @@ export default function MessageBubble({
   const appearScale = appear.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
 
   // ---- double-tap → heart burst + ❤️ reaction (original +one interaction) ----
+  // Medium haptic + a quick bubble pulse make the like land with a physical
+  // thump; the burst itself is the gradient LikeBurst above the bubble.
+  const pulse = useRef(new Animated.Value(1)).current;
+  const pulseNow = () => {
+    if (reduced) return;
+    pulse.setValue(1);
+    Animated.sequence([
+      Animated.spring(pulse, { toValue: 1.055, ...motion.springPress, useNativeDriver: true }),
+      Animated.spring(pulse, { toValue: 1, ...motion.springBack, useNativeDriver: true }),
+    ]).start();
+  };
   const handleTap = () => {
     const now = Date.now();
     if (now - lastTapAt.current < 320) {
       lastTapAt.current = 0;
-      haptic('impact');
+      if (message.deleted) return;
+      haptic('medium');
+      pulseNow();
       setBurst(true);
       onReact?.(message.id, '❤️');
     } else {
@@ -247,13 +271,19 @@ export default function MessageBubble({
 
   const liftY = lift.interpolate({ inputRange: [0, 1], outputRange: [0, -3] });
   const liftScale = lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] });
-  // Compose the swipe translateX with the entrance + long-press lift so a
-  // single native-driven transform drives all three (they never overlap).
+  // Compose the swipe translateX with the entrance + long-press lift +
+  // double-tap pulse so a single native-driven transform drives them all.
   const bubbleTransform = [
     { translateX },
     ...(shouldAnimateIn ? [{ translateY: appearY }, { scale: appearScale }] : []),
     ...(menu && !reduced ? [{ translateY: liftY }, { scale: liftScale }] : []),
+    { scale: pulse },
   ];
+
+  // Emoji-only messages (≤3 glyphs) show jumbo — the premium chat-app touch.
+  const jumbo = !message.deleted && (message.type === 'text' || !message.type)
+    ? jumboEmojiChars(message.body)
+    : null;
 
   return (
     <>
@@ -293,7 +323,7 @@ export default function MessageBubble({
           )}
           <Pressable
             onPress={handleTap}
-            onLongPress={() => { haptic('selection'); setMenu(true); }}
+            onLongPress={openMenu}
             delayLongPress={280}
             onHoverIn={isWeb ? () => setHovered(true) : undefined}
             onHoverOut={isWeb ? () => setHovered(false) : undefined}
@@ -315,7 +345,7 @@ export default function MessageBubble({
               pointerEvents="none"
               style={[s.highlightWash, shape, { opacity: hlOpacity, backgroundColor: theme.highlighterWash }]}
             />
-            {burst && <HeartBurst onDone={() => setBurst(false)} reduced={reduced} />}
+            {burst && <LikeBurst onDone={() => setBurst(false)} reduced={reduced} />}
           {isGroup && !isMine && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 }}>
               <Text style={[type.labelXs, { color: theme.graphite }]}>{String(senderName || 'Unknown').toUpperCase()}</Text>
@@ -401,7 +431,11 @@ export default function MessageBubble({
           ) : message.type === 'poll' && message.poll ? (
             <PollBody messageId={message.id} poll={message.poll} isMine={isMine} ink={ink} onVotePoll={onVotePoll} />
           ) : message.type === 'image' ? (
-            <Pressable onPress={() => onImagePress?.(mediaUrl(message.mediaUrl))}>
+            <Pressable
+              onPress={() => onImagePress?.(mediaUrl(message.mediaUrl))}
+              onLongPress={openMenu}
+              delayLongPress={280}
+            >
               <View style={s.imageWrap}>
                 <Image
                   source={{ uri: mediaUrl(message.mediaThumbUrl || message.mediaUrl) }}
@@ -419,7 +453,13 @@ export default function MessageBubble({
               {!!message.body && <EmojiText style={[type.bodyMd, { color: ink, marginTop: 7 }]}>{message.body}</EmojiText>}
             </Pressable>
           ) : message.type === 'voice' ? (
-            <VoiceNote uri={mediaUrl(message.mediaUrl)} duration={message.duration} isMine={isMine} />
+            <VoiceNote uri={mediaUrl(message.mediaUrl)} duration={message.duration} isMine={isMine} onLongPress={openMenu} />
+          ) : jumbo ? (
+            <View style={s.jumboRow}>
+              {jumbo.map((ch, i) => (
+                <Emoji key={`${ch}-${i}`} char={ch} size={jumbo.length === 1 ? 56 : jumbo.length === 2 ? 44 : 36} />
+              ))}
+            </View>
           ) : (
             <EmojiText style={[type.bodyMd, { color: ink }]}>{message.body}</EmojiText>
           )}
@@ -511,10 +551,32 @@ export default function MessageBubble({
                 <Text style={[type.bodyMd, { color: theme.text }]}>Disappear in…</Text>
               </SpringPressable>
             )}
-            {isMine && !message.deleted && (
-              <SpringPressable scaleTo={motion.scale.row} haptic="warning" style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]} onPress={() => { onDelete(message.id); setMenu(false); }}>
+            {!message.deleted && isMine && (
+              <SpringPressable
+                scaleTo={motion.scale.row}
+                haptic="warning"
+                style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]}
+                onPress={async () => {
+                  setMenu(false);
+                  // "Delete for everyone" is permanent for all participants —
+                  // confirm so an accidental long-press never wipes a message.
+                  const ok = await confirmDeleteForEveryone();
+                  if (ok) onDelete?.(message.id);
+                }}
+              >
                 <Icon name="trash-outline" size={18} color={theme.danger} />
                 <Text style={[type.bodyMd, { color: theme.danger }]}>Delete for everyone</Text>
+              </SpringPressable>
+            )}
+            {!message.deleted && (
+              <SpringPressable
+                scaleTo={motion.scale.row}
+                haptic="warning"
+                style={({ pressed }) => [s.menuItem, pressed ? marker(theme, 1) : null]}
+                onPress={() => { onDeleteForMe?.(message); setMenu(false); }}
+              >
+                <Icon name="eye-off-outline" size={18} color={theme.danger} />
+                <Text style={[type.bodyMd, { color: theme.danger }]}>Delete for me</Text>
               </SpringPressable>
             )}
             {!isMine && !message.deleted && onReport && (
@@ -607,6 +669,7 @@ const makeStyles = (t) => StyleSheet.create({
   },
   meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 5, marginTop: 5 },
   reply: { borderLeftWidth: 2, paddingLeft: 8, paddingVertical: 2, marginBottom: 7 },
+  jumboRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
   reactions: {
     position: 'absolute', bottom: -12, left: 10, flexDirection: 'row', gap: 4,
     paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1,

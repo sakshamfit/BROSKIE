@@ -7,10 +7,13 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
-import AffiliationPicker, { affiliationType } from '../components/AffiliationPicker';
+import { affiliationType } from '../components/affiliationMeta';
 import { PaperCard, InkField, InkButton, TapeChip, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import { type, inkBox, marker } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { lazyComponent } from '../lazy';
+
+const AffiliationPicker = lazyComponent(() => import('../components/AffiliationPicker'));
 
 /** "Personal Information" — Name, Username, About, Phone. */
 export default function PersonalInfoScreen({ navigation, embedded = false }) {

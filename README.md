@@ -107,7 +107,8 @@ touch surface (slide a bubble right — native app, mobile web and the Median sh
 desktop keeps hover ↩ + R), reply quotes that jump to the original message,
 emoji reactions, delete-for-everyone, **edit sent messages**, **forward to one or many
 chats** (with a FORWARDED tag), image sharing with lightbox, voice-note UI with
-waveform, 32-emoji picker, day separators, and per-user **Delete chat** that clears
+waveform, full vector emoji picker with skin-tones + flags, jumbo emoji-only
+messages, day separators, and per-user **Delete chat** that clears
 history only for the person deleting it and restores the thread when a new message arrives.
 First messages from people outside accepted contacts stay in Instagram-style **Activity**
 (the +one wordmark or heart) until accepted, deleted, or blocked. Opening a chat or
@@ -164,7 +165,7 @@ who share your college or workplace.
 - **Collaborative notes**: every chat (especially groups) can have shared real-time notes — multiple users type together, cursors and presence live, powered by classic Jupiter OT (apply/compose/transform/invert).
 - **Offline OT**: operations queued when offline are transformed on reconnect against server history via `baseVersion`.
 - **Persistence**: server stores docs + operations in SQLite (`documents`, `document_operations`, `message_edit_operations`), client caches in IndexedDB/AsyncStorage.
-- See `OT.md` for full design, socket events (`doc:join`, `doc:operation`, `doc:selection`, `message:edit:ot`) and tests (`npm run test:ot` — 31 checks).
+- See `OT.md` for full design, socket events (`doc:join`, `doc:operation`, `doc:selection`, `message:edit:ot`) and tests (`npm run test:ot` — 33 checks, including client⇄server parity).
 
 **Calls** — real 1:1 voice/video WebRTC on every platform (browser + Android
 app), with the ink-and-paper full-screen overlay, ringing, accept/decline and
@@ -226,13 +227,18 @@ the graph overlay.
 Bricolage Grotesque headlines / Karla body / JetBrains Mono labels.
 
 **Icons & emoji — 100% SVG** — every icon is a true vector (`react-native-svg`) rendered
-from official Ionicons path data via `<Icon>`. Every emoji is a full-colour Twemoji vector
-(1445 of them — smileys, people, nature, food, travel, activities, objects, symbols)
-rendered via `<Emoji>` / `<EmojiText>`, which auto-swaps emoji inside any string (message
-bodies, group names, statuses, previews) — the picker itself is tabbed by category with
-a name search ("fire" finds 🔥). No icon fonts and no system emoji glyphs anywhere, so
-rendering is identical on iOS, Android and web instead of falling back to inconsistent
-platform glyphs for anything outside a small hand-picked set.
+from official Ionicons path data via `<Icon>`. Every emoji is a full-colour Twemoji
+vector — the **complete RGI set, 4000+ emoji** (smileys, people, nature, food, travel,
+activities, objects, symbols, **all flags, keycaps, ZWJ families, and every skin tone**,
+up to Unicode 16) — rendered via `<Emoji>` / `<EmojiText>`, which auto-swaps emoji
+inside any string (message bodies, group names, statuses, previews). The picker is
+tabbed by category with CLDR-name + keyword search ("fire" or "lit" finds 🔥) and a
+long-press **skin-tone strip** on people/hand emoji, exactly like WhatsApp/Telegram.
+Typing-variant aliases (bare ❤ for ❤️, keycaps without VS16, FE0F-stripped ZWJ forms)
+mean text from any keyboard still matches vector art. Emoji-only messages render
+**jumbo-sized**. No icon fonts and no system emoji glyphs anywhere, so rendering is
+identical — and premium — on iOS, Android and web. The packed table is regenerated
+from official Twemoji artwork + emojibase metadata by `scripts/generate-emoji-data.js`.
 
 **Calls** — real 1:1 voice and video calling over WebRTC, signalled through the existing
 Socket.IO connection (ringing, accept/decline/busy/missed, mute, hang up), with call

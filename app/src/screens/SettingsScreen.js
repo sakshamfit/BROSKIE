@@ -115,7 +115,7 @@ export default function SettingsScreen({ navigation, embedded = false }) {
               <Divider theme={theme} />
               <NavRow
                 theme={theme}
-                icon="shield-outline"
+                icon="shield-checkmark-outline"
                 title="Admin ▸ Safety & Moderation"
                 subtitle="Private — reports, alerts, cases, audit"
                 onPress={() => navigation.navigate('AdminSafety')}

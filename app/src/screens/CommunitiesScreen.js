@@ -8,11 +8,13 @@ import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { Avatar, EmptyState, TapeChip, rippleFor } from '../components/common';
 import { CATEGORY_LIST, categoryMeta } from '../components/communityMeta';
-import NewCommunityScreen from './NewCommunityScreen';
-import CommunityDetailScreen from './CommunityDetailScreen';
 import { onOpenCommunity, consumePendingCommunity, onProfileWillOpen } from '../push/routing';
 import { type, inkBox, marker, radius, raised } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { lazyComponent } from '../lazy';
+
+const NewCommunityScreen = lazyComponent(() => import('./NewCommunityScreen'));
+const CommunityDetailScreen = lazyComponent(() => import('./CommunityDetailScreen'));
 
 const tiltFor = (i) => (i % 2 === 0 ? '-0.7deg' : '0.6deg');
 

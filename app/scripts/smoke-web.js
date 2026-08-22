@@ -136,14 +136,24 @@ async function getBundle(argPath) {
     return true;
   };
   const check = (name, ok) => { if (!ok) problems.push(`interaction failed: ${name}`); };
+  /** Poll until `fn()` is truthy — screens are code-split, so "how long until
+   *  it appears" is not a fixed number. */
+  const waitFor = async (fn, timeout = 4000) => {
+    const started = Date.now();
+    while (Date.now() - started < timeout) {
+      if (fn()) return true;
+      await settle(100);
+    }
+    return false;
+  };
+  const bodyText = () => window.document.body.textContent || '';
 
   const clickable = [...window.document.querySelectorAll('[role="button"], button')];
 
   // like → the control must flip to the "Unlike" state (icon morph + count)
   if (byLabel('Like')) {
     press(byLabel('Like'));
-    await settle();
-    check('like toggles to Unlike', !!byLabel('Unlike'));
+    check('like toggles to Unlike', await waitFor(() => !!byLabel('Unlike')));
   }
 
   // follow → the pill must report the opposite action afterwards
@@ -151,19 +161,19 @@ async function getBundle(argPath) {
   if (followBtn) {
     const before = followBtn.getAttribute('aria-label');
     press(followBtn);
-    await settle();
-    const after = [...window.document.querySelectorAll('[aria-label^="Follow "], [aria-label^="Unfollow "]')]
-      .map((e) => e.getAttribute('aria-label'));
-    check('follow changes state', !after.includes(before) || after.length === 0);
+    const changed = await waitFor(() => {
+      const after = [...window.document.querySelectorAll('[aria-label^="Follow "], [aria-label^="Unfollow "]')]
+        .map((e) => e.getAttribute('aria-label'));
+      return !after.includes(before) || after.length === 0;
+    });
+    check('follow changes state', changed);
   }
 
   // tab bar → switching to Chats must bring the conversation list in
   if (byLabel('Chats')) {
     press(byLabel('Chats'));
-    await settle(700);
-    const t = window.document.body.textContent || '';
-    check('chats tab shows conversations', /Grace Hopper|Katherine Johnson/.test(t));
-    if (process.env.SMOKE_DUMP) console.log('after chats tab:', t.replace(/BESbswy/g, '').replace(/\s+/g, ' ').slice(0, 400));
+    check('chats tab shows conversations',
+      await waitFor(() => /Grace Hopper|Katherine Johnson/.test(bodyText())));
   }
 
   // open a conversation → the thread and its composer must appear
@@ -173,23 +183,27 @@ async function getBundle(argPath) {
   if (process.env.SMOKE_DUMP) console.log('chatRow found:', !!chatRow, window.document.querySelectorAll('[aria-label^="Open chat with"]').length);
   if (chatRow) {
     press(chatRow);
-    await settle(900);
-    const inThread = /long-pressing this bubble|Message 0 in/i.test(window.document.body.textContent);
+    const inThread = await waitFor(() => /long-pressing this bubble|Message 0 in/i.test(bodyText()));
     check('chat row opens the conversation', inThread);
 
     // long-press a bubble → the action menu must open
     if (inThread) {
       const bubble = [...window.document.querySelectorAll('div')]
         .find((el) => (el.textContent || '').trim() === 'Try long-pressing this bubble.');
-      if (bubble) {
+      // Synthesised long-press: hold past delayLongPress, then release.
+      // Retried a couple of times — the press timer competes with whatever
+      // else the app is doing on its first frames.
+      const menuOpen = () => /Reply|Forward|Star message/.test(bodyText());
+      let opened = false;
+      for (let attempt = 0; bubble && !opened && attempt < 3; attempt += 1) {
         bubble.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
         bubble.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-        await settle(650);
+        await settle(700);
         bubble.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true, cancelable: true }));
         bubble.dispatchEvent(new window.MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-        await settle(500);
-        check('long-press opens the message menu', /Reply|Forward|Star message/.test(window.document.body.textContent));
+        opened = await waitFor(menuOpen, 1500);
       }
+      if (bubble) check('long-press opens the message menu', opened);
     }
   }
 

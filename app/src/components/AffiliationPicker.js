@@ -11,16 +11,9 @@ import { useTheme } from '../store/ThemeContext';
 import { InkButton, InkField, TapeChip } from './common';
 import { type, inkBox, marker, dashedRule, stroke } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { AFFILIATION_TYPES, affiliationType } from './affiliationMeta';
 
-export const AFFILIATION_TYPES = [
-  { key: 'institution', label: 'College / Institution', short: 'Institution', icon: 'school-outline' },
-  { key: 'organization', label: 'Organization', short: 'Organization', icon: 'people-outline' },
-  { key: 'workplace', label: 'Workplace', short: 'Workplace', icon: 'construct-outline' },
-];
-
-export function affiliationType(typeKey) {
-  return AFFILIATION_TYPES.find((item) => item.key === typeKey) || AFFILIATION_TYPES[0];
-}
+export { AFFILIATION_TYPES, affiliationType };
 
 /**
  * Search an existing place or register a new one. Joining a place writes it

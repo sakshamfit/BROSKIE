@@ -7,8 +7,10 @@ import Icon from '../icons/Icon';
 import { PaperCard, Avatar, Rule } from './common';
 import { type, inkBox, alpha, radius } from '../theme';
 import { api } from '../api';
-import CollabEditor from './CollabEditor';
 import { SpringPressable, motion } from '../motion';
+import { lazyComponent } from '../lazy';
+
+const CollabEditor = lazyComponent(() => import('./CollabEditor'));
 
 /**
  * CollabDocumentView - Lists and manages collaborative documents in a chat

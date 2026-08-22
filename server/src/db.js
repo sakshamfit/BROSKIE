@@ -400,6 +400,10 @@ addColumnIfMissing('messages', 'client_id', 'client_id TEXT');
 addColumnIfMissing('messages', 'client_created_at', 'client_created_at INTEGER');
 addColumnIfMissing('messages', 'updated_at', 'updated_at INTEGER');
 addColumnIfMissing('messages', 'media_thumb_url', 'media_thumb_url TEXT');
+// "Delete for me": csv of user ids who hid this message only on their own
+// devices. Unlike the global `deleted` flag ("delete for everyone"), this
+// never removes the message for other participants.
+addColumnIfMissing('messages', 'hidden_for', 'hidden_for TEXT DEFAULT \'\'');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client_id ON messages(client_id) WHERE client_id IS NOT NULL');
 db.exec('CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id, created_at)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_messages_updated ON messages(chat_id, updated_at)');
