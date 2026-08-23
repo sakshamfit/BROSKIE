@@ -24,6 +24,8 @@ jobs:
         run: npm ci
       - name: Syntax check every source file
         run: for f in src/*.js test-*.js; do node --check "$f"; done
+      - name: DATA_DIR / Railway SQLITE_READONLY suite
+        run: node test-data-dir.js
       - name: Push notifications suite (33 checks)
         run: node test-push.js
       - name: Forgot password and OTP suite

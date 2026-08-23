@@ -25,7 +25,8 @@
     "test:otp": "node test-forgot-password-otp.js",
     "test:gc": "node test-gc-isolation.js",
     "test:chat-inbox": "node test-chat-inbox.js",
-    "test:features": "node test-features.js"
+    "test:features": "node test-features.js",
+    "test:data-dir": "node test-data-dir.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",

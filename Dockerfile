@@ -26,23 +26,35 @@ RUN apt-get update \
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
-# A small, non-root runtime image. Runtime state is written only to /data,
-# which Compose mounts as a named volume; no environment files are copied.
+# A small runtime image. Runtime state is written only to /data, which
+# Compose/Railway mount as a volume. The entrypoint starts as root so it
+# can chown that volume (Railway mounts volumes as root) and then drops
+# to the `node` user. No environment files are copied.
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app/server
 
+# gosu is used by docker-entrypoint.sh to drop root after fixing volume
+# ownership. RAILWAY_RUN_UID=0 is the official Railway override when a
+# volume is attached: volumes are mounted as root, and a non-root uid
+# cannot write tomodachi.db (SQLITE_READONLY).
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends gosu \
+  && rm -rf /var/lib/apt/lists/* \
+  && gosu nobody true
+
 ENV NODE_ENV=production \
     PORT=4000 \
-    DATA_DIR=/data
+    DATA_DIR=/data \
+    RAILWAY_RUN_UID=0
 
 COPY --chown=node:node server/package.json ./
 COPY --from=server-deps --chown=node:node /app/server/node_modules ./node_modules
 COPY --chown=node:node server/src ./src
 COPY --from=web-build --chown=node:node /tmp/plusone-web ./public
+COPY --chmod=755 server/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 RUN mkdir -p /data && chown node:node /data
 
-USER node
 EXPOSE 4000
 
 # Uses Node rather than curl/wget so no diagnostic package is carried in the
@@ -51,4 +63,5 @@ EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "require('http').get('http://127.0.0.1:4000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "src/index.js"]

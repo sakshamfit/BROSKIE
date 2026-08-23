@@ -1,7 +1,12 @@
 require('dotenv').config();
 const Database = require('better-sqlite3');
 const path = require('path');
-const fs = require('fs');
+const {
+  resolveDataDir,
+  usingPersistentVolume,
+  onKnownEphemeralHost,
+  readonlyHelp,
+} = require('./dataDir');
 
 // DATA_DIR can be pointed at a mounted persistent volume (Railway Volume,
 // Render Disk, etc.) so the SQLite file — and locally-stored uploads —
@@ -12,13 +17,13 @@ const fs = require('fs');
 //      Volume is attached to the service, so we pick it up with zero config
 //      the moment a volume exists — see DEPLOY.md for the one-time setup.
 //   3. Falls back to server/data for local dev / no-volume deploys.
-const usingPersistentVolume = !!(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH);
-const DATA_DIR = process.env.DATA_DIR
-  ? path.resolve(process.env.DATA_DIR)
-  : process.env.RAILWAY_VOLUME_MOUNT_PATH
-    ? path.resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH)
-    : path.join(__dirname, '..', 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+//
+// resolveDataDir() also chmods an existing tomodachi.db (and WAL/SHM) when
+// the process owns it. Railway volumes are mounted as root; a non-root
+// process opening a root-owned db is the SQLITE_READONLY crash in deploy
+// logs. If we still cannot write, we throw here with the Railway fix
+// (RAILWAY_RUN_UID=0) instead of dying later on a branding UPDATE.
+const DATA_DIR = resolveDataDir();
 
 // Loud, impossible-to-miss startup warning when running on a known
 // ephemeral-disk host (Railway or Render, detected via the env vars they
@@ -29,7 +34,6 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 // the actual failure mode behind "I pushed an update and lost my data" —
 // surfacing it at boot means it shows up in deploy logs immediately
 // instead of being discovered after the fact.
-const onKnownEphemeralHost = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RENDER);
 if (!usingPersistentVolume && onKnownEphemeralHost) {
   console.warn(
     '\n⚠️  ⚠️  ⚠️  NO PERSISTENT STORAGE CONFIGURED  ⚠️  ⚠️  ⚠️\n' +
@@ -46,8 +50,16 @@ if (!usingPersistentVolume && onKnownEphemeralHost) {
   );
 }
 
-const db = new Database(path.join(DATA_DIR, 'tomodachi.db'));
-db.pragma('journal_mode = WAL');
+const dbPath = path.join(DATA_DIR, 'tomodachi.db');
+const db = new Database(dbPath);
+try {
+  db.pragma('journal_mode = WAL');
+} catch (err) {
+  // Some volume filesystems reject WAL (needs extra sidecar files). Fall
+  // back to the rollback journal so boot can still write.
+  console.warn(`[db] WAL mode failed (${err.message}); using DELETE journal`);
+  db.pragma('journal_mode = DELETE');
+}
 db.pragma('foreign_keys = ON');
 
 db.exec(`
@@ -357,7 +369,17 @@ CREATE INDEX IF NOT EXISTS idx_calls_participants ON calls(caller_id, callee_id,
 /* Branding migration: update only the untouched legacy default; custom user
    bios are never modified. Technical database/storage names intentionally
    remain "tomodachi" so existing production data and installed sessions keep working. */
-db.prepare("UPDATE users SET about = 'Hey there! I am using +one.' WHERE about = 'Hey there! I am using 友達.'").run();
+try {
+  db.prepare("UPDATE users SET about = 'Hey there! I am using +one.' WHERE about = 'Hey there! I am using 友達.'").run();
+} catch (err) {
+  if (err && (err.code === 'SQLITE_READONLY' || /readonly/i.test(err.message || ''))) {
+    const wrapped = new Error(readonlyHelp(DATA_DIR));
+    wrapped.code = 'SQLITE_READONLY';
+    wrapped.cause = err;
+    throw wrapped;
+  }
+  throw err;
+}
 
 /* ---- lightweight migrations for columns added after initial release ---- */
 function addColumnIfMissing(table, column, ddl) {

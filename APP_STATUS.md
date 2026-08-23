@@ -547,10 +547,14 @@ Inside the shell:
 
 ```bash
 echo $RAILWAY_VOLUME_MOUNT_PATH
+echo $RAILWAY_RUN_UID
 ls -la /data
 ```
 
 The mount path should be `/data`, and the directory should contain `tomodachi.db`.
+`RAILWAY_RUN_UID` must be `0`. Railway mounts the volume as root; a non-root
+uid makes `tomodachi.db` read-only and boot crashes with `SQLITE_READONLY`
+on the branding `UPDATE users SET about…` line.
 
 ---
 
@@ -560,7 +564,7 @@ Before pushing/deploying changes:
 
 1. Confirm the Railway Volume is still attached at `/data`.
 2. Do not change or delete `DATA_DIR`, `RAILWAY_VOLUME_MOUNT_PATH`, or database files.
-3. Keep `JWT_SECRET` configured in Railway.
+3. Keep `JWT_SECRET` and `RAILWAY_RUN_UID=0` configured in Railway.
 4. Keep secrets only in Railway/Supabase variable dashboards.
 5. Run the web export locally:
 

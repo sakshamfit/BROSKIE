@@ -44,9 +44,9 @@ const isPublishableKey =
 // Falls back to server/uploads for local dev (zero config). Irrelevant once
 // Supabase Storage is configured (SUPABASE_URL + key), since that path never
 // touches local disk at all.
-const VOLUME_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH;
-const UPLOAD_DIR = VOLUME_DIR
-  ? path.join(path.resolve(VOLUME_DIR), 'uploads')
+const { usingPersistentVolume, resolveDataDir } = require('./dataDir');
+const UPLOAD_DIR = usingPersistentVolume
+  ? path.join(resolveDataDir(), 'uploads')
   : path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
