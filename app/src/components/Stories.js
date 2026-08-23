@@ -425,7 +425,10 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, held, replyFocused]);
 
-  const progressScaleX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  // Animate width rather than scaleX + transformOrigin. The latter can leak
+  // an invalid `transform-origin` attribute through the SVG/web renderer;
+  // width grows from the left consistently on web, Android and iOS.
+  const progressWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
 
   /* ---- story viewer gestures ----
      `dismissY` follows a downward drag 1:1 (upward is heavily resisted) and
@@ -525,7 +528,10 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
                   {done && <View style={[StyleSheet.absoluteFill, { backgroundColor: foregroundFor(item) }]} />}
                   {active && (
                     <Animated.View
-                      style={[StyleSheet.absoluteFill, { backgroundColor: foregroundFor(item), transform: [{ scaleX: progressScaleX }], transformOrigin: 'left' }]}
+                      style={[{
+                        position: 'absolute', left: 0, top: 0, bottom: 0,
+                        width: progressWidth, backgroundColor: foregroundFor(item),
+                      }]}
                     />
                   )}
                 </View>

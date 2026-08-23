@@ -1,0 +1,40 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: plusone-backend:local
+    init: true
+    ports:
+      - "${PLUSONE_PORT:-4000}:4000"
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATA_DIR: /data
+      # Compose intentionally refuses to start without this rather than using
+      # the server's development-only fallback secret.
+      JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET in .env before starting Docker Compose}"
+      CORS_ORIGIN: "${CORS_ORIGIN:-*}"
+      ADMIN_USERNAMES: "${ADMIN_USERNAMES:-saksham}"
+      GOLD_TICK_USERNAMES: "${GOLD_TICK_USERNAMES:-saksham}"
+      BACKUP_KEEP: "${BACKUP_KEEP:-20}"
+      SUPABASE_URL: "${SUPABASE_URL:-}"
+      SUPABASE_SERVICE_KEY: "${SUPABASE_SERVICE_KEY:-}"
+      SUPABASE_BUCKET: "${SUPABASE_BUCKET:-tomodachi-uploads}"
+      JAMENDO_CLIENT_ID: "${JAMENDO_CLIENT_ID:-}"
+      VAPID_PUBLIC_KEY: "${VAPID_PUBLIC_KEY:-}"
+      VAPID_PRIVATE_KEY: "${VAPID_PRIVATE_KEY:-}"
+      VAPID_SUBJECT: "${VAPID_SUBJECT:-mailto:hello@plusone.app}"
+    volumes:
+      # SQLite, uploads, automatic backups and generated VAPID keys persist
+      # here. Normal workflow must never use `docker compose down -v`.
+      - plusone_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+volumes:
+  plusone_data:

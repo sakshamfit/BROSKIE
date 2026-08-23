@@ -11,6 +11,9 @@
     "start": "cd server && npm start",
     "dev:server": "cd server && npm run dev",
     "dev:app": "cd app && npx expo start",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down",
+    "docker:smoke": "bash scripts/docker-smoke.sh",
     "build:cloudflare": "cd app && npm ci && EXPO_PUBLIC_API_URL=https://broskie-h.up.railway.app CI=true npx expo export --platform web --output-dir dist",
     "deploy:cloudflare": "npx wrangler deploy",
     "backup": "cd server && npm run backup",
@@ -22,6 +25,7 @@
     "test:push": "cd server && npm run test:push",
     "test:phase2": "cd server && npm run test:phase2",
     "test:phase3": "cd server && npm run test:phase3",
+    "test:otp": "cd server && npm run test:otp",
     "test:moderation": "cd server && npm run test:moderation",
     "test:features": "cd server && npm run test:features",
     "test:chat-inbox": "cd server && npm run test:chat-inbox"

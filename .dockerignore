@@ -1,0 +1,50 @@
+# Source-control, local configuration, and editor metadata
+.git/
+.github/
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies and generated application output
+node_modules/
+**/node_modules/
+.npm/
+**/.expo/
+**/.expo-shared/
+**/dist/
+**/web-build/
+server/public/
+server/data/
+server/uploads/
+coverage/
+
+# Native builds and host-specific files
+app/android/
+app/ios/
+.kotlin/
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.*
+yarn-debug.*
+
+# Credentials and private signing material. Public app/google-services.json is
+# not copied by the Dockerfile, and server-only source has no reason to need it.
+*.p8
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
+*.key
+*-firebase-adminsdk-*.json
+.netrc
+.git-credentials
+
+# Docker never needs repository documentation, media generation tooling, or
+# test fixtures to build the production backend image.
+docs/
+median/
+server/test-*.js

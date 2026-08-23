@@ -1,7 +1,14 @@
 const jwt = require('jsonwebtoken');
 const db = require('./db');
 
-const SECRET = process.env.JWT_SECRET || 'tomodachi-dev-secret-change-me';
+// A predictable secret is convenient for throwaway local development only.
+// Production containers must receive a unique secret through their runtime
+// environment; failing early prevents accidentally issuing production tokens
+// that anyone can forge.
+const SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'tomodachi-dev-secret-change-me');
+if (!SECRET) {
+  throw new Error('JWT_SECRET is required when NODE_ENV=production');
+}
 
 function sign(user) {
   return jwt.sign({ id: user.id, username: user.username }, SECRET, { expiresIn: '30d' });

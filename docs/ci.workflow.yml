@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: server/package-lock.json
       - name: Install dependencies
@@ -26,6 +26,8 @@ jobs:
         run: for f in src/*.js test-*.js; do node --check "$f"; done
       - name: Push notifications suite (33 checks)
         run: node test-push.js
+      - name: Forgot password and OTP suite
+        run: node test-forgot-password-otp.js
       - name: Phase 2 campus loop suite (39 checks)
         run: node test-phase2.js
       - name: Phase 3 suite (invite links, grouped activity, web push)
@@ -53,7 +55,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: app/package-lock.json
       - name: Install dependencies
