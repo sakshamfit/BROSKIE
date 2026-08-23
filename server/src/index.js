@@ -993,6 +993,84 @@ app.post('/api/auth/register', (req, res) => {
   res.json({ token: sign(user), user: accountUser(user) });
 });
 
+// Server-side OTP and Reset Password flows
+const otps = new Map(); // phone -> { otp, expiresAt, attempts, userId }
+const resetTokens = new Map(); // token -> { userId, expiresAt }
+
+app.post('/api/auth/forgot-password', (req, res) => {
+  const { phone } = req.body || {};
+  if (!phone) return res.status(400).json({ error: 'Phone number is required' });
+
+  // Find user by phone number
+  const user = db.prepare('SELECT * FROM users WHERE phone = ?').get(phone);
+  if (!user) return res.status(404).json({ error: 'No account registered with this phone number' });
+
+  // Generate 6-digit OTP
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+  otps.set(phone, { otp, expiresAt, attempts: 0, userId: user.id });
+
+  console.log(`\n========================================\n[OTP] Sent OTP ${otp} to user ${user.username} (phone: ${phone})\n========================================\n`);
+
+  res.json({ success: true, message: 'OTP sent successfully' });
+});
+
+app.post('/api/auth/verify-otp', (req, res) => {
+  const { phone, otp } = req.body || {};
+  if (!phone || !otp) return res.status(400).json({ error: 'Phone and OTP are required' });
+
+  const record = otps.get(phone);
+  if (!record) return res.status(400).json({ error: 'No OTP requested for this phone number' });
+
+  if (Date.now() > record.expiresAt) {
+    otps.delete(phone);
+    return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+  }
+
+  if (record.otp !== String(otp)) {
+    record.attempts += 1;
+    if (record.attempts >= 3) {
+      otps.delete(phone);
+      return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new OTP.' });
+    }
+    return res.status(400).json({ error: 'Invalid OTP' });
+  }
+
+  // OTP verified successfully. Generate a single-use secure reset token.
+  const resetToken = require('crypto').randomBytes(24).toString('hex');
+  resetTokens.set(resetToken, { userId: record.userId, expiresAt: Date.now() + 10 * 60 * 1000 }); // 10 minutes
+
+  // Clean up the OTP
+  otps.delete(phone);
+
+  res.json({ success: true, resetToken });
+});
+
+app.post('/api/auth/reset-password', (req, res) => {
+  const { resetToken, newPassword } = req.body || {};
+  if (!resetToken || !newPassword) return res.status(400).json({ error: 'Reset token and new password are required' });
+
+  const record = resetTokens.get(resetToken);
+  if (!record) return res.status(400).json({ error: 'Invalid or expired reset token' });
+
+  if (Date.now() > record.expiresAt) {
+    resetTokens.delete(resetToken);
+    return res.status(400).json({ error: 'Reset token has expired' });
+  }
+
+  const passwordValidationError = passwordError(newPassword);
+  if (passwordValidationError) return res.status(400).json({ error: passwordValidationError });
+
+  const hash = bcrypt.hashSync(String(newPassword), 8);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, record.userId);
+
+  // Consume the reset token
+  resetTokens.delete(resetToken);
+
+  res.json({ success: true, message: 'Password updated successfully' });
+});
+
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body || {};
   const user = getUserByUsername(username);

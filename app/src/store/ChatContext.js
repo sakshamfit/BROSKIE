@@ -106,6 +106,7 @@ export function ChatProvider({ children }) {
   const [remoteStream, setRemoteStream] = useState(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  const [speakerOn, setSpeakerOn] = useState(true);
   const pcRef = useRef(null);
   const pendingCandidates = useRef([]);
   const ringtoneRef = useRef(null);
@@ -821,23 +822,37 @@ export function ChatProvider({ children }) {
     });
 
     socket.on('call:offer', async ({ callId, sdp }) => {
-      // Callee side: caller's offer arrives once we've accepted and the
-      // caller has our accept — create our own peer connection and answer.
-      const pc = await ensurePeerConnection(callId, callRef.current?.type || 'audio');
-      await pc.setRemoteDescription(RTC.SessionDescription(sdp));
-      flushPendingCandidates(pc);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('call:answer', { callId, sdp: answer });
-      setCall((prev) => (prev ? { ...prev, status: 'ongoing' } : prev));
+      try {
+        // Callee side: caller's offer arrives once we've accepted and the
+        // caller has our accept — create our own peer connection and answer.
+        const pc = await ensurePeerConnection(callId, callRef.current?.type || 'audio');
+        await pc.setRemoteDescription(RTC.SessionDescription(sdp));
+        flushPendingCandidates(pc);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('call:answer', { callId, sdp: answer });
+        setCall((prev) => (prev ? { ...prev, status: 'ongoing' } : prev));
+      } catch (e) {
+        console.error('[WebRTC] Error in call:offer:', e);
+        socket.emit('call:hangup', { callId });
+        teardownWebRTC();
+        setCall((prev) => (prev && prev.id === callId ? { ...prev, status: 'ended', endedReason: 'failed', error: e.message } : prev));
+      }
     });
 
     socket.on('call:answer', async ({ callId, sdp }) => {
-      const pc = pcRef.current;
-      if (!pc || callRef.current?.id !== callId) return;
-      await pc.setRemoteDescription(RTC.SessionDescription(sdp));
-      flushPendingCandidates(pc);
-      setCall((prev) => (prev ? { ...prev, status: 'ongoing' } : prev));
+      try {
+        const pc = pcRef.current;
+        if (!pc || callRef.current?.id !== callId) return;
+        await pc.setRemoteDescription(RTC.SessionDescription(sdp));
+        flushPendingCandidates(pc);
+        setCall((prev) => (prev ? { ...prev, status: 'ongoing' } : prev));
+      } catch (e) {
+        console.error('[WebRTC] Error in call:answer:', e);
+        socket.emit('call:hangup', { callId });
+        teardownWebRTC();
+        setCall((prev) => (prev && prev.id === callId ? { ...prev, status: 'ended', endedReason: 'failed', error: e.message } : prev));
+      }
     });
 
     socket.on('call:ice-candidate', async ({ callId, candidate }) => {
@@ -915,6 +930,7 @@ export function ChatProvider({ children }) {
     setLocalStream(stream);
     setMicOn(true);
     setCamOn(type === 'video');
+    setSpeakerOn(true);
 
     const pc = RTC.createPeerConnection({ iceServers: ICE_SERVERS });
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -922,12 +938,31 @@ export function ChatProvider({ children }) {
     pc.onicecandidate = (e) => {
       if (e.candidate) socketRef.current?.emit('call:ice-candidate', { callId, candidate: e.candidate });
     };
-    pc.ontrack = (e) => setRemoteStream(e.streams[0]);
-    pc.onconnectionstatechange = () => {
-      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
-        // let the explicit call:ended event (server-driven) be the source of
-        // truth for ending the UI, so a transient ICE hiccup doesn't hang up
+    pc.ontrack = (e) => {
+      if (e.streams && e.streams[0]) {
+        setRemoteStream(e.streams[0]);
+      } else {
+        const rStream = typeof window !== 'undefined' && window.MediaStream
+          ? new window.MediaStream([e.track])
+          : (e.track ? { id: 'remote', getTracks: () => [e.track] } : null);
+        setRemoteStream(rStream);
       }
+    };
+    pc.onconnectionstatechange = () => {
+      setCall((prev) => {
+        if (prev && prev.id === callId) {
+          return { ...prev, connectionState: pc.connectionState };
+        }
+        return prev;
+      });
+    };
+    pc.oniceconnectionstatechange = () => {
+      setCall((prev) => {
+        if (prev && prev.id === callId) {
+          return { ...prev, iceConnectionState: pc.iceConnectionState };
+        }
+        return prev;
+      });
     };
 
     pcRef.current = pc;
@@ -943,14 +978,35 @@ export function ChatProvider({ children }) {
         socketRef.current?.emit('call:offer', { callId, sdp: offer });
       }
     } catch (e) {
+      console.error('[WebRTC] startWebRTC failed:', e);
       socketRef.current?.emit('call:hangup', { callId });
+      teardownWebRTC();
       setCall((prev) => (prev ? { ...prev, status: 'ended', endedReason: 'failed', error: e.message } : prev));
     }
   }, [ensurePeerConnection]);
 
   const teardownWebRTC = useCallback(() => {
-    if (pcRef.current) { try { pcRef.current.close(); } catch {} pcRef.current = null; }
-    setLocalStream((prev) => { prev?.getTracks().forEach((t) => t.stop()); return null; });
+    stopRingtone();
+    if (pcRef.current) {
+      try {
+        pcRef.current.onicecandidate = null;
+        pcRef.current.ontrack = null;
+        pcRef.current.onconnectionstatechange = null;
+        pcRef.current.oniceconnectionstatechange = null;
+        pcRef.current.close();
+      } catch (err) {
+        console.warn('[WebRTC] teardown error:', err);
+      }
+      pcRef.current = null;
+    }
+    setLocalStream((prev) => {
+      if (prev) {
+        prev.getTracks().forEach((t) => {
+          try { t.stop(); } catch {}
+        });
+      }
+      return null;
+    });
     setRemoteStream(null);
     pendingCandidates.current = [];
   }, []);
@@ -962,7 +1018,25 @@ export function ChatProvider({ children }) {
       setTimeout(() => setCall(null), 3500);
       return;
     }
+    teardownWebRTC();
     callTypeRef.current = type;
+
+    // Pre-populate recipient name and avatar from our loaded chats for immediate response
+    const chat = chats.find((c) => c.id === chatId);
+    const callee = chat
+      ? { id: calleeId, name: chat.name, avatar: chat.avatar }
+      : { id: calleeId, name: 'Calling...' };
+
+    setCall({
+      id: 'initiating',
+      chatId,
+      type,
+      direction: 'outgoing',
+      status: 'calling',
+      with: callee,
+      startedAt: Date.now(),
+    });
+
     socketRef.current?.emit('call:invite', { chatId, calleeId, type }, (res) => {
       if (res?.error) {
         setCall({ id: 'error', chatId, type, direction: 'outgoing', status: 'ended', endedReason: res.busy ? 'busy' : 'failed', error: res.error });
@@ -971,11 +1045,12 @@ export function ChatProvider({ children }) {
       }
       setCall({ id: res.call.id, chatId, type, direction: 'outgoing', status: 'ringing', with: res.call.with, startedAt: res.call.startedAt });
     });
-  }, []);
+  }, [chats, teardownWebRTC]);
 
   const acceptCall = useCallback(() => {
     if (!call) return;
     stopRingtone();
+    teardownWebRTC();
     socketRef.current?.emit('call:accept', { callId: call.id }, async (res) => {
       if (res?.error) { setCall(null); return; }
       callTypeRef.current = call.type;
@@ -986,22 +1061,27 @@ export function ChatProvider({ children }) {
         await ensurePeerConnection(call.id, call.type);
       } catch (e) {
         socketRef.current?.emit('call:hangup', { callId: call.id });
+        teardownWebRTC();
         setCall((prev) => (prev ? { ...prev, status: 'ended', endedReason: 'failed', error: e.message } : prev));
       }
     });
-  }, [call, ensurePeerConnection]);
+  }, [call, ensurePeerConnection, teardownWebRTC]);
 
   const declineCall = useCallback(() => {
     if (!call) return;
     stopRingtone();
-    socketRef.current?.emit('call:decline', { callId: call.id });
+    if (call.id !== 'initiating' && call.id !== 'error' && call.id !== 'unsupported') {
+      socketRef.current?.emit('call:decline', { callId: call.id });
+    }
     setCall(null);
   }, [call]);
 
   const hangUp = useCallback(() => {
     if (!call) return;
     stopRingtone();
-    socketRef.current?.emit('call:hangup', { callId: call.id });
+    if (call.id !== 'initiating' && call.id !== 'error' && call.id !== 'unsupported') {
+      socketRef.current?.emit('call:hangup', { callId: call.id });
+    }
     teardownWebRTC();
     setCall(null);
   }, [call, teardownWebRTC]);
@@ -1020,6 +1100,29 @@ export function ChatProvider({ children }) {
       localStream?.getVideoTracks().forEach((t) => { t.enabled = next; });
       return next;
     });
+  }, [localStream]);
+
+  const toggleSpeaker = useCallback(() => {
+    setSpeakerOn((prev) => !prev);
+  }, []);
+
+  const switchCamera = useCallback(async () => {
+    if (!localStream) return;
+    const videoTracks = localStream.getVideoTracks();
+    if (videoTracks.length === 0) return;
+    for (const track of videoTracks) {
+      if (typeof track._switchCamera === 'function') {
+        track._switchCamera();
+      } else if (typeof track.applyConstraints === 'function') {
+        const currentFacing = track.getSettings()?.facingMode;
+        const nextFacing = currentFacing === 'user' ? 'environment' : 'user';
+        try {
+          await track.applyConstraints({ facingMode: nextFacing });
+        } catch (e) {
+          console.warn('[WebRTC] switch camera constraint error:', e);
+        }
+      }
+    }
   }, [localStream]);
 
   /* ---------------- GC actions (isolated: never touch direct state) ---------------- */
@@ -1530,8 +1633,8 @@ export function ChatProvider({ children }) {
           setMessages(updater);
         },
         // Calls
-        call, localStream, remoteStream, micOn, camOn, callSupported: RTC_SUPPORTED,
-        startCall, acceptCall, declineCall, hangUp, toggleMic, toggleCam,
+        call, localStream, remoteStream, micOn, camOn, speakerOn, callSupported: RTC_SUPPORTED,
+        startCall, acceptCall, declineCall, hangUp, toggleMic, toggleCam, toggleSpeaker, switchCamera,
       }}
     >
       {children}
