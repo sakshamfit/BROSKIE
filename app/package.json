@@ -66,6 +66,9 @@
     "test:chat-inbox": "node --test src/chatInbox.test.mjs"
   },
   "private": true,
+  "engines": {
+    "node": "24.x"
+  },
   "devDependencies": {
     "@config-plugins/react-native-webrtc": "15.0.2",
     "jsdom": "^30.0.1"
