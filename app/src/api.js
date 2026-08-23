@@ -315,6 +315,15 @@ export const api = {
   login: async (payload) => checkedAuthPayload(await request('/api/auth/login', {
     method: 'POST', body: payload, timeoutMs: 30000, retries: 1,
   })),
+  forgotPassword: (phone) => request('/api/auth/forgot-password', {
+    method: 'POST', body: { phone }, timeoutMs: 20000, retries: 1,
+  }),
+  verifyOtp: (phone, otp) => request('/api/auth/verify-otp', {
+    method: 'POST', body: { phone, otp }, timeoutMs: 20000, retries: 1,
+  }),
+  resetPassword: (resetToken, newPassword) => request('/api/auth/reset-password', {
+    method: 'POST', body: { resetToken, newPassword }, timeoutMs: 20000, retries: 1,
+  }),
   usernameAvailable: (username) => request(`/api/auth/username-available?username=${encodeURIComponent(username)}`, {
     timeoutMs: 10000, retries: 1,
   }),

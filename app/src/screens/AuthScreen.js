@@ -95,25 +95,29 @@ export default function AuthScreen() {
    * surface rather than a flex box that re-centers on every IME frame.
    */
   const anchorTop = isWeb ? width < 600 : !isSplitCapable;
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [mode, setMode] = useState('login'); // 'login' | 'register' | 'forgot' | 'otp' | 'reset'
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const submittingRef = useRef(false);
   const [focus, setFocus] = useState(null);
+
+  // OTP Verification specific states
+  const [otp, setOtp] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const otpInputRef = useRef(null);
 
   const [checking, setChecking] = useState(false);
   const [availability, setAvailability] = useState(null); // { available, error }
   const checkSequence = useRef(0);
 
-  // Debounced username availability probe: one server call per typing
-  // pause (450ms) instead of one per keystroke. `checkSequence` bumps on
-  // every keystroke (here, in the effect), so any response that no longer
-  // matches the current candidate — out-of-order or stale — is discarded.
+  // Debounced username availability probe
   const checkAvailability = useDebouncedCallback(async (candidate, sequence) => {
     try {
       const result = await api.usernameAvailable(candidate);
@@ -139,25 +143,94 @@ export default function AuthScreen() {
     return () => checkAvailability.cancel();
   }, [username, mode, checkAvailability]);
 
-  // Every rejection lands the same way: the card shakes once and the phone
-  // taps back. `errorTick` advances on each failure so two identical
-  // messages in a row still register as two separate refusals.
   const [errorTick, setErrorTick] = useState(0);
   const fail = (message) => {
     setError(message);
+    setSuccessMessage('');
     setErrorTick((n) => n + 1);
     haptic('error');
+  };
+
+  const handleForgotPassword = async () => {
+    const phoneCandidate = phone.trim();
+    if (!phoneCandidate) return fail('Phone number is required to receive OTP.');
+    setBusy(true);
+    try {
+      await api.forgotPassword(phoneCandidate);
+      setSuccessMessage('OTP sent successfully!');
+      setMode('otp');
+      setOtp('');
+      haptic('success');
+    } catch (e) {
+      fail(e.message || 'Failed to request OTP');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otp.length < 6) return fail('Please enter the complete 6-digit OTP.');
+    setBusy(true);
+    try {
+      const res = await api.verifyOtp(phone.trim(), otp);
+      setResetToken(res.resetToken);
+      setSuccessMessage('OTP Verified. Please set a new password.');
+      setMode('reset');
+      setPassword('');
+      setConfirmPassword('');
+      haptic('success');
+    } catch (e) {
+      fail(e.message || 'OTP verification failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!password) return fail('Please enter a new password.');
+    if (password.length < 8) return fail(PASSWORD_HINT);
+    if (password !== confirmPassword) return fail('Passwords do not match.');
+    setBusy(true);
+    try {
+      await api.resetPassword(resetToken, password);
+      setSuccessMessage('Password reset successful! You can now sign in.');
+      setMode('login');
+      setUsername('');
+      setPassword('');
+      setPhone('');
+      haptic('success');
+    } catch (e) {
+      fail(e.message || 'Failed to reset password.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submit = async () => {
     if (submittingRef.current) return;
     setError('');
+    setSuccessMessage('');
+
+    if (mode === 'forgot') {
+      await handleForgotPassword();
+      return;
+    }
+    if (mode === 'otp') {
+      await handleVerifyOtp();
+      return;
+    }
+    if (mode === 'reset') {
+      await handleResetPassword();
+      return;
+    }
+
     const candidate = username.trim();
     if (!candidate) return fail('Username is required.');
     if (candidate.length > MAX_USERNAME_LENGTH) return fail(`Username must be ${MAX_USERNAME_LENGTH} characters or fewer.`);
     if (!password) return fail(mode === 'register' ? PASSWORD_HINT : 'Password is required.');
     if (mode === 'register' && !name.trim()) return fail('Please enter your name.');
     if (mode === 'register' && password.length < 8) return fail(PASSWORD_HINT);
+    
     submittingRef.current = true;
     setBusy(true);
     try {
@@ -177,13 +250,6 @@ export default function AuthScreen() {
       <HalftoneBackground />
       <SpeedLines />
 
-      {/*
-        Only iOS gets KeyboardAvoidingView padding. Android uses the activity's
-        adjustPan mode, and mobile web relies on its own input scrolling. Do
-        not combine KAV padding with ScrollView's automatic keyboard insets:
-        two independent offsets are a common cause of a focused TextInput
-        oscillating while the keyboard animates.
-      */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         enabled={Platform.OS === 'ios'}
@@ -200,9 +266,6 @@ export default function AuthScreen() {
           overScrollMode={anchorTop ? 'never' : 'auto'}
         >
           <View style={[anchorTop ? s.layoutAnchored : s.layout, { flexDirection: isSplitCapable ? 'row' : 'column' }]}>
-            {/* -------- Branding splash — hidden on phones to leave room for the
-                form (matches how the mockup's own layout collapses on small
-                screens); tablets/desktop keep the full split. -------- */}
             {isSplitCapable && (
               <View style={[s.brandSection, anchorTop && s.brandSectionAnchored]}>
                 <GlitchWordmark small={isSmallPhone} />
@@ -218,7 +281,6 @@ export default function AuthScreen() {
               </View>
             )}
 
-            {/* Only the authentication object changes; the existing +one manga background and branding stay untouched. */}
             <View style={anchorTop ? s.cardWrapAnchored : s.cardWrap}>
               <View style={[s.card, isSmallPhone && s.cardCompact]}>
                 <View pointerEvents="none" style={s.cardTexture}>
@@ -233,35 +295,156 @@ export default function AuthScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={s.cardEyebrow}>+ONE · SECURE ACCESS</Text>
-                      <Text style={s.cardTitle}>{mode === 'login' ? 'Sign in' : 'Create account'}</Text>
+                      <Text style={s.cardTitle}>
+                        {mode === 'login' ? 'Sign in' :
+                         mode === 'register' ? 'Create account' :
+                         mode === 'forgot' ? 'Forgot Password' :
+                         mode === 'otp' ? 'Verify OTP' :
+                         'Reset Password'}
+                      </Text>
                     </View>
                   </View>
 
-                  <View style={s.modeRow}>
-                    {['login', 'register'].map((m) => {
-                      const active = mode === m;
-                      return (
-                        <SpringPressable
-                          key={m}
-                          onPress={() => { setMode(m); setError(''); setShowPassword(false); }}
-                          disabled={busy}
-                          scaleTo={motion.scale.chip}
-                          haptic="selection"
-                          android_ripple={{ color: 'rgba(255,226,77,0.22)' }}
-                          style={({ pressed }) => [
-                            s.modeTab,
-                            active && s.modeTabActive,
-                            pressed && Platform.OS !== 'android' && { opacity: 0.78 },
-                          ]}
-                        >
-                          <Text style={[s.modeTabText, active && s.modeTabTextActive]}>
-                            {m === 'login' ? 'SIGN IN' : 'SIGN UP'}
-                          </Text>
-                        </SpringPressable>
-                      );
-                    })}
-                  </View>
+                  {(mode === 'login' || mode === 'register') && (
+                    <View style={s.modeRow}>
+                      {['login', 'register'].map((m) => {
+                        const active = mode === m;
+                        return (
+                          <SpringPressable
+                            key={m}
+                            onPress={() => { setMode(m); setError(''); setSuccessMessage(''); setShowPassword(false); }}
+                            disabled={busy}
+                            scaleTo={motion.scale.chip}
+                            haptic="selection"
+                            android_ripple={{ color: 'rgba(255,226,77,0.22)' }}
+                            style={({ pressed }) => [
+                              s.modeTab,
+                              active && s.modeTabActive,
+                              pressed && Platform.OS !== 'android' && { opacity: 0.78 },
+                            ]}
+                          >
+                            <Text style={[s.modeTabText, active && s.modeTabTextActive]}>
+                              {m === 'login' ? 'SIGN IN' : 'SIGN UP'}
+                            </Text>
+                          </SpringPressable>
+                        );
+                      })}
+                    </View>
+                  )}
 
+                  {/* FORGOT PASSWORD: Enter Registered Phone */}
+                  {mode === 'forgot' && (
+                    <Field
+                      icon="call-outline"
+                      label="Registered Phone"
+                      value={phone}
+                      onChangeText={(val) => { setPhone(val); if (error) setError(''); }}
+                      placeholder="+91 00000 00000"
+                      focused={focus === 'phone'}
+                      onFocus={() => setFocus('phone')}
+                      onBlur={() => setFocus(null)}
+                      keyboardType="phone-pad"
+                      autoComplete="tel"
+                      textContentType="telephoneNumber"
+                      editable={!busy}
+                    />
+                  )}
+
+                  {/* OTP INPUT SCREEN */}
+                  {mode === 'otp' && (
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={s.otpInstructions}>
+                        Enter the 6-digit verification code sent to your registered phone number.
+                      </Text>
+                      
+                      <Pressable onPress={() => otpInputRef.current?.focus()} style={s.otpBoxesRow}>
+                        {Array.from({ length: 6 }).map((_, i) => {
+                          const char = otp[i] || '';
+                          const isFocused = otp.length === i;
+                          return (
+                            <View key={i} style={[s.otpBox, isFocused && s.otpBoxFocused]}>
+                              <Text style={s.otpText}>{char || '_'}</Text>
+                            </View>
+                          );
+                        })}
+                      </Pressable>
+                      <TextInput
+                        ref={otpInputRef}
+                        value={otp}
+                        onChangeText={(val) => {
+                          const cleaned = val.replace(/[^0-9]/g, '');
+                          if (cleaned.length <= 6) {
+                            setOtp(cleaned);
+                            if (error) setError('');
+                          }
+                        }}
+                        keyboardType="number-pad"
+                        style={{ position: 'absolute', width: 0, height: 0, opacity: 0 }}
+                        maxLength={6}
+                        editable={!busy}
+                      />
+
+                      <View style={s.otpResendRow}>
+                        <Text style={s.resendText}>Didn't receive it?</Text>
+                        <Pressable onPress={handleForgotPassword} disabled={busy} hitSlop={10}>
+                          <Text style={s.resendLink}>Resend OTP</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* RESET NEW PASSWORD SCREEN */}
+                  {mode === 'reset' && (
+                    <>
+                      <Field
+                        icon="key-outline"
+                        label="New Password"
+                        value={password}
+                        onChangeText={(value) => { setPassword(value); if (error) setError(''); }}
+                        placeholder="At least 8 characters"
+                        focused={focus === 'key'}
+                        onFocus={() => setFocus('key')}
+                        onBlur={() => setFocus(null)}
+                        secureTextEntry={!showPassword}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoComplete="new-password"
+                        textContentType="newPassword"
+                        editable={!busy}
+                      />
+                      <Field
+                        icon="key-outline"
+                        label="Confirm New Password"
+                        value={confirmPassword}
+                        onChangeText={(value) => { setConfirmPassword(value); if (error) setError(''); }}
+                        placeholder="Repeat password"
+                        focused={focus === 'key-confirm'}
+                        onFocus={() => setFocus('key-confirm')}
+                        onBlur={() => setFocus(null)}
+                        secureTextEntry={!showPassword}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoComplete="new-password"
+                        textContentType="newPassword"
+                        returnKeyType="done"
+                        onSubmitEditing={submit}
+                        editable={!busy}
+                        suffix={
+                          <Pressable
+                            onPress={() => setShowPassword((visible) => !visible)}
+                            accessibilityRole="button"
+                            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                            hitSlop={10}
+                            style={s.passwordToggle}
+                          >
+                            <Icon name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={21} color={CARD.subtext} />
+                          </Pressable>
+                        }
+                      />
+                    </>
+                  )}
+
+                  {/* Standard Sign Up Fields */}
                   {mode === 'register' && (
                     <Field
                       icon="person-outline"
@@ -280,35 +463,37 @@ export default function AuthScreen() {
                     />
                   )}
 
-                  <Field
-                    icon="id-card-outline"
-                    label="Username"
-                    value={username}
-                    onChangeText={(value) => { setUsername(value); if (error) setError(''); }}
-                    placeholder="Your username"
-                    focused={focus === 'uid'}
-                    onFocus={() => setFocus('uid')}
-                    onBlur={() => setFocus(null)}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="username"
-                    textContentType="username"
-                    maxLength={MAX_USERNAME_LENGTH}
-                    editable={!busy}
-                    suffix={
-                      mode === 'register' ? (
-                        checking ? (
-                          <ActivityIndicator size="small" color={CARD.accent} />
-                        ) : availability ? (
-                          <Icon
-                            name={availability.available ? 'checkmark-circle' : 'alert-circle'}
-                            size={19}
-                            color={availability.available ? '#8ddd9b' : CARD.error}
-                          />
+                  {(mode === 'login' || mode === 'register') && (
+                    <Field
+                      icon="id-card-outline"
+                      label="Username"
+                      value={username}
+                      onChangeText={(value) => { setUsername(value); if (error) setError(''); }}
+                      placeholder="Your username"
+                      focused={focus === 'uid'}
+                      onFocus={() => setFocus('uid')}
+                      onBlur={() => setFocus(null)}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="username"
+                      textContentType="username"
+                      maxLength={MAX_USERNAME_LENGTH}
+                      editable={!busy}
+                      suffix={
+                        mode === 'register' ? (
+                          checking ? (
+                            <ActivityIndicator size="small" color={CARD.accent} />
+                          ) : availability ? (
+                            <Icon
+                              name={availability.available ? 'checkmark-circle' : 'alert-circle'}
+                              size={19}
+                              color={availability.available ? '#8ddd9b' : CARD.error}
+                            />
+                          ) : null
                         ) : null
-                      ) : null
-                    }
-                  />
+                      }
+                    />
+                  )}
                   {mode === 'register' && availability && !availability.available && (
                     <Text style={s.fieldHint}>{availability.error}</Text>
                   )}
@@ -333,38 +518,58 @@ export default function AuthScreen() {
                     />
                   )}
 
-                  <Field
-                    icon="key-outline"
-                    label="Password"
-                    value={password}
-                    onChangeText={(value) => { setPassword(value); if (error) setError(''); }}
-                    placeholder="At least 8 characters"
-                    focused={focus === 'key'}
-                    onFocus={() => setFocus('key')}
-                    onBlur={() => setFocus(null)}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                    textContentType={mode === 'login' ? 'password' : 'newPassword'}
-                    returnKeyType="done"
-                    onSubmitEditing={submit}
-                    editable={!busy}
-                    suffix={
-                      <Pressable
-                        onPress={() => setShowPassword((visible) => !visible)}
-                        accessibilityRole="button"
-                        accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                        hitSlop={10}
-                        style={s.passwordToggle}
-                      >
-                        <Icon name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={21} color={CARD.subtext} />
-                      </Pressable>
-                    }
-                  />
+                  {mode === 'login' && (
+                    <Field
+                      icon="key-outline"
+                      label="Password"
+                      value={password}
+                      onChangeText={(value) => { setPassword(value); if (error) setError(''); }}
+                      placeholder="Enter password"
+                      focused={focus === 'key'}
+                      onFocus={() => setFocus('key')}
+                      onBlur={() => setFocus(null)}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="current-password"
+                      textContentType="password"
+                      returnKeyType="done"
+                      onSubmitEditing={submit}
+                      editable={!busy}
+                      suffix={
+                        <Pressable
+                          onPress={() => setShowPassword((visible) => !visible)}
+                          accessibilityRole="button"
+                          accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                          hitSlop={10}
+                          style={s.passwordToggle}
+                        >
+                          <Icon name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={21} color={CARD.subtext} />
+                        </Pressable>
+                      }
+                    />
+                  )}
 
                   {mode === 'register' && <Text style={s.passwordHint}>{PASSWORD_HINT}</Text>}
 
+                  {/* Forgot Password trigger on Login tab */}
+                  {mode === 'login' && (
+                    <View style={s.forgotLinkRow}>
+                      <Pressable onPress={() => { setMode('forgot'); setError(''); setSuccessMessage(''); }} hitSlop={10}>
+                        <Text style={s.forgotLink}>Forgot password?</Text>
+                      </Pressable>
+                    </View>
+                  )}
+
+                  {/* Success Notifications */}
+                  {!!successMessage && (
+                    <View style={s.successRow}>
+                      <Icon name="checkmark-circle" size={17} color="#8ddd9b" />
+                      <Text style={s.successText}>{successMessage}</Text>
+                    </View>
+                  )}
+
+                  {/* Errors */}
                   {!!error && (
                     <Shake trigger={errorTick}>
                       <View style={s.errorRow}>
@@ -374,6 +579,7 @@ export default function AuthScreen() {
                     </Shake>
                   )}
 
+                  {/* Action trigger button */}
                   <SpringPressable
                     onPress={submit}
                     disabled={busy}
@@ -389,15 +595,33 @@ export default function AuthScreen() {
                     {busy ? (
                       <>
                         <ActivityIndicator color={CARD.bgDeep} />
-                        <Text style={s.submitText}>{mode === 'login' ? 'SIGNING IN…' : 'CREATING…'}</Text>
+                        <Text style={s.submitText}>PROCESSING…</Text>
                       </>
                     ) : (
                       <>
-                        <Text style={s.submitText}>{mode === 'login' ? 'SIGN IN' : 'CREATE ACCOUNT'}</Text>
+                        <Text style={s.submitText}>
+                          {mode === 'login' ? 'SIGN IN' :
+                           mode === 'register' ? 'CREATE ACCOUNT' :
+                           mode === 'forgot' ? 'REQUEST OTP' :
+                           mode === 'otp' ? 'VERIFY OTP' :
+                           'RESET PASSWORD'}
+                        </Text>
                         <Icon name="arrow-forward" size={20} color={CARD.bgDeep} />
                       </>
                     )}
                   </SpringPressable>
+
+                  {/* Back Navigation options for non-login states */}
+                  {mode !== 'login' && mode !== 'register' && (
+                    <Pressable
+                      onPress={() => { setMode('login'); setError(''); setSuccessMessage(''); }}
+                      disabled={busy}
+                      style={{ alignSelf: 'center', marginTop: 18 }}
+                      hitSlop={10}
+                    >
+                      <Text style={s.backLink}>Back to Sign In</Text>
+                    </Pressable>
+                  )}
                 </View>
               </View>
             </View>
@@ -437,7 +661,6 @@ function Field({ icon, label, suffix, focused, ...inputProps }) {
   );
 }
 
-/** Halftone dot-grid background, tiled via an SVG pattern (works everywhere, no images). */
 const HalftoneBackground = memo(function HalftoneBackground() {
   return (
     <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
@@ -451,7 +674,6 @@ const HalftoneBackground = memo(function HalftoneBackground() {
   );
 });
 
-/** Diagonal cyan speed-line overlay, looping via a native Animated translate. */
 const SpeedLines = memo(function SpeedLines() {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -476,7 +698,6 @@ const SpeedLines = memo(function SpeedLines() {
   );
 });
 
-/** Red/cyan double-exposed "glitch" wordmark, built from stacked offset text layers. */
 const GlitchWordmark = memo(function GlitchWordmark({ small = false, compact = false }) {
   const size = compact ? (small ? 44 : 56) : (small ? 64 : 88);
   const textStyle = [s.glitchText, { fontSize: size, lineHeight: size + 4 }];
@@ -498,17 +719,12 @@ const GlitchWordmark = memo(function GlitchWordmark({ small = false, compact = f
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: VOID.background },
   scroll: { flexGrow: 1, minHeight: '100%' },
-  // Natural-height scroll content: never a function of the (keyboard-shrunk)
-  // viewport, so the form cannot re-flow while the IME is animating.
   scrollAnchored: { flexGrow: 0, paddingBottom: 40 },
 
   layout: {
     flex: 1,
     minHeight: 640,
   },
-  // No forced minimum and, importantly, no flex growth on phone layouts. A
-  // flex-growing child would be remeasured every time Android reports another
-  // IME inset and could re-centre the card underneath the focused TextInput.
   layoutAnchored: { flexGrow: 0 },
 
   brandSection: {
@@ -594,8 +810,6 @@ const s = StyleSheet.create({
     paddingVertical: 28,
     position: 'relative',
   },
-  // Top-anchored twin: the card's Y position is padding-driven, independent
-  // of viewport height, so focused fields never move when the keyboard opens.
   cardWrapAnchored: {
     flex: 0,
     alignItems: 'center',
@@ -698,6 +912,14 @@ const s = StyleSheet.create({
   },
   errorText: { flex: 1, fontFamily: 'Hanken_400Regular', fontSize: 13, lineHeight: 18, color: CARD.error },
 
+  successRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 9,
+    marginTop: 11, paddingHorizontal: 12, paddingVertical: 10,
+    borderWidth: 1, borderColor: 'rgba(141,221,155,0.5)', borderRadius: 7,
+    backgroundColor: 'rgba(10,138,47,0.2)',
+  },
+  successText: { flex: 1, fontFamily: 'Hanken_400Regular', fontSize: 13, lineHeight: 18, color: '#8ddd9b' },
+
   submitBtn: {
     minHeight: 56, marginTop: 23,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 11,
@@ -716,4 +938,76 @@ const s = StyleSheet.create({
 
   speedLinesTrack: { flexDirection: 'row', width: '220%', height: '100%' },
   speedLine: { width: 2, height: '100%', marginRight: 98, backgroundColor: 'rgba(0,240,255,0.08)' },
+
+  // OTP Styles
+  otpInstructions: {
+    fontFamily: 'Hanken_400Regular',
+    fontSize: 14,
+    lineHeight: 20,
+    color: CARD.subtext,
+    textAlign: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 10,
+  },
+  otpBoxesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginVertical: 20,
+    paddingHorizontal: 5,
+  },
+  otpBox: {
+    width: 44,
+    height: 54,
+    borderWidth: 1.5,
+    borderColor: CARD.line,
+    borderRadius: 8,
+    backgroundColor: CARD.bgDeep,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  otpBoxFocused: {
+    borderColor: CARD.accent,
+    backgroundColor: '#191817',
+  },
+  otpText: {
+    fontFamily: 'SpaceMono_700Bold',
+    fontSize: 22,
+    color: CARD.text,
+  },
+  otpResendRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  resendText: {
+    fontFamily: 'Hanken_400Regular',
+    fontSize: 13.5,
+    color: CARD.muted,
+  },
+  resendLink: {
+    fontFamily: 'SpaceMono_700Bold',
+    fontSize: 13.5,
+    color: CARD.accent,
+  },
+  forgotLinkRow: {
+    alignItems: 'flex-end',
+    marginTop: -8,
+    marginBottom: 12,
+  },
+  forgotLink: {
+    fontFamily: 'Hanken_400Regular',
+    fontSize: 13.5,
+    color: CARD.accent,
+    textDecorationLine: 'underline',
+  },
+  backLink: {
+    fontFamily: 'SpaceMono_700Bold',
+    fontSize: 13.5,
+    color: CARD.muted,
+    textDecorationLine: 'underline',
+  },
 });

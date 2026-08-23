@@ -652,13 +652,22 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
             />
           )}
           {chat.type === 'direct' && (
-            <InkIconButton
-              name="call"
-              size={36}
-              iconSize={16}
-              disabled={!!call}
-              onPress={() => startCall(chatId, chat.otherUserId, 'audio')}
-            />
+            <>
+              <InkIconButton
+                name="call"
+                size={36}
+                iconSize={16}
+                disabled={!!call}
+                onPress={() => startCall(chatId, chat.otherUserId, 'audio')}
+              />
+              <InkIconButton
+                name="videocam"
+                size={36}
+                iconSize={16}
+                disabled={!!call}
+                onPress={() => startCall(chatId, chat.otherUserId, 'video')}
+              />
+            </>
           )}
           <InkIconButton
             name="ellipsis-horizontal"

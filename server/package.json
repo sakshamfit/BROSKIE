@@ -22,6 +22,7 @@
     "test:phase3": "node test-phase3.js",
     "test:moderation": "node test-moderation.js",
     "test:ot": "node test-ot.js",
+    "test:otp": "node test-forgot-password-otp.js",
     "test:gc": "node test-gc-isolation.js",
     "test:features": "node test-features.js"
   },
