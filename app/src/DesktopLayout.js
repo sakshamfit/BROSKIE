@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Modal, BackHandler, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './icons/Icon';
@@ -7,6 +7,7 @@ import { useTheme } from './store/ThemeContext';
 import { useAuth } from './store/AuthContext';
 import { useChatListState } from './store/ChatContext';
 import useResponsive from './hooks/useResponsive';
+import { MotionActive } from './motion';
 import { FrostedBackdrop } from './components/common';
 import { type, inkBox, stroke, raised } from './theme';
 import { onOpenProfileRequest, onOpenPostRequest } from './push/routing';
@@ -60,7 +61,31 @@ export default function SplitLayout() {
 
   // On native tablets the sidebar sits inside the device's safe area
   // (status bar / notch / home indicator); web ignores this (insets are 0).
-  const s = makeStyles(theme, insets, isWeb);
+  // Memoized: this StyleSheet used to be rebuilt on every render of the
+  // shell (every keystroke/unread tick that reaches this component).
+  const s = useMemo(() => makeStyles(theme, insets, isWeb), [theme, insets.top, insets.bottom, isWeb]);
+
+  // Main sections stay MOUNTED once visited and are merely hidden while
+  // another tab is showing. Unmounting them on every switch (the previous
+  // behaviour) meant each switch re-created the whole screen and re-ran its
+  // startup fetches against the server — on a remote backend that turned
+  // every tab change into a skeleton screen + a network round-trip. Hidden
+  // panes cost no frames: MotionActive switches their looping animations
+  // off, and display:none removes them from layout/paint entirely.
+  const visitedTabs = useRef(new Set());
+  visitedTabs.current.add(tab);
+  const keepMountedPane = (key, children) => {
+    const isActive = tab === key;
+    if (!isActive && !visitedTabs.current.has(key)) return null;
+    return (
+      <View
+        style={[s.keepPane, !isActive && s.keepPaneHidden]}
+        pointerEvents={isActive ? 'auto' : 'none'}
+      >
+        <MotionActive active={isActive}>{children}</MotionActive>
+      </View>
+    );
+  };
 
   // Navigation stays icon-only at every desktop/tablet width: the destination
   // names remain available to screen readers via accessibility labels.
@@ -255,7 +280,7 @@ export default function SplitLayout() {
       />
 
       <View style={s.main}>
-        {tab === 'chats' && (
+        {keepMountedPane('chats', (
           <>
             <View style={[s.listPane, { borderRightColor: theme.graphiteLine }]}>
               <ChatListScreen navigation={listNav} embedded />
@@ -272,9 +297,9 @@ export default function SplitLayout() {
               )}
             </View>
           </>
-        )}
+        ))}
 
-        {tab === 'network' && (
+        {keepMountedPane('network', (
           <View style={[s.fullPane, s.centeredPane]}>
             <NetworkScreen
               navigation={{
@@ -284,13 +309,13 @@ export default function SplitLayout() {
               onOpenChat={(chatId) => { setTab('chats'); setSelectedChatId(chatId); }}
             />
           </View>
-        )}
+        ))}
 
         {/* GCs — Instagram-style group chats, kept entirely inside the GC
             pane: list → GC chat (for joined GCs) → GC detail (via header).
             Opening or messaging a GC never switches to the Chats pane and
             never touches direct chats. */}
-        {tab === 'gc' && (
+        {keepMountedPane('gc', (
           <View style={[s.fullPane, s.centeredPane]}>
             {gcSub === 'chat' && gcSelectedId ? (
               <GCChatScreen
@@ -315,16 +340,16 @@ export default function SplitLayout() {
               />
             )}
           </View>
-        )}
+        ))}
 
-        {tab === 'colleagues' && (
+        {keepMountedPane('colleagues', (
           <View style={[s.fullPane, s.centeredPane]}>
             <ColleaguesScreen
               navigation={listNav}
               onOpenChat={(chatId) => { setTab('chats'); setSelectedChatId(chatId); }}
             />
           </View>
-        )}
+        ))}
 
         {tab === 'calls' && (
           <View style={[s.fullPane, s.centeredPane]}>
@@ -465,6 +490,10 @@ const makeStyles = (t, insets, isWeb) => StyleSheet.create({
   detailPane: { flex: 1, height: '100%', minHeight: 0, minWidth: 0 },
   fullPane: { flex: 1, height: '100%', minHeight: 0, minWidth: 0 },
   centeredPane: { alignItems: 'center' },
+  // Keep-mounted section wrapper: fills the main area exactly like the old
+  // conditional render did, and disappears from layout+paint when hidden.
+  keepPane: { flex: 1, flexDirection: 'row', height: '100%', minHeight: 0, minWidth: 0 },
+  keepPaneHidden: { display: 'none' },
 });
 
 const styles = StyleSheet.create({

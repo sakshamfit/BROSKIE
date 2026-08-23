@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Modal, Alert, Animated, Easing, ActivityIndicator,
+  Platform,
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import Icon from '../icons/Icon';
@@ -38,6 +39,14 @@ const CHAT_TILE_TEXT = '#fdf8f8';
 const CHAT_TILE_MUTED = '#bdb9b7';
 const CHAT_TILE_LINE = '#000000';
 const EMPTY_TYPING = Object.freeze({});
+
+// Web/desktop list tuning. Browser viewports are much taller than phones, so
+// the native defaults (10 rows first pass, narrow render window) leave the
+// fold half-empty on first paint and then churn rows in/out while scrolling —
+// mount/unmount is what janks on the web, DOM rows themselves are cheap.
+const LIST_PERF = Platform.OS === 'web'
+  ? { initialNumToRender: 20, maxToRenderPerBatch: 16, windowSize: 31, updateCellsBatchingPeriod: 30 }
+  : {};
 
 export default function ChatListScreen({ navigation }) {
   const {
@@ -223,6 +232,7 @@ export default function ChatListScreen({ navigation }) {
         extraData={`${filter}:${visible.length}:${requestBusy || ''}`}
         keyExtractor={(i) => (filter === INBOX_FILTERS.requests ? i.chatId : i.id)}
         renderItem={filter === INBOX_FILTERS.requests ? renderRequest : renderChat}
+        {...LIST_PERF}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.ink} />}
         contentContainerStyle={[s.listContent, !visible.length && { flexGrow: 1 }]}
         keyboardShouldPersistTaps="handled"

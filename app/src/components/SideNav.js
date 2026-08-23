@@ -22,7 +22,7 @@ import { openProfile } from '../push/routing';
 export default function SideNav({ active, onNavigate, onNewChat, onSettings, onHelp, onLogout, onOpenProfile, railOnly = false }) {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const s = makeStyles(theme);
+  const s = React.useMemo(() => makeStyles(theme), [theme]);
 
   const openOwnProfile = () => {
     if (!user?.id) return;
