@@ -442,9 +442,10 @@ export function ChatProvider({ children }) {
     }
     setGcMessagesLoaded((prev) => ({ ...prev, [message.chatId]: true }));
     setGcMessageErrors((prev) => {
-      if (!prev[message.chatId]) return prev;
+      const chatId = message.chatId;
+      if (!prev[chatId]) return prev;
       const next = { ...prev };
-      delete next[message.chatId];
+      delete next[chatId];
       return next;
     });
   }, []);
