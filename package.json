@@ -28,7 +28,8 @@
     "test:otp": "cd server && npm run test:otp",
     "test:moderation": "cd server && npm run test:moderation",
     "test:features": "cd server && npm run test:features",
-    "test:chat-inbox": "cd server && npm run test:chat-inbox"
+    "test:chat-inbox": "cd server && npm run test:chat-inbox",
+    "test:data-dir": "cd server && npm run test:data-dir"
   },
   "workspaces": [],
   "license": "MIT"

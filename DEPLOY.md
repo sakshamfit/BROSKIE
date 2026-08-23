@@ -44,11 +44,14 @@ and the server serves it automatically when that folder exists.
 
 ### Railway
 1. https://railway.app → **New Project → Deploy from GitHub repo** → `BROSKIE`
-2. Railway reads `railway.json` — build and start commands are preconfigured.
-   Leave **Root Directory empty** (the repo root). The root `package.json` is
-   what makes Nixpacks detect Node and install npm; it then delegates to
-   `server/`. Setting a root directory of `server` will break the build.
+2. Railway uses the repo `Dockerfile` (`railway.json` sets the builder).
+   Leave **Root Directory empty** (the repo root).
 3. **Variables →** add `JWT_SECRET` (generate: `openssl rand -hex 32`)
+   and **`RAILWAY_RUN_UID=0`**. Railway volumes are mounted as root; a
+   non-root process can open `tomodachi.db` but every write fails with
+   `SQLITE_READONLY` (the crash on the branding `UPDATE users SET about…`
+   line in deploy logs). `0` runs the container as root long enough for
+   the entrypoint to chown `/data` to the `node` user.
 4. **Settings → Networking → Generate Domain**
 5. Open the domain. That's the whole app.
 
@@ -226,12 +229,13 @@ PWA that stubbornly serves an old build.
 |---|---|
 | Settings says "You're on the latest version" after you shipped one | The update was published to a different channel than the installed build listens on, or it needs a native rebuild (fingerprint runtime version changed) — see "Shipping app updates" above |
 | "Updates unavailable in this build" | Expo Go or a dev build — OTA updates only run in EAS builds |
-| Build fails: `npm: command not found` | No `package.json` at the repo root, or Root Directory set to `server`. Nixpacks detects the language from the root — keep the root manifest and leave Root Directory empty. |
+| Build fails: `npm: command not found` | Root Directory set to `server`, or the host is not using the repo Dockerfile. Leave Root Directory empty so the image builds from the repository root. |
 | Build fails: `GetEnv.NoBoolean: is not a boolean` | The host injects a `CI` env var Expo can't parse (e.g. an empty value). The build scripts already pin `CI=true` before `expo export` (see `server/package.json` / `vercel.json`), so this only reappears if the build command is overridden in the host UI — keep the repo's own `npm run build`. |
 | "Reconnecting…" in Settings | Backend asleep, or (two-host) wrong `EXPO_PUBLIC_API_URL` |
 | Blank page, 404 on refresh | Web build missing — run `npm run build` so `server/public` exists |
 | "Failed to fetch" on login | Two-host: backend `http://` while site is `https://` (mixed content) |
 | Messages send but never arrive | WebSockets blocked — the host must support them (Vercel functions don't) |
+| Deploy log: `SqliteError: attempt to write a readonly database` on `UPDATE users SET about…` | Railway volume is mounted as root and the process is not root. Set **`RAILWAY_RUN_UID=0`** on the service and redeploy. The Docker entrypoint also chowns `/data` when it starts as root. |
 | Chats/communities/posts vanish after redeploy | No persistent volume attached yet — see "Never lose data on deploy" above |
 | Images 404 after redeploy | `server/uploads` is ephemeral without a volume — attach one (above) or set up Supabase Storage (see `SUPABASE.md`) |
 

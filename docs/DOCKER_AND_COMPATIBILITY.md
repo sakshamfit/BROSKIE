@@ -43,8 +43,10 @@ Expo Android / iOS / web client
 ```
 
 - `Dockerfile` is a multi-stage Node 24 build: it creates the Expo web export,
-  installs server production dependencies only, runs as the built-in `node`
-  user, and has no `.env` or credentials copied into it.
+  installs server production dependencies only, starts as root so
+  `docker-entrypoint.sh` can chown the `/data` volume (Railway mounts
+  volumes as root), then drops to the built-in `node` user. No `.env` or
+  credentials are copied into it.
 - `compose.yaml` starts only the required backend and its `plusone_data` named
   volume. It uses a read-only root filesystem, `/tmp` tmpfs and
   `no-new-privileges`.

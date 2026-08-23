@@ -5,7 +5,7 @@
 1. Go to [https://railway.app](https://railway.app) and log in (GitHub login works)
 2. Click **New Project** → **Deploy from GitHub repo**
 3. Select `sakshamfit/BROSKIE`
-4. Railway auto-detects Node from root `package.json` and reads `railway.json`
+4. Railway builds the repo `Dockerfile` (`railway.json` sets `builder: DOCKERFILE`). Leave the root directory empty.
 
 ## Step 2 — Add Environment Variables
 
@@ -14,6 +14,7 @@ In your Railway project dashboard → **Variables**, add these:
 | Variable | Value |
 |---|---|
 | `JWT_SECRET` | Generate one: click "Generate" or run `openssl rand -hex 32` |
+| `RAILWAY_RUN_UID` | `0` — **required** once a Volume is attached. Railway mounts volumes as root; without this the process cannot write `tomodachi.db` and boot crashes with `SQLITE_READONLY`. |
 | `SUPABASE_URL` | `https://ldrdawvivzggzoxyiugf.supabase.co` |
 | `SUPABASE_SERVICE_KEY` | Your secret key (from Supabase dashboard → Settings → API → `service_role` key) |
 | `SUPABASE_BUCKET` | `tomodachi-uploads` |
