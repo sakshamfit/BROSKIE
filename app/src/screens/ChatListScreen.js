@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Modal, Alert, Animated, Easing,
+  View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Modal, Alert, Animated, Easing, ActivityIndicator,
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import Icon from '../icons/Icon';
@@ -22,6 +22,10 @@ import { api } from '../api';
 import { confirm } from '../hooks/confirm';
 import { useDebouncedCallback } from '../rateLimit';
 import { idlePreload } from '../lazy';
+import {
+  INBOX_FILTERS, INBOX_LABELS, INBOX_EMPTY, isInboxFilter,
+  filterInboxChats, filterInboxRequests, filterSearchMessages, inboxCounts,
+} from '../chatInbox';
 
 /* each divider leans a slightly different way, like a hand-ruled line */
 const TILTS = [-0.5, 0.8, -0.3, 0.6, -0.7, 0.4];
@@ -36,7 +40,11 @@ const CHAT_TILE_MUTED = '#bdb9b7';
 const CHAT_TILE_LINE = '#000000';
 
 export default function ChatListScreen({ navigation }) {
-  const { chats, chatsLoaded, chatsError, refreshChats, typing, markRead } = useChat();
+  const {
+    chats, chatsLoaded, chatsError, refreshChats, typing, markRead, upsertChat,
+    inboxFilter, setInboxFilter,
+    chatRequests, chatRequestsLoaded, chatRequestsError, refreshChatRequests,
+  } = useChat();
 
   useEffect(() => {
     idlePreload(() => import('./ConversationScreen'));
@@ -46,10 +54,13 @@ export default function ChatListScreen({ navigation }) {
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [msgResults, setMsgResults] = useState([]);
-  const [showArchived, setShowArchived] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [sheetChat, setSheetChat] = useState(null); // long-press action sheet
   const [sheetBusy, setSheetBusy] = useState(false);
+  const [requestBusy, setRequestBusy] = useState(null);
+  const [requestError, setRequestError] = useState('');
+  const filter = isInboxFilter(inboxFilter) ? inboxFilter : INBOX_FILTERS.recent;
 
   // Opens the short window in which rows are allowed to cascade in
   // (see ChatRowEntrance). Runs before the first rows render.
@@ -60,8 +71,11 @@ export default function ChatListScreen({ navigation }) {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await refreshChats(); } catch { /* existing rows + inline retry stay visible */ } finally { setRefreshing(false); }
-  }, [refreshChats]);
+    try {
+      if (filter === INBOX_FILTERS.requests) await refreshChatRequests();
+      else await refreshChats({ includeGCs: false });
+    } catch { /* existing rows + inline retry stay visible */ } finally { setRefreshing(false); }
+  }, [filter, refreshChats, refreshChatRequests]);
 
   // Debounce: a fast typist fires one /api/search per pause instead of one
   // per keystroke. `searchMessages` keeps a stable identity, so handing it
@@ -69,12 +83,14 @@ export default function ChatListScreen({ navigation }) {
   // out-of-order responses so a slow result can't resurrect itself after
   // the box was cleared.
   const searchSeq = useRef(0);
-  const searchMessages = useDebouncedCallback(async (q, seq) => {
+  const searchMessages = useDebouncedCallback(async (q, seq, category) => {
+    if (category === INBOX_FILTERS.requests) {
+      if (searchSeq.current === seq) setMsgResults([]);
+      return;
+    }
     try {
       const { messages } = await api.search(q.trim());
-      // GC messages stay in the GC section — they never surface in Chats search.
-      const gcIds = new Set(chats.filter((c) => c.type === 'gc').map((c) => c.id));
-      if (searchSeq.current === seq) setMsgResults(messages.filter((m) => !gcIds.has(m.chatId)));
+      if (searchSeq.current === seq) setMsgResults(filterSearchMessages(messages, chats, category));
     } catch {
       if (searchSeq.current === seq) setMsgResults([]);
     }
@@ -86,24 +102,71 @@ export default function ChatListScreen({ navigation }) {
     // expensive part, so it is debounced to one request per typing pause.
     setQuery(q);
     const seq = ++searchSeq.current;
-    if (q.trim().length < 2) { setMsgResults([]); searchMessages.cancel(); return; }
-    searchMessages(q, seq);
-  }, [searchMessages]);
+    if (q.trim().length < 2 || filter === INBOX_FILTERS.requests) {
+      setMsgResults([]);
+      searchMessages.cancel();
+      return;
+    }
+    searchMessages(q, seq, filter);
+  }, [searchMessages, filter]);
+
+  const selectFilter = useCallback((next) => {
+    if (next === filter) { setMenuOpen(false); return; }
+    setInboxFilter(next);
+    setMenuOpen(false);
+    setMsgResults([]);
+    searchSeq.current += 1;
+    searchMessages.cancel();
+    setRequestError('');
+  }, [filter, setInboxFilter, searchMessages]);
 
   // GCs (Instagram-style group chats) live in their own section — never here.
-  const archivedCount = chats.filter((c) => c.archived && c.type !== 'gc').length;
-  const visible = useMemo(() => {
-    const base = chats.filter((c) => c.type !== 'gc' && (showArchived ? c.archived : !c.archived));
-    if (!query.trim()) return base;
-    const q = query.toLowerCase();
-    return base.filter((c) => c.name?.toLowerCase().includes(q));
-  }, [chats, query, showArchived]);
+  const counts = useMemo(() => inboxCounts(chats, chatRequests), [chats, chatRequests]);
+  const visibleChats = useMemo(
+    () => (filter === INBOX_FILTERS.requests ? [] : filterInboxChats(chats, filter, query)),
+    [chats, filter, query],
+  );
+  const visibleRequests = useMemo(
+    () => (filter === INBOX_FILTERS.requests ? filterInboxRequests(chatRequests, query) : []),
+    [chatRequests, filter, query],
+  );
+  const visible = filter === INBOX_FILTERS.requests ? visibleRequests : visibleChats;
+  const pinnedCount = filter === INBOX_FILTERS.recent ? visibleChats.filter((c) => c.pinned).length : 0;
+  const listReady = filter === INBOX_FILTERS.requests ? chatRequestsLoaded : chatsLoaded;
+  const listError = filter === INBOX_FILTERS.requests ? chatRequestsError : chatsError;
+  const listHasRows = filter === INBOX_FILTERS.requests ? chatRequests.length > 0 : chats.some((c) => c.type !== 'gc');
 
-  const pinnedCount = visible.filter((c) => c.pinned).length;
+  const respondRequest = async (item, action) => {
+    if (action !== 'accept') {
+      const ok = await confirm(
+        action === 'block'
+          ? `Block ${item.requester?.name || 'this person'} and delete the request?`
+          : 'Decline this chat request?',
+        {
+          title: action === 'block' ? 'Block sender' : 'Decline request',
+          confirmLabel: action === 'block' ? 'Block' : 'Decline',
+          destructive: true,
+        },
+      );
+      if (!ok) return;
+    }
+    setRequestBusy(`${item.chatId}:${action}`);
+    setRequestError('');
+    try {
+      const result = await api.respondChatRequest(item.chatId, action);
+      if (action === 'accept' && result.chat) upsertChat(result.chat);
+      await refreshChatRequests().catch(() => {});
+      if (action === 'accept') await refreshChats({ includeGCs: false }).catch(() => {});
+    } catch (error) {
+      setRequestError(error.message || 'Could not update this request.');
+    } finally {
+      setRequestBusy(null);
+    }
+  };
 
-  const toggleArchive = async (chat) => { await api.archive(chat.id, !chat.archived); refreshChats(); };
-  const togglePin = async (chat) => { await api.pin(chat.id, !chat.pinned); refreshChats(); };
-  const toggleMute = async (chat) => { await api.mute(chat.id, !chat.muted); refreshChats(); };
+  const toggleArchive = async (chat) => { await api.archive(chat.id, !chat.archived); refreshChats({ includeGCs: false }); };
+  const togglePin = async (chat) => { await api.pin(chat.id, !chat.pinned); refreshChats({ includeGCs: false }); };
+  const toggleMute = async (chat) => { await api.mute(chat.id, !chat.muted); refreshChats({ includeGCs: false }); };
   const deleteChat = async (chat) => {
     const ok = await confirm(
       `Delete ${isGroupChat(chat) ? `“${chat.name}”` : `your chat with ${chat.name}`} from your inbox? Its current history will be cleared for you, but not for other members.`,
@@ -114,7 +177,7 @@ export default function ChatListScreen({ navigation }) {
     try {
       await api.deleteChat(chat.id);
       setSheetChat(null);
-      await refreshChats();
+      await refreshChats({ includeGCs: false });
     } catch (error) {
       Alert.alert('Could not delete chat', error.message || 'Please try again.');
     } finally {
@@ -135,25 +198,44 @@ export default function ChatListScreen({ navigation }) {
     />
   );
 
+  const renderRequest = ({ item, index }) => (
+    <RequestChatRow
+      item={item}
+      index={index}
+      theme={theme}
+      busy={requestBusy}
+      onAccept={() => respondRequest(item, 'accept')}
+      onDecline={() => respondRequest(item, 'delete')}
+      style={s}
+    />
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <BrandHeader navigation={navigation} />
 
       <FlatList
+        key={`inbox-${filter}`}
         data={visible}
-        keyExtractor={(i) => i.id}
-        renderItem={renderChat}
+        extraData={`${filter}:${visible.length}:${requestBusy || ''}`}
+        keyExtractor={(i) => (filter === INBOX_FILTERS.requests ? i.chatId : i.id)}
+        renderItem={filter === INBOX_FILTERS.requests ? renderRequest : renderChat}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.ink} />}
         contentContainerStyle={[s.listContent, !visible.length && { flexGrow: 1 }]}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <MotionIn distance={8}>
             <View>
-            <View style={[s.recentCard, { backgroundColor: theme.card, borderColor: theme.ink }]}>
-              <Text style={s.recentTitle}>RECENT CHATS</Text>
-              <View style={[s.inkLine, { backgroundColor: theme.ink }]} />
-              <View style={[s.inkLineFine, { backgroundColor: theme.ink }]} />
-            </View>
+            <InboxFilterCard
+              theme={theme}
+              style={s}
+              filter={filter}
+              counts={counts}
+              requestsKnown={chatRequestsLoaded && !chatRequestsError}
+              open={menuOpen}
+              onToggle={() => { haptic('selection'); setMenuOpen((v) => !v); }}
+              onSelect={selectFilter}
+            />
             {/* searchable, but visually kept as a hand-inked panel */}
             <View style={s.searchBox}>
               <TextInput
@@ -161,7 +243,7 @@ export default function ChatListScreen({ navigation }) {
                 onChangeText={runSearch}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setSearchFocused(false)}
-                placeholder="Search chats..."
+                placeholder={filter === INBOX_FILTERS.requests ? 'Search requests...' : filter === INBOX_FILTERS.archived ? 'Search archived...' : 'Search chats...'}
                 placeholderTextColor={theme.muted}
                 style={s.searchInput}
               />
@@ -170,16 +252,26 @@ export default function ChatListScreen({ navigation }) {
             {/* scribble focus indicator */}
             {searchFocused && <Scribble />}
 
-            {!!chatsError && chats.length > 0 && (
+            {!!listError && (filter === INBOX_FILTERS.requests ? chatRequests.length > 0 : chats.length > 0) && (
               <View style={[s.loadError, { borderColor: theme.danger, backgroundColor: theme.dangerContainer }]}>
                 <Icon name="alert-circle-outline" size={17} color={theme.danger} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[type.bodyStrong, { color: theme.danger }]}>Unable to refresh conversations</Text>
-                  <Text style={[type.bodySm, { color: theme.subtext }]}>Showing saved chat history.</Text>
+                  <Text style={[type.bodyStrong, { color: theme.danger }]}>
+                    {filter === INBOX_FILTERS.requests ? 'Unable to refresh requests' : 'Unable to refresh conversations'}
+                  </Text>
+                  <Text style={[type.bodySm, { color: theme.subtext }]}>
+                    {filter === INBOX_FILTERS.requests ? 'Showing saved requests.' : 'Showing saved chat history.'}
+                  </Text>
                 </View>
-                <Pressable onPress={() => refreshChats().catch(() => {})} hitSlop={7}>
+                <Pressable onPress={() => onRefresh()} hitSlop={7}>
                   <Text style={[type.labelXs, { color: theme.danger }]}>RETRY</Text>
                 </Pressable>
+              </View>
+            )}
+            {!!requestError && filter === INBOX_FILTERS.requests && (
+              <View style={[s.loadError, { borderColor: theme.danger, backgroundColor: theme.dangerContainer }]}>
+                <Icon name="alert-circle-outline" size={17} color={theme.danger} />
+                <Text style={[type.bodySm, { color: theme.danger, flex: 1 }]}>{requestError}</Text>
               </View>
             )}
 
@@ -208,42 +300,28 @@ export default function ChatListScreen({ navigation }) {
               </FadeSlide>
             )}
 
-            {!showArchived && pinnedCount > 0 && (
+            {filter === INBOX_FILTERS.recent && pinnedCount > 0 && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 10 }}>
                 <Icon name="pin" size={14} color={theme.ink} />
                 <Text style={[type.labelXs, { color: theme.muted, letterSpacing: 1 }]}>PINNED</Text>
               </View>
             )}
-
-            {!showArchived && archivedCount > 0 && (
-              <SpringPressable style={({ pressed }) => [s.archiveRow, pressed ? marker(theme, 1) : null]} onPress={() => setShowArchived(true)} scaleTo={motion.scale.row} haptic="selection">
-                <Icon name="archive-outline" size={17} color={theme.ink} />
-                <Text style={[type.bodyMd, { flex: 1, color: theme.text }]}>Archived</Text>
-                <Text style={[type.labelSm, { color: theme.muted }]}>{archivedCount}</Text>
-              </SpringPressable>
-            )}
-            {showArchived && (
-              <SpringPressable style={({ pressed }) => [s.archiveRow, pressed ? marker(theme, 1) : null]} onPress={() => setShowArchived(false)} scaleTo={motion.scale.row} haptic="selection">
-                <Icon name="arrow-back" size={17} color={theme.ink} />
-                <Text style={[type.bodyMd, { flex: 1, color: theme.text }]}>Back to chats</Text>
-              </SpringPressable>
-            )}
             </View>
           </MotionIn>
         }
         ListEmptyComponent={
-          !chatsLoaded && !showArchived ? (
+          !listReady ? (
             <ChatListSkeleton />
-          ) : chatsError && !chats.length && !showArchived ? (
+          ) : listError && !listHasRows ? (
             <View style={s.emptyLoadError}>
               <EmptyState
                 icon="alert-circle-outline"
-                title="Unable to load conversations"
+                title={filter === INBOX_FILTERS.requests ? 'Unable to load requests' : 'Unable to load conversations'}
                 subtitle="Your history was not erased. Check your connection and retry."
               />
               <SpringPressable
                 accessibilityRole="button"
-                onPress={() => refreshChats().catch(() => {})}
+                onPress={() => onRefresh()}
                 style={({ pressed }) => [s.retryButton, inkBox(theme, 'thin'), pressed && marker(theme, 1)]}
                 scaleTo={motion.scale.row}
                 haptic="selection"
@@ -254,21 +332,9 @@ export default function ChatListScreen({ navigation }) {
             </View>
           ) : (
             <EmptyState
-              icon={showArchived ? 'archive-outline' : query.trim() ? 'search-outline' : 'chatbubbles-outline'}
-              title={showArchived
-                ? 'Nothing archived'
-                : query.trim()
-                  ? 'No matching chats'
-                  : chats.length
-                    ? 'All conversations archived'
-                    : 'No conversations yet'}
-              subtitle={showArchived
-                ? 'Long-press a chat to archive it.'
-                : query.trim()
-                  ? 'Try another name or clear the search.'
-                  : chats.length
-                    ? 'Open Archived above to see your history.'
-                    : 'Tap find +ones to start a conversation.'}
+              icon={query.trim() ? 'search-outline' : INBOX_EMPTY[filter].icon}
+              title={query.trim() ? (filter === INBOX_FILTERS.requests ? 'No matching requests' : 'No matching chats') : INBOX_EMPTY[filter].title}
+              subtitle={query.trim() ? 'Try another name or clear the search.' : INBOX_EMPTY[filter].subtitle}
             />
           )
         }
@@ -357,6 +423,118 @@ export default function ChatListScreen({ navigation }) {
         </View>
       </BottomSheet>
     </View>
+  );
+}
+
+const INBOX_OPTIONS = [INBOX_FILTERS.recent, INBOX_FILTERS.archived, INBOX_FILTERS.requests];
+
+function InboxFilterCard({ theme, style: s, filter, counts, requestsKnown, open, onToggle, onSelect }) {
+  return (
+    <View style={[s.recentCard, { backgroundColor: theme.card, borderColor: theme.ink }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${INBOX_LABELS[filter]}, change chat list`}
+        accessibilityState={{ expanded: open }}
+        onPress={onToggle}
+        hitSlop={6}
+        style={s.filterTrigger}
+      >
+        <Text style={s.recentTitle} numberOfLines={1}>{INBOX_LABELS[filter]}</Text>
+        <Icon
+          name="chevron-down-outline"
+          size={20}
+          color={theme.ink}
+          style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}
+        />
+      </Pressable>
+      <View style={[s.inkLine, { backgroundColor: theme.ink }]} />
+      <View style={[s.inkLineFine, { backgroundColor: theme.ink }]} />
+      {open && (
+        <View style={s.filterMenu} accessibilityRole="menu">
+          {INBOX_OPTIONS.map((key) => {
+            const selected = key === filter;
+            const count = key === INBOX_FILTERS.archived
+              ? counts.archived
+              : key === INBOX_FILTERS.requests && requestsKnown
+                ? counts.requests
+                : 0;
+            const showCount = key !== INBOX_FILTERS.recent && count > 0;
+            return (
+              <SpringPressable
+                key={key}
+                accessibilityRole="menuitem"
+                accessibilityState={{ selected }}
+                accessibilityLabel={showCount ? `${INBOX_LABELS[key]}, ${count}` : INBOX_LABELS[key]}
+                onPress={() => onSelect(key)}
+                style={({ pressed }) => [s.filterOption, selected && marker(theme, 1), pressed && marker(theme, 1)]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
+              >
+                <Text style={[type.bodyMd, { color: theme.text, flex: 1, fontFamily: selected ? type.body(700) : type.body(400) }]}>
+                  {INBOX_LABELS[key]}
+                </Text>
+                {showCount ? <Text style={[type.labelSm, { color: theme.muted }]}>{count}</Text> : null}
+                {selected ? <Icon name="checkmark" size={16} color={theme.ink} /> : null}
+              </SpringPressable>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function RequestChatRow({ item, index, theme, busy, onAccept, onDecline, style: s }) {
+  const person = item.requester || {};
+  const message = item.chat?.lastMessage;
+  const preview = message?.deleted
+    ? 'This message was deleted.'
+    : message?.body || 'Wants to chat';
+  const acceptBusy = busy === `${item.chatId}:accept`;
+  const declineBusy = busy === `${item.chatId}:delete`;
+  return (
+    <ChatRowEntrance index={index} style={s.requestWrap}>
+      <View style={[s.requestCard, inkBox(theme, index % 2 ? 'thin' : 'ink'), { backgroundColor: theme.card }]}>
+        <View style={s.requestHead}>
+          <Avatar uri={person.avatar} name={person.name} id={person.id} size={48} weight="ink" profileId={person.id} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>
+                {person.name || 'Unknown'}
+              </EmojiText>
+              {hasGoldTick(person) && <GoldTick size={15} />}
+            </View>
+            <EmojiText style={[type.bodySm, { color: theme.subtext, marginTop: 3 }]} numberOfLines={2}>
+              {preview}
+            </EmojiText>
+          </View>
+        </View>
+        <View style={s.requestActions}>
+          <SpringPressable
+            onPress={onAccept}
+            disabled={!!busy}
+            style={({ pressed }) => [s.requestBtn, inkBox(theme, 'ink'), { backgroundColor: theme.ink }, pressed && { opacity: 0.88 }, !!busy && !acceptBusy && { opacity: 0.5 }]}
+            scaleTo={motion.scale.row}
+            haptic="selection"
+          >
+            {acceptBusy ? <ActivityIndicator size="small" color={theme.onPrimary} /> : (
+              <Text style={[type.labelXs, { color: theme.onPrimary }]}>ACCEPT</Text>
+            )}
+          </SpringPressable>
+          <SpringPressable
+            onPress={onDecline}
+            disabled={!!busy}
+            style={({ pressed }) => [s.requestBtn, inkBox(theme, 'thin'), pressed && marker(theme, 1), !!busy && !declineBusy && { opacity: 0.5 }]}
+            scaleTo={motion.scale.row}
+            haptic="warning"
+          >
+            {declineBusy ? <ActivityIndicator size="small" color={theme.ink} /> : (
+              <Text style={[type.labelXs, { color: theme.ink }]}>DECLINE</Text>
+            )}
+          </SpringPressable>
+        </View>
+      </View>
+    </ChatRowEntrance>
   );
 }
 
@@ -637,7 +815,21 @@ const makeStyles = (t) => StyleSheet.create({
     borderTopLeftRadius: 4, borderTopRightRadius: 7, borderBottomRightRadius: 3, borderBottomLeftRadius: 6,
     transform: [{ rotate: '-0.5deg' }],
   },
-  recentTitle: { ...type.headlineMd, color: t.text, letterSpacing: 0.7 },
+  recentTitle: { ...type.headlineMd, color: t.text, letterSpacing: 0.7, flex: 1 },
+  filterTrigger: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
+  filterMenu: { marginTop: 10, gap: 2 },
+  filterOption: {
+    minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 6, paddingVertical: 10,
+  },
+  requestWrap: { marginBottom: 16 },
+  requestCard: { padding: 14 },
+  requestHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  requestActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
+  requestBtn: {
+    minHeight: 40, minWidth: 96, paddingHorizontal: 14, paddingVertical: 8,
+    alignItems: 'center', justifyContent: 'center',
+  },
   inkLine: { height: 2, width: '100%', marginTop: 8 },
   inkLineFine: { height: 1, width: '94%', marginTop: 3, opacity: 0.5 },
   searchBox: {

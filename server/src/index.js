@@ -1948,7 +1948,17 @@ app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => 
 /* chats                                                               */
 /* ------------------------------------------------------------------ */
 
-app.get('/api/chats', requireAuth, (req, res) => res.json({ chats: userChats(req.userId) }));
+app.get('/api/chats', requireAuth, (req, res) => {
+  const chats = userChats(req.userId);
+  const recent = chats.filter((c) => !c.archived);
+  const archived = chats.filter((c) => c.archived);
+  const inbox = String(req.query.inbox || '');
+  const selected = inbox === 'recent' ? recent : inbox === 'archived' ? archived : chats;
+  res.json({
+    chats: selected,
+    counts: { recent: recent.length, archived: archived.length },
+  });
+});
 
 app.post('/api/chats/direct', requireAuth, (req, res) => {
   const { userId } = req.body || {};
@@ -2316,6 +2326,8 @@ app.delete('/api/chats/:id', requireAuth, (req, res) => {
 app.post('/api/chats/:id/archive', requireAuth, (req, res) => {
   const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
   if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  const membership = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chat.id, req.userId);
+  if (!membership) return res.status(403).json({ error: 'Not a member of this chat' });
   const set = new Set((chat.archived_by || '').split(',').filter(Boolean));
   if (req.body.archived) set.add(req.userId); else set.delete(req.userId);
   db.prepare('UPDATE chats SET archived_by = ? WHERE id = ?').run([...set].join(','), chat.id);
