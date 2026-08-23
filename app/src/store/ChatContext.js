@@ -416,7 +416,13 @@ export function ChatProvider({ children }) {
     setGcMessageErrors((prev) => {
       if (!prev[message.chatId]) return prev;
       const next = { ...prev };
-      delete next[mesnt.has(gcId)) return;
+      delete next[message.chatId];
+      return next;
+    });
+  }, []);
+
+  const joinGCRoom = useCallback((gcId) => {
+    if (!gcId || gcRoomsRef.current.has(gcId) || gcPendingRoomsRef.current.has(gcId)) return;
     const socket = socketRef.current;
     if (!socket?.connected) {
       gcPendingRoomsRef.current.add(gcId);
