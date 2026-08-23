@@ -30,13 +30,11 @@ import { setViewedChat } from '../push/notifications';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
 import { throttle } from '../rateLimit';
 import ImageLightbox from '../components/ImageLightbox';
-import { lazyComponent } from '../lazy';
-
-const EmojiPicker = lazyComponent(() => import('../components/EmojiPicker'));
-const ForwardSheet = lazyComponent(() => import('../components/ForwardSheet'));
-const PollComposer = lazyComponent(() => import('../components/PollComposer'));
-const ThemePickerSheet = lazyComponent(() => import('../components/ThemePickerSheet'));
-const CollabDocumentView = lazyComponent(() => import('../components/CollabDocumentView'));
+import EmojiPicker from '../components/EmojiPicker';
+import ForwardSheet from '../components/ForwardSheet';
+import PollComposer from '../components/PollComposer';
+import ThemePickerSheet from '../components/ThemePickerSheet';
+import CollabDocumentView from '../components/CollabDocumentView';
 
 /**
  * GCChatScreen — the GC chat environment.

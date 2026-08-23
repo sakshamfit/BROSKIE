@@ -12,12 +12,10 @@ import SongCard from '../components/SongCard';
 import { rippleFor } from '../components/common';
 import { dashedRule, marker, radius, type, raised } from '../theme';
 import { SpringPressable, motion } from '../motion';
-import { lazyComponent } from '../lazy';
 import { editorConfigFor } from '../imageEditor/config';
-
-const AudiencePicker = lazyComponent(() => import('../components/AudiencePicker'));
-const SongPicker = lazyComponent(() => import('../components/SongPicker'));
-const UniversalImageEditor = lazyComponent(() => import('../components/UniversalImageEditor'));
+import AudiencePicker from '../components/AudiencePicker';
+import SongPicker from '../components/SongPicker';
+import UniversalImageEditor from '../components/UniversalImageEditor';
 
 /**
  * Full-screen "New Post" composer for The Network — a dedicated page

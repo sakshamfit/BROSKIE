@@ -22,10 +22,8 @@ import { type, inkBox, stroke, raised } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
 import { onNetworkFilterRequest, consumePendingNetworkFilter, onOpenCommunity, consumePendingCommunity, onProfileWillOpen } from '../push/routing';
-import { lazyComponent } from '../lazy';
-
-const NewPostScreen = lazyComponent(() => import('./NewPostScreen'));
-const CommunitiesScreen = lazyComponent(() => import('./CommunitiesScreen'));
+import NewPostScreen from './NewPostScreen';
+import CommunitiesScreen from './CommunitiesScreen';
 
 /* Phase 2 feed lenses: the whole world, your college/workplace people, or
  * just the authors you follow. */

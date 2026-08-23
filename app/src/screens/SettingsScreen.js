@@ -14,10 +14,8 @@ import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 import { openProfile } from '../push/routing';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
-import { lazyComponent } from '../lazy';
 import { editorConfigFor } from '../imageEditor/config';
-
-const UniversalImageEditor = lazyComponent(() => import('../components/UniversalImageEditor'));
+import UniversalImageEditor from '../components/UniversalImageEditor';
 
 /**
  * Settings hub — profile hero (editable avatar) + two grouped sections

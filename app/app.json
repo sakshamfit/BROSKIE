@@ -3,6 +3,7 @@
     "name": "+one",
     "slug": "saksham",
     "version": "1.4.0",
+    "platforms": ["ios", "android", "web"],
     "orientation": "default",
     "scheme": "plusone",
     "icon": "./assets/icon.png",

@@ -44,7 +44,7 @@ const LAST_CHECK_KEY = '+one.update-last-check';
 const CACHE_BUST_PARAM = 'u';
 
 /** Foreground checks are throttled so app switching doesn't hammer the CDN. */
-const CHECK_THROTTLE_MS = 60 * 1000;
+const CHECK_THROTTLE_MS = 15 * 60 * 1000;
 
 export const APP_VERSION = appConfig?.expo?.version || '1.0.0';
 export const BUILD_NUMBER = Platform.select({

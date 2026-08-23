@@ -8,9 +8,7 @@ import { PaperCard, Avatar, Rule } from './common';
 import { type, inkBox, alpha, radius } from '../theme';
 import { api } from '../api';
 import { SpringPressable, motion } from '../motion';
-import { lazyComponent } from '../lazy';
-
-const CollabEditor = lazyComponent(() => import('./CollabEditor'));
+import CollabEditor from './CollabEditor';
 
 /**
  * CollabDocumentView - Lists and manages collaborative documents in a chat

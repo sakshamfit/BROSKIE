@@ -1,9 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
-import { lazyComponent } from '../lazy';
 import { editorConfigFor } from '../imageEditor/config';
-
-const UniversalImageEditor = lazyComponent(() => import('../components/UniversalImageEditor'));
+import UniversalImageEditor from '../components/UniversalImageEditor';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput, Platform,
   KeyboardAvoidingView,

@@ -223,19 +223,23 @@ export default function DailyAIGreeting() {
       };
       const loadLocalWeather = async () => {
         try {
-          const permission = await Location.requestForegroundPermissionsAsync();
-          if (permission.status !== 'granted') return { state: 'denied' };
-          const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          const { latitude, longitude } = position.coords;
-          const response = await fetch(
-            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,weather_code&timezone=auto`
-          );
-          if (!response.ok) throw new Error('Weather unavailable');
-          const data = await response.json();
-          const temperature = Number(data.current?.temperature_2m);
-          const code = Number(data.current?.weather_code || 0);
-          if (!Number.isFinite(temperature)) throw new Error('Weather unavailable');
-          return { state: 'ready', temperature, apparent: Number(data.current?.apparent_temperature), code, ...conditionFor(code, temperature) };
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500));
+          const weatherPromise = (async () => {
+            const permission = await Location.requestForegroundPermissionsAsync();
+            if (permission.status !== 'granted') return { state: 'denied' };
+            const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            const { latitude, longitude } = position.coords;
+            const response = await fetch(
+              `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,weather_code&timezone=auto`
+            );
+            if (!response.ok) throw new Error('Weather unavailable');
+            const data = await response.json();
+            const temperature = Number(data.current?.temperature_2m);
+            const code = Number(data.current?.weather_code || 0);
+            if (!Number.isFinite(temperature)) throw new Error('Weather unavailable');
+            return { state: 'ready', temperature, apparent: Number(data.current?.apparent_temperature), code, ...conditionFor(code, temperature) };
+          })();
+          return await Promise.race([weatherPromise, timeoutPromise]);
         } catch {
           return { state: 'unavailable' };
         }

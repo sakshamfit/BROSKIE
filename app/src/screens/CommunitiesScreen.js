@@ -11,10 +11,8 @@ import { CATEGORY_LIST, categoryMeta } from '../components/communityMeta';
 import { onOpenCommunity, consumePendingCommunity, onProfileWillOpen } from '../push/routing';
 import { type, inkBox, marker, radius, raised } from '../theme';
 import { SpringPressable, motion } from '../motion';
-import { lazyComponent } from '../lazy';
-
-const NewCommunityScreen = lazyComponent(() => import('./NewCommunityScreen'));
-const CommunityDetailScreen = lazyComponent(() => import('./CommunityDetailScreen'));
+import NewCommunityScreen from './NewCommunityScreen';
+import CommunityDetailScreen from './CommunityDetailScreen';
 
 const tiltFor = (i) => (i % 2 === 0 ? '-0.7deg' : '0.6deg');
 
