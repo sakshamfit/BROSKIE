@@ -5,7 +5,7 @@ import Icon from './icons/Icon';
 import SideNav from './components/SideNav';
 import { useTheme } from './store/ThemeContext';
 import { useAuth } from './store/AuthContext';
-import { useChat } from './store/ChatContext';
+import { useChatListState } from './store/ChatContext';
 import useResponsive from './hooks/useResponsive';
 import { FrostedBackdrop } from './components/common';
 import { type, inkBox, stroke, raised } from './theme';
@@ -47,7 +47,7 @@ const PostDetailScreen = lazyScreen(() => import('./screens/PostDetailScreen'), 
 export default function SplitLayout() {
   const { theme } = useTheme();
   const { logout } = useAuth();
-  const { chats } = useChat();
+  const { chats } = useChatListState();
   const { insets, isWeb } = useResponsive();
   const [tab, setTab] = useState('network');
   const [selectedChatId, setSelectedChatId] = useState(null);

@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
-import { useChat } from '../store/ChatContext';
+import { useChatActions, useChatCall } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { confirm } from '../hooks/confirm';
 import {
@@ -26,9 +26,10 @@ export default function ActivityScreen({ navigation, embedded = false, onOpenCha
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const {
-    upsertChat, refreshChats, refreshActivity, startCall, call,
+    upsertChat, refreshChats, refreshActivity,
     onChatRequestEvent, onColleagueEvent, onCommunityEvent, onPostEvent,
-  } = useChat();
+  } = useChatActions();
+  const { startCall, call } = useChatCall();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

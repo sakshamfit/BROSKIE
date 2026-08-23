@@ -8,7 +8,7 @@ import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
-import { useChat } from '../store/ChatContext';
+import { useChatGCState, useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import {
   Avatar, EmptyState, TapeChip, Rule, InkButton, InkField, FrostedBackdrop,
@@ -26,10 +26,11 @@ import useResponsive from '../hooks/useResponsive';
  * conversations are real chats, but they NEVER appear in the Chats inbox:
  * they live here only (chat.type === 'gc').
  */
-export default function GCScreen({ navigation, onOpenChat }) {
+function GCScreen({ navigation, onOpenChat, active = true }) {
   const { user } = useAuth();
   const { theme } = useTheme();
-  const { gcChats, refreshGCs, gcTyping: typing, onGCEvent } = useChat();
+  const { gcChats, gcTyping: typing } = useChatGCState();
+  const { refreshGCs, onGCEvent } = useChatActions();
   const { isTablet } = useResponsive();
   const [section, setSection] = useState('mine'); // mine | discover
   const [discover, setDiscover] = useState([]);
@@ -60,7 +61,9 @@ export default function GCScreen({ navigation, onOpenChat }) {
     }
   }, [refreshGCs]);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => {
+    if (active) loadAll();
+  }, [active, loadAll]);
   useEffect(() => {
     // Keep `gcMeta` (description/privacy/request counts) in step with the
     // GC store summaries.
@@ -69,12 +72,12 @@ export default function GCScreen({ navigation, onOpenChat }) {
 
   // Join requests arriving / being answered elsewhere — keep badges fresh.
   useEffect(() => {
-    if (!onGCEvent) return undefined;
+    if (!active || !onGCEvent) return undefined;
     return onGCEvent((ev) => {
       loadAll();
       if (ev === 'gc:requestUpdate') refreshGCs().catch(() => {});
     });
-  }, [onGCEvent, loadAll, refreshGCs]);
+  }, [active, onGCEvent, loadAll, refreshGCs]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -317,6 +320,8 @@ export default function GCScreen({ navigation, onOpenChat }) {
     </View>
   );
 }
+
+export default React.memo(GCScreen);
 
 /** Create-a-GC overlay: name, description, who can join, and the first
  *  members picked from your contacts. */

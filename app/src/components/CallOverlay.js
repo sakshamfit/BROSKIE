@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Platform, Modal, Animated } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { RemoteVideo, LocalVideo } from './CallVideo';
-import { useChat } from '../store/ChatContext';
+import { useChatCall, useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, rippleFor, GoldTick, hasGoldTick } from './common';
 import { radius, type, inkBox, sketchBox, raised, lightTheme } from '../theme';
@@ -16,10 +16,8 @@ import GridPaper from './GridPaper';
  * premium pulsating rings, and solid connection state handling.
  */
 export default function CallOverlay() {
-  const {
-    call, localStream, remoteStream, micOn, camOn, speakerOn, callSupported,
-    acceptCall, declineCall, hangUp, toggleMic, toggleCam, toggleSpeaker, switchCamera,
-  } = useChat();
+  const { call, localStream, remoteStream, micOn, camOn, speakerOn, callSupported } = useChatCall();
+  const { acceptCall, declineCall, hangUp, toggleMic, toggleCam, toggleSpeaker, switchCamera } = useChatActions();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const s = makeStyles(theme);

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { AppState } from 'react-native';
 import { io } from 'socket.io-client';
 import { SOCKET_URL, api } from '../api';
@@ -10,8 +10,24 @@ import TextOperation from '../ot/TextOperation';
 import { OTManager } from '../ot/OTManager';
 import { INBOX_FILTERS, isInboxFilter } from '../chatInbox';
 
+// Keep the historical `useChat()` API for compatibility, but publish focused
+// contexts as well. A socket typing event or a call timer must not re-render
+// the Network feed, and a post update must not re-render 400 chat bubbles.
 const ChatContext = createContext(null);
+const ChatListStateContext = createContext(null);
+const ChatMessageStateContext = createContext(null);
+const ChatGCStateContext = createContext(null);
+const ChatRealtimeContext = createContext(null);
+const ChatCallContext = createContext(null);
+const ChatActionsContext = createContext(null);
+
 export const useChat = () => useContext(ChatContext);
+export const useChatListState = () => useContext(ChatListStateContext);
+export const useChatMessageState = () => useContext(ChatMessageStateContext);
+export const useChatGCState = () => useContext(ChatGCStateContext);
+export const useChatRealtime = () => useContext(ChatRealtimeContext);
+export const useChatCall = () => useContext(ChatCallContext);
+export const useChatActions = () => useContext(ChatActionsContext);
 
 /** Best-effort refresh of the activity badge count (used by socket events). */
 const refreshActivityUnread = async (setActivityUnread) => {
@@ -69,6 +85,12 @@ export function ChatProvider({ children }) {
   const [messagesLoaded, setMessagesLoaded] = useState({}); // chatId -> cache/server checked
   const [messagesLoading, setMessagesLoading] = useState({});
   const [messageErrors, setMessageErrors] = useState({});
+  // Refs let stable callbacks read current collections without making the
+  // actions context change on every incoming message/chat update.
+  const chatsRef = useRef(chats);
+  chatsRef.current = chats;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const [typing, setTyping] = useState({});       // chatId -> { userId: name }
   const [connected, setConnected] = useState(false);
   const [activityUnread, setActivityUnread] = useState(0);
@@ -294,35 +316,41 @@ export function ChatProvider({ children }) {
       if (engine.store.getChats().length) setChatsLoaded(true);
       engine.outbox.drain();
 
-      try {
-        const result = await api.chats();
-        if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
-        if (!disposed) {
-          // /api/chats never returns GC rows (server-side filter), and we
-          // defensively drop any that somehow arrive — GCs belong to the GC
-          // environment only.
-          engine.store.setChats(result.chats.filter((c) => c?.type !== 'gc'), { fromServer: true });
-          setChatsError(null);
+      // These requests are independent. Starting them together removes one
+      // full round-trip from the first signed-in frame while each surface keeps
+      // its own loading/error state.
+      const loadChats = (async () => {
+        try {
+          const result = await api.chats();
+          if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
+          if (!disposed) {
+            // /api/chats never returns GC rows (server-side filter), and we
+            // defensively drop any that somehow arrive — GCs belong to the GC
+            // environment only.
+            engine.store.setChats(result.chats.filter((c) => c?.type !== 'gc'), { fromServer: true });
+            setChatsError(null);
+          }
+        } catch {
+          if (!disposed) setChatsError('Unable to load conversations. Your saved history is still available.');
+        } finally {
+          if (!disposed) setChatsLoaded(true);
         }
-      } catch {
-        if (!disposed) {
-          setChatsError('Unable to load conversations. Your saved history is still available.');
-        }
-      } finally {
-        if (!disposed) setChatsLoaded(true);
-      }
+      })();
 
-      try {
-        const pending = await api.chatRequests();
-        if (!disposed && Array.isArray(pending?.requests)) {
-          setChatRequests(pending.requests);
-          setChatRequestsError(null);
+      const loadRequests = (async () => {
+        try {
+          const pending = await api.chatRequests();
+          if (!disposed && Array.isArray(pending?.requests)) {
+            setChatRequests(pending.requests);
+            setChatRequestsError(null);
+          }
+        } catch {
+          if (!disposed) setChatRequestsError('Unable to load chat requests.');
+        } finally {
+          if (!disposed) setChatRequestsLoaded(true);
         }
-      } catch {
-        if (!disposed) setChatRequestsError('Unable to load chat requests.');
-      } finally {
-        if (!disposed) setChatRequestsLoaded(true);
-      }
+      })();
+      await Promise.all([loadChats, loadRequests]);
     })();
 
     const appSub = AppState.addEventListener('change', (next) => {
@@ -1075,7 +1103,7 @@ export function ChatProvider({ children }) {
     callTypeRef.current = type;
 
     // Pre-populate recipient name and avatar from our loaded chats for immediate response
-    const chat = chats.find((c) => c.id === chatId);
+    const chat = chatsRef.current.find((c) => c.id === chatId);
     const callee = chat
       ? { id: calleeId, name: chat.name, avatar: chat.avatar }
       : { id: calleeId, name: 'Calling...' };
@@ -1098,7 +1126,7 @@ export function ChatProvider({ children }) {
       }
       setCall({ id: res.call.id, chatId, type, direction: 'outgoing', status: 'ringing', with: res.call.with, startedAt: res.call.startedAt });
     });
-  }, [chats, teardownWebRTC]);
+  }, [teardownWebRTC]);
 
   const acceptCall = useCallback(() => {
     if (!call) return;
@@ -1591,7 +1619,7 @@ export function ChatProvider({ children }) {
         }
       } else {
         // Fallback search in state
-        for (const list of Object.values(messages)) {
+        for (const list of Object.values(messagesRef.current)) {
           const found = list.find(m => m.id === messageId);
           if (found) {
             oldBody = found.body || '';
@@ -1619,7 +1647,7 @@ export function ChatProvider({ children }) {
         if (res?.error) reject(new Error(res.error)); else resolve(res.message);
       });
     });
-  }, [messages]);
+  }, []);
 
   const editMessageOT = useCallback((messageId, operation, baseVersion) => {
     return new Promise((resolve, reject) => {
@@ -1664,51 +1692,84 @@ export function ChatProvider({ children }) {
     return res.document;
   }, []);
 
+  const setGcMessagesLocal = useCallback((updater) => {
+    const store = gcStoreRef.current;
+    if (!store) return;
+    const prev = store.getAllMessagesCopy();
+    const next = typeof updater === 'function' ? updater(prev) : updater;
+    store.replaceMessagesMap(next);
+  }, []);
+
+  // These setters are part of the public action surface. Keeping them stable
+  // is important: otherwise every keystroke/message would invalidate the
+  // action context even when its consumers only need a callback.
+  const setMessagesLocal = useCallback((updater) => {
+    const engine = engineRef.current;
+    if (engine) {
+      const prev = engine.store.getAllMessagesCopy();
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      engine.store.replaceMessagesMap(next);
+      return;
+    }
+    setMessages(updater);
+  }, []);
+
+  const listStateValue = useMemo(() => ({
+    chats, chatsLoaded, chatsError, inboxFilter, chatRequests, chatRequestsLoaded, chatRequestsError,
+  }), [chats, chatsLoaded, chatsError, inboxFilter, chatRequests, chatRequestsLoaded, chatRequestsError]);
+  const messageStateValue = useMemo(() => ({
+    messages, messagesLoaded, messagesLoading, messageErrors, documents, otReady,
+  }), [messages, messagesLoaded, messagesLoading, messageErrors, documents, otReady]);
+  const gcStateValue = useMemo(() => ({
+    gcChats, gcMessages, gcMessagesLoaded, gcMessagesLoading, gcMessageErrors,
+    gcTyping, gcCursors, gcConnected: connected,
+  }), [gcChats, gcMessages, gcMessagesLoaded, gcMessagesLoading, gcMessageErrors, gcTyping, gcCursors, connected]);
+  const realtimeValue = useMemo(() => ({ typing, connected, activityUnread }), [typing, connected, activityUnread]);
+  const callStateValue = useMemo(() => ({
+    call, localStream, remoteStream, micOn, camOn, speakerOn, callSupported: RTC_SUPPORTED,
+  }), [call, localStream, remoteStream, micOn, camOn, speakerOn]);
+  const actionsValue = useMemo(() => ({
+    setInboxFilter, refreshChatRequests, refreshChats, refreshActivity, loadMessages, loadOlderMessages,
+    sendMessage, markRead, setTypingState, react, deleteMessage, removeMessageLocal, editMessage,
+    editMessageOT, createPoll, votePoll, upsertChat, onPostEvent, onStatusEvent, onGCEvent,
+    onCommunityEvent, onColleagueEvent, onChatRequestEvent, onChatThemeEvent, onDocEvent,
+    refreshDocuments, createDocument, socketRef,
+    refreshGCs, loadGCMessages, loadOlderGCMessages, sendGCMessage, retryGCMessage, editGCMessage,
+    markGCRead, setGCTypingState, joinGCRoom, leaveGCRoom, setGcMessages: setGcMessagesLocal,
+    setMessages: setMessagesLocal, otManager: otManagerRef.current,
+    startCall, acceptCall, declineCall, hangUp, toggleMic, toggleCam, toggleSpeaker, switchCamera,
+  }), [
+    setInboxFilter, refreshChatRequests, refreshChats, refreshActivity, loadMessages, loadOlderMessages,
+    sendMessage, markRead, setTypingState, react, deleteMessage, removeMessageLocal, editMessage,
+    editMessageOT, createPoll, votePoll, upsertChat, onPostEvent, onStatusEvent, onGCEvent,
+    onCommunityEvent, onColleagueEvent, onChatRequestEvent, onChatThemeEvent, onDocEvent,
+    refreshDocuments, createDocument, refreshGCs, loadGCMessages, loadOlderGCMessages, sendGCMessage,
+    retryGCMessage, editGCMessage, markGCRead, setGCTypingState, joinGCRoom, leaveGCRoom,
+    setGcMessagesLocal, setMessagesLocal, otReady, startCall, acceptCall, declineCall, hangUp,
+    toggleMic, toggleCam, toggleSpeaker, switchCamera,
+  ]);
+  // Legacy consumers still receive the same shape. New consumers below use a
+  // focused context so unrelated high-frequency updates stay isolated.
+  const legacyValue = useMemo(() => ({
+    ...listStateValue, ...messageStateValue, ...realtimeValue, ...gcStateValue,
+    ...callStateValue, ...actionsValue,
+  }), [listStateValue, messageStateValue, realtimeValue, gcStateValue, callStateValue, actionsValue]);
+
   return (
-    <ChatContext.Provider
-      value={{
-        chats, chatsLoaded, chatsError,
-        inboxFilter, setInboxFilter,
-        chatRequests, chatRequestsLoaded, chatRequestsError, refreshChatRequests,
-        messages, messagesLoaded, messagesLoading, messageErrors,
-        typing, connected, activityUnread,
-        documents, otReady,
-        refreshChats, refreshActivity, loadMessages, loadOlderMessages, sendMessage, markRead,
-        setTypingState, react, deleteMessage, removeMessageLocal, editMessage, editMessageOT, createPoll, votePoll,
-        upsertChat, onPostEvent, onStatusEvent, onGCEvent, onCommunityEvent, onColleagueEvent, onChatRequestEvent,
-        onChatThemeEvent, onDocEvent,
-        refreshDocuments, createDocument,
-        socketRef,
-        /* ---- GC environment: separate state/cache/events ---- */
-        gcChats, gcMessages, gcMessagesLoaded, gcMessagesLoading, gcMessageErrors,
-        gcTyping, gcCursors, gcConnected: connected,
-        refreshGCs, loadGCMessages, loadOlderGCMessages, sendGCMessage, retryGCMessage,
-        editGCMessage, markGCRead, setGCTypingState, joinGCRoom, leaveGCRoom,
-        setGcMessages: (updater) => {
-          const store = gcStoreRef.current;
-          if (!store) return;
-          const prev = store.getAllMessagesCopy();
-          const next = typeof updater === 'function' ? updater(prev) : updater;
-          store.replaceMessagesMap(next);
-        },
-        otManager: otManagerRef.current,
-        // exposed for lightweight local patches (e.g. optimistic star/timer state)
-        setMessages: (updater) => {
-          const engine = engineRef.current;
-          if (engine) {
-            const prev = engine.store.getAllMessagesCopy();
-            const next = typeof updater === 'function' ? updater(prev) : updater;
-            engine.store.replaceMessagesMap(next);
-            return;
-          }
-          setMessages(updater);
-        },
-        // Calls
-        call, localStream, remoteStream, micOn, camOn, speakerOn, callSupported: RTC_SUPPORTED,
-        startCall, acceptCall, declineCall, hangUp, toggleMic, toggleCam, toggleSpeaker, switchCamera,
-      }}
-    >
-      {children}
+    <ChatContext.Provider value={legacyValue}>
+      <ChatListStateContext.Provider value={listStateValue}>
+        <ChatMessageStateContext.Provider value={messageStateValue}>
+          <ChatGCStateContext.Provider value={gcStateValue}>
+            <ChatRealtimeContext.Provider value={realtimeValue}>
+              <ChatCallContext.Provider value={callStateValue}>
+                <ChatActionsContext.Provider value={actionsValue}>
+                  {children}
+                </ChatActionsContext.Provider>
+              </ChatCallContext.Provider>
+            </ChatRealtimeContext.Provider>
+          </ChatGCStateContext.Provider>
+        </ChatMessageStateContext.Provider>
+      </ChatListStateContext.Provider>
     </ChatContext.Provider>
   );
 }

@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { useAuth } from '../store/AuthContext';
-import { useChat } from '../store/ChatContext';
+import { useChatRealtime } from '../store/ChatContext';
 import { type, stroke } from '../theme';
 import { SpringPressable, motion } from '../motion';
 import { openProfile } from '../push/routing';
@@ -16,8 +16,8 @@ import { openProfile } from '../push/routing';
 export default function BrandHeader({ navigation, onOpenActivity, bordered = true }) {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const chat = useChat();
-  const unread = chat?.activityUnread || 0;
+  const { activityUnread = 0 } = useChatRealtime();
+  const unread = activityUnread || 0;
   const s = makeStyles(theme);
 
   const openActivity = () => {

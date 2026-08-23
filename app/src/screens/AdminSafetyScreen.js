@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
-import { useChat } from '../store/ChatContext';
+import { useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, PaperCard, TapeChip, Rule, InkButton, InkField, GoldTick, hasGoldTick } from '../components/common';
 import { type, inkBox, marker, dashedRule, radius, raised } from '../theme';
@@ -60,7 +60,7 @@ const fullTime = (ts) => new Date(ts).toLocaleString();
 
 export default function AdminSafetyScreen({ navigation }) {
   const { user } = useAuth();
-  const { onModerationEvent } = useChat();
+  const { onModerationEvent } = useChatActions();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const s = makeStyles(theme);

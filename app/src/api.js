@@ -147,7 +147,7 @@ function candidateBases(path) {
   return secondary && secondary !== primary ? [primary, secondary] : [primary];
 }
 
-async function request(path, {
+async function requestUncached(path, {
   method = 'GET', body, isForm = false, timeoutMs = DEFAULT_TIMEOUT_MS,
   retries = method === 'GET' ? 1 : 0,
 } = {}) {
@@ -276,6 +276,24 @@ async function request(path, {
   }
   if (lastError) throw lastError;
   throw new ApiError('Unable to connect. Check your internet connection and try again.', { code: 'NETWORK_ERROR' });
+}
+
+// Effects from two mounted surfaces can ask for the same GET during the same
+// tick (for example the chat cache and a notification badge). Share only the
+// in-flight promise; completed GETs are never cached, so privacy/settings data
+// cannot become stale and mutations keep their existing behaviour.
+const inFlightGets = new Map();
+function request(path, options = {}) {
+  const method = options.method || 'GET';
+  if (method !== 'GET' || options.isForm) return requestUncached(path, options);
+  const key = `${authToken || ''}|${path}|${options.timeoutMs || DEFAULT_TIMEOUT_MS}|${options.retries ?? 1}`;
+  const existing = inFlightGets.get(key);
+  if (existing) return existing;
+  const promise = requestUncached(path, options).finally(() => {
+    if (inFlightGets.get(key) === promise) inFlightGets.delete(key);
+  });
+  inFlightGets.set(key, promise);
+  return promise;
 }
 
 // Exported for focused network diagnostics/tests; application code uses `api` below.

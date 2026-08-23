@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
-import { useChat } from '../store/ChatContext';
+import { useChatGCState, useChatActions } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import {
@@ -33,9 +33,8 @@ import { confirm } from '../hooks/confirm';
  */
 export default function GCDetailScreen({ route, navigation, embedded = false, onClose = null }) {
   const chatId = route?.params?.chatId || null;
-  const {
-    gcChats, refreshGCs, joinGCRoom, leaveGCRoom,
-  } = useChat();
+  const { gcChats } = useChatGCState();
+  const { refreshGCs, joinGCRoom, leaveGCRoom } = useChatActions();
   const { user } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();

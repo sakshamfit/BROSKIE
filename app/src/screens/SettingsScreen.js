@@ -5,7 +5,7 @@ import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
-import { useChat } from '../store/ChatContext';
+import { useChatRealtime } from '../store/ChatContext';
 import useResponsive from '../hooks/useResponsive';
 import { Avatar, InkButton, InkField, PaperCard, TapeChip, handleFor, MotionIn, FrostedBackdrop, GoldTick, hasGoldTick, HandDrawnToggle } from '../components/common';
 import { SpringPressable, motion } from '../motion';
@@ -27,7 +27,7 @@ const UniversalImageEditor = lazyComponent(() => import('../components/Universal
 export default function SettingsScreen({ navigation, embedded = false }) {
   const { user, logout } = useAuth();
   const { theme, mode, preference, toggle } = useTheme();
-  const { connected } = useChat();
+  const { connected } = useChatRealtime();
   const insets = useSafeAreaInsets();
   const { isTablet } = useResponsive();
   const s = makeStyles(theme);

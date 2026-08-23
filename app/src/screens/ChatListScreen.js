@@ -6,7 +6,7 @@ import Svg, { Polyline } from 'react-native-svg';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import BrandHeader from '../components/BrandHeader';
-import { useChat } from '../store/ChatContext';
+import { useChatListState, useChatRealtime, useChatActions } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import {
@@ -38,13 +38,15 @@ const CHAT_TILE_PRESSED = '#242321';
 const CHAT_TILE_TEXT = '#fdf8f8';
 const CHAT_TILE_MUTED = '#bdb9b7';
 const CHAT_TILE_LINE = '#000000';
+const EMPTY_TYPING = Object.freeze({});
 
 export default function ChatListScreen({ navigation }) {
   const {
-    chats, chatsLoaded, chatsError, refreshChats, typing, markRead, upsertChat,
-    inboxFilter, setInboxFilter,
-    chatRequests, chatRequestsLoaded, chatRequestsError, refreshChatRequests,
-  } = useChat();
+    chats, chatsLoaded, chatsError, inboxFilter,
+    chatRequests, chatRequestsLoaded, chatRequestsError,
+  } = useChatListState();
+  const { typing } = useChatRealtime();
+  const { refreshChats, markRead, upsertChat, setInboxFilter, refreshChatRequests } = useChatActions();
 
   useEffect(() => {
     idlePreload(() => import('./ConversationScreen'));
@@ -67,7 +69,7 @@ export default function ChatListScreen({ navigation }) {
   const firstPaint = useRef(true);
   if (firstPaint.current) { firstPaint.current = false; listOpenedAt.t = Date.now(); }
 
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -185,18 +187,22 @@ export default function ChatListScreen({ navigation }) {
     }
   };
 
-  const renderChat = ({ item, index }) => (
+  const openSheet = useCallback((chat) => {
+    haptic('selection');
+    setSheetChat(chat);
+  }, []);
+  const renderChat = useCallback(({ item, index }) => (
     <ChatRow
       item={item}
       index={index}
-      typing={typing[item.id] || {}}
+      typing={typing[item.id] || EMPTY_TYPING}
       user={user}
       theme={theme}
       navigation={navigation}
-      onOpenSheet={(chat) => { haptic('selection'); setSheetChat(chat); }}
+      onOpenSheet={openSheet}
       style={s}
     />
-  );
+  ), [typing, user, theme, navigation, openSheet, s]);
 
   const renderRequest = ({ item, index }) => (
     <RequestChatRow
@@ -577,7 +583,7 @@ function ChatRowEntrance({ index, style, children }) {
   return <MotionIn delay={staggerDelay(index)} distance={8} style={style}>{children}</MotionIn>;
 }
 
-function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, style: s }) {
+const ChatRow = React.memo(function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, style: s }) {
   const pulse = useRef(new Animated.Value(0)).current;   // avatar scale pulse
   const wash = useRef(new Animated.Value(0)).current;    // highlight wash
   const lastActivityAt = useRef(item.lastMessage?.createdAt || item.updatedAt || 0);
@@ -752,7 +758,7 @@ function ChatRow({ item, index, typing, user, theme, navigation, onOpenSheet, st
       </AnimatedPressable>
     </ChatRowEntrance>
   );
-}
+});
 
 /** Soft skeleton of the chat list shown before the first fetch resolves. */
 function ChatListSkeleton() {

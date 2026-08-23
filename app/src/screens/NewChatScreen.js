@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
-import { useChat } from '../store/ChatContext';
+import { useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, InkField, InkIconButton, InkCheckbox, handleFor, GoldTick, hasGoldTick } from '../components/common';
 import { type, inkBox, marker, dashedRule } from '../theme';
@@ -13,7 +13,7 @@ import { SpringPressable, motion } from '../motion';
 export default function NewChatScreen({ navigation, embedded = false }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { upsertChat, refreshChats, refreshActivity } = useChat();
+  const { upsertChat, refreshChats, refreshActivity } = useChatActions();
   const [users, setUsers] = useState([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);

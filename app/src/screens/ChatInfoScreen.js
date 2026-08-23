@@ -5,7 +5,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
-import { useChat } from '../store/ChatContext';
+import { useChatListState, useChatActions } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, lastSeenText, PaperCard, TapeChip, handleFor, Rule, InkButton, InkField, FrostedBackdrop, GoldTick, hasGoldTick, isGroupChat } from '../components/common';
@@ -20,7 +20,8 @@ const CollabDocumentView = lazyComponent(() => import('../components/CollabDocum
 
 export default function ChatInfoScreen({ route, navigation, embedded = false }) {
   const { chatId } = route.params;
-  const { chats, refreshChats, socketRef } = useChat();
+  const { chats } = useChatListState();
+  const { refreshChats, socketRef } = useChatActions();
   const socket = socketRef?.current || null;
   const { user } = useAuth();
   const { theme } = useTheme();

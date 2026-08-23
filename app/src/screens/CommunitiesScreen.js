@@ -3,7 +3,7 @@ import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, Refresh
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
-import { useChat } from '../store/ChatContext';
+import { useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { Avatar, EmptyState, TapeChip, rippleFor } from '../components/common';
@@ -28,7 +28,7 @@ const tiltFor = (i) => (i % 2 === 0 ? '-0.7deg' : '0.6deg');
  */
 export default function CommunitiesScreen({ onOpenChat }) {
   const { theme } = useTheme();
-  const { onCommunityEvent } = useChat();
+  const { onCommunityEvent } = useChatActions();
   const { isTablet } = useResponsive();
   const s = makeStyles(theme);
 

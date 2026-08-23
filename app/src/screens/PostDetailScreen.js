@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
-import { useChat } from '../store/ChatContext';
+import { useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { confirm } from '../hooks/confirm';
 import PostCard from '../components/PostCard';
@@ -25,7 +25,7 @@ export default function PostDetailScreen({ navigation, route, embedded = false }
   const postId = route?.params?.postId;
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { onPostEvent } = useChat();
+  const { onPostEvent } = useChatActions();
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);

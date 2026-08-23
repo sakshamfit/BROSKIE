@@ -8,7 +8,7 @@ import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
-import { useChat } from '../store/ChatContext';
+import { useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, TapeChip, Rule, handleFor, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import BrandHeader from '../components/BrandHeader';
@@ -36,9 +36,9 @@ const FEED_FILTERS = [
 ];
 const INSTAGRAM_HEART = '#ED4956';
 
-export default function NetworkScreen({ navigation, onOpenChat }) {
+function NetworkScreen({ navigation, onOpenChat, active = true }) {
   const { user } = useAuth();
-  const { onPostEvent } = useChat();
+  const { onPostEvent } = useChatActions();
   const { theme } = useTheme();
   const { isTablet } = useResponsive();
   const [section, setSection] = useState('feed'); // feed | communities — colleagues lives as its own top-level tab, not inside Network
@@ -101,17 +101,21 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
   }, [activeFilter]);
 
   useEffect(() => {
+    if (!active) return undefined;
     (async () => {
       try {
-        await load(activeTag, activeFilter);
-        setTags((await api.postTags()).tags);
+        const [, tagResult] = await Promise.all([
+          load(activeTag, activeFilter),
+          api.postTags(),
+        ]);
+        setTags(tagResult.tags || []);
       } catch (e) {
         // non-fatal — feed just starts empty
       } finally {
         setLoading(false);
       }
     })();
-  }, [load, activeTag, activeFilter]);
+  }, [active, load, activeTag, activeFilter]);
 
   // Filter jumps requested from elsewhere (Today strip, greeter handoff).
   useEffect(() => onNetworkFilterRequest((filter) => {
@@ -155,8 +159,13 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
   const onRefresh = async () => {
     setRefreshing(true);
     setTodayReload((k) => k + 1);
-    try { await load(activeTag, activeFilter); setTags((await api.postTags()).tags); }
-    catch {} finally { setRefreshing(false); }
+    try {
+      const [, tagResult] = await Promise.all([
+        load(activeTag, activeFilter),
+        api.postTags(),
+      ]);
+      setTags(tagResult.tags || []);
+    } catch {} finally { setRefreshing(false); }
   };
 
   const loadMore = async () => {
@@ -188,7 +197,7 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
 
   /** Follow / unfollow an author from any of their posts — every card by the
    *  same author updates, so the Following lens stays truthful. */
-  const toggleFollow = async (post) => {
+  const toggleFollow = useCallback(async (post) => {
     if (post.mine || typeof post.following !== 'boolean') return;
     const authorId = post.userId;
     const next = !post.following;
@@ -199,9 +208,9 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
     } catch {
       setPosts((prev) => prev.map((p) => (p.userId === authorId && !p.mine ? { ...p, following: !next } : p)));
     }
-  };
+  }, []);
 
-  const toggleLike = async (post) => {
+  const toggleLike = useCallback(async (post) => {
     // optimistic
     setPosts((prev) => prev.map((p) =>
       p.id === post.id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p));
@@ -212,14 +221,14 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
       setPosts((prev) => prev.map((p) =>
         p.id === post.id ? { ...p, liked: post.liked, likes: post.likes } : p));
     }
-  };
+  }, []);
 
-  const removePost = async (post) => {
+  const removePost = useCallback(async (post) => {
     const ok = await confirm('Tear up this post?', { title: 'Delete post', confirmLabel: 'Delete', destructive: true });
     if (!ok) return;
     setPosts((prev) => prev.filter((p) => p.id !== post.id));
     try { await api.deletePost(post.id); } catch { load(activeTag); }
-  };
+  }, [activeTag, load]);
 
   /* ---------------- render ---------------- */
 
@@ -238,7 +247,10 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
         ? 'Tap FOLLOW on a post to build your own feed.'
         : 'Tap the pencil to sketch the first page.';
 
-  const renderPost = ({ item, index }) => (
+  const onTagPress = useCallback((tag) => {
+    setActiveTag((current) => (tag === current ? null : tag));
+  }, []);
+  const renderPost = useCallback(({ item, index }) => (
     <PostCard
       post={item}
       index={index}
@@ -246,11 +258,11 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
       onOpenComments={setCommentsFor}
       onToggleFollow={toggleFollow}
       onDelete={removePost}
-      onTagPress={(tag) => setActiveTag(tag === activeTag ? null : tag)}
+      onTagPress={onTagPress}
       activeTag={activeTag}
       onOpenImage={setLightbox}
     />
-  );
+  ), [toggleLike, toggleFollow, removePost, onTagPress, activeTag]);
 
   const SectionToggle = (
     <View style={s.sectionRow}>
@@ -285,12 +297,13 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
       {SectionToggle}
 
       {/* BROSKIE Status — grid-lined home, segmented rings, immersive viewer. */}
-      <StoriesRow reloadKey={todayReload} />
+      <StoriesRow active={active} reloadKey={todayReload} />
 
       {/* Today at your place — who's around/online from your college or
           workplace, one-tap "I'm around", today's place posts. Hidden for
           users with no places on their profile. */}
       <TodayStrip
+        active={active}
         reloadKey={todayReload}
         onOpenChat={async (userId) => {
           try {
@@ -438,6 +451,8 @@ export default function NetworkScreen({ navigation, onOpenChat }) {
     </View>
   );
 }
+
+export default React.memo(NetworkScreen);
 
 /* ------------------------------------------------------------------ */
 /* comments                                                            */

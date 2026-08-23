@@ -514,7 +514,130 @@ function notHiddenFor(viewerId, alias = 'm') {
   return [`(',' || ${alias}.hidden_for || ',') NOT LIKE ?`, needle];
 }
 
-function hydrateMessage(m, viewerId) {
+function uniqueValues(values) {
+  return [...new Set((values || []).filter(Boolean))];
+}
+
+function placeholders(values) {
+  return values.map(() => '?').join(',');
+}
+
+/**
+ * Build the side-data needed to hydrate a page of messages in batches. The
+ * previous implementation called SQLite once per message for chat type,
+ * reactions, receipts, members, replies, stars and polls. A 50-message page
+ * could therefore trigger several hundred synchronous queries and block the
+ * Express event loop. Keeping this context request-local makes hydration
+ * linear in page size while preserving the exact response shape.
+ */
+function createMessageHydrationContext(rows, viewerId) {
+  const source = (rows || []).filter(Boolean);
+  const messageIds = uniqueValues(source.map((row) => row.id));
+  const chatIds = uniqueValues(source.map((row) => row.chat_id));
+  const replyIds = uniqueValues(source.map((row) => row.reply_to));
+  const statusIds = uniqueValues(source.map((row) => row.status_id));
+  const pollIds = uniqueValues(source.map((row) => row.poll_id));
+  const context = {
+    chatTypes: new Map(),
+    reactionsById: new Map(),
+    receiptsById: new Map(),
+    membersByChat: new Map(),
+    repliesById: new Map(),
+    usersById: new Map(),
+    starredIds: new Set(),
+    statusesById: new Map(),
+    pollsById: new Map(),
+    pollVotesById: new Map(),
+    viewerReadReceipts: true,
+  };
+
+  if (chatIds.length) {
+    db.prepare(`SELECT id, type FROM chats WHERE id IN (${placeholders(chatIds)})`).all(...chatIds)
+      .forEach((row) => context.chatTypes.set(row.id, row.type));
+    db.prepare(`SELECT cm.chat_id, cm.user_id, u.name, u.username
+                FROM chat_members cm JOIN users u ON u.id = cm.user_id
+                WHERE cm.chat_id IN (${placeholders(chatIds)})`).all(...chatIds)
+      .forEach((row) => {
+        const members = context.membersByChat.get(row.chat_id) || [];
+        members.push(row);
+        context.membersByChat.set(row.chat_id, members);
+      });
+  }
+  if (messageIds.length) {
+    db.prepare(`SELECT message_id, user_id, emoji FROM reactions WHERE message_id IN (${placeholders(messageIds)})`).all(...messageIds)
+      .forEach((row) => {
+        const reactions = context.reactionsById.get(row.message_id) || [];
+        reactions.push(row);
+        context.reactionsById.set(row.message_id, reactions);
+      });
+    db.prepare(`SELECT message_id, user_id, state FROM receipts WHERE message_id IN (${placeholders(messageIds)})`).all(...messageIds)
+      .forEach((row) => {
+        const receipts = context.receiptsById.get(row.message_id) || [];
+        receipts.push(row);
+        context.receiptsById.set(row.message_id, receipts);
+      });
+    if (viewerId) {
+      db.prepare(`SELECT message_id FROM starred_messages
+                  WHERE user_id = ? AND message_id IN (${placeholders(messageIds)})`)
+        .all(viewerId, ...messageIds)
+        .forEach((row) => context.starredIds.add(row.message_id));
+    }
+  }
+  if (replyIds.length) {
+    db.prepare(`SELECT id, sender_id, type, body, deleted FROM messages WHERE id IN (${placeholders(replyIds)})`).all(...replyIds)
+      .forEach((row) => context.repliesById.set(row.id, row));
+  }
+
+  const userIds = uniqueValues([
+    ...[...context.membersByChat.values()].flat().map((row) => row.user_id),
+    ...[...context.repliesById.values()].map((row) => row.sender_id),
+  ]);
+  if (userIds.length) {
+    db.prepare(`SELECT id, username, phone, name, about, avatar, last_seen, is_online, created_at, gold_tick
+                FROM users WHERE id IN (${placeholders(userIds)})`).all(...userIds)
+      .forEach((row) => context.usersById.set(row.id, row));
+  }
+  if (viewerId) {
+    const viewer = getUser(viewerId);
+    context.viewerReadReceipts = getSettings(viewer).privacy.readReceipts;
+  }
+
+  if (statusIds.length) {
+    db.prepare(`SELECT * FROM statuses WHERE id IN (${placeholders(statusIds)})`).all(...statusIds)
+      .forEach((row) => context.statusesById.set(row.id, row));
+    const statusUserIds = uniqueValues([...context.statusesById.values()].map((row) => row.user_id));
+    if (statusUserIds.length) {
+      db.prepare(`SELECT id, username, phone, name, about, avatar, last_seen, is_online, created_at, gold_tick
+                  FROM users WHERE id IN (${placeholders(statusUserIds)})`).all(...statusUserIds)
+        .forEach((row) => context.usersById.set(row.id, row));
+    }
+  }
+
+  if (pollIds.length) {
+    db.prepare(`SELECT * FROM polls WHERE id IN (${placeholders(pollIds)})`).all(...pollIds)
+      .forEach((row) => context.pollsById.set(row.id, row));
+    db.prepare(`SELECT poll_id, user_id, option_index FROM poll_votes WHERE poll_id IN (${placeholders(pollIds)})`).all(...pollIds)
+      .forEach((row) => {
+        const votes = context.pollVotesById.get(row.poll_id) || [];
+        votes.push(row);
+        context.pollVotesById.set(row.poll_id, votes);
+      });
+    const pollUserIds = uniqueValues([...context.pollsById.values()].map((row) => row.created_by));
+    if (pollUserIds.length) {
+      db.prepare(`SELECT id, username, phone, name, about, avatar, last_seen, is_online, created_at, gold_tick
+                  FROM users WHERE id IN (${placeholders(pollUserIds)})`).all(...pollUserIds)
+        .forEach((row) => context.usersById.set(row.id, row));
+    }
+  }
+  return context;
+}
+
+function hydrateMessages(rows, viewerId) {
+  const context = createMessageHydrationContext(rows, viewerId);
+  return (rows || []).map((row) => hydrateMessage(row, viewerId, context)).filter(Boolean);
+}
+
+function hydrateMessage(m, viewerId, context = null) {
   if (!m) return null;
   // A message hidden via "Delete for me" never leaves the server for that
   // viewer. The row still exists for everyone else (and for "delete for
@@ -525,11 +648,19 @@ function hydrateMessage(m, viewerId) {
   //   conversationType: 'direct' | 'group' | 'gc'
   // `gcId` is set (equal to chat_id — a GC's id IS its chat id) only for
   // GC messages; it is null for every direct/group message.
-  const messageChat = db.prepare('SELECT type FROM chats WHERE id = ?').get(m.chat_id);
+  const messageChat = context?.chatTypes
+    ? { type: context.chatTypes.get(m.chat_id) }
+    : db.prepare('SELECT type FROM chats WHERE id = ?').get(m.chat_id);
   const conversationType = messageChat?.type || 'direct';
-  const reactions = db.prepare('SELECT user_id, emoji FROM reactions WHERE message_id = ?').all(m.id);
-  const receipts = db.prepare('SELECT user_id, state FROM receipts WHERE message_id = ?').all(m.id);
-  const others = memberIds(m.chat_id).filter((id) => id !== m.sender_id);
+  const reactions = context
+    ? (context.reactionsById.get(m.id) || [])
+    : db.prepare('SELECT user_id, emoji FROM reactions WHERE message_id = ?').all(m.id);
+  const receipts = context
+    ? (context.receiptsById.get(m.id) || [])
+    : db.prepare('SELECT user_id, state FROM receipts WHERE message_id = ?').all(m.id);
+  const others = context
+    ? (context.membersByChat.get(m.chat_id) || []).map((member) => member.user_id).filter((id) => id !== m.sender_id)
+    : memberIds(m.chat_id).filter((id) => id !== m.sender_id);
   const readers = new Set(receipts.filter((r) => r.state === 'read').map((r) => r.user_id));
   const delivered = new Set(receipts.filter((r) => r.state === 'delivered').map((r) => r.user_id));
 
@@ -543,15 +674,17 @@ function hydrateMessage(m, viewerId) {
   // sent messages. So if the person currently looking at this chat has it
   // disabled, a computed 'read' status never surfaces to them.
   if (status === 'read' && viewerId) {
-    const viewer = getUser(viewerId);
-    if (viewer && !getSettings(viewer).privacy.readReceipts) status = 'delivered';
+    const readReceiptsOn = context ? context.viewerReadReceipts : getSettings(getUser(viewerId)).privacy.readReceipts;
+    if (!readReceiptsOn) status = 'delivered';
   }
 
   let replyTo = null;
   if (m.reply_to) {
-    const r = db.prepare('SELECT * FROM messages WHERE id = ?').get(m.reply_to);
+    const r = context
+      ? context.repliesById.get(m.reply_to)
+      : db.prepare('SELECT * FROM messages WHERE id = ?').get(m.reply_to);
     if (r) {
-      const sender = getUser(r.sender_id);
+      const sender = context?.usersById?.get(r.sender_id) || getUser(r.sender_id);
       replyTo = {
         id: r.id,
         senderId: r.sender_id,
@@ -563,7 +696,7 @@ function hydrateMessage(m, viewerId) {
   }
 
   const starred = viewerId
-    ? !!db.prepare('SELECT 1 FROM starred_messages WHERE message_id = ? AND user_id = ?').get(m.id, viewerId)
+    ? (context?.starredIds ? context.starredIds.has(m.id) : !!db.prepare('SELECT 1 FROM starred_messages WHERE message_id = ? AND user_id = ?').get(m.id, viewerId))
     : false;
 
   // Status reply preview — frozen snapshot so the quoted status survives after the 24h expiry.
@@ -573,12 +706,15 @@ function hydrateMessage(m, viewerId) {
       try { statusReply = JSON.parse(m.status_snapshot); } catch {}
     }
     if (!statusReply) {
-      const st = db.prepare('SELECT * FROM statuses WHERE id = ?').get(m.status_id);
+      const st = context
+        ? context.statusesById.get(m.status_id)
+        : db.prepare('SELECT * FROM statuses WHERE id = ?').get(m.status_id);
       if (st) {
+        const statusAuthor = context?.usersById?.get(st.user_id) || getUser(st.user_id);
         statusReply = {
           id: st.id, type: st.type, body: st.body, mediaUrl: st.media_url, mediaAspect: st.media_aspect || null, bg: st.bg,
           song: st.song ? JSON.parse(st.song) : null, audience: st.audience || 'public', createdAt: st.created_at,
-          author: publicUser(getUser(st.user_id)),
+          author: publicUser(statusAuthor),
         };
       } else {
         statusReply = { id: m.status_id, expired: true };
@@ -606,7 +742,7 @@ function hydrateMessage(m, viewerId) {
     edited: !!m.edited,
     forwarded: !!m.forwarded_from,
     starred,
-    poll: !m.deleted && m.type === 'poll' ? hydratePoll(m.poll_id, viewerId) : null,
+    poll: !m.deleted && m.type === 'poll' ? hydratePoll(m.poll_id, viewerId, context) : null,
     replyTo,
     statusReply,
     status,
@@ -616,15 +752,19 @@ function hydrateMessage(m, viewerId) {
 }
 
 /** Live poll state (counts + my vote) hydrated per viewer. */
-function hydratePoll(pollId, viewerId) {
+function hydratePoll(pollId, viewerId, context = null) {
   if (!pollId) return null;
-  const p = db.prepare('SELECT * FROM polls WHERE id = ?').get(pollId);
+  const p = context
+    ? context.pollsById.get(pollId)
+    : db.prepare('SELECT * FROM polls WHERE id = ?').get(pollId);
   if (!p) return null;
   let options = [];
   try { options = JSON.parse(p.options || '[]'); } catch { options = []; }
-  const votes = db.prepare('SELECT user_id, option_index FROM poll_votes WHERE poll_id = ?').all(pollId);
+  const votes = context
+    ? (context.pollVotesById.get(pollId) || [])
+    : db.prepare('SELECT user_id, option_index FROM poll_votes WHERE poll_id = ?').all(pollId);
   const counts = options.map((_, i) => votes.filter((v) => v.option_index === i).length);
-  const creator = getUser(p.created_by);
+  const creator = context?.usersById?.get(p.created_by) || getUser(p.created_by);
   return {
     id: p.id,
     question: p.question,
@@ -634,6 +774,164 @@ function hydratePoll(pollId, viewerId) {
     createdByName: creator ? creator.name : 'Unknown',
     createdAt: p.created_at,
   };
+}
+
+/**
+ * Chat-list previews do not need reactions, poll state, reply bodies, or
+ * status snapshots. Keeping this deliberately small avoids doing the full
+ * message hydration work once for every row in the inbox.
+ */
+function hydrateMessagePreview(m, viewerId, context) {
+  if (!m || isHiddenForMe(m, viewerId)) return null;
+  const conversationType = context.chatTypes.get(m.chat_id) || 'direct';
+  const receipts = context.receiptsById.get(m.id) || [];
+  const members = context.membersByChat.get(m.chat_id) || [];
+  const others = members.map((member) => member.user_id).filter((id) => id !== m.sender_id);
+  const readers = new Set(receipts.filter((r) => r.state === 'read').map((r) => r.user_id));
+  const delivered = new Set(receipts.filter((r) => r.state === 'delivered').map((r) => r.user_id));
+  let status = 'sent';
+  if (others.length && others.every((id) => delivered.has(id) || readers.has(id))) status = 'delivered';
+  if (others.length && others.every((id) => readers.has(id))) status = 'read';
+  if (status === 'read' && viewerId && !context.viewerReadReceipts) status = 'delivered';
+  return {
+    id: m.id,
+    clientId: m.client_id || m.id,
+    chatId: m.chat_id,
+    senderId: m.sender_id,
+    type: m.type,
+    conversationType,
+    gcId: conversationType === 'gc' ? m.chat_id : null,
+    body: m.deleted ? '' : m.body,
+    mediaUrl: m.deleted ? null : m.media_url,
+    mediaThumbUrl: m.deleted ? null : (m.media_thumb_url || null),
+    duration: m.duration,
+    deleted: !!m.deleted,
+    createdAt: m.created_at,
+    clientCreatedAt: m.client_created_at || m.created_at,
+    updatedAt: m.updated_at || m.created_at,
+    expiresAt: m.expires_at || null,
+    edited: !!m.edited,
+    forwarded: !!m.forwarded_from,
+    starred: context.starredIds.has(m.id),
+    poll: null,
+    replyTo: null,
+    statusReply: null,
+    status,
+    reactions: [],
+    mentions: (() => { try { return JSON.parse(m.mentions || '[]'); } catch { return []; } })(),
+  };
+}
+
+/** Batch chat summaries for the inbox/greeting path. */
+function chatSummariesForUser(chatIds, viewerId) {
+  const ids = uniqueValues(chatIds);
+  if (!ids.length) return [];
+  const chats = db.prepare(`SELECT * FROM chats WHERE id IN (${placeholders(ids)})`).all(...ids);
+  const membersByChat = new Map();
+  db.prepare(`SELECT cm.chat_id, cm.user_id, cm.role, cm.muted, cm.pinned_at, cm.cleared_at,
+                     u.id, u.username, u.phone, u.name, u.about, u.avatar, u.last_seen, u.is_online,
+                     u.created_at, u.gold_tick, u.settings
+              FROM chat_members cm JOIN users u ON u.id = cm.user_id
+              WHERE cm.chat_id IN (${placeholders(ids)})`).all(...ids)
+    .forEach((row) => {
+      const list = membersByChat.get(row.chat_id) || [];
+      list.push(row);
+      membersByChat.set(row.chat_id, list);
+    });
+
+  const viewerMember = new Map();
+  membersByChat.forEach((members, chatId) => {
+    const me = members.find((member) => member.user_id === viewerId);
+    if (me) viewerMember.set(chatId, me);
+  });
+  const [notHiddenSql, notHiddenParam] = notHiddenFor(viewerId, 'm');
+  const latestRows = db.prepare(
+    `SELECT * FROM (
+       SELECT m.*, ROW_NUMBER() OVER (PARTITION BY m.chat_id ORDER BY m.created_at DESC, m.id DESC) row_number
+       FROM messages m
+       JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
+       WHERE m.chat_id IN (${placeholders(ids)})
+         AND m.created_at > COALESCE(cm.cleared_at, 0)
+         AND ${notHiddenSql}
+     ) latest WHERE row_number = 1`
+  ).all(viewerId, ...ids, notHiddenParam);
+  const lastByChat = new Map(latestRows.map((row) => [row.chat_id, row]));
+  const unreadRows = db.prepare(
+    `SELECT m.chat_id, COUNT(*) count
+     FROM messages m
+     JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
+     WHERE m.chat_id IN (${placeholders(ids)})
+       AND m.sender_id != ? AND m.sender_id != 'system'
+       AND m.created_at > COALESCE(cm.cleared_at, 0)
+       AND ${notHiddenSql}
+       AND NOT EXISTS (
+         SELECT 1 FROM receipts r
+         WHERE r.message_id = m.id AND r.user_id = ? AND r.state = 'read'
+       )
+     GROUP BY m.chat_id`
+  ).all(viewerId, ...ids, viewerId, notHiddenParam, viewerId);
+  const unreadByChat = new Map(unreadRows.map((row) => [row.chat_id, row.count]));
+  const requestRows = db.prepare(`SELECT * FROM chat_requests WHERE chat_id IN (${placeholders(ids)})`).all(...ids);
+  const requestByChat = new Map(requestRows.map((row) => [row.chat_id, row]));
+  const latestIds = latestRows.map((row) => row.id);
+  const previewContext = {
+    chatTypes: new Map(chats.map((chat) => [chat.id, chat.type])),
+    receiptsById: new Map(),
+    membersByChat,
+    starredIds: new Set(),
+    viewerReadReceipts: getSettings(getUser(viewerId)).privacy.readReceipts,
+  };
+  if (latestIds.length) {
+    db.prepare(`SELECT message_id, user_id, state FROM receipts WHERE message_id IN (${placeholders(latestIds)})`)
+      .all(...latestIds)
+      .forEach((row) => {
+        const list = previewContext.receiptsById.get(row.message_id) || [];
+        list.push(row);
+        previewContext.receiptsById.set(row.message_id, list);
+      });
+    db.prepare(`SELECT message_id FROM starred_messages WHERE user_id = ? AND message_id IN (${placeholders(latestIds)})`)
+      .all(viewerId, ...latestIds)
+      .forEach((row) => previewContext.starredIds.add(row.message_id));
+  }
+
+  return chats.map((chat) => {
+    const members = membersByChat.get(chat.id) || [];
+    const me = viewerMember.get(chat.id);
+    const other = chat.type === 'direct' ? members.find((member) => member.id !== viewerId) : null;
+    const otherPresence = other ? presenceFor(other, viewerId) : { isOnline: false, lastSeen: 0 };
+    const request = chat.type === 'direct' ? requestByChat.get(chat.id) : null;
+    const last = lastByChat.get(chat.id);
+    return {
+      id: chat.id,
+      type: chat.type,
+      name: chat.type !== 'direct' ? chat.name : other ? other.name : 'Unknown',
+      username: chat.type === 'direct' && other ? other.username : null,
+      avatar: chat.type !== 'direct' ? chat.avatar : other ? other.avatar : null,
+      about: other ? other.about : null,
+      otherUserId: other ? other.id : null,
+      isOnline: otherPresence.isOnline,
+      lastSeen: otherPresence.lastSeen,
+      muted: me ? !!me.muted : false,
+      archived: (chat.archived_by || '').split(',').filter(Boolean).includes(viewerId),
+      pinned: me ? !!me.pinned_at : false,
+      disappearSeconds: chat.disappear_seconds || 0,
+      themeId: chat.theme_id || 'graphite',
+      themeUpdatedBy: chat.theme_updated_by || null,
+      themeUpdatedAt: chat.theme_updated_at || null,
+      role: me ? me.role : 'member',
+      members: members.map((member) => ({ ...publicUser(member), role: member.role })),
+      lastMessage: last ? hydrateMessagePreview(last, viewerId, previewContext) : null,
+      unread: unreadByChat.get(chat.id) || 0,
+      requestStatus: request?.status || null,
+      requestDirection: request
+        ? request.sender_id === viewerId ? 'outgoing' : request.receiver_id === viewerId ? 'incoming' : null
+        : null,
+      updatedAt: chat.updated_at,
+    };
+  }).sort((a, b) =>
+    ((b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
+    || ((b.lastMessage?.createdAt || b.updatedAt || 0) - (a.lastMessage?.createdAt || a.updatedAt || 0))
+  );
 }
 
 /** Timers users can pick for disappearing messages (seconds). 0 = off. */
@@ -782,11 +1080,10 @@ function userChats(userId) {
        ORDER BY c.updated_at DESC`
     )
     .all(userId, userId, userId, userId);
-  // Pinned chats float to the top; within each group keep recency order.
-  return rows
-    .map((r) => chatSummary(r.id, userId))
-    .filter(Boolean)
-    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+  // Fetch all summaries in one batch. This is used by /api/chats and the
+  // greeting endpoint, so an account with many conversations no longer turns
+  // one request into an N+1 query storm.
+  return chatSummariesForUser(rows.map((row) => row.id), userId);
 }
 
 /**
@@ -1716,14 +2013,15 @@ app.get('/api/today', requireAuth, (req, res) => {
         )
         .all(...sharerIds, since)
     : [];
-  const placesPosts = [];
+  const visiblePlaceRows = [];
   const posters = new Set();
   postRows.forEach((r) => {
     if (canViewPost(r.id, r.user_id, r.audience || 'public', req.userId)) {
-      if (placesPosts.length < 12) placesPosts.push(hydratePost(r, req.userId));
+      if (visiblePlaceRows.length < 12) visiblePlaceRows.push(r);
       posters.add(r.user_id);
     }
   });
+  const placesPosts = hydratePosts(visiblePlaceRows, req.userId);
 
   const mine = aroundRowFor(req.userId);
   res.json({
@@ -2628,15 +2926,32 @@ app.get('/api/gc', requireAuth, (req, res) => {
      JOIN gcs g ON g.chat_id = c.id
      WHERE cm.user_id = ? ORDER BY c.updated_at DESC`
   ).all(req.userId);
+  const gcIds = rows.map((row) => row.id);
+  const summaries = chatSummariesForUser(gcIds, req.userId);
+  const byId = new Map(summaries.map((summary) => [summary.id, summary]));
+  const requestCounts = gcIds.length
+    ? new Map(
+        db.prepare(`SELECT chat_id, COUNT(*) count FROM gc_requests
+                    WHERE status = 'pending' AND chat_id IN (${placeholders(gcIds)}) GROUP BY chat_id`)
+          .all(...gcIds)
+          .map((row) => [row.chat_id, row.count])
+      )
+    : new Map();
   res.json({
-    chats: rows.map((r) => {
-      const summary = chatSummary(r.id, req.userId);
+    chats: rows.map((row) => {
+      const summary = byId.get(row.id);
       if (!summary) return null;
-      const meta = gcMetaRow(r.id);
-      const requestCount = summary.role === 'admin'
-        ? db.prepare("SELECT COUNT(*) c FROM gc_requests WHERE chat_id = ? AND status = 'pending'").get(r.id).c
-        : 0;
-      return { ...summary, gc: { description: meta?.description || '', rules: (() => { try { return JSON.parse(meta?.rules || '[]'); } catch { return []; } })(), privacy: meta?.privacy || 'request', requestCount } };
+      const meta = gcMetaRow(row.id);
+      const requestCount = summary.role === 'admin' ? (requestCounts.get(row.id) || 0) : 0;
+      return {
+        ...summary,
+        gc: {
+          description: meta?.description || '',
+          rules: (() => { try { return JSON.parse(meta?.rules || '[]'); } catch { return []; } })(),
+          privacy: meta?.privacy || 'request',
+          requestCount,
+        },
+      };
     }).filter(Boolean),
   });
 });
@@ -2959,7 +3274,7 @@ function chatMessagesPage(chatId, viewerId, query = {}) {
   const newest = rows[rows.length - 1];
   const oldest = rows[0];
   return {
-    messages: rows.map((m) => hydrateMessage(m, viewerId)).filter(Boolean),
+    messages: hydrateMessages(rows, viewerId),
     hasMore,
     cursor: {
       after: newest ? newest.created_at : after,
@@ -3016,7 +3331,7 @@ app.get('/api/sync/messages', requireAuth, (req, res) => {
     ? page.reduce((max, row) => Math.max(max, row.updated_at || row.created_at || 0), after)
     : after;
   res.json({
-    messages: page.map((m) => hydrateMessage(m, req.userId)).filter(Boolean),
+    messages: hydrateMessages(page, req.userId),
     cursor,
     hasMore,
   });
@@ -3370,24 +3685,38 @@ function postAudienceIds(postId, authorId, audience) {
   return ids.filter((id) => id === authorId || !blockedEitherWay(authorId, id));
 }
 
-function hydrateStatus(s, viewerId) {
+function hydrateStatus(s, viewerId, context = null) {
   return {
     id: s.id, type: s.type, body: s.body, mediaUrl: s.media_url, mediaAspect: s.media_aspect || null, bg: s.bg,
     song: s.song ? JSON.parse(s.song) : null,
     audience: s.audience || 'public',
     createdAt: s.created_at,
-    viewed: !!db.prepare('SELECT 1 FROM status_views WHERE status_id = ? AND user_id = ?').get(s.id, viewerId),
+    viewed: context ? context.viewedIds.has(s.id) : !!db.prepare('SELECT 1 FROM status_views WHERE status_id = ? AND user_id = ?').get(s.id, viewerId),
   };
+}
+
+function hydrateStatuses(rows, viewerId) {
+  const statusIds = uniqueValues((rows || []).map((row) => row.id));
+  if (!statusIds.length) return [];
+  const viewedIds = new Set();
+  if (viewerId) {
+    db.prepare(`SELECT status_id FROM status_views WHERE user_id = ? AND status_id IN (${placeholders(statusIds)})`)
+      .all(viewerId, ...statusIds)
+      .forEach((row) => viewedIds.add(row.status_id));
+  }
+  const context = { viewedIds };
+  return (rows || []).map((row) => hydrateStatus(row, viewerId, context));
 }
 
 app.get('/api/status', requireAuth, (req, res) => {
   db.prepare('DELETE FROM statuses WHERE expires_at < ?').run(now());
   const rows = db.prepare('SELECT * FROM statuses ORDER BY created_at ASC').all();
   const visible = rows.filter((s) => canViewStatus(s.id, s.user_id, s.audience || 'public', req.userId));
+  const hydrated = hydrateStatuses(visible, req.userId);
 
   const byUser = {};
-  visible.forEach((s) => {
-    (byUser[s.user_id] ||= []).push(hydrateStatus(s, req.userId));
+  visible.forEach((s, index) => {
+    (byUser[s.user_id] ||= []).push(hydrated[index]);
   });
   const groups = Object.entries(byUser).map(([userId, items]) => ({
     user: publicUser(getUser(userId)),
@@ -3617,14 +3946,58 @@ app.get('/api/spotify/search', requireAuth, (req, res) => {
 /* The Network — public worldwide posts                                */
 /* ------------------------------------------------------------------ */
 
-function hydratePost(row, viewerId) {
+function createPostHydrationContext(rows, viewerId) {
+  const source = (rows || []).filter(Boolean);
+  const postIds = uniqueValues(source.map((row) => row.id));
+  const authorIds = uniqueValues(source.map((row) => row.user_id));
+  const context = {
+    authorsById: new Map(),
+    likesByPost: new Map(),
+    commentsByPost: new Map(),
+    likedPosts: new Set(),
+    followedAuthors: new Set(),
+  };
+  if (authorIds.length) {
+    db.prepare(`SELECT id, username, phone, name, about, avatar, last_seen, is_online, created_at, gold_tick
+                FROM users WHERE id IN (${placeholders(authorIds)})`).all(...authorIds)
+      .forEach((row) => context.authorsById.set(row.id, row));
+  }
+  if (postIds.length) {
+    db.prepare(`SELECT post_id, COUNT(*) count FROM post_likes
+                WHERE post_id IN (${placeholders(postIds)}) GROUP BY post_id`).all(...postIds)
+      .forEach((row) => context.likesByPost.set(row.post_id, row.count));
+    db.prepare(`SELECT post_id, COUNT(*) count FROM post_comments
+                WHERE post_id IN (${placeholders(postIds)}) GROUP BY post_id`).all(...postIds)
+      .forEach((row) => context.commentsByPost.set(row.post_id, row.count));
+    if (viewerId) {
+      db.prepare(`SELECT post_id FROM post_likes
+                  WHERE user_id = ? AND post_id IN (${placeholders(postIds)})`)
+        .all(viewerId, ...postIds)
+        .forEach((row) => context.likedPosts.add(row.post_id));
+    }
+  }
+  if (viewerId && authorIds.length) {
+    db.prepare(`SELECT followed_id FROM follows
+                WHERE follower_id = ? AND followed_id IN (${placeholders(authorIds)})`)
+      .all(viewerId, ...authorIds)
+      .forEach((row) => context.followedAuthors.add(row.followed_id));
+  }
+  return context;
+}
+
+function hydratePosts(rows, viewerId) {
+  const context = createPostHydrationContext(rows, viewerId);
+  return (rows || []).map((row) => hydratePost(row, viewerId, context)).filter(Boolean);
+}
+
+function hydratePost(row, viewerId, context = null) {
   if (!row) return null;
-  const author = getUser(row.user_id);
-  const likes = db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id = ?').get(row.id).c;
-  const comments = db.prepare('SELECT COUNT(*) c FROM post_comments WHERE post_id = ?').get(row.id).c;
-  const liked = viewerId
-    ? !!db.prepare('SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?').get(row.id, viewerId)
-    : false;
+  const author = context?.authorsById?.get(row.user_id) || getUser(row.user_id);
+  const likes = context ? (context.likesByPost.get(row.id) || 0) : db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id = ?').get(row.id).c;
+  const comments = context ? (context.commentsByPost.get(row.id) || 0) : db.prepare('SELECT COUNT(*) c FROM post_comments WHERE post_id = ?').get(row.id).c;
+  const liked = context
+    ? context.likedPosts.has(row.id)
+    : viewerId ? !!db.prepare('SELECT 1 FROM post_likes WHERE post_id = ? AND user_id = ?').get(row.id, viewerId) : false;
   return {
     id: row.id,
     userId: row.user_id,
@@ -3643,7 +4016,9 @@ function hydratePost(row, viewerId) {
     mine: row.user_id === viewerId,
     // Phase 2: does the viewer follow this author (for Following feed + the
     // Follow button state)? Author's own posts never show a follow button.
-    following: viewerId && row.user_id !== viewerId ? isFollowing(viewerId, row.user_id) : undefined,
+    following: viewerId && row.user_id !== viewerId
+      ? (context ? context.followedAuthors.has(row.user_id) : isFollowing(viewerId, row.user_id))
+      : undefined,
   };
 }
 
@@ -3708,7 +4083,7 @@ app.get('/api/posts', requireAuth, (req, res) => {
   }
 
   res.json({
-    posts: visible.map((r) => hydratePost(r, req.userId)),
+    posts: hydratePosts(visible, req.userId),
     // `before` has already been advanced past every row we've examined
     // (visible or filtered-out), so resuming from it never skips a post.
     nextBefore: !exhausted && visible.length === limit ? before : null,

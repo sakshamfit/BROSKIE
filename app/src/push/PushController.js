@@ -12,7 +12,7 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { useAuth } from '../store/AuthContext';
-import { useChat } from '../store/ChatContext';
+import { useChatListState, useChatRealtime } from '../store/ChatContext';
 import {
   registerPushNotifications,
   unregisterPushNotifications,
@@ -24,7 +24,8 @@ import { routeFromNotification } from './routing';
 
 export default function PushController() {
   const { user, token } = useAuth();
-  const { chats, activityUnread } = useChat();
+  const { chats } = useChatListState();
+  const { activityUnread } = useChatRealtime();
 
   /* Registration lifecycle: one registration per signed-in session.
    *

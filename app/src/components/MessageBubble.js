@@ -46,7 +46,7 @@ export const DISAPPEAR_OPTIONS = [
 export const disappearLabel = (seconds) =>
   DISAPPEAR_OPTIONS.find((o) => o.seconds === seconds)?.label || 'Off';
 
-export default function MessageBubble({
+const MessageBubble = React.memo(function MessageBubble({
   message, isMine, isGroup, senderName, senderUser,
   onReply, onReact, onDelete, onDeleteForMe, onImagePress,
   onEdit, onForward, onStar, onSetTimer, onVotePoll, onReport,
@@ -590,7 +590,9 @@ export default function MessageBubble({
       </BottomSheet>
     </>
   );
-}
+});
+
+export default MessageBubble;
 
 /** The poll card rendered inside a 'poll' message bubble. */
 function PollBody({ messageId, poll, ink, isMine, onVotePoll }) {

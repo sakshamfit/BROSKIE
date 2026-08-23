@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { View, Pressable, StyleSheet, Platform, Animated } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -7,7 +7,7 @@ import Icon from './icons/Icon';
 
 import { useAuth } from './store/AuthContext';
 import { useTheme } from './store/ThemeContext';
-import { useChat } from './store/ChatContext';
+import { useChatListState, useChatGCState } from './store/ChatContext';
 import useResponsive from './hooks/useResponsive';
 import { Loading, CountBead } from './components/common';
 import { marker, stroke } from './theme';
@@ -46,11 +46,13 @@ const UserProfileScreen = lazyScreen(() => import('./screens/UserProfileScreen')
 const PostDetailScreen = lazyScreen(() => import('./screens/PostDetailScreen'), { label: 'Post Detail' });
 
 const Stack = createNativeStackNavigator();
+const HOME_PAGE_KEYS = ['network', 'gc', 'chats', 'colleagues'];
 
 /** Floating tab bar — bottom nav for phones (and tablets in portrait narrower than split). */
 function HomeTabs({ navigation }) {
   const { theme } = useTheme();
-  const { chats, gcChats } = useChat();
+  const { chats } = useChatListState();
+  const { gcChats } = useChatGCState();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState('network');
   // Completely separate unread counters:
@@ -68,14 +70,14 @@ function HomeTabs({ navigation }) {
   // chats, kept out of the Chats inbox entirely. Page-swipe navigation
   // follows THIS order. Settings stays a pushed stack screen, so it is not
   // part of the swipe strip.
-  const TABS = [
+  const TABS = useMemo(() => [
     { key: 'network', label: 'Network', icon: 'people' },
     { key: 'gc', label: 'GC', icon: 'gc', outlineOnly: true, badge: gcUnread },
     { key: 'chats', label: 'Chats', icon: 'chatbubble', badge: unread },
     { key: 'colleagues', label: 'Colleagues', icon: 'school-outline', outlineOnly: true },
     { key: 'settings', label: 'Settings', icon: 'settings' },
-  ];
-  const PAGES = TABS.filter((t) => t.key !== 'settings');
+  ], [gcUnread, unread]);
+  const PAGES = useMemo(() => HOME_PAGE_KEYS.map((key) => ({ key })), []);
   const pageIndex = Math.max(0, PAGES.findIndex((p) => p.key === tab));
 
   // The pager feeds this value during a drag so the tab bar responds while
@@ -87,8 +89,13 @@ function HomeTabs({ navigation }) {
   // flow stays entirely inside the GC environment: joined GCs open directly
   // into GCChat; GCDetail (info/members) is accessed from the chat header.
   // The Chats tab keeps its own state and its own chats untouched.
-  const openDirectChat = (chatId) => { setTab('chats'); navigation.navigate('Conversation', { chatId }); };
-  const openGC = (chatId, isMember) => { navigation.navigate(isMember ? 'GCChat' : 'GCDetail', { chatId }); };
+  const openDirectChat = useCallback((chatId) => {
+    setTab('chats');
+    navigation.navigate('Conversation', { chatId });
+  }, [navigation]);
+  const openGC = useCallback((chatId, isMember) => {
+    navigation.navigate(isMember ? 'GCChat' : 'GCDetail', { chatId });
+  }, [navigation]);
 
   // Push deep links can target a Home page (e.g. a colleague request routes
   // to the Colleagues tab). Tab state lives here, not in navigation state,
@@ -102,6 +109,20 @@ function HomeTabs({ navigation }) {
     idlePreload(() => import('./screens/SettingsScreen'));
   }, []);
 
+  const pageDescriptors = useMemo(() => PAGES.map((p) => ({
+    key: p.key,
+    render: ({ active }) => {
+      if (p.key === 'chats') return <ChatListScreen navigation={navigation} active={active} />;
+      if (p.key === 'gc') return <GCScreen navigation={navigation} onOpenChat={openGC} active={active} />;
+      if (p.key === 'colleagues') return <ColleaguesScreen navigation={navigation} onOpenChat={openDirectChat} active={active} />;
+      return <NetworkScreen navigation={navigation} onOpenChat={openDirectChat} active={active} />;
+    },
+  })), [PAGES, navigation, openGC, openDirectChat]);
+  const onPageIndexChange = useCallback((nextIndex) => {
+    const nextPage = PAGES[nextIndex];
+    if (nextPage) setTab(nextPage.key);
+  }, [PAGES]);
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -111,17 +132,9 @@ function HomeTabs({ navigation }) {
             spring (or returns) on release. The bottom tab bar below stays in
             sync: navigation state commits only when the gesture completes. */}
         <PageSwipePager
-          pages={PAGES.map((p) => ({
-            key: p.key,
-            render: () => {
-              if (p.key === 'chats') return <ChatListScreen navigation={navigation} />;
-              if (p.key === 'gc') return <GCScreen navigation={navigation} onOpenChat={openGC} />;
-              if (p.key === 'colleagues') return <ColleaguesScreen navigation={navigation} onOpenChat={openDirectChat} />;
-              return <NetworkScreen navigation={navigation} onOpenChat={openDirectChat} />;
-            },
-          }))}
+          pages={pageDescriptors}
           index={pageIndex}
-          onIndexChange={(i) => setTab(PAGES[i].key)}
+          onIndexChange={onPageIndexChange}
           progress={swipeProgress}
         />
       </SafeAreaView>

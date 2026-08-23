@@ -205,7 +205,7 @@ export default function PageSwipePager({
                     looping motion (skeleton shimmers, typing dots, floating
                     empty states) is switched off while they are off-screen —
                     a page you cannot see must not cost frames. */}
-                {mounted ? <MotionActive active={i === index}>{p.render()}</MotionActive> : null}
+                {mounted ? <MotionActive active={i === index}>{p.render({ active: i === index })}</MotionActive> : null}
               </View>
             );
           })}
