@@ -416,15 +416,7 @@ export function ChatProvider({ children }) {
     setGcMessageErrors((prev) => {
       if (!prev[message.chatId]) return prev;
       const next = { ...prev };
-      delete next[message.chatId];
-      return next;
-    });
-  }, []);
-
-  /* ---- GC socket rooms: join only after membership is re-verified by the
-     server (gc:join), leave on blur, no duplicate listeners (idempotent). */
-  const joinGCRoom = useCallback((gcId) => {
-    if (!gcId || gcRoomsRef.current.has(gcId)) return;
+      delete next[mesnt.has(gcId)) return;
     const socket = socketRef.current;
     if (!socket?.connected) {
       gcPendingRoomsRef.current.add(gcId);
