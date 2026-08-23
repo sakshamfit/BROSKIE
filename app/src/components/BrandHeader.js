@@ -18,7 +18,8 @@ export default function BrandHeader({ navigation, onOpenActivity, bordered = tru
   const { user } = useAuth();
   const { activityUnread = 0 } = useChatRealtime();
   const unread = activityUnread || 0;
-  const s = makeStyles(theme);
+  // Memoized: the header re-renders on every activity-badge change.
+  const s = React.useMemo(() => makeStyles(theme), [theme]);
 
   const openActivity = () => {
     if (onOpenActivity) onOpenActivity();

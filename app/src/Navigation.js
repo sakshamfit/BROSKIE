@@ -59,7 +59,9 @@ function HomeTabs({ navigation }) {
   //   - GC badge = GC unread (gcChats), shown on the GC tab.
   const unread = chats.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
   const gcUnread = gcChats.reduce((n, c) => n + (c.archived ? 0 : c.unread || 0), 0);
-  const s = makeStyles(theme);
+  // Memoized: this shell re-renders on every unread tick, and rebuilding a
+  // StyleSheet each time was pure waste.
+  const s = useMemo(() => makeStyles(theme), [theme]);
 
   // Feed first, chat in the centre: Network → GC → Chats → Colleagues →
   // Settings. The old See tab was merged into Network (24-hour status
@@ -219,7 +221,7 @@ function TabButton({ label, active, onPress, icon, outlineOnly, color, badge, th
         extrapolate: 'clamp',
       })
     : 1;
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   return (
     <Pressable
       accessibilityRole="button"
