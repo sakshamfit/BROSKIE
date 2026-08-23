@@ -27,6 +27,7 @@ echo "━━━ [3/5] server: test suites ━━━"
   npm run test:phase3             && \
   npm run test:ot                 && \
   npm run test:gc                 && \
+  npm run test:chat-inbox         && \
   npm run test:features)
 
 echo "━━━ [4/6] app: install deps ━━━"

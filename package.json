@@ -4,7 +4,7 @@
   "private": true,
   "description": "+one \u2014 realtime ink-and-paper messenger. Root manifest so hosts (Railway/Render/Nixpacks) detect a Node project and delegate to server/.",
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "build": "cd server && npm install && npm run build",
@@ -23,7 +23,8 @@
     "test:phase2": "cd server && npm run test:phase2",
     "test:phase3": "cd server && npm run test:phase3",
     "test:moderation": "cd server && npm run test:moderation",
-    "test:features": "cd server && npm run test:features"
+    "test:features": "cd server && npm run test:features",
+    "test:chat-inbox": "cd server && npm run test:chat-inbox"
   },
   "workspaces": [],
   "license": "MIT"

@@ -8,6 +8,7 @@ import { GCLocalStore } from '../messaging/GCStore';
 import * as RTC from '../webrtc/rtc';
 import TextOperation from '../ot/TextOperation';
 import { OTManager } from '../ot/OTManager';
+import { INBOX_FILTERS, isInboxFilter } from '../chatInbox';
 
 const ChatContext = createContext(null);
 export const useChat = () => useContext(ChatContext);
@@ -58,6 +59,12 @@ export function ChatProvider({ children }) {
   const [chats, setChats] = useState([]);
   const [chatsLoaded, setChatsLoaded] = useState(false); // cache checked / first request settled
   const [chatsError, setChatsError] = useState(null);
+  // Inbox filter is session + user scoped. Switching it NEVER archives,
+  // unarchives, or otherwise mutates chat rows — it only changes the view.
+  const [inboxFilter, setInboxFilterState] = useState(INBOX_FILTERS.recent);
+  const [chatRequests, setChatRequests] = useState([]);
+  const [chatRequestsLoaded, setChatRequestsLoaded] = useState(false);
+  const [chatRequestsError, setChatRequestsError] = useState(null);
   const [messages, setMessages] = useState({});   // chatId -> message[]
   const [messagesLoaded, setMessagesLoaded] = useState({}); // chatId -> cache/server checked
   const [messagesLoading, setMessagesLoading] = useState({});
@@ -166,6 +173,10 @@ export function ChatProvider({ children }) {
     return () => docListeners.current.delete(fn);
   }, []);
 
+  const setInboxFilter = useCallback((next) => {
+    if (isInboxFilter(next)) setInboxFilterState(next);
+  }, []);
+
   const upsertChat = useCallback((chat) => {
     const engine = engineRef.current;
     if (engine) {
@@ -212,6 +223,10 @@ export function ChatProvider({ children }) {
       setMessages({});
       setChatsLoaded(false);
       setChatsError(null);
+      setInboxFilterState(INBOX_FILTERS.recent);
+      setChatRequests([]);
+      setChatRequestsLoaded(false);
+      setChatRequestsError(null);
       setMessagesLoaded({});
       setMessagesLoading({});
       setMessageErrors({});
@@ -223,6 +238,10 @@ export function ChatProvider({ children }) {
     setMessages({});
     setChatsLoaded(false);
     setChatsError(null);
+    setInboxFilterState(INBOX_FILTERS.recent);
+    setChatRequests([]);
+    setChatRequestsLoaded(false);
+    setChatRequestsError(null);
     setMessagesLoaded({});
     setMessagesLoading({});
     setMessageErrors({});
@@ -291,6 +310,18 @@ export function ChatProvider({ children }) {
         }
       } finally {
         if (!disposed) setChatsLoaded(true);
+      }
+
+      try {
+        const pending = await api.chatRequests();
+        if (!disposed && Array.isArray(pending?.requests)) {
+          setChatRequests(pending.requests);
+          setChatRequestsError(null);
+        }
+      } catch {
+        if (!disposed) setChatRequestsError('Unable to load chat requests.');
+      } finally {
+        if (!disposed) setChatRequestsLoaded(true);
       }
     })();
 
@@ -625,6 +656,9 @@ export function ChatProvider({ children }) {
     });
 
     socket.on('chat:removed', ({ chatId }) => {
+      if (chatId) {
+        setChatRequests((prev) => prev.filter((row) => row.chatId !== chatId));
+      }
       if (gcIdsRef.current.has(chatId)) {
         gcStoreRef.current?.removeChat(chatId);
         leaveGCRoom(chatId);
@@ -657,6 +691,13 @@ export function ChatProvider({ children }) {
         return;
       }
       upsertChat(chat);
+      // An accepted conversation leaving Request Chat is a display update
+      // only — the request row is dropped once the chat is in the inbox.
+      if (chat?.id) {
+        setChatRequests((prev) => (prev.some((row) => row.chatId === chat.id)
+          ? prev.filter((row) => row.chatId !== chat.id)
+          : prev));
+      }
     };
     socket.on('chat:updated', routeIncomingChat);
     socket.on('chat:new', routeIncomingChat);
@@ -706,10 +747,24 @@ export function ChatProvider({ children }) {
     });
 
     socket.on('chat:request', (payload) => {
+      if (payload?.chatId) {
+        setChatRequests((prev) => {
+          const idx = prev.findIndex((row) => row.chatId === payload.chatId);
+          if (idx === -1) return [payload, ...prev];
+          const next = [...prev];
+          next[idx] = payload;
+          return next;
+        });
+        setChatRequestsLoaded(true);
+        setChatRequestsError(null);
+      }
       chatRequestListeners.current.forEach((fn) => fn('chat:request', payload));
       refreshActivityUnread(setActivityUnread);
     });
     socket.on('chat:request:resolved', (payload) => {
+      if (payload?.chatId) {
+        setChatRequests((prev) => prev.filter((row) => row.chatId !== payload.chatId));
+      }
       if (payload?.action === 'accept' && payload?.chat) upsertChat(payload.chat);
       chatRequestListeners.current.forEach((fn) => fn('chat:request:resolved', payload));
       refreshActivityUnread(setActivityUnread);
@@ -1353,21 +1408,37 @@ export function ChatProvider({ children }) {
 
   /* ---------------- actions ---------------- */
 
-  const refreshChats = useCallback(async () => {
+  const refreshChatRequests = useCallback(async () => {
+    setChatRequestsError(null);
+    try {
+      const pending = await api.chatRequests();
+      if (!Array.isArray(pending?.requests)) throw new Error('Invalid chat requests response');
+      setChatRequests(pending.requests);
+      setChatRequestsLoaded(true);
+      return pending.requests;
+    } catch (error) {
+      setChatRequestsError('Unable to load chat requests.');
+      setChatRequestsLoaded(true);
+      throw error;
+    }
+  }, []);
+
+  const refreshChats = useCallback(async ({ includeGCs = true } = {}) => {
     setChatsError(null);
     try {
       const engine = engineRef.current;
       if (engine) {
         await engine.sync.refreshChatsFromServer();
-        // GCs never ride the direct-chat store — refresh them separately.
-        const gcs = await refreshGCs().catch(() => []);
+        // Chat-list pull-to-refresh can skip GCs so Recent/Archived never
+        // reload the separate GC environment.
+        const gcs = includeGCs ? await refreshGCs().catch(() => []) : [];
         setChatsLoaded(true);
         return gcs;
       }
       const result = await api.chats();
       if (!Array.isArray(result?.chats)) throw new Error('Invalid conversations response');
       setChats(sortChats(result.chats.filter((c) => c?.type !== 'gc')));
-      await refreshGCs().catch(() => {});
+      if (includeGCs) await refreshGCs().catch(() => {});
       setChatsLoaded(true);
       return result.chats;
     } catch (error) {
@@ -1599,6 +1670,8 @@ export function ChatProvider({ children }) {
     <ChatContext.Provider
       value={{
         chats, chatsLoaded, chatsError,
+        inboxFilter, setInboxFilter,
+        chatRequests, chatRequestsLoaded, chatRequestsError, refreshChatRequests,
         messages, messagesLoaded, messagesLoading, messageErrors,
         typing, connected, activityUnread,
         documents, otReady,
