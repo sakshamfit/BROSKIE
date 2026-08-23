@@ -67,7 +67,7 @@
   },
   "private": true,
   "engines": {
-    "node": "24.x"
+    "node": "24.18.0"
   },
   "devDependencies": {
     "@config-plugins/react-native-webrtc": "15.0.2",
