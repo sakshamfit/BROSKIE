@@ -32,6 +32,27 @@ account to message with.
 log in as two different accounts, and message between them. Typing indicators, delivery
 and blue ticks all update live.
 
+### Dockerized backend (optional, recommended for repeatable local services)
+
+Docker runs the **Node/SQLite/Socket.IO backend**, not the Expo mobile UI. It
+keeps the local database, uploads, automatic backups and generated browser-push
+keys in a named volume while Android/iOS/web still run through Expo and real
+browser/device testing.
+
+```bash
+cp .env.example .env
+# Set JWT_SECRET in .env to: openssl rand -hex 32
+docker compose up --build -d
+curl http://localhost:4000/health
+docker compose logs -f backend
+```
+
+Use `docker compose down` to stop it. Do **not** use `docker compose down -v`
+in normal development because it destroys the local persisted data. See
+[`docs/DOCKER_AND_COMPATIBILITY.md`](docs/DOCKER_AND_COMPATIBILITY.md) for
+physical-device API URLs, security configuration, the Docker smoke command and
+the Android/iOS/web validation matrix.
+
 ### Data safety — no data loss on updates
 
 - The database is backed up **automatically every 6 hours** and **right before

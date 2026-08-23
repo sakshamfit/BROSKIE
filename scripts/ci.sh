@@ -22,6 +22,7 @@ echo "━━━ [3/5] server: test suites ━━━"
   npm run test:chat-history       && \
   npm run test:offline-messaging  && \
   npm run test:push               && \
+  npm run test:otp                && \
   npm run test:phase2             && \
   npm run test:moderation         && \
   npm run test:phase3             && \

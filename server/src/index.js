@@ -59,12 +59,21 @@ function passwordError(value) {
 }
 
 const app = express();
+// Comma-separated browser origins can be configured without rebuilding the
+// container. Native apps do not send a browser Origin header, while a local
+// development default of `*` keeps Expo web and LAN testing straightforward.
+// Public deployments should set the exact HTTPS origins in CORS_ORIGIN.
+const configuredCorsOrigins = String(process.env.CORS_ORIGIN || '*')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const corsOrigin = configuredCorsOrigins.length === 0 || configuredCorsOrigins.includes('*') ? '*' : configuredCorsOrigins;
 // Gzip every compressible response (JS/CSS bundles, API JSON). The web
 // bundle drops from ~1.4 MB to ~380 KB over the wire — the single biggest
 // win for slow connections. Socket.IO traffic is unaffected (it attaches to
 // the raw HTTP server), and tiny responses skip compression via `threshold`.
 app.use(compression({ threshold: 1024 }));
-app.use(cors({ origin: '*' }));
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '25mb' }));
 
 const storage = require('./storage');
@@ -931,7 +940,10 @@ function deleteAccountData(userId) {
 /* auth routes                                                         */
 /* ------------------------------------------------------------------ */
 
-app.get('/api/health', (req, res) => res.json({ ok: true, time: now(), storage: storage.describe() }));
+// Liveness/readiness endpoint for Docker, hosts and load balancers. It is
+// registered only after SQLite has opened and schema migrations have run, and
+// deliberately exposes no storage configuration, credentials or user data.
+app.get(['/health', '/api/health'], (req, res) => res.status(200).json({ ok: true, time: now() }));
 
 app.get('/api/auth/username-available', (req, res) => {
   const raw = req.query.username;
@@ -4607,7 +4619,7 @@ app.put('/api/admin/moderation/settings', requireAuth, requireAdmin, (req, res) 
 /* ------------------------------------------------------------------ */
 
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' }, maxHttpBufferSize: 3e7 });
+const io = new Server(server, { cors: { origin: corsOrigin }, maxHttpBufferSize: 3e7 });
 
 const sockets = new Map(); // userId -> Set<socketId>
 const activeCalls = new Map(); // userId -> callId, for busy-detection and cleanup on disconnect

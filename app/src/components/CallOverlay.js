@@ -6,7 +6,7 @@ import { RemoteVideo, LocalVideo } from './CallVideo';
 import { useChat } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, rippleFor, GoldTick, hasGoldTick } from './common';
-import { radius, type, inkBox, sketchBox, raised } from '../theme';
+import { radius, type, inkBox, sketchBox, raised, lightTheme } from '../theme';
 import { SpringPressable, motion } from '../motion';
 import GridPaper from './GridPaper';
 
