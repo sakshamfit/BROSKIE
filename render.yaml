@@ -9,7 +9,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: NODE_VERSION
-        value: "24"
+        value: "24.18.0"
       # Only takes effect once the `disk:` block below is uncommented (Render
       # Disks require a paid plan — Starter or up). server/src/db.js and
       # server/src/storage.js both read DATA_DIR and, if set, store the

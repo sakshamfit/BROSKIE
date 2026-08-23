@@ -5627,18 +5627,46 @@ function shutdownWithBackup(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[shutdown] ${signal} received — backing up before exit…`);
+  // Stop taking new work first so the backup snapshots a quiet database.
+  try {
+    io.close();
+  } catch {}
+  try {
+    server.close();
+  } catch {}
   (async () => {
     try {
       await backupNow();
     } catch (e) {
       console.error('[backup]', e.message);
     } finally {
+      // Finalize every cached prepared statement BEFORE the process starts
+      // tearing down. better-sqlite3 statements that outlive the Node
+      // environment abort in their destructors — the
+      // "Assertion failed: (env) != nullptr" RemoveEnvironmentCleanupHook
+      // crash from the deploy logs. Closing the db here (env still alive)
+      // makes that teardown path impossible and checkpoints WAL on the way
+      // out.
+      try {
+        db.closeDatabase();
+      } catch (e) {
+        console.error('[shutdown] db close:', e.message);
+      }
       process.exit(0);
     }
   })();
 }
 process.on('SIGTERM', () => shutdownWithBackup('SIGTERM'));
 process.on('SIGINT', () => shutdownWithBackup('SIGINT'));
+
+// Safety net: if the process exits by any other route (uncaught exception,
+// manual exit, test harness), still close the database synchronously so no
+// Statement destructor can run after the environment is gone.
+process.on('exit', () => {
+  try {
+    db.closeDatabase();
+  } catch {}
+});
 
 /* ------------------------------------------------------------------ */
 /* single-host mode: serve the built web app from this same server      */

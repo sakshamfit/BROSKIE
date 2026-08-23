@@ -52,6 +52,60 @@ if (!usingPersistentVolume && onKnownEphemeralHost) {
 
 const dbPath = path.join(DATA_DIR, 'tomodachi.db');
 const db = new Database(dbPath);
+
+/* ----------------------------------------------------------------------
+ * Prepared-statement cache (native-crash + memory hardening)
+ * ----------------------------------------------------------------------
+ * better-sqlite3's prepare() compiles SQL into a native sqlite3_stmt
+ * wrapped in a Node ObjectWrap. This codebase calls db.prepare() inline
+ * ~500 times — in route handlers, in the 15s disappearing-message sweep,
+ * etc. — so it mints a NEW native Statement object on every call and
+ * leaves it for the garbage collector to finalize. That means:
+ *
+ *   - thousands of native objects per hour whose finalizers run at
+ *     GC time (the exact surface of the Node 24.19+ "Assertion failed:
+ *     (env) != nullptr" / RemoveEnvironmentCleanupHook aborts), and
+ *   - steady RSS growth on memory-capped containers (Railway).
+ *
+ * better-sqlite3's own docs say to prepare once and reuse. We wrap
+ * prepare() with a small bounded LRU cache keyed by the final SQL
+ * string: hot paths reuse compiled statements, and the number of live
+ * native statements stays capped no matter how dynamic the SQL gets
+ * (IN (…) lists with varying placeholder counts, etc.).
+ *
+ * SQLITE_STMT_CACHE=0 disables the cache (fresh statement per call).
+ * ---------------------------------------------------------------------- */
+const STMT_CACHE_LIMIT = Math.max(0, Number(process.env.SQLITE_STMT_CACHE || 512));
+const stmtCache = new Map(); // sql -> Statement, insertion-ordered (LRU)
+const rawPrepare = db.prepare.bind(db);
+db.prepare = function prepareCached(sql) {
+  const hit = stmtCache.get(sql);
+  if (hit) {
+    // Refresh LRU recency.
+    stmtCache.delete(sql);
+    stmtCache.set(sql, hit);
+    return hit;
+  }
+  const stmt = rawPrepare(sql);
+  if (STMT_CACHE_LIMIT > 0) {
+    stmtCache.set(sql, stmt);
+    while (stmtCache.size > STMT_CACHE_LIMIT) {
+      stmtCache.delete(stmtCache.keys().next().value);
+    }
+  }
+  return stmt;
+};
+
+/** Close the database cleanly: finalizes every cached statement while the
+ *  Node environment is still alive. Statements whose destructors run during
+ *  process teardown (after the environment is destroyed) are what abort the
+ *  process in production — closing here makes that path impossible.
+ *  Shutdown-only; idempotent. */
+function closeDatabase() {
+  stmtCache.clear();
+  if (db.open) db.close();
+}
+
 try {
   db.pragma('journal_mode = WAL');
 } catch (err) {
@@ -693,3 +747,4 @@ CREATE INDEX IF NOT EXISTS idx_msg_edit_ops_msg ON message_edit_operations(messa
 
 module.exports = db;
 module.exports.DATA_DIR = DATA_DIR;
+module.exports.closeDatabase = closeDatabase;
