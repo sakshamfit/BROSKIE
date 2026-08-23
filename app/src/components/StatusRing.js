@@ -62,8 +62,10 @@ export default function StatusRing({
           strokeWidth={stroke}
           strokeDasharray={empty ? '4 5' : `${dash} ${gapLen}`}
           strokeLinecap="round"
-          rotation="-90"
-          origin={`${size / 2}, ${size / 2}`}
+          // Keep the SVG transform in one valid SVG attribute. The older
+          // rotation + origin props made react-native-svg emit the CSS
+          // `transform-origin` attribute on web, which React warns about.
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
       {children}

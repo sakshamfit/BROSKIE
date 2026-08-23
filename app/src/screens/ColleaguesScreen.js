@@ -7,7 +7,7 @@ import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
-import { useChat } from '../store/ChatContext';
+import { useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { AFFILIATION_TYPES, affiliationType } from '../components/affiliationMeta';
@@ -31,10 +31,10 @@ const CARD_TILTS = ['0.5deg', '-0.8deg', '1deg'];
  * organization or workplace. Connection requests turn that shared context
  * into an accepted friend/contact relationship.
  */
-export default function ColleaguesScreen({ navigation, onOpenChat }) {
+function ColleaguesScreen({ navigation, onOpenChat, active = true }) {
   const { theme } = useTheme();
   const { user, refreshUser } = useAuth();
-  const { upsertChat, onColleagueEvent } = useChat();
+  const { upsertChat, onColleagueEvent } = useChatActions();
   const { isTablet } = useResponsive();
   const [colleagues, setColleagues] = useState([]);
   const [places, setPlaces] = useState([]);
@@ -74,6 +74,7 @@ export default function ColleaguesScreen({ navigation, onOpenChat }) {
   // reloads at once instead of waiting out the debounce window.
   const debouncedLoad = useDebouncedCallback(() => load(), 220);
   useEffect(() => {
+    if (!active) return undefined;
     if (!query.trim()) {
       debouncedLoad.cancel();
       load();
@@ -81,14 +82,14 @@ export default function ColleaguesScreen({ navigation, onOpenChat }) {
     }
     debouncedLoad();
     return undefined;
-  }, [query, load, debouncedLoad]);
+  }, [active, query, load, debouncedLoad]);
 
   // A request accepted on another device or a newly joined colleague should
   // appear without leaving/re-entering the screen.
   useEffect(() => {
-    if (!onColleagueEvent) return undefined;
+    if (!active || !onColleagueEvent) return undefined;
     return onColleagueEvent(() => load({ quiet: true }));
-  }, [onColleagueEvent, load]);
+  }, [active, onColleagueEvent, load]);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -200,6 +201,7 @@ export default function ColleaguesScreen({ navigation, onOpenChat }) {
             one-tap "I'm around", and today's place posts. The greeter's
             handoff lands here. Hidden for users without places. */}
         <TodayStrip
+          active={active}
           reloadKey={todayReload}
           onOpenChat={openMessageById}
           onSeePosts={() => openNetworkFeed('places')}
@@ -426,6 +428,8 @@ export default function ColleaguesScreen({ navigation, onOpenChat }) {
     </View>
   );
 }
+
+export default React.memo(ColleaguesScreen);
 
 function SectionTitle({ theme, title, note }) {
   return (

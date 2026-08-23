@@ -10,7 +10,7 @@ import {
   RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync,
   useAudioRecorder, useAudioRecorderState,
 } from 'expo-audio';
-import { useChat } from '../store/ChatContext';
+import { useChatListState, useChatMessageState, useChatRealtime, useChatActions, useChatCall } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChatTheme, ChatThemeScope } from '../store/ChatThemeContext';
@@ -41,19 +41,25 @@ const CollabDocumentView = lazyComponent(() => import('../components/CollabDocum
 
 function ConversationContent({ route, navigation, embedded = false, themePicker = null }) {
   const { chatId, initialChat = null } = route.params || {};
+  const { chats } = useChatListState();
+  const { messages, messagesLoaded, messagesLoading, messageErrors } = useChatMessageState();
+  const { typing } = useChatRealtime();
   const {
-    chats, messages, messagesLoaded, messagesLoading, messageErrors,
-    typing, refreshChats, loadMessages, loadOlderMessages, sendMessage, markRead, setTypingState,
-    react, deleteMessage, removeMessageLocal, editMessage, createPoll, votePoll, startCall, call, setMessages,
+    refreshChats, loadMessages, loadOlderMessages, sendMessage, markRead, setTypingState,
+    react, deleteMessage, removeMessageLocal, editMessage, createPoll, votePoll, startCall, setMessages,
     socketRef,
-  } = useChat();
+  } = useChatActions();
+  const { call } = useChatCall();
   const socket = socketRef?.current || null;
   const { user } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useResponsive();
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const audioRecorderState = useAudioRecorderState(audioRecorder, 100);
+  // The recorder hook polls even while the composer is idle. 100ms caused the
+  // entire conversation tree to render ten times per second; the timer only
+  // displays whole seconds, so 500ms is plenty and keeps the idle chat cheap.
+  const audioRecorderState = useAudioRecorderState(audioRecorder, 500);
 
   // `initialChat` is passed by NewChat so Android never waits on an async
   // Context render before it can draw the conversation shell.
@@ -79,11 +85,11 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const [reportNote, setReportNote] = useState('');
   const [reportBusy, setReportBusy] = useState(false);
 
-  const openReport = (message) => {
+  const openReport = useCallback((message) => {
     setReportReason('');
     setReportNote('');
     setReportMsg(message);
-  };
+  }, []);
 
   const submitReport = async () => {
     if (!reportReason || reportBusy) return;
@@ -225,7 +231,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     };
   }, [scrollToLatest]);
 
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
 
   useEffect(() => {
     if (chatId) loadMessages(chatId).catch(() => {});
@@ -502,7 +508,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     return () => window.removeEventListener('keydown', onKey);
   }, [replyTo]);
 
-  const startEdit = (message) => {
+  const startEdit = useCallback((message) => {
     setEditing(message);
     setText(message.body || '');
     setShowEmoji(false);
@@ -515,30 +521,29 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         setOtEditingVersion(prev => ({ ...prev, [message.id]: 0 }));
       });
     }
-  };
+  }, []);
 
-  const toggleStar = async (message) => {
-    try {
-      const { starred } = message.starred
-        ? await api.unstarMessage(message.id)
-        : await api.starMessage(message.id);
-      setMessagesLocalStar(message.id, starred);
-    } catch (e) { console.warn('star failed', e.message); }
-  };
-
-  // small local patch helper: keep message list in sync with star/timer changes
-  // without waiting for the socket round-trip (the server also broadcasts
-  // message:updated so other clients stay in sync).
-  const setMessagesLocalStar = (id, starred) => {
+  // Small local patch helpers are stable, so memoized message rows can skip
+  // their expensive gesture/menu tree while the recorder or composer updates.
+  const setMessagesLocalStar = useCallback((id, starred) => {
     setMessages((prev) => {
       const entry = Object.entries(prev).find(([, list]) => list.some((m) => m.id === id));
       if (!entry) return prev;
       const [cid, list] = entry;
       return { ...prev, [cid]: list.map((m) => (m.id === id ? { ...m, starred } : m)) };
     });
-  };
+  }, [setMessages]);
 
-  const setMessageTimer = async (message, seconds) => {
+  const toggleStar = useCallback(async (message) => {
+    try {
+      const { starred } = message.starred
+        ? await api.unstarMessage(message.id)
+        : await api.starMessage(message.id);
+      setMessagesLocalStar(message.id, starred);
+    } catch (e) { console.warn('star failed', e.message); }
+  }, [setMessagesLocalStar]);
+
+  const setMessageTimer = useCallback(async (message, seconds) => {
     try {
       const { expiresAt } = await api.setMessageTimer(message.id, seconds);
       setMessages((prev) => {
@@ -548,11 +553,74 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         return { ...prev, [cid]: list.map((m) => (m.id === message.id ? { ...m, expiresAt } : m)) };
       });
     } catch (e) { console.warn('timer failed', e.message); }
-  };
+  }, [setMessages]);
 
-  const onVote = async (messageId, pollId, optionIndex) => {
+  const onVote = useCallback(async (messageId, pollId, optionIndex) => {
     try { await votePoll(messageId, pollId, optionIndex); } catch (e) { console.warn('vote failed', e.message); }
-  };
+  }, [votePoll]);
+
+  const renderMessage = useCallback(({ item }) => (
+    item._type === 'day' ? (
+      <View style={s.dayWrap}>
+        <View style={[dashedRule(theme), { flex: 1 }]} />
+        <View style={[s.tapeStrip, { backgroundColor: theme.cardAlt, borderColor: theme.graphiteLine }]}>
+          <Text style={[type.labelXs, { color: theme.graphite }]}>{String(item.label || '').toUpperCase()}</Text>
+        </View>
+        <View style={[dashedRule(theme), { flex: 1 }]} />
+      </View>
+    ) : (
+      <MessageBubble
+        message={item}
+        animateIn={!!item._new}
+        isMine={item.senderId === user.id}
+        isGroup={isGroupChat(chat)}
+        senderName={nameFor(item.senderId)}
+        senderUser={chat?.members?.find((m) => m.id === item.senderId)}
+        onReply={handleReply}
+        onOpenReply={openReply}
+        highlighted={replyHighlightId === item.id}
+        onReact={react}
+        onDelete={deleteMessage}
+        onDeleteForMe={handleDeleteForMe}
+        onImagePress={setLightbox}
+        onEdit={startEdit}
+        onForward={setForwardMsg}
+        onStar={toggleStar}
+        onSetTimer={setTimerMsg}
+        onVotePoll={onVote}
+        onReport={openReport}
+      />
+    )
+  ), [s, theme, user, chat, nameFor, handleReply, openReply, replyHighlightId, react, deleteMessage,
+    handleDeleteForMe, startEdit, toggleStar, onVote, openReport]);
+
+  const onListScroll = useCallback((event) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    if (contentSize.height <= layoutMeasurement.height + 48) return;
+    if (contentOffset.y > 90 || loadingOlderRef.current || !loadOlderMessages) return;
+    loadingOlderRef.current = true;
+    suppressScrollToEnd.current = true;
+    Promise.resolve(loadOlderMessages(chatId)).finally(() => {
+      setTimeout(() => {
+        suppressScrollToEnd.current = false;
+        loadingOlderRef.current = false;
+      }, 400);
+    });
+  }, [chatId, loadOlderMessages]);
+
+  const onContentSizeChange = useCallback(() => {
+    if (suppressScrollToEnd.current || suppressFocusScroll.current) return;
+    listRef.current?.scrollToEnd({ animated: false });
+  }, []);
+  const onScrollToIndexFailed = useCallback((info) => {
+    setTimeout(() => {
+      listRef.current?.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index - 200), animated: false });
+    }, 60);
+  }, []);
+  const keyExtractor = useCallback((item) => item.id, []);
+  const listContentStyle = useMemo(() => ({
+    paddingVertical: 14, flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 8,
+  }), []);
 
   if (!chat) {
     return (
@@ -694,71 +762,18 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         ref={listRef}
         style={s.messagesList}
         data={rows}
-        keyExtractor={(i) => i.id}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
-        contentContainerStyle={{ paddingVertical: 14, flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 8 }}
+        contentContainerStyle={listContentStyle}
         maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
-        onScroll={(event) => {
-          const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-          if (contentSize.height <= layoutMeasurement.height + 48) return;
-          if (contentOffset.y > 90) return;
-          if (loadingOlderRef.current || !loadOlderMessages) return;
-          loadingOlderRef.current = true;
-          suppressScrollToEnd.current = true;
-          Promise.resolve(loadOlderMessages(chatId)).finally(() => {
-            setTimeout(() => {
-              suppressScrollToEnd.current = false;
-              loadingOlderRef.current = false;
-            }, 400);
-          });
-        }}
+        onScroll={onListScroll}
         scrollEventThrottle={80}
-        onContentSizeChange={() => {
-          if (suppressScrollToEnd.current || suppressFocusScroll.current) return;
-          listRef.current?.scrollToEnd({ animated: false });
-        }}
-        onScrollToIndexFailed={(info) => {
-          // Rows vary in height; fall back to an estimated offset, then retry.
-          setTimeout(() => {
-            listRef.current?.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index - 200), animated: false });
-          }, 60);
-        }}
-        renderItem={({ item }) =>
-          item._type === 'day' ? (
-            <View style={s.dayWrap}>
-              <View style={[dashedRule(theme), { flex: 1 }]} />
-              <View style={[s.tapeStrip, { backgroundColor: theme.cardAlt, borderColor: theme.graphiteLine }]}>
-                <Text style={[type.labelXs, { color: theme.graphite }]}>{String(item.label || '').toUpperCase()}</Text>
-              </View>
-              <View style={[dashedRule(theme), { flex: 1 }]} />
-            </View>
-          ) : (
-            <MessageBubble
-              message={item}
-              animateIn={!!item._new}
-              isMine={item.senderId === user.id}
-              isGroup={isGroupChat(chat)}
-              senderName={nameFor(item.senderId)}
-              senderUser={chat?.members?.find((m) => m.id === item.senderId)}
-              onReply={handleReply}
-              onOpenReply={openReply}
-              highlighted={replyHighlightId === item.id}
-              onReact={react}
-              onDelete={deleteMessage}
-              onDeleteForMe={handleDeleteForMe}
-              onImagePress={setLightbox}
-              onEdit={startEdit}
-              onForward={setForwardMsg}
-              onStar={toggleStar}
-              onSetTimer={setTimerMsg}
-              onVotePoll={onVote}
-              onReport={openReport}
-            />
-          )
-        }
+        onContentSizeChange={onContentSizeChange}
+        onScrollToIndexFailed={onScrollToIndexFailed}
+        keyExtractor={keyExtractor}
+        renderItem={renderMessage}
         ListEmptyComponent={
           !messageHistoryLoaded || messageHistoryLoading ? (
             <View style={s.emptyChat}>

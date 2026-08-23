@@ -9,7 +9,7 @@ import { EmojiText } from '../icons/Emoji';
 import { api, mediaUrl } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
-import { useChat } from '../store/ChatContext';
+import { useChatActions } from '../store/ChatContext';
 import { Avatar, formatChatTime, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from './common';
 import { AUDIENCE } from './audienceMeta';
 import SongCard from './SongCard';
@@ -60,10 +60,10 @@ function foregroundFor(status) {
  * graphite. Tapping a circle opens the same full-screen story viewer the
  * old See tab used, replies included.
  */
-export default function StoriesRow({ reloadKey = 0 }) {
+export default function StoriesRow({ reloadKey = 0, active = true }) {
   const { user } = useAuth();
   const { theme } = useTheme();
-  const { onStatusEvent } = useChat();
+  const { onStatusEvent } = useChatActions();
   const [data, setData] = useState({ mine: null, others: [] });
   const [loading, setLoading] = useState(true);
   const [composerMode, setComposerMode] = useState(null); // choose | text | photo
@@ -74,11 +74,13 @@ export default function StoriesRow({ reloadKey = 0 }) {
     try { setData(await api.statuses()); } catch {} finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load, reloadKey]);
   useEffect(() => {
-    if (!onStatusEvent) return undefined;
+    if (active) load();
+  }, [active, load, reloadKey]);
+  useEffect(() => {
+    if (!active || !onStatusEvent) return undefined;
     return onStatusEvent(() => load());
-  }, [onStatusEvent, load]);
+  }, [active, onStatusEvent, load]);
 
   const closeViewer = () => {
     setViewerGroup(null);

@@ -25,7 +25,7 @@ const tiltFor = (i) => (i % 2 === 0 ? '-0.8deg' : '0.7deg');
  *     Instagram heart burst;
  *   - tapping the author's avatar circle opens their profile.
  */
-export default function PostCard({
+const PostCard = React.memo(function PostCard({
   post,
   index = 0,
   tilted = true,
@@ -187,7 +187,9 @@ export default function PostCard({
       </View>
     </DoubleTapLike>
   );
-}
+});
+
+export default PostCard;
 
 /**
  * The like control. Three things happen on one tap, all native driven:

@@ -25,7 +25,7 @@ const hoursLeft = (expiresAt) => Math.max(1, Math.round((expiresAt - Date.now())
  * Renders nothing for users with no places on their profile and nothing
  * while the first load is in flight — the rest of the screen never waits.
  */
-export default function TodayStrip({ reloadKey = 0, onOpenChat, onSeePosts }) {
+export default function TodayStrip({ reloadKey = 0, onOpenChat, onSeePosts, active = true }) {
   const { theme } = useTheme();
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -41,7 +41,9 @@ export default function TodayStrip({ reloadKey = 0, onOpenChat, onSeePosts }) {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load, reloadKey]);
+  useEffect(() => {
+    if (active) load();
+  }, [active, load, reloadKey]);
 
   const hasPlaces = !!data?.places?.length;
   const people = useMemo(() => {

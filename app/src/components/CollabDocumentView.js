@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator, TextInput, Modal, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '../store/ThemeContext';
-import { useChat } from '../store/ChatContext';
+import { useChatActions } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import Icon from '../icons/Icon';
 import { PaperCard, Avatar, Rule } from './common';
@@ -20,8 +20,8 @@ const CollabEditor = lazyComponent(() => import('./CollabEditor'));
 export function CollabDocumentView({ chatId, embedded = false, socket: socketProp }) {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const chatCtx = useChat();
-  const socket = socketProp || chatCtx?.socketRef?.current || null;
+  const { socketRef } = useChatActions();
+  const socket = socketProp || socketRef?.current || null;
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);

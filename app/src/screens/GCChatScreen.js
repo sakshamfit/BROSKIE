@@ -11,7 +11,7 @@ import {
   RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync,
   useAudioRecorder, useAudioRecorderState,
 } from 'expo-audio';
-import { useChat } from '../store/ChatContext';
+import { useChatGCState, useChatActions } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import { useChatTheme, ChatThemeScope } from '../store/ChatThemeContext';
@@ -50,18 +50,22 @@ const CollabDocumentView = lazyComponent(() => import('../components/CollabDocum
 function GCConversationContent({ route, navigation, embedded = false, themePicker = null }) {
   const { chatId } = route.params || {};
   const {
-    gcChats, gcMessages, gcMessagesLoaded, gcMessagesLoading, gcMessageErrors,
-    gcTyping, refreshGCs, loadGCMessages, loadOlderGCMessages, sendGCMessage, retryGCMessage,
+    gcChats, gcMessages, gcMessagesLoaded, gcMessagesLoading, gcMessageErrors, gcTyping,
+  } = useChatGCState();
+  const {
+    refreshGCs, loadGCMessages, loadOlderGCMessages, sendGCMessage, retryGCMessage,
     editGCMessage, markGCRead, setGCTypingState, joinGCRoom, leaveGCRoom,
     react, deleteMessage, createPoll, votePoll, socketRef, setGcMessages,
-  } = useChat();
+  } = useChatActions();
   const socket = socketRef?.current || null;
   const { user } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useResponsive();
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const audioRecorderState = useAudioRecorderState(audioRecorder, 100);
+  // Only whole recording seconds are displayed. Polling at 100ms made the
+  // whole GC message list render ten times per second even when idle.
+  const audioRecorderState = useAudioRecorderState(audioRecorder, 500);
 
   const chat = gcChats.find((c) => c.id === chatId);
   const list = gcMessages[chatId] || [];
@@ -201,27 +205,13 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
     clearTimeout(replyMissingTimer.current);
   }, []);
 
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
 
-  if (!chat) {
-    return (
-      <View style={[s.center, { backgroundColor: theme.bg, padding: 28 }]}>
-        <ActivityIndicator color={theme.primary} />
-        <Text style={[type.labelSm, { color: theme.muted, marginTop: 14 }]}>OPENING GC…</Text>
-        <Pressable onPress={() => refreshGCs().catch(() => {})} style={[inkBox(theme, 'thin'), { marginTop: 18, paddingHorizontal: 16, paddingVertical: 9 }]}>
-          <Text style={[type.labelSm, { color: theme.ink }]}>RETRY</Text>
-        </Pressable>
-        {!embedded && (
-          <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 12, padding: 8 }}>
-            <Text style={[type.labelSm, { color: theme.subtext }]}>BACK TO GCs</Text>
-          </Pressable>
-        )}
-      </View>
-    );
-  }
-
+  // Keep hook order stable while the GC summary is arriving. The previous
+  // early return skipped the callbacks below on the first render, which can
+  // trigger a hooks-order error exactly during a slow/cold startup.
   const typers = Object.values(gcTyping[chatId] || {});
-  const subtitle = chat.members
+  const subtitle = chat?.members
     ? chat.members.map((m) => (m?.id === user.id ? 'You' : String(m?.name || 'Unknown').split(' ')[0])).join(', ')
     : '';
 
@@ -428,7 +418,7 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
     }, 1600);
   }, [rows]);
 
-  const startEdit = (message) => {
+  const startEdit = useCallback((message) => {
     setEditing(message);
     setText(message.body || '');
     setShowEmoji(false);
@@ -437,9 +427,9 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
         setEditing((prev) => (prev && prev.id === message.id ? { ...prev, otVersion: r.version || 0 } : prev));
       }).catch(() => {});
     }
-  };
+  }, []);
 
-  const toggleStar = async (message) => {
+  const toggleStar = useCallback(async (message) => {
     try {
       const { starred } = message.starred ? await api.unstarMessage(message.id) : await api.starMessage(message.id);
       setGcMessages((prev) => {
@@ -449,9 +439,9 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
         return { ...prev, [cid]: list.map((m) => (m.id === message.id ? { ...m, starred } : m)) };
       });
     } catch (e) { console.warn('gc star failed', e.message); }
-  };
+  }, [setGcMessages]);
 
-  const setMessageTimer = async (message, seconds) => {
+  const setMessageTimer = useCallback(async (message, seconds) => {
     try {
       const { expiresAt } = await api.setMessageTimer(message.id, seconds);
       setGcMessages((prev) => {
@@ -461,17 +451,17 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
         return { ...prev, [cid]: list.map((m) => (m.id === message.id ? { ...m, expiresAt } : m)) };
       });
     } catch (e) { console.warn('gc timer failed', e.message); }
-  };
+  }, [setGcMessages]);
 
-  const onVote = async (messageId, pollId, optionIndex) => {
+  const onVote = useCallback(async (messageId, pollId, optionIndex) => {
     try { await votePoll(messageId, pollId, optionIndex); } catch (e) { console.warn('gc vote failed', e.message); }
-  };
+  }, [votePoll]);
 
-  const openReport = (message) => {
+  const openReport = useCallback((message) => {
     setReportReason('');
     setReportNote('');
     setReportMsg(message);
-  };
+  }, []);
 
   const submitReport = async () => {
     if (!reportReason || reportBusy) return;
@@ -490,11 +480,84 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
     }
   };
 
-  const keyboardPad = Platform.OS === 'android' || Platform.OS === 'web' ? keyboardHeight : 0;
-  const openInfo = () => navigation?.navigate?.('GCDetail', { chatId });
+  const renderMessage = useCallback(({ item }) => (
+    item._type === 'day' ? (
+      <View style={s.dayWrap}>
+        <View style={[dashedRule(theme), { flex: 1 }]} />
+        <View style={[s.tapeStrip, { backgroundColor: theme.cardAlt, borderColor: theme.graphiteLine }]}>
+          <Text style={[type.labelXs, { color: theme.graphite }]}>{String(item.label || '').toUpperCase()}</Text>
+        </View>
+        <View style={[dashedRule(theme), { flex: 1 }]} />
+      </View>
+    ) : (
+      <MessageBubble
+        message={item}
+        animateIn={!!item._new}
+        isMine={item.senderId === user.id}
+        isGroup
+        senderName={nameFor(item.senderId)}
+        senderUser={chat?.members?.find((m) => m.id === item.senderId)}
+        onReply={handleReply}
+        onOpenReply={openReply}
+        highlighted={replyHighlightId === item.id}
+        onReact={react}
+        onDelete={deleteMessage}
+        onDeleteForMe={handleDeleteForMe}
+        onImagePress={setLightbox}
+        onEdit={startEdit}
+        onForward={setForwardMsg}
+        onStar={toggleStar}
+        onSetTimer={setTimerMsg}
+        onVotePoll={onVote}
+        onReport={openReport}
+      />
+    )
+  ), [s, theme, user, chat, nameFor, handleReply, openReply, replyHighlightId, react, deleteMessage,
+    handleDeleteForMe, startEdit, toggleStar, onVote, openReport]);
 
-  return (
-    <KeyboardAvoidingView
+  const onListScroll = useCallback((event) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    if (contentSize.height <= layoutMeasurement.height + 48 || contentOffset.y > 90 || loadingOlderRef.current) return;
+    loadingOlderRef.current = true;
+    suppressScrollToEnd.current = true;
+    Promise.resolve(loadOlderGCMessages(chatId)).finally(() => {
+      setTimeout(() => { suppressScrollToEnd.current = false; loadingOlderRef.current = false; }, 400);
+    });
+  }, [chatId, loadOlderGCMessages]);
+  const onContentSizeChange = useCallback(() => {
+    if (suppressScrollToEnd.current || suppressFocusScroll.current) return;
+    listRef.current?.scrollToEnd({ animated: false });
+  }, []);
+  const onScrollToIndexFailed = useCallback((info) => {
+    setTimeout(() => {
+      listRef.current?.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index - 200), animated: false });
+    }, 60);
+  }, []);
+  const keyExtractor = useCallback((item) => item.id, []);
+  const listContentStyle = useMemo(() => ({
+    paddingVertical: 14, flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 8,
+  }), []);
+  const keyboardPad = Platform.OS === 'android' || Platform.OS === 'web' ? keyboardHeight : 0;
+  const openInfo = useCallback(() => navigation?.navigate?.('GCDetail', { chatId }), [navigation, chatId]);
+
+  if (!chat) {
+    return (
+      <View style={[s.center, { backgroundColor: theme.bg, padding: 28 }]}>
+        <ActivityIndicator color={theme.primary} />
+        <Text style={[type.labelSm, { color: theme.muted, marginTop: 14 }]}>OPENING GC…</Text>
+        <Pressable onPress={() => refreshGCs().catch(() => {})} style={[inkBox(theme, 'thin'), { marginTop: 18, paddingHorizontal: 16, paddingVertical: 9 }]}>
+          <Text style={[type.labelSm, { color: theme.ink }]}>RETRY</Text>
+        </Pressable>
+        {!embedded && (
+          <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 12, padding: 8 }}>
+            <Text style={[type.labelSm, { color: theme.subtext }]}>BACK TO GCs</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
+
+  return (    <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: theme.chatBg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
@@ -566,67 +629,18 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
           ref={listRef}
           style={s.messagesList}
           data={rows}
-          keyExtractor={(i) => i.id}
+          keyExtractor={keyExtractor}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           automaticallyAdjustContentInsets={false}
           contentInsetAdjustmentBehavior="never"
-          contentContainerStyle={{ paddingVertical: 14, flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 8 }}
+          contentContainerStyle={listContentStyle}
           maintainVisibleContentPosition={{ minIndexForVisible: 1 }}
-          onScroll={(event) => {
-            const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-            if (contentSize.height <= layoutMeasurement.height + 48) return;
-            if (contentOffset.y > 90) return;
-            if (loadingOlderRef.current) return;
-            loadingOlderRef.current = true;
-            suppressScrollToEnd.current = true;
-            Promise.resolve(loadOlderGCMessages(chatId)).finally(() => {
-              setTimeout(() => { suppressScrollToEnd.current = false; loadingOlderRef.current = false; }, 400);
-            });
-          }}
+          onScroll={onListScroll}
           scrollEventThrottle={80}
-          onContentSizeChange={() => {
-            if (suppressScrollToEnd.current || suppressFocusScroll.current) return;
-            listRef.current?.scrollToEnd({ animated: false });
-          }}
-          onScrollToIndexFailed={(info) => {
-            setTimeout(() => {
-              listRef.current?.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index - 200), animated: false });
-            }, 60);
-          }}
-          renderItem={({ item }) =>
-            item._type === 'day' ? (
-              <View style={s.dayWrap}>
-                <View style={[dashedRule(theme), { flex: 1 }]} />
-                <View style={[s.tapeStrip, { backgroundColor: theme.cardAlt, borderColor: theme.graphiteLine }]}>
-                  <Text style={[type.labelXs, { color: theme.graphite }]}>{String(item.label || '').toUpperCase()}</Text>
-                </View>
-                <View style={[dashedRule(theme), { flex: 1 }]} />
-              </View>
-            ) : (
-              <MessageBubble
-                message={item}
-                animateIn={!!item._new}
-                isMine={item.senderId === user.id}
-                isGroup
-                senderName={nameFor(item.senderId)}
-                senderUser={chat?.members?.find((m) => m.id === item.senderId)}
-                onReply={handleReply}
-                onOpenReply={openReply}
-                highlighted={replyHighlightId === item.id}
-                onReact={react}
-                onDelete={deleteMessage}
-                onDeleteForMe={handleDeleteForMe}
-                onImagePress={setLightbox}
-                onEdit={startEdit}
-                onForward={setForwardMsg}
-                onStar={toggleStar}
-                onSetTimer={setTimerMsg}
-                onVotePoll={onVote}
-                onReport={openReport}
-              />
-            )
-          }
+          onContentSizeChange={onContentSizeChange}
+          onScrollToIndexFailed={onScrollToIndexFailed}
+          renderItem={renderMessage}
           ListEmptyComponent={
             !messageHistoryLoaded || messageHistoryLoading ? (
               <View style={s.emptyChat}>

@@ -138,16 +138,34 @@ export function upsertMessageList(list, incoming, { replaceId } = {}) {
 
 export function mergeMessageLists(local, remote, { keepPending = true } = {}) {
   const byId = new Map();
+  // A page merge used to scan every existing message for every incoming row.
+  // Chats keep up to 400 local messages, so reconnects turned into avoidable
+  // O(n²) work. Index both server ids and client ids while retaining the
+  // existing alias-aware merge semantics.
+  const aliases = new Map();
   const remember = (message) => {
     if (!message?.id && !message?.clientId) return;
-    const existing = [...byId.values()].find((item) => sameMessage(item, message));
-    if (existing) {
+    const existingKey = [message.id, message.clientId]
+      .map((id) => aliases.get(id))
+      .find((key) => key !== undefined)
+      || (byId.has(messageKey(message)) ? messageKey(message) : undefined);
+    if (existingKey !== undefined) {
+      const existing = byId.get(existingKey);
       const merged = mergeMessage(existing, message);
-      byId.delete(messageKey(existing));
-      byId.set(messageKey(merged), merged);
+      const nextKey = messageKey(merged);
+      byId.delete(existingKey);
+      byId.set(nextKey, merged);
+      aliases.forEach((key, id) => {
+        if (key === existingKey) aliases.set(id, nextKey);
+      });
+      if (merged.id) aliases.set(merged.id, nextKey);
+      if (merged.clientId) aliases.set(merged.clientId, nextKey);
       return;
     }
-    byId.set(messageKey(message), message);
+    const key = messageKey(message);
+    byId.set(key, message);
+    if (message.id) aliases.set(message.id, key);
+    if (message.clientId) aliases.set(message.clientId, key);
   };
   (local || []).forEach(remember);
   (remote || []).forEach(remember);

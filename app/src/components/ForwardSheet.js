@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import Icon from '../icons/Icon';
-import { useChat } from '../store/ChatContext';
+import { useChatListState, useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, InkCheckbox, InkButton, EmptyState, Rule, FrostedBackdrop, GoldTick, hasGoldTick, isGroupChat } from './common';
 import { BottomSheet, SpringPressable, motion } from '../motion';
@@ -15,7 +15,8 @@ import { api } from '../api';
  */
 export default function ForwardSheet({ visible, message, onClose }) {
   const { theme } = useTheme();
-  const { chats, upsertChat } = useChat();
+  const { chats } = useChatListState();
+  const { upsertChat } = useChatActions();
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
   const s = makeStyles(theme);

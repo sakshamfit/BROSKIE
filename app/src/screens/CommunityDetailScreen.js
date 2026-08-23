@@ -5,7 +5,7 @@ import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api, WEB_APP_URL } from '../api';
 import { useAuth } from '../store/AuthContext';
-import { useChat } from '../store/ChatContext';
+import { useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, PaperCard, TapeChip, handleFor, Rule, InkButton, rippleFor, FrostedBackdrop, GoldTick, hasGoldTick } from '../components/common';
 import { categoryMeta, JOIN_POLICY } from '../components/communityMeta';
@@ -22,7 +22,7 @@ import { SpringPressable, motion } from '../motion';
  */
 export default function CommunityDetailScreen({ communityId, onClose, onOpenChat }) {
   const { user } = useAuth();
-  const { onCommunityEvent } = useChat();
+  const { onCommunityEvent } = useChatActions();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const s = makeStyles(theme);

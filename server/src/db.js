@@ -444,6 +444,26 @@ addColumnIfMissing('messages', 'status_id', 'status_id TEXT');
 addColumnIfMissing('messages', 'status_snapshot', 'status_snapshot TEXT');
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_messages_status_id ON messages(status_id) WHERE status_id IS NOT NULL'); } catch {}
 
+/* Hot-path indexes. The schema started with only chat_id/created_at, but
+   inbox hydration, reconnect sync, unread counts and the activity feed also
+   filter by the other side of these relationships. Keeping these indexes in
+   the migration section makes existing Railway volumes pick them up without
+   a data rebuild. */
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_chat_members_user_chat ON chat_members(user_id, chat_id);
+  CREATE INDEX IF NOT EXISTS idx_messages_chat_created_id ON messages(chat_id, created_at DESC, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_messages_chat_updated_id ON messages(chat_id, updated_at DESC, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_messages_expires ON messages(expires_at) WHERE expires_at IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_receipts_user_state_message ON receipts(user_id, state, message_id);
+  CREATE INDEX IF NOT EXISTS idx_chat_requests_sender_status ON chat_requests(sender_id, status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_post_likes_post_at ON post_likes(post_id, at DESC);
+  CREATE INDEX IF NOT EXISTS idx_post_likes_user_at ON post_likes(user_id, at DESC);
+  CREATE INDEX IF NOT EXISTS idx_post_comments_user_at ON post_comments(user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_statuses_expires_created ON statuses(expires_at, created_at);
+  CREATE INDEX IF NOT EXISTS idx_communities_visibility_updated ON communities(visibility, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_gc_requests_user_status ON gc_requests(user_id, status, created_at);
+`);
+
 /* ---- push notifications (Expo push) ---- */
 /* One row per registered device token. The token itself is the primary key:
    a device that signs in as a different user simply reassigns its row, so a
@@ -605,6 +625,7 @@ CREATE TABLE IF NOT EXISTS poll_votes (
   FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_poll_votes_poll_option ON poll_votes(poll_id, option_index);
 
 /* ---- Operational Transformation: collaborative documents & message edit history ---- */
 CREATE TABLE IF NOT EXISTS documents (

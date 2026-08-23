@@ -5,7 +5,7 @@ import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
-import { useChat } from '../store/ChatContext';
+import { useChatCall, useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, formatChatTime, rippleFor, GoldTick, hasGoldTick } from '../components/common';
 import useResponsive from '../hooks/useResponsive';
@@ -19,7 +19,8 @@ import { SpringPressable, motion } from '../motion';
  */
 export default function CallsScreen({ navigation, embedded = false }) {
   const { user } = useAuth();
-  const { startCall, call: activeCall, callSupported } = useChat();
+  const { startCall } = useChatActions();
+  const { call: activeCall, callSupported } = useChatCall();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const { isTablet } = useResponsive();

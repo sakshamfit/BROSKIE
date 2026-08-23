@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
-import { useChat } from '../store/ChatContext';
+import { useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { confirm } from '../hooks/confirm';
 import { Avatar, EmptyState, Rule, TapeChip, formatChatTime, handleFor, GoldTick, hasGoldTick } from './common';
@@ -16,7 +16,7 @@ import { SpringPressable, motion } from '../motion';
 /** Full-height inbox for first messages from people outside accepted contacts. */
 export default function MessageRequestsPanel({ visible, onClose, requests, onChanged, navigation }) {
   const { theme } = useTheme();
-  const { upsertChat, refreshChats } = useChat();
+  const { upsertChat, refreshChats } = useChatActions();
   const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');

@@ -4,7 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import Svg, { Circle, Defs, Pattern, Path, Rect } from 'react-native-svg';
-import { useFonts } from 'expo-font';
+import { loadAsync, useFonts } from 'expo-font';
 import { BricolageGrotesque_600SemiBold } from '@expo-google-fonts/bricolage-grotesque/600SemiBold';
 import { BricolageGrotesque_700Bold } from '@expo-google-fonts/bricolage-grotesque/700Bold';
 import { BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque/800ExtraBold';
@@ -35,6 +35,74 @@ import { lazyComponent } from './src/lazy';
 const PushController = lazyComponent(() => import('./src/push/PushController'));
 const CallOverlay = lazyComponent(() => import('./src/components/CallOverlay'));
 const DailyAIGreeting = lazyComponent(() => import('./src/components/DailyAIGreeting'));
+
+// Keep the authentication path small: the original app requested every font
+// (including the handwriting and chat-only families) before the first signed-in
+// screen could settle. The remaining families are loaded once, after auth, in
+// the background. `Font.loadAsync` is used instead of another `useFonts` hook so
+// this work never gates the first paint.
+const AUTH_FONTS = {
+  Bricolage_600SemiBold: BricolageGrotesque_600SemiBold,
+  Anybody_800ExtraBold,
+  Anybody_900Black,
+  SpaceMono_700Bold,
+  Hanken_400Regular: HankenGrotesk_400Regular,
+};
+const APP_FONTS = {
+  Bricolage_700Bold: BricolageGrotesque_700Bold,
+  Bricolage_800ExtraBold: BricolageGrotesque_800ExtraBold,
+  Karla_400Regular,
+  Karla_500Medium,
+  Karla_700Bold,
+  JetBrainsMono_500Medium,
+  JetBrainsMono_700Bold,
+  SpaceMono_400Regular,
+  Caveat_600SemiBold,
+  Caveat_700Bold,
+};
+let appFontsPromise = null;
+
+function useAuthenticatedFonts(enabled) {
+  useEffect(() => {
+    if (!enabled || appFontsPromise) return undefined;
+    appFontsPromise = loadAsync(APP_FONTS).catch(() => {
+      // Font loading is cosmetic. System fallbacks keep the app usable if a
+      // device cannot finish downloading the optional families.
+    });
+    return undefined;
+  }, [enabled]);
+}
+
+function DeferredDailyAIGreeting({ user }) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setReady(false);
+      return undefined;
+    }
+    let cancelled = false;
+    let timer;
+    const reveal = () => {
+      if (!cancelled) setReady(true);
+    };
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.requestIdleCallback) {
+      const idleId = window.requestIdleCallback(reveal, { timeout: 1400 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback?.(idleId);
+      };
+    }
+    // Let the first authenticated frame and its essential data requests win.
+    timer = setTimeout(reveal, 900);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [user?.id]);
+
+  return ready && user ? <DailyAIGreeting /> : null;
+}
 
 /**
  * Keep +one current without the user thinking about it.
@@ -102,6 +170,7 @@ function SketchGraphPaper() {
 function Root() {
   const { theme, mode } = useTheme();
   const { user } = useAuth();
+  useAuthenticatedFonts(!!user);
 
   // On web, keep the page shell (html/body/#root backgrounds + the mobile
   // browser-chrome "theme-color") in lockstep with the app theme, so there
@@ -164,7 +233,7 @@ function Root() {
       {/* Registers this device for push, syncs the unread badge, and routes
           notification taps to the exact screen. No-op on web. */}
       {user && <PushController />}
-      {user && <DailyAIGreeting />}
+      {user && <DeferredDailyAIGreeting user={user} />}
       {user && <CallOverlay />}
     </>
   );
@@ -205,23 +274,7 @@ export default function App() {
   // Aliases keep theme.js font names short (Bricolage_800ExtraBold etc.)
   // Fonts load in the background; we deliberately do not gate first paint on
   // them (see the comment before the return below).
-  useFonts({
-    Bricolage_600SemiBold: BricolageGrotesque_600SemiBold,
-    Bricolage_700Bold: BricolageGrotesque_700Bold,
-    Bricolage_800ExtraBold: BricolageGrotesque_800ExtraBold,
-    Karla_400Regular,
-    Karla_500Medium,
-    Karla_700Bold,
-    JetBrainsMono_500Medium,
-    JetBrainsMono_700Bold,
-    Anybody_800ExtraBold,
-    Anybody_900Black,
-    SpaceMono_400Regular,
-    SpaceMono_700Bold,
-    Hanken_400Regular: HankenGrotesk_400Regular,
-    Caveat_600SemiBold,
-    Caveat_700Bold,
-  });
+  useFonts(AUTH_FONTS);
   // Fonts load in the background. Instead of holding the first paint until
   // every TTF arrives (which made the auth screen sit on "LOADING +ONE" for
   // up to 2.5s on cold visits), we render the shell immediately with the

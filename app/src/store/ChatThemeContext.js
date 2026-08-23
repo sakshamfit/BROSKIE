@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
-import { useChat } from './ChatContext';
+import { useChatListState, useChatGCState, useChatActions } from './ChatContext';
 import { ThemeContext, useTheme } from './ThemeContext';
 import { ThemeRegistry, resolveChatTheme } from '../chatThemes';
 import { api } from '../api';
@@ -23,7 +23,9 @@ export const useChatTheme = () => useContext(ChatThemeContext);
  * notice. Unknown ids always fall back to `graphite`.
  */
 export function ChatThemeProvider({ children }) {
-  const { chats, gcChats, onChatThemeEvent } = useChat();
+  const { chats } = useChatListState();
+  const { gcChats } = useChatGCState();
+  const { onChatThemeEvent } = useChatActions();
   const [live, setLive] = useState({});        // chatId -> { themeId, updatedBy, updatedAt, optimistic? }
   const [applyState, setApplyState] = useState({}); // chatId -> { saving?, error? }
 
