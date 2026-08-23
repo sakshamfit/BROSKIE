@@ -166,12 +166,16 @@ function badgeFor(userId) {
 async function sendToExpo(messages) {
   for (let i = 0; i < messages.length; i += EXPO_CHUNK) {
     const chunk = messages.slice(i, i + EXPO_CHUNK);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = setTimeout(() => controller?.abort(), 8000);
     try {
       const res = await fetch(EXPO_PUSH_SEND_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(chunk),
+        signal: controller?.signal,
       });
+      clearTimeout(timer);
       const body = await res.json().catch(() => null);
       if (!body || !Array.isArray(body.data)) continue;
       // Prune dead registrations so the table stays honest. Any other error
@@ -187,6 +191,7 @@ async function sendToExpo(messages) {
         }
       });
     } catch (e) {
+      clearTimeout(timer);
       // Network hiccup talking to Expo — nothing to do, next event retries.
       console.warn('[push] send failed:', e?.message || e);
     }

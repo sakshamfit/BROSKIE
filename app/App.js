@@ -30,11 +30,10 @@ import OrientationManager from './src/components/OrientationManager';
 import { setupMedianBridge, setMedianTheme } from './src/web/medianStatusBar';
 import VercelObservability from './src/web/VercelObservability';
 import { WEB_BUILD, startUpdateLifecycle } from './src/updates';
-import { lazyComponent } from './src/lazy';
 
-const PushController = lazyComponent(() => import('./src/push/PushController'));
-const CallOverlay = lazyComponent(() => import('./src/components/CallOverlay'));
-const DailyAIGreeting = lazyComponent(() => import('./src/components/DailyAIGreeting'));
+import PushController from './src/push/PushController';
+import CallOverlay from './src/components/CallOverlay';
+import DailyAIGreeting from './src/components/DailyAIGreeting';
 
 // Keep the authentication path small: the original app requested every font
 // (including the handwriting and chat-only families) before the first signed-in

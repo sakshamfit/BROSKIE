@@ -14,9 +14,7 @@ import { radius, type, inkBox, marker, dashedRule, raised } from '../theme';
 import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 import { DISAPPEAR_OPTIONS, disappearLabel } from '../components/MessageBubble';
-import { lazyComponent } from '../lazy';
-
-const CollabDocumentView = lazyComponent(() => import('../components/CollabDocumentView'));
+import CollabDocumentView from '../components/CollabDocumentView';
 
 export default function ChatInfoScreen({ route, navigation, embedded = false }) {
   const { chatId } = route.params;

@@ -21,7 +21,6 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 import { api } from '../api';
 import { confirm } from '../hooks/confirm';
 import { useDebouncedCallback } from '../rateLimit';
-import { idlePreload } from '../lazy';
 import {
   INBOX_FILTERS, INBOX_LABELS, INBOX_EMPTY, isInboxFilter,
   filterInboxChats, filterInboxRequests, filterSearchMessages, inboxCounts,
@@ -48,9 +47,7 @@ export default function ChatListScreen({ navigation }) {
   const { typing } = useChatRealtime();
   const { refreshChats, markRead, upsertChat, setInboxFilter, refreshChatRequests } = useChatActions();
 
-  useEffect(() => {
-    idlePreload(() => import('./ConversationScreen'));
-  }, []);
+  useEffect(() => {}, []);
   const { user } = useAuth();
   const { theme } = useTheme();
   const [query, setQuery] = useState('');

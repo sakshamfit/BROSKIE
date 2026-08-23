@@ -29,15 +29,13 @@ import { setViewedChat } from '../push/notifications';
 import { radius, type, inkBox, marker, dashedRule, stroke, raised } from '../theme';
 import { throttle } from '../rateLimit';
 import ImageLightbox from '../components/ImageLightbox';
-import { lazyComponent } from '../lazy';
 import { editorConfigFor } from '../imageEditor/config';
-
-const EmojiPicker = lazyComponent(() => import('../components/EmojiPicker'));
-const UniversalImageEditor = lazyComponent(() => import('../components/UniversalImageEditor'));
-const ForwardSheet = lazyComponent(() => import('../components/ForwardSheet'));
-const PollComposer = lazyComponent(() => import('../components/PollComposer'));
-const ThemePickerSheet = lazyComponent(() => import('../components/ThemePickerSheet'));
-const CollabDocumentView = lazyComponent(() => import('../components/CollabDocumentView'));
+import EmojiPicker from '../components/EmojiPicker';
+import UniversalImageEditor from '../components/UniversalImageEditor';
+import ForwardSheet from '../components/ForwardSheet';
+import PollComposer from '../components/PollComposer';
+import ThemePickerSheet from '../components/ThemePickerSheet';
+import CollabDocumentView from '../components/CollabDocumentView';
 
 function ConversationContent({ route, navigation, embedded = false, themePicker = null }) {
   const { chatId, initialChat = null } = route.params || {};

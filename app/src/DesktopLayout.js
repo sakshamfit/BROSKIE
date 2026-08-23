@@ -9,32 +9,31 @@ import { useChatListState } from './store/ChatContext';
 import useResponsive from './hooks/useResponsive';
 import { FrostedBackdrop } from './components/common';
 import { type, inkBox, stroke, raised } from './theme';
-import { lazyScreen, lazyComponent, idlePreload } from './lazy';
 import { onOpenProfileRequest, onOpenPostRequest } from './push/routing';
 
-const ChatListScreen = lazyScreen(() => import('./screens/ChatListScreen'), { label: 'Chats' });
-const ConversationScreen = lazyScreen(() => import('./screens/ConversationScreen'), { label: 'Conversation' });
-const NewChatScreen = lazyScreen(() => import('./screens/NewChatScreen'), { label: 'New Chat' });
-const SettingsScreen = lazyScreen(() => import('./screens/SettingsScreen'), { label: 'Settings' });
-const ChatInfoScreen = lazyScreen(() => import('./screens/ChatInfoScreen'), { label: 'Chat Info' });
-const NetworkScreen = lazyScreen(() => import('./screens/NetworkScreen'), { label: 'Network' });
-const GCScreen = lazyScreen(() => import('./screens/GCScreen'), { label: 'GC' });
-const GCDetailScreen = lazyScreen(() => import('./screens/GCDetailScreen'), { label: 'GC Details' });
-const GCChatScreen = lazyScreen(() => import('./screens/GCChatScreen'), { label: 'GC Chat' });
-const ColleaguesScreen = lazyScreen(() => import('./screens/ColleaguesScreen'), { label: 'Colleagues' });
-const PersonalInfoScreen = lazyScreen(() => import('./screens/PersonalInfoScreen'), { label: 'Personal Info' });
-const SecurityScreen = lazyScreen(() => import('./screens/SecurityScreen'), { label: 'Security' });
-const AppearanceScreen = lazyScreen(() => import('./screens/AppearanceScreen'), { label: 'Appearance' });
-const NotificationsScreen = lazyScreen(() => import('./screens/NotificationsScreen'), { label: 'Notifications' });
-const ActivityScreen = lazyScreen(() => import('./screens/ActivityScreen'), { label: 'Activity' });
-const PrivacyScreen = lazyScreen(() => import('./screens/PrivacyScreen'), { label: 'Privacy' });
-const BlockedUsersScreen = lazyScreen(() => import('./screens/BlockedUsersScreen'), { label: 'Blocked Contacts' });
-const HelpScreen = lazyScreen(() => import('./screens/HelpScreen'), { label: 'Help' });
-const CallsScreen = lazyScreen(() => import('./screens/CallsScreen'), { label: 'Calls' });
-const StarredMessagesScreen = lazyScreen(() => import('./screens/StarredMessagesScreen'), { label: 'Starred' });
-const AdminSafetyScreen = lazyScreen(() => import('./screens/AdminSafetyScreen'), { label: 'Safety & Reports' });
-const UserProfileScreen = lazyScreen(() => import('./screens/UserProfileScreen'), { label: 'User Profile' });
-const PostDetailScreen = lazyScreen(() => import('./screens/PostDetailScreen'), { label: 'Post Detail' });
+import ChatListScreen from './screens/ChatListScreen';
+import ConversationScreen from './screens/ConversationScreen';
+import NewChatScreen from './screens/NewChatScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import ChatInfoScreen from './screens/ChatInfoScreen';
+import NetworkScreen from './screens/NetworkScreen';
+import GCScreen from './screens/GCScreen';
+import GCDetailScreen from './screens/GCDetailScreen';
+import GCChatScreen from './screens/GCChatScreen';
+import ColleaguesScreen from './screens/ColleaguesScreen';
+import PersonalInfoScreen from './screens/PersonalInfoScreen';
+import SecurityScreen from './screens/SecurityScreen';
+import AppearanceScreen from './screens/AppearanceScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
+import ActivityScreen from './screens/ActivityScreen';
+import PrivacyScreen from './screens/PrivacyScreen';
+import BlockedUsersScreen from './screens/BlockedUsersScreen';
+import HelpScreen from './screens/HelpScreen';
+import CallsScreen from './screens/CallsScreen';
+import StarredMessagesScreen from './screens/StarredMessagesScreen';
+import AdminSafetyScreen from './screens/AdminSafetyScreen';
+import UserProfileScreen from './screens/UserProfileScreen';
+import PostDetailScreen from './screens/PostDetailScreen';
 
 /**
  * Split shell for wide viewports — desktop web AND real tablets/foldables
@@ -190,10 +189,7 @@ export default function SplitLayout() {
 
   // Android hardware back: close whatever is on top instead of exiting the
   // app (matches how the native stack navigator behaves on phones).
-  useEffect(() => {
-    idlePreload(() => import('./screens/ConversationScreen'));
-    idlePreload(() => import('./screens/SettingsScreen'));
-  }, []);
+  useEffect(() => {}, []);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;

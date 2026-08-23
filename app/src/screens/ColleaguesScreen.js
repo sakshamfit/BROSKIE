@@ -18,9 +18,7 @@ import { openNetworkFeed } from '../push/routing';
 import { useDebouncedCallback } from '../rateLimit';
 import { type, inkBox, marker, dashedRule, raised } from '../theme';
 import { SpringPressable, motion } from '../motion';
-import { lazyComponent } from '../lazy';
-
-const AffiliationPicker = lazyComponent(() => import('../components/AffiliationPicker'));
+import AffiliationPicker from '../components/AffiliationPicker';
 
 const FILTERS = [{ key: '', short: 'All', icon: 'globe-outline' }, ...AFFILIATION_TYPES];
 const CARD_TILTS = ['0.5deg', '-0.8deg', '1deg'];

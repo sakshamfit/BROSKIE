@@ -15,15 +15,13 @@ import { AUDIENCE } from './audienceMeta';
 import SongCard from './SongCard';
 import { radius, type, marker, stroke, raised } from '../theme';
 import { FadeSlide, Skeleton, motion, SpringPressable, haptic, useReducedMotion, Pop, Stagger } from '../motion';
-import { lazyComponent } from '../lazy';
 import { editorConfigFor } from '../imageEditor/config';
 import GridPaper from './GridPaper';
 import StatusRing from './StatusRing';
 import Emoji from '../icons/Emoji';
-
-const AudiencePicker = lazyComponent(() => import('./AudiencePicker'));
-const UniversalImageEditor = lazyComponent(() => import('./UniversalImageEditor'));
-const SongPicker = lazyComponent(() => import('./SongPicker'));
+import AudiencePicker from './AudiencePicker';
+import UniversalImageEditor from './UniversalImageEditor';
+import SongPicker from './SongPicker';
 
 const BG_COLORS = ['#FFE24D', '#fdf8f8', '#e2e3de', '#5d5f5b', '#1c1b1b', '#39444c'];
 const REACTIONS = ['❤️', '😂', '🔥', '😮', '👏'];
