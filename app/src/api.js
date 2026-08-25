@@ -1,11 +1,16 @@
 import { Platform } from 'react-native';
 
-// Railway remains the realtime/socket origin. HTTP requests use the stable
-// Vercel app origin by default, which proxies /api and /uploads to Railway.
-// This avoids device-specific TLS/route failures when a phone can open the
-// app but cannot complete an HTTPS request directly to the Railway hostname.
+// Railway remains the persistent realtime/socket origin. The public app
+// domain proxies HTTP API and upload requests there through Vercel.
 const DEFAULT_SERVER_URL = 'https://broskie-h.up.railway.app';
-const DEFAULT_MOBILE_API_URL = 'https://plusoneeeee.vercel.app';
+const PUBLIC_WEB_URL = 'https://plusoneco.in';
+const DEFAULT_MOBILE_API_URL = PUBLIC_WEB_URL;
+
+const isPublicStaticHost = (hostname) => (
+  hostname === 'plusoneco.in'
+  || hostname === 'www.plusoneco.in'
+  || hostname.endsWith('.vercel.app')
+);
 
 /**
  * Resolve the backend URL.
@@ -21,7 +26,7 @@ function resolveBase() {
   // Prefer the same-origin Vercel proxy even if an old project-level
   // EXPO_PUBLIC_API_URL still points directly at Railway. This makes a
   // redeployed website pick up the transport fix without a second env edit.
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && isPublicStaticHost(window.location.hostname)) {
     return '';
   }
 
@@ -56,7 +61,7 @@ function resolveBase() {
 
     // Vercel proxies HTTP API/media requests to Railway. Keep the browser
     // request same-origin so the proxy also removes CORS/TLS differences.
-    if (hostname.endsWith('.vercel.app')) return '';
+    if (isPublicStaticHost(hostname)) return '';
 
     // Anything else (production single-host): same origin, use relative paths.
     return '';
@@ -70,16 +75,17 @@ export const API_URL = resolveBase();
 
 /** Socket.IO target: Vercel and native HTTP proxy clients still use the
  * persistent Railway origin for realtime events. */
-const runningOnVercel = Platform.OS === 'web'
+const runningOnStaticHost = Platform.OS === 'web'
   && typeof window !== 'undefined'
-  && window.location.hostname.endsWith('.vercel.app');
-export const SOCKET_URL = runningOnVercel || API_URL === DEFAULT_MOBILE_API_URL
+  && isPublicStaticHost(window.location.hostname);
+export const SOCKET_URL = runningOnStaticHost || API_URL === DEFAULT_MOBILE_API_URL
   ? DEFAULT_SERVER_URL
   : API_URL;
 
-/** Public web origin — used for shareable links (community invites, profile
- *  links) that must open in any browser, on any platform. */
-export const WEB_APP_URL = DEFAULT_MOBILE_API_URL;
+/** Canonical public web origin used for shareable community and profile links.
+ * Browser requests themselves stay on their current origin, so www aliases
+ * continue to work while links consistently use the primary domain. */
+export const WEB_APP_URL = PUBLIC_WEB_URL;
 
 export function mediaUrl(u) {
   if (!u) return null;
