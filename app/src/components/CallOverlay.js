@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Platform, Modal, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
-import { RemoteVideo, LocalVideo } from './CallVideo';
+import { RemoteVideo, LocalVideo, RemoteAudio } from './CallVideo';
 import { useChatCall, useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, rippleFor, GoldTick, hasGoldTick } from './common';
@@ -100,9 +100,11 @@ export default function CallOverlay() {
           </>
         )}
 
-        {/* Voice calling hidden surface to play sound on web browser */}
+        {/* Voice calling audio on web — a hidden <audio> element. iOS Safari
+            does not reliably play audio from a zero-sized hidden <video>,
+            which left voice calls silent on iPhones. */}
         {!isVideo && isOngoing && Platform.OS === 'web' && (
-          <RemoteVideo stream={remoteStream} style={{ width: 0, height: 0, position: 'absolute', opacity: 0 }} />
+          <RemoteAudio stream={remoteStream} style={{ display: 'none' }} />
         )}
 
         {/* Header and center info */}

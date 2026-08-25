@@ -131,7 +131,6 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   // Reply focus / quote-tap must not trigger the composer's usual
   // scroll-to-bottom jump — keep the user on the message they swiped.
   const suppressFocusScroll = useRef(false);
-  const suppressScrollToEnd = useRef(false);
   const recSecs = Math.max(0, Math.floor((audioRecorderState.durationMillis || 0) / 1000));
 
   // forward + timer + poll + docs modals
@@ -151,12 +150,15 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   // keyboardHeight inset below covers those. iOS is handled by
   // KeyboardAvoidingView; Android and mobile web get the explicit bottom inset
   // because their keyboards may not resize the chat list for us.
+  // Bottom-anchored (inverted) list: offset 0 IS the latest message, so
+  // "scroll to latest" is a zero-distance no-op on open — the chat renders
+  // directly on the newest message with no visible scroll animation.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const keyboardScrollTimer = useRef(null);
   const scrollToLatest = useCallback((delay = 0) => {
     clearTimeout(keyboardScrollTimer.current);
     keyboardScrollTimer.current = setTimeout(() => {
-      listRef.current?.scrollToEnd({ animated: delay > 0 });
+      listRef.current?.scrollToOffset({ offset: 0, animated: delay > 0 });
     }, delay);
   }, []);
 
@@ -466,7 +468,10 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       if (day !== lastDay) { out.push({ _type: 'day', id: 'day_' + day, label: formatDayLabel(ts) }); lastDay = day; }
       out.push({ _type: 'msg', ...m });
     });
-    return out;
+    // Newest first: the FlatList is `inverted`, so index 0 renders at the
+    // visual bottom. Opening the chat therefore lands on the latest message
+    // instantly — no top-of-chat flash, no scrollToEnd animation.
+    return out.reverse();
   }, [list]);
 
   // Tapping a reply quote scrolls to the original (animated) and briefly
@@ -480,13 +485,13 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       replyMissingTimer.current = setTimeout(() => setReplyMissing(false), 2000);
       return;
     }
-    suppressScrollToEnd.current = true;
+    suppressFocusScroll.current = true;
     listRef.current?.scrollToIndex({ index: idx, viewPosition: 0.4, animated: true });
     setReplyHighlightId(messageId);
     clearTimeout(replyHighlightTimer.current);
     replyHighlightTimer.current = setTimeout(() => {
       setReplyHighlightId(null);
-      suppressScrollToEnd.current = false;
+      suppressFocusScroll.current = false;
     }, 1600);
   }, [rows]);
 
@@ -595,20 +600,34 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const onListScroll = useCallback((event) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     if (contentSize.height <= layoutMeasurement.height + 48) return;
-    if (contentOffset.y > 90 || loadingOlderRef.current || !loadOlderMessages) return;
+    // Inverted geometry: the visual TOP (oldest messages) is near the END of
+    // the scroll range, so "close to the top" means offset + viewport ≈ size.
+    if (contentOffset.y + layoutMeasurement.height < contentSize.height - 90 || loadingOlderRef.current || !loadOlderMessages) return;
     loadingOlderRef.current = true;
-    suppressScrollToEnd.current = true;
     Promise.resolve(loadOlderMessages(chatId)).finally(() => {
       setTimeout(() => {
-        suppressScrollToEnd.current = false;
         loadingOlderRef.current = false;
       }, 400);
     });
   }, [chatId, loadOlderMessages]);
 
-  const onContentSizeChange = useCallback(() => {
-    if (suppressScrollToEnd.current || suppressFocusScroll.current) return;
-    listRef.current?.scrollToEnd({ animated: false });
+  // The inverted list is bottom-anchored on native (maintainVisibleContentPosition)
+  // and bottom-anchored at offset 0 on web. One web-specific gap remains: RNW
+  // has no maintainVisibleContentPosition, so while the user is scrolled up
+  // reading history, rows added above/below (older history or a new message)
+  // would drift the reading position by one row each. Compensate the scroll
+  // offset by the content-height delta so the reading position stays glued —
+  // unless the user is at the bottom (offset 0), where the newest message
+  // must simply appear.
+  const contentHeightRef = useRef(0);
+  const onContentSizeChange = useCallback((_, nextHeight) => {
+    if (Platform.OS !== 'web' || typeof nextHeight !== 'number') return;
+    const prev = contentHeightRef.current;
+    contentHeightRef.current = nextHeight;
+    if (!prev || nextHeight <= prev) return;
+    const node = listRef.current?.getScrollableNode?.();
+    if (!node || node.scrollTop <= 1) return;
+    node.scrollTop += (nextHeight - prev);
   }, []);
   const onScrollToIndexFailed = useCallback((info) => {
     setTimeout(() => {
@@ -617,7 +636,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   }, []);
   const keyExtractor = useCallback((item) => item.id, []);
   const listContentStyle = useMemo(() => ({
-    paddingVertical: 14, flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 8,
+    paddingVertical: 14, flexGrow: 1,
   }), []);
 
   if (!chat) {
@@ -760,6 +779,12 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         ref={listRef}
         style={s.messagesList}
         data={rows}
+        // Bottom-anchored chat list: the newest message is index 0 at the
+        // visual bottom. Opening the chat renders directly on the latest
+        // message — there is no initial scroll, so nothing can flash the top
+        // of the conversation or animate down.
+        inverted
+        windowSize={9}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         automaticallyAdjustContentInsets={false}

@@ -11,12 +11,14 @@ if (!SECRET) {
 }
 
 function sign(user) {
-  return jwt.sign({ id: user.id, username: user.username }, SECRET, { expiresIn: '30d' });
+  return jwt.sign({ id: user.id, username: user.username }, SECRET, { expiresIn: '30d', algorithm: 'HS256' });
 }
 
 function verify(token) {
   try {
-    return jwt.verify(token, SECRET);
+    // Algorithm pinned: tokens are always HS256, so a crafted header can never
+    // negotiate a different verification path.
+    return jwt.verify(token, SECRET, { algorithms: ['HS256'] });
   } catch (e) {
     return null;
   }
