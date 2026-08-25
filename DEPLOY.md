@@ -1,5 +1,10 @@
 # Deploying +one
 
+> **AWS?** See **[AWS_DEPLOY.md](./AWS_DEPLOY.md)** — scripted EC2 + Docker +
+> EBS deployment (CloudShell-friendly, includes Route53/HTTPS setup and
+> Railway data-migration steps). The Railway/Render notes below still apply
+> for non-AWS hosting.
+
 **Recommendation: deploy to ONE host.** It is simpler, cheaper, faster, and
 removes a whole class of bugs. Details below, plus the two-host option if you
 specifically need a CDN.
