@@ -99,11 +99,10 @@ Only if you want the Vercel CDN. `vercel.json` is already in the repo.
    use the Vercel HTTPS origin and avoid device-specific Railway TLS failures.
 3. `EXPO_PUBLIC_API_URL` is optional. Set it only if you use a different
    backend; do not point it at the Vercel website unless its proxy is deployed.
-4. Lock down CORS on the backend by setting `CORS_ORIGIN` on Railway to the
-   exact web origin (for example `https://your-app.vercel.app`). Multiple
-   origins can be comma-separated. The backend applies the same allow-list to
-   Express and Socket.IO; no source edit is needed. Keep `*` only for local
-   development.
+4. Lock down CORS on the Railway backend by setting
+   `CORS_ORIGIN=https://plusoneco.in,https://www.plusoneco.in`. The backend
+   applies the same allow-list to Express and Socket.IO; no source edit or
+   web rebuild is needed. Keep `*` only for local development.
 
 ### Cloudflare Workers static web deployment
 
