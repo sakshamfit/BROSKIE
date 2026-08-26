@@ -13,6 +13,7 @@ import { confirm } from '../hooks/confirm';
 import PostCard from '../components/PostCard';
 import { Avatar, EmptyState, handleFor, formatChatTime, GoldTick, hasGoldTick } from '../components/common';
 import ImageLightbox from '../components/ImageLightbox';
+import { stopPreview } from '../previewPlayer';
 import { type, inkBox, stroke } from '../theme';
 import { SpringPressable, motion } from '../motion';
 
@@ -54,6 +55,7 @@ export default function PostDetailScreen({ navigation, route, embedded = false }
   }, [postId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => () => stopPreview(), []);
 
   /* live counts while the post is open */
   useEffect(() => {
@@ -148,6 +150,7 @@ export default function PostDetailScreen({ navigation, route, embedded = false }
                   onToggleFollow={toggleFollow}
                   onDelete={removePost}
                   onOpenImage={setLightbox}
+                  playbackActive
                 />
                 <Text style={[type.labelXs, { color: theme.muted, marginBottom: 10 }]}>
                   {post.comments === 1 ? '1 COMMENT' : `${post.comments || 0} COMMENTS`}

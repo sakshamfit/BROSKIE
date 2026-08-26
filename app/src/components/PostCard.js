@@ -37,6 +37,7 @@ const PostCard = React.memo(function PostCard({
   activeTag = null,
   onOpenImage,
   showFollow = true,
+  playbackActive = false,
 }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -143,12 +144,23 @@ const PostCard = React.memo(function PostCard({
           ]}
         >
           <Image source={{ uri: mediaUrl(post.mediaUrl) }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          {!!post.song && (
+            <View style={s.songOnMedia} pointerEvents="box-none">
+              <SongCard song={post.song} variant="sticker" autoPlay={playbackActive} />
+            </View>
+          )}
         </DoubleTapLike>
       )}
 
-      {!!post.song && (
-        <View style={{ marginTop: 12 }}>
-          <SongCard song={post.song} compact />
+      {!!post.song && !post.mediaUrl && (
+        <View style={[s.songOnly, inkBox(theme, 'thin')]}>
+          {(post.song.artwork || post.song.albumArt) ? (
+            <Image source={{ uri: post.song.artwork || post.song.albumArt }} style={StyleSheet.absoluteFill} blurRadius={18} />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.cardAlt }]} />
+          )}
+          <View style={s.songOnlyScrim} />
+          <SongCard song={post.song} variant="sticker" autoPlay={playbackActive} />
         </View>
       )}
 

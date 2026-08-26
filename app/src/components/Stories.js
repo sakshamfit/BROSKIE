@@ -22,6 +22,7 @@ import Emoji from '../icons/Emoji';
 import AudiencePicker from './AudiencePicker';
 import UniversalImageEditor from './UniversalImageEditor';
 import SongPicker from './SongPicker';
+import { stopPreview } from '../previewPlayer';
 
 const BG_COLORS = ['#FFE24D', '#fdf8f8', '#e2e3de', '#5d5f5b', '#1c1b1b', '#39444c'];
 const REACTIONS = ['❤️', '😂', '🔥', '😮', '👏'];
@@ -328,6 +329,7 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
   const moveRef = useRef(null);
 
   const closeViewer = useCallback(() => {
+    stopPreview();
     setReplyText('');
     setReplyFeedback('');
     setReplyFocused(false);
@@ -560,7 +562,7 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
             </Pressable>
           </View>
 
-          <View style={s.viewerBody} pointerEvents="none">
+          <View style={s.viewerBody} pointerEvents="box-none">
             {/* each story segment enters with a soft settle */}
             <FadeSlide key={current.id} from="up" distance={14} scale={0.985} style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
             {current.type === 'image' ? (
@@ -574,15 +576,21 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
                 ]}
               >
                 <Image source={{ uri: mediaUrl(current.mediaUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                {!!current.song && (
+                  <View style={s.viewerSongOnMedia}>
+                    <SongCard song={current.song} variant="sticker" autoPlay paused={held || replyFocused} />
+                  </View>
+                )}
               </View>
             ) : (
-              <EmojiText style={[s.viewerText, { color: foregroundFor(current) }]}>{current.body}</EmojiText>
-            )}
-
-            {!!current.song && (
-              <View style={s.viewerSong}>
-                <SongCard song={current.song} tint={foregroundFor(current)} />
-              </View>
+              <>
+                <EmojiText style={[s.viewerText, { color: foregroundFor(current) }]}>{current.body}</EmojiText>
+                {!!current.song && (
+                  <View style={s.viewerSong} pointerEvents="auto">
+                    <SongCard song={current.song} variant="sticker" autoPlay paused={held || replyFocused} />
+                  </View>
+                )}
+              </>
             )}
 
             {current.type === 'image' && !!current.body && (
@@ -956,6 +964,11 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                       <Icon name="create-outline" size={14} color="#ffffff" />
                       <Text style={[type.labelXs, { color: '#ffffff' }]}>EDIT CROP</Text>
                     </Pressable>
+                    {!!song && (
+                      <View style={s.composerSongOnMedia}>
+                        <SongCard song={song} variant="sticker" onRemove={() => setSong(null)} />
+                      </View>
+                    )}
                   </View>
                   <View style={s.captionBar}>
                     <TextInput
@@ -976,12 +989,9 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
                   <Text style={[type.bodySm, { color: 'rgba(255,255,255,0.58)', marginTop: 5, textAlign: 'center' }]}>Original, square, portrait, wide or story frame</Text>
                 </Pressable>
               )}
-              {!!song && (
-                <View style={s.composerSongDark}>
-                  <SongCard song={song} tint="#ffffff" />
-                  <Pressable onPress={() => setSong(null)} hitSlop={8} style={{ padding: 5 }}>
-                    <Icon name="close" size={16} color="#ffffff" />
-                  </Pressable>
+              {!image && !!song && (
+                <View style={{ marginTop: 14 }}>
+                  <SongCard song={song} variant="sticker" onRemove={() => setSong(null)} />
                 </View>
               )}
             </View>
@@ -1002,10 +1012,7 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
               />
               {!!song && (
                 <View style={s.composerSongText}>
-                  <SongCard song={song} tint={foreground} />
-                  <Pressable onPress={() => setSong(null)} hitSlop={8} style={{ padding: 5 }}>
-                    <Icon name="close" size={16} color={foreground} />
-                  </Pressable>
+                  <SongCard song={song} variant="sticker" onRemove={() => setSong(null)} />
                 </View>
               )}
             </View>
@@ -1238,7 +1245,8 @@ const makeStyles = (t) => StyleSheet.create({
   viewerBody: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 22, paddingVertical: 20, zIndex: 2 },
   viewerText: { ...type.headlineMd, fontSize: 28, lineHeight: 39, textAlign: 'center', maxWidth: 680 },
   viewerImageFrame: { maxWidth: 720, maxHeight: '72%', overflow: 'hidden', backgroundColor: '#111111' },
-  viewerSong: { marginTop: 18, width: '100%', maxWidth: 360 },
+  viewerSong: { marginTop: 18, width: '100%', maxWidth: 360, alignItems: 'center' },
+  viewerSongOnMedia: { position: 'absolute', left: 10, bottom: 12, right: 10, zIndex: 4 },
   viewerCaption: { maxWidth: 620, marginTop: 15, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.58)' },
 
   composer: { flex: 1 },
@@ -1249,7 +1257,8 @@ const makeStyles = (t) => StyleSheet.create({
   chooseCard: { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 2, borderRadius: 12, padding: 16, marginBottom: 14 },
   chooseIcon: { width: 46, height: 46, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
   photoStage: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18, paddingBottom: 4 },
-  composerImageFrame: { flexShrink: 1, maxWidth: 720, maxHeight: '68%', overflow: 'hidden', backgroundColor: '#111111' },
+  composerImageFrame: { flexShrink: 1, maxWidth: 720, maxHeight: '68%', overflow: 'hidden', backgroundColor: '#111111', position: 'relative' },
+  composerSongOnMedia: { position: 'absolute', left: 10, bottom: 12, right: 10 },
   editCropButton: { position: 'absolute', right: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.72)' },
   emptyPhoto: { minWidth: 260, alignItems: 'center', padding: 32, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.38)', borderRadius: 12 },
   captionBar: { width: '100%', maxWidth: 680, marginTop: 14, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)', paddingHorizontal: 16 },
