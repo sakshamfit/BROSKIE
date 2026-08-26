@@ -215,7 +215,7 @@ every afternoon without opening Chats.
 | **Community invite links** | 8-char code per community (admins only see it), `Share` sheet with `https://…/c/<code>`, join-by-code bypasses every join policy (the link IS the approval), long-press rotates/revokes. Web `/c/<code>` and native `plusone://c/<code>` both deep-link: join → open the community detail. |
 | **Hold-to-record voice notes** | Hold the mic button to record, release to send; quick taps cancel (never send accidents). Race-safe: a release during recorder start-up parks the stop. |
 | **Activity grouping** | Likes/comments on your posts collapse into one row per post ("7 people liked your post") with stacked avatars; latest comment as preview. 7-day window. |
-| Songs on See/Network | iTunes Search API picker (zero-config, 30s previews) with optional Jamendo full-length tracks appended — see QA_LOOP2_REPORT addendum. |
+| Songs on See/Network | iTunes primary + Deezer fallback, provider-verified attachments, per-user limits — see the Music / Song Attachments section below. |
 | **CI** | Workflow file shipped at `docs/ci.workflow.yml` — activate once via GitHub → Add file → Create new file → name it `.github/workflows/ci.yml` → paste it in (the sandbox's git token cannot create workflow files). CI runs every server suite (chat history 14, offline messaging 14, message state 15, push 33, phase 2 39, phase 3 27, moderation 61, OT 33, features 27 — 263 checks) + web and Android bundle exports. |
 
 New endpoints: `GET /api/push/web-config`, `POST/DELETE /api/push/web-subscription`,
@@ -653,3 +653,36 @@ For any issue report, include:
 3. whether the issue occurs on web, Android, or iOS;
 4. Railway deploy/log time; and
 5. whether `/api/health` returns `ok: true`.
+
+---
+
+## Music / Song Attachments (Phase 9)
+
+- **Providers:** iTunes Search API is primary (free, no key, no auth); the **Deezer API is
+  the automatic fallback** for tracks Apple doesn't have. All provider traffic is proxied
+  through the backend — the client never calls Apple/Deezer directly, so providers can be
+  swapped without an app update.
+- **Previews only, by design.** Both providers serve ~30-second clips. There is NO
+  full-track playback anywhere in the app, for licensing reasons — do not add full
+  playback without an actual licensing agreement with a music provider.
+- **Endpoints:**
+  - `GET /api/songs/search?q=<query>` — auth'd, 30 req/min **per user**, sanitized query
+    (NFKC, control chars stripped, 100-char cap), 15-min LRU cache (500 entries).
+    Returns `{ results: Song[], degraded: boolean }` (`tracks`/`configured` kept for
+    pre-Phase-9 clients). `degraded: true` = both providers failed; the composer stays
+    usable.
+  - `GET /api/songs/:id` — cached lookup by normalized id (`itunes:<trackId>` /
+    `deezer:<id>`); 404 when unknown.
+- **Canonical song shape** (stored JSON on `posts.song` and `statuses.song`, serialized
+  by `normalizeStoredSong()` so pre-Phase-9 stored blobs keep rendering):
+  `{ id, provider, title, artist, album, artwork(512px), previewUrl, durationMs }`.
+- **Attachments are verified server-side:** new-format ids are re-fetched from the
+  provider at post/status creation and the provider's own title/artist/artwork is stored
+  (a client cannot spoof feed content via this field); legacy shapes are accepted as a
+  strictly allowlisted copy; non-HTTPS previews are rejected.
+- **Client behaviour:** debounced search sheet, one app-wide preview at a time, subtle
+  0:30 progress bar, playback stops when the card unmounts (scrolls off the windowed
+  list) and never plays in the background; audio session matches the voice-note
+  precedent (duckOthers).
+- **Tests:** `server/test-songs.js` (42 checks — mocked-provider units + real-server
+  integration incl. fallback, degraded, per-user 429, spoof rejection, legacy round-trip).
