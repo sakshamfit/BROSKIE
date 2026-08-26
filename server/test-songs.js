@@ -70,8 +70,25 @@ async function unitTests() {
     };
     const r1 = await songs.searchSongs('alone alan walker', 15);
     ok(r1.results.length === 1 && !r1.degraded && r1.results[0].provider === 'itunes', 'itunes primary search works');
-    ok(calls.length === 1 && calls[0].includes('itunes.apple.com') && calls[0].includes('media=music'), 'only iTunes was contacted');
-    ok(calls[0].includes('term=alone%20alan%20walker'), 'query is URL-encoded outbound');
+    ok(calls.some((u) => u.includes('itunes.apple.com') && u.includes('media=music')), 'iTunes was contacted');
+    ok(calls.some((u) => u.includes('api.deezer.com')), 'Deezer is queried in parallel so missing iTunes tracks still appear');
+    ok(calls.some((u) => u.includes('term=alone%20alan%20walker')), 'query is URL-encoded outbound');
+
+    // ranking: favourite artist floats to the top
+    const mixed = songs.rankSongs([
+      { id: 'itunes:1', title: 'Other', artist: 'Someone', previewUrl: 'https://a.example/x' },
+      { id: 'itunes:2', title: 'Alone', artist: 'Alan Walker', previewUrl: 'https://a.example/y' },
+    ], { favoriteArtists: ['Alan Walker'] }, 'song');
+    ok(mixed[0].artist === 'Alan Walker', 'favourite artist is ranked first');
+
+    const merged = songs.mergeSongs([
+      [{ id: 'itunes:1', title: 'Alone', artist: 'Alan Walker', previewUrl: null }],
+      [{ id: 'deezer:9', title: 'Alone', artist: 'Alan Walker', previewUrl: 'https://a.example/p' }],
+    ]);
+    ok(merged.length === 1 && merged[0].previewUrl, 'merge prefers the copy that has a preview');
+
+    const noPrev = songs.mapItunes({ ...ITUNES_TRACK, previewUrl: undefined });
+    ok(noPrev && noPrev.id === 'itunes:1051398388' && !noPrev.previewUrl, 'tracks without a preview are still returned');
 
     // cache: same query again → no new fetches
     const callsBefore = calls.length;
@@ -188,9 +205,21 @@ async function integrationTests() {
   ok(Array.isArray(s1.data.tracks) && s1.data.configured === true, 'legacy tracks/configured keys kept for old clients');
   ok(s1.data.results[0]?.id === 'itunes:1051398388' && s1.data.results[0]?.title === 'Alone', 'canonical shape on the wire');
 
-  // deezer fallback through the route
+  // deezer through the route when iTunes has nothing
   const s2 = await get(`/api/songs/search?q=onlydeezer`, token);
-  ok(s2.data.results[0]?.provider === 'deezer' && !s2.data.degraded, 'route falls back to Deezer when iTunes has nothing');
+  ok(s2.data.results[0]?.provider === 'deezer' && !s2.data.degraded, 'route returns Deezer when iTunes has nothing');
+
+  // taste + vibe ranking
+  const tastePut = await fetch(`${BASE}/api/songs/taste`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ favoriteArtists: ['Alan Walker', 'Daft Punk'] }),
+  });
+  const tasteBody = await tastePut.json();
+  ok(tastePut.status === 200 && tasteBody.music?.favoriteArtists?.includes('Alan Walker'), 'favourite artists persist');
+  const browse = await get('/api/songs/browse', token);
+  ok(browse.status === 200 && Array.isArray(browse.data.sections?.forYou), 'browse returns For you sections');
+  ok(Array.isArray(browse.data.favoriteArtists) && browse.data.favoriteArtists.includes('Daft Punk'), 'browse includes saved artists');
 
   // degraded through the route (both providers 500/absent)
   const s3 = await get(`/api/songs/search?q=boom`, token);

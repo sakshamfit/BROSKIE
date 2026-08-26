@@ -119,8 +119,9 @@ web-only for now — see "Notes & limits" below.
 ## Features
 
 **Song attachments** — the post and status composers can attach a song via the iTunes
-Search API (free, no key) with an automatic Deezer fallback; results are proxied, cached
-and rate-limited through the backend (`/api/songs/search`, `/api/songs/:id`). ~30-second
+Search API (free, no key) plus Deezer in parallel (so tracks missing from one store still
+show up). Results are proxied, cached, vibe-ranked from your favourite artists / recents,
+and rate-limited through the backend (`/api/songs/search`, `/api/songs/browse`, `/api/songs/:id`). ~30-second
 previews play inline anywhere the song appears (feed, post detail, status) — one preview
 at a time, with a progress bar, and playback stops when the card scrolls off-screen.
 **Previews only, by design** — full-track playback would require a licensing agreement

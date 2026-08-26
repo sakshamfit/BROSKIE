@@ -748,6 +748,32 @@ CREATE TABLE IF NOT EXISTS message_edit_operations (
   FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_msg_edit_ops_msg ON message_edit_operations(message_id, version);
+
+/* ---- Music taste: favourite artists + recently attached songs ---- */
+CREATE TABLE IF NOT EXISTS user_favorite_artists (
+  user_id    TEXT NOT NULL,
+  artist     TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, artist),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_fav_artists_user ON user_favorite_artists(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS user_song_history (
+  user_id     TEXT NOT NULL,
+  song_id     TEXT NOT NULL,
+  title       TEXT,
+  artist      TEXT,
+  album       TEXT,
+  artwork     TEXT,
+  preview_url TEXT,
+  provider    TEXT,
+  last_at     INTEGER NOT NULL,
+  count       INTEGER DEFAULT 1,
+  PRIMARY KEY (user_id, song_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_song_history_user ON user_song_history(user_id, last_at DESC);
 `);
 
 module.exports = db;

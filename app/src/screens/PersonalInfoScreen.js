@@ -27,6 +27,8 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
   const [error, setError] = useState('');
   const [affiliationPicker, setAffiliationPicker] = useState(false);
   const [removingAffiliation, setRemovingAffiliation] = useState(null);
+  const [artistDraft, setArtistDraft] = useState('');
+  const [savingTaste, setSavingTaste] = useState(false);
 
   const openEdit = (field) => {
     setError('');
@@ -160,6 +162,62 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
             </View>
             <Icon name="chevron-forward-outline" size={17} color={theme.muted} />
           </SpringPressable>
+        </View>
+
+        <Text style={[type.labelXs, { color: theme.muted, marginTop: 28, marginBottom: 6 }]}>YOUR VIBE</Text>
+        <Text style={[type.bodySm, { color: theme.subtext, marginBottom: 10 }]}>
+          Favourite artists rank first when you add a song to a status or post.
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+          {(user?.music?.favoriteArtists || []).map((name) => (
+            <View key={name} style={[s.vibeChip, inkBox(theme, 'thin')]}>
+              <Text style={[type.labelXs, { color: theme.text }]}>{name.toUpperCase()}</Text>
+              <Pressable
+                onPress={async () => {
+                  const next = (user?.music?.favoriteArtists || []).filter((a) => a.toLowerCase() !== name.toLowerCase());
+                  setSavingTaste(true);
+                  try {
+                    await api.saveSongTaste(next);
+                    await refreshUser();
+                  } catch (e) {
+                    setError(e.message);
+                  } finally {
+                    setSavingTaste(false);
+                  }
+                }}
+                hitSlop={6}
+              >
+                <Icon name="close" size={12} color={theme.muted} />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+        <View style={[s.vibeAdd, inkBox(theme, 'thin')]}>
+          <TextInput
+            value={artistDraft}
+            onChangeText={setArtistDraft}
+            placeholder="Add a favourite artist"
+            placeholderTextColor={theme.muted}
+            style={s.vibeInput}
+            onSubmitEditing={async () => {
+              const name = artistDraft.trim();
+              if (!name) return;
+              const current = user?.music?.favoriteArtists || [];
+              if (current.some((a) => a.toLowerCase() === name.toLowerCase())) { setArtistDraft(''); return; }
+              setSavingTaste(true);
+              try {
+                await api.saveSongTaste([...current, name].slice(0, 12));
+                setArtistDraft('');
+                await refreshUser();
+              } catch (e) {
+                setError(e.message);
+              } finally {
+                setSavingTaste(false);
+              }
+            }}
+            returnKeyType="done"
+          />
+          {savingTaste ? <ActivityIndicator size="small" color={theme.ink} /> : null}
         </View>
       </ScrollView>
 

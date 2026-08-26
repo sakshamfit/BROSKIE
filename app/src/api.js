@@ -559,6 +559,10 @@ export const api = {
   viewStatus: (id) => request(`/api/status/${id}/view`, { method: 'POST' }),
   replyToStatus: (id, body) => request(`/api/status/${id}/reply`, { method: 'POST', body: { body } }),
   searchSongs: (q) => request(`/api/songs/search?q=${encodeURIComponent(q)}`),
+  browseSongs: () => request('/api/songs/browse'),
+  songTaste: () => request('/api/songs/taste'),
+  saveSongTaste: (favoriteArtists) => request('/api/songs/taste', { method: 'PUT', body: { favoriteArtists } }),
+  recordSongHistory: (song) => request('/api/songs/history', { method: 'POST', body: { song } }),
 
   // Communities — purpose-based groups (club night, house party, trip planning, running, chai chat...)
   communities: ({ category, mine } = {}) => {

@@ -507,10 +507,110 @@ function affiliationsForUser(userId) {
     }));
 }
 
+function parseStoredSong(raw) {
+  return normalizeStoredSong(raw);
+}
+
+function musicTasteFor(userId) {
+  if (!userId) return { favoriteArtists: [], recents: [] };
+  const favoriteArtists = db
+    .prepare('SELECT artist FROM user_favorite_artists WHERE user_id = ? ORDER BY created_at DESC')
+    .all(userId)
+    .map((r) => r.artist);
+  const recents = db
+    .prepare(
+      `SELECT song_id id, title, artist, album, artwork, preview_url previewUrl, provider, last_at lastAt, count
+       FROM user_song_history WHERE user_id = ? ORDER BY last_at DESC LIMIT 24`
+    )
+    .all(userId)
+    .map((r) => ({
+      id: r.id,
+      title: r.title || '',
+      artist: r.artist || '',
+      album: r.album || '',
+      artwork: r.artwork || null,
+      previewUrl: r.previewUrl || null,
+      provider: r.provider || null,
+      lastAt: r.lastAt,
+      count: r.count,
+    }));
+  return { favoriteArtists, recents };
+}
+
+function implicitArtistsFor(userId) {
+  const rows = [
+    ...db.prepare('SELECT song FROM posts WHERE user_id = ? AND song IS NOT NULL AND deleted = 0 ORDER BY created_at DESC LIMIT 40').all(userId),
+    ...db.prepare('SELECT song FROM statuses WHERE user_id = ? AND song IS NOT NULL ORDER BY created_at DESC LIMIT 20').all(userId),
+  ];
+  const counts = new Map();
+  rows.forEach((row) => {
+    const song = parseStoredSong(row.song);
+    const artist = songs.sanitizeArtistName(song?.artist);
+    if (!artist) return;
+    const key = artist.toLowerCase();
+    const cur = counts.get(key) || { artist, n: 0 };
+    cur.n += 1;
+    counts.set(key, cur);
+  });
+  return [...counts.values()].sort((a, b) => b.n - a.n).map((r) => r.artist);
+}
+
+function recordSongHistory(userId, song) {
+  if (!userId || !song || typeof song !== 'object') return;
+  const id = String(song.id || '').slice(0, 64);
+  if (!id) return;
+  const title = String(song.title || song.name || '').slice(0, 120);
+  const artist = songs.sanitizeArtistName(song.artist);
+  const album = String(song.album || '').slice(0, 160);
+  const artwork = /^https:\/\/[^\s"'<>\\]+$/.test(String(song.artwork || song.albumArt || '')) ? String(song.artwork || song.albumArt) : null;
+  const previewUrl = /^https:\/\/[^\s"'<>\\]+$/.test(String(song.previewUrl || '')) ? String(song.previewUrl) : null;
+  const provider = String(song.provider || song.source || '').slice(0, 24) || null;
+  const t = now();
+  db.prepare(
+    `INSERT INTO user_song_history (user_id, song_id, title, artist, album, artwork, preview_url, provider, last_at, count)
+     VALUES (?,?,?,?,?,?,?,?,?,1)
+     ON CONFLICT(user_id, song_id) DO UPDATE SET
+       title = excluded.title, artist = excluded.artist, album = excluded.album,
+       artwork = COALESCE(excluded.artwork, user_song_history.artwork),
+       preview_url = COALESCE(excluded.preview_url, user_song_history.preview_url),
+       provider = COALESCE(excluded.provider, user_song_history.provider),
+       last_at = excluded.last_at, count = user_song_history.count + 1`
+  ).run(userId, id, title, artist, album, artwork, previewUrl, provider, t);
+}
+
+function trendingAttachedSongs(limit = 12) {
+  const since = now() - 14 * 24 * 3600 * 1000;
+  const rows = [
+    ...db.prepare('SELECT song FROM posts WHERE deleted = 0 AND song IS NOT NULL AND created_at > ? ORDER BY created_at DESC LIMIT 200').all(since),
+    ...db.prepare('SELECT song FROM statuses WHERE song IS NOT NULL AND created_at > ? ORDER BY created_at DESC LIMIT 120').all(since),
+  ];
+  const byKey = new Map();
+  rows.forEach((row) => {
+    const song = parseStoredSong(row.song);
+    if (!song || !(song.id || song.title)) return;
+    const key = song.id || `${String(song.title).toLowerCase()}|${String(song.artist).toLowerCase()}`;
+    const cur = byKey.get(key) || { song, n: 0 };
+    cur.n += 1;
+    if (!cur.song.previewUrl && song.previewUrl) cur.song = song;
+    byKey.set(key, cur);
+  });
+  return [...byKey.values()]
+    .sort((a, b) => b.n - a.n)
+    .slice(0, limit)
+    .map((r) => r.song);
+}
+
 function accountUser(u) {
   // `role` is included ONLY in the account's own profile responses — never
   // in publicUser, so admin identity isn't broadcast to other users.
-  return u ? { ...publicUser(u), role: u.role || 'user', moderation: u.moderation || 'active', settings: getSettings(u), affiliations: affiliationsForUser(u.id) } : null;
+  return u ? {
+    ...publicUser(u),
+    role: u.role || 'user',
+    moderation: u.moderation || 'active',
+    settings: getSettings(u),
+    affiliations: affiliationsForUser(u.id),
+    music: musicTasteFor(u.id),
+  } : null;
 }
 
 function sharedAffiliations(userId, otherId) {
@@ -3942,6 +4042,7 @@ app.post('/api/status', requireAuth, async (req, res) => {
     const verdict = await songs.verifyAttachment(song);
     if (verdict.error) return res.status(400).json({ error: verdict.error });
     verifiedSong = verdict.song;
+    recordSongHistory(req.userId, verifiedSong);
   }
 
   const allowedAudiences = ['public', 'contacts', 'contacts_except', 'selected'];
@@ -4126,20 +4227,104 @@ app.post('/api/status/:id/reply', requireAuth, (req, res) => {
   res.json({ ok: true, chatId, message: hydrateMessage(row, req.userId) });
 });
 
-/** Song search for status composer — proxies Jamendo's public track search API. */
+/** Song search for status/post composers — iTunes + Deezer, vibe-ranked. */
 app.get('/api/songs/search', requireAuth, songsLimiter, async (req, res) => {
-  // iTunes Search is the primary provider, Deezer the automatic fallback
-  // (see server/src/songs.js). The client never calls the providers directly
-  // — results are proxied, normalized, cached, and rate-limited per user.
-  // Sanitization also happens inside songs.js; applied here first so even a
-  // bypassed module can't forward junk outbound (defense in depth).
+  // Both providers are queried together (see server/src/songs.js). The client
+  // never calls them directly — results are proxied, normalized, cached,
+  // ranked for this user's taste, and rate-limited per user.
   const q = songs.sanitizeQuery(req.query.q);
-  if (!q) return res.json({ results: [], tracks: [], degraded: false, configured: true });
-  const limit = Math.min(25, Math.max(1, Number(req.query.limit) || 15));
-  const { results, degraded } = await songs.searchSongs(q, limit);
+  const taste = musicTasteFor(req.userId);
+  if (!taste.favoriteArtists.length) {
+    taste.favoriteArtists = implicitArtistsFor(req.userId);
+  }
+  if (!q) {
+    return res.json({ results: [], tracks: [], degraded: false, configured: true, music: taste });
+  }
+  const limit = Math.min(40, Math.max(1, Number(req.query.limit) || 25));
+  const { results, degraded } = await songs.searchSongs(q, limit, taste);
   // `tracks`/`configured` are legacy keys kept for app versions released
   // before Phase 9 — new clients read `results`/`degraded`.
-  res.json({ results, tracks: results, degraded, configured: true });
+  res.json({ results, tracks: results, degraded, configured: true, music: taste });
+});
+
+/** Home of the picker: For you / favourite artists / recents / trending. */
+app.get('/api/songs/browse', requireAuth, songsLimiter, async (req, res) => {
+  const taste = musicTasteFor(req.userId);
+  const implicit = implicitArtistsFor(req.userId);
+  const seedArtists = [...taste.favoriteArtists];
+  implicit.forEach((a) => {
+    if (!seedArtists.some((x) => x.toLowerCase() === a.toLowerCase())) seedArtists.push(a);
+  });
+  const profile = { favoriteArtists: seedArtists, recents: taste.recents };
+  const forYou = [];
+  const seen = new Set();
+  const pushUnique = (list) => {
+    (list || []).forEach((song) => {
+      if (!song?.id || seen.has(song.id)) return;
+      seen.add(song.id);
+      forYou.push(song);
+    });
+  };
+  taste.recents.slice(0, 6).forEach((song) => pushUnique([song]));
+  const artistQueries = seedArtists.slice(0, 5);
+  if (artistQueries.length) {
+    const batches = await Promise.all(artistQueries.map((artist) => songs.searchSongs(artist, 6, profile)));
+    batches.forEach((batch) => pushUnique(batch.results));
+  }
+  const trending = trendingAttachedSongs(12).filter((song) => !seen.has(song.id));
+  if (!forYou.length) pushUnique(trending);
+  res.json({
+    sections: {
+      forYou: forYou.slice(0, 16),
+      recents: taste.recents,
+      trending: trending.slice(0, 12),
+    },
+    favoriteArtists: taste.favoriteArtists,
+    suggestedArtists: implicit.filter((a) => !taste.favoriteArtists.some((f) => f.toLowerCase() === a.toLowerCase())).slice(0, 8),
+    music: taste,
+  });
+});
+
+app.get('/api/songs/taste', requireAuth, (req, res) => {
+  res.json({ music: musicTasteFor(req.userId), suggestedArtists: implicitArtistsFor(req.userId).slice(0, 8) });
+});
+
+app.put('/api/songs/taste', requireAuth, (req, res) => {
+  const incoming = Array.isArray(req.body?.favoriteArtists) ? req.body.favoriteArtists : null;
+  if (!incoming) return res.status(400).json({ error: 'favoriteArtists must be an array.' });
+  const cleaned = [];
+  const seen = new Set();
+  incoming.forEach((raw) => {
+    const artist = songs.sanitizeArtistName(raw);
+    const key = artist.toLowerCase();
+    if (artist.length < 1 || artist.length > 80 || seen.has(key)) return;
+    seen.add(key);
+    cleaned.push(artist);
+  });
+  if (cleaned.length > 12) return res.status(400).json({ error: 'Pick up to 12 favourite artists.' });
+  const t = now();
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM user_favorite_artists WHERE user_id = ?').run(req.userId);
+    const insert = db.prepare('INSERT INTO user_favorite_artists (user_id, artist, created_at) VALUES (?,?,?)');
+    cleaned.forEach((artist, i) => insert.run(req.userId, artist, t - i));
+  });
+  tx();
+  res.json({ music: musicTasteFor(req.userId) });
+});
+
+app.post('/api/songs/history', requireAuth, (req, res) => {
+  const song = req.body?.song;
+  if (!song || typeof song !== 'object') return res.status(400).json({ error: 'Missing song.' });
+  recordSongHistory(req.userId, {
+    id: String(song.id || '').slice(0, 64),
+    title: String(song.title || song.name || '').slice(0, 120),
+    artist: songs.sanitizeArtistName(song.artist),
+    album: String(song.album || '').slice(0, 160),
+    artwork: song.artwork || song.albumArt,
+    previewUrl: song.previewUrl,
+    provider: song.provider || song.source,
+  });
+  res.json({ music: musicTasteFor(req.userId) });
 });
 
 // Single-song lookup by normalized id ("itunes:1440857781") — lets a client
@@ -4332,6 +4517,7 @@ app.post('/api/posts', requireAuth, async (req, res) => {
     const verdict = await songs.verifyAttachment(song);
     if (verdict.error) return res.status(400).json({ error: verdict.error });
     verifiedSong = verdict.song;
+    recordSongHistory(req.userId, verifiedSong);
   }
 
   const gate = moderation.moderationGate(req.userId);
@@ -5979,4 +6165,3 @@ server.listen(PORT, '0.0.0.0', async () => {
   console.log(`[storage] ${storage.describe()}`);
   await storage.ensureBucket();
 });
-
