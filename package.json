@@ -18,6 +18,7 @@
     "deploy:cloudflare": "npx wrangler deploy",
     "backup": "cd server && npm run backup",
     "ci": "bash scripts/ci.sh",
+    "test:emoji": "node scripts/test-emoji-data.js",
     "audit:chats": "cd server && npm run audit:chats --",
     "test:chat-history": "cd server && npm run test:chat-history",
     "test:offline-messaging": "cd server && npm run test:offline-messaging",

@@ -6,9 +6,10 @@
  * with custom branded animated stickers (e.g. pulsing heart, sparkle loop).
  */
 import React from 'react';
-import { View, StyleSheet, Pressable, Text } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import LottieView from 'lottie-react-native';
 import { useTheme } from '../store/ThemeContext';
+import Emoji from '../icons/Emoji';
 
 export function AnimatedSticker({ sticker, style }) {
   const { theme } = useTheme();
@@ -21,7 +22,7 @@ export function AnimatedSticker({ sticker, style }) {
         style={{ width: 64, height: 64 }}
       />
       <View style={[styles.stickerLabel, { backgroundColor: theme.ink }]}>
-        <Text style={{ color: theme.onPrimary, fontSize: 8 }}>{sticker?.glyph || '❤️'}</Text>
+        <Emoji char={sticker?.glyph || '❤️'} size={10} />
       </View>
     </View>
   );

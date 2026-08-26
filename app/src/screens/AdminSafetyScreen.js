@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
+import Emoji, { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
 import { useAuth } from '../store/AuthContext';
 import { useChatActions } from '../store/ChatContext';
@@ -375,7 +376,7 @@ function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases, onRet
         const tone = SEVERITY_TONE[c.severity] || SEVERITY_TONE.LOW;
         return (
           <SpringPressable key={c.id} onPress={() => onOpenCase(c.id)} style={({ pressed }) => [s.alertRow, inkBox(theme, 'thin'), pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="selection">
-            <Text style={{ fontSize: 18 }}>{tone.emoji}</Text>
+            <Emoji char={tone.emoji} size={18} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={[type.labelSm, { color: tone.color }]}>{c.severity}</Text>
@@ -384,9 +385,9 @@ function OverviewTab({ theme, s, overview, loading, onOpenCase, onGoCases, onRet
               <Text style={[type.bodyMd, { color: theme.text, marginTop: 2 }]} numberOfLines={1}>
                 {c.reason || c.category}
               </Text>
-              <Text style={[type.labelXs, { color: theme.muted, marginTop: 2 }]} numberOfLines={1}>
+              <EmojiText style={[type.labelXs, { color: theme.muted, marginTop: 2 }]} numberOfLines={1}>
                 @{c.username || 'unknown'} · {SOURCE_LABEL[c.source] || c.source} {c.signals > 1 ? `· ${c.signals} signals` : ''}
-              </Text>
+              </EmojiText>
             </View>
             <Icon name="chevron-forward-outline" size={16} color={theme.muted} />
           </SpringPressable>
@@ -453,7 +454,7 @@ function CasesTab(props) {
           const tone = SEVERITY_TONE[item.severity] || SEVERITY_TONE.LOW;
           return (
             <SpringPressable onPress={() => onOpenCase(item.id)} style={({ pressed }) => [s.alertRow, inkBox(theme, 'thin'), pressed && marker(theme, 1)]} scaleTo={motion.scale.row} haptic="selection">
-              <Text style={{ fontSize: 18 }}>{tone.emoji}</Text>
+              <Emoji char={tone.emoji} size={18} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={[type.labelSm, { color: tone.color }]}>{item.severity}</Text>
@@ -513,10 +514,10 @@ function CaseDetail({ theme, s, detail, onClose, onReview, onUserAction, onRevie
           </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={[type.headlineMd, { color: theme.text }]}>Case #{c.id}</Text>
-            <Text style={[type.labelXs, { color: theme.muted }]}>{SOURCE_LABEL[c.source] || c.source}{c.signals > 1 ? ` · ${c.signals} detection signals` : ''}</Text>
+            <EmojiText style={[type.labelXs, { color: theme.muted }]}>{SOURCE_LABEL[c.source] || c.source}{c.signals > 1 ? ` · ${c.signals} detection signals` : ''}</EmojiText>
           </View>
           <View style={[s.sevBadge, { backgroundColor: tone.bg, borderColor: tone.color }]}>
-            <Text style={[type.labelSm, { color: tone.color }]}>{tone.emoji} {c.severity}</Text>
+            <EmojiText style={[type.labelSm, { color: tone.color }]}>{tone.emoji} {c.severity}</EmojiText>
           </View>
         </View>
 
@@ -682,7 +683,7 @@ function UserPanel({ theme, s, userId, onClose, onAction }) {
         <Text style={[type.labelXs, { color: theme.muted }]}>MODERATION HISTORY</Text>
         {data.cases.map((c) => (
           <View key={c.id} style={[s.alertRow, inkBox(theme, 'thin')]}>
-            <Text style={{ fontSize: 16 }}>{(SEVERITY_TONE[c.severity] || SEVERITY_TONE.LOW).emoji}</Text>
+            <Emoji char={(SEVERITY_TONE[c.severity] || SEVERITY_TONE.LOW).emoji} size={16} />
             <View style={{ flex: 1 }}>
               <Text style={[type.bodySm, { color: theme.text }]} numberOfLines={1}>#{c.id} {c.category} · {c.status}</Text>
               <Text style={[type.labelXs, { color: theme.muted }]}>{c.reason} · {timeAgo(c.createdAt)}</Text>

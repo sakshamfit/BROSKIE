@@ -58,7 +58,7 @@ const messages = (chatId) => [0, 1, 2].map((i) => ({
   id: `${chatId}-m${i}`,
   chatId,
   senderId: i % 2 ? 'u2' : 'u1',
-  body: i === 1 ? 'Try long-pressing this bubble.' : `Message ${i} in ${chatId}.`,
+  body: i === 1 ? 'Try long-pressing this bubble.' : `Message ${i} in ${chatId}. ${i === 2 ? '😀🔥❤️' : ''}`.trim(),
   type: 'text',
   conversationType: chatId.startsWith('gc') ? 'gc' : 'direct',
   gcId: chatId.startsWith('gc') ? chatId : null,
@@ -73,7 +73,7 @@ const messages = (chatId) => [0, 1, 2].map((i) => ({
 const gcChat = (i) => ({
   id: `gc${i}`,
   type: 'gc',
-  name: i === 0 ? 'Gaming Hub' : 'College Friends',
+  name: i === 0 ? 'Gaming Hub 🎮' : 'College Friends',
   avatar: null,
   role: 'member',
   members: [me, other, { id: 'u3', username: 'katherine', name: 'Katherine Johnson', avatar: null, role: 'member' }],
@@ -127,7 +127,19 @@ const ROUTES = {
   'GET /api/colleagues': () => ({ colleagues: [] }),
   'GET /api/colleagues/requests': () => ({ requests: [], incoming: [], outgoing: [] }),
   'GET /api/affiliations': () => ({ affiliations: [] }),
-  'GET /api/status': () => ({ mine: null, others: [] }),
+  'GET /api/status': () => ({
+    mine: null,
+    others: [{
+      user: other,
+      items: [{
+        id: 'status-emoji', userId: other.id, type: 'text', body: 'Launch day 🚀🔥',
+        bg: '#f7c95c', audience: 'public', createdAt: now - 120_000,
+        expiresAt: now + 86_400_000, viewed: false,
+      }],
+      latestAt: now - 120_000,
+      allViewed: false,
+    }],
+  }),
   'GET /api/communities': () => ({ communities: [] }),
   'GET /api/blocked': () => ({ blocked: [] }),
   'GET /api/greeting-summary': () => ({ summary: null }),
@@ -139,10 +151,22 @@ const ROUTES = {
 };
 
 /** /api/chats/<id>/messages, /api/gc/<id>/messages and other id-bearing paths. */
-function dynamicRoute(method, pathname) {
+function dynamicRoute(method, pathname, rawBody = '') {
   let m = pathname.match(/^\/api\/chats\/([^/]+)\/messages$/);
   if (m && method === 'GET') return { messages: messages(m[1]) };
-  if (m && method === 'POST') return { message: messages(m[1])[0] };
+  if (m && method === 'POST') {
+    let submitted = {};
+    try { submitted = JSON.parse(rawBody || '{}'); } catch {}
+    return {
+      message: {
+        ...messages(m[1])[0],
+        id: `${m[1]}-sent-${Date.now()}`,
+        senderId: me.id,
+        body: submitted.body || '',
+        createdAt: Date.now(),
+      },
+    };
+  }
   m = pathname.match(/^\/api\/gc\/([^/]+)\/messages$/);
   if (m && method === 'GET') return { messages: gcMessages(m[1]), hasMore: false };
   if (m && method === 'POST') return { message: gcMessages(m[1])[0] };
@@ -163,7 +187,7 @@ const server = http.createServer((req, res) => {
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
     const handler = ROUTES[key];
-    const payload = handler ? handler(url, body) : (dynamicRoute(req.method, url.pathname) || {});
+    const payload = handler ? handler(url, body) : (dynamicRoute(req.method, url.pathname, body) || {});
     res.writeHead(handler ? 200 : 200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(payload));
   });
