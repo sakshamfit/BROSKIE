@@ -16,7 +16,7 @@ import GridPaper from './GridPaper';
  * premium pulsating rings, and solid connection state handling.
  */
 export default function CallOverlay() {
-  const { call, localStream, remoteStream, micOn, camOn, speakerOn, callSupported } = useChatCall();
+  const { call, localStream, remoteStream, micOn, camOn, speakerOn, remoteSinkId, callSupported } = useChatCall();
   const { acceptCall, declineCall, hangUp, toggleMic, toggleCam, toggleSpeaker, switchCamera } = useChatActions();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -95,16 +95,17 @@ export default function CallOverlay() {
         {/* Video calling rendering */}
         {isVideo && isOngoing && (
           <>
-            <RemoteVideo stream={remoteStream} style={webStyles.remoteVideo} />
+            <RemoteVideo stream={remoteStream} sinkId={remoteSinkId} style={webStyles.remoteVideo} />
             <LocalVideo stream={localStream} style={webStyles.localVideo} />
           </>
         )}
 
         {/* Voice calling audio on web — a hidden <audio> element. iOS Safari
             does not reliably play audio from a zero-sized hidden <video>,
-            which left voice calls silent on iPhones. */}
+            which left voice calls silent on iPhones. sinkId routes it between
+            the loud speaker and headphones/earphones (the speaker toggle). */}
         {!isVideo && isOngoing && Platform.OS === 'web' && (
-          <RemoteAudio stream={remoteStream} style={{ display: 'none' }} />
+          <RemoteAudio stream={remoteStream} sinkId={remoteSinkId} style={{ display: 'none' }} />
         )}
 
         {/* Header and center info */}
@@ -209,15 +210,17 @@ export default function CallOverlay() {
                 accessibilityLabel={micOn ? "Mute microphone" : "Unmute microphone"}
               />
               
-              {/* Speaker routing controls */}
+              {/* Speaker routing control — phone-style switch. It routes the
+                  remote audio between the loud speaker and the earphone /
+                  headphones / Bluetooth output; it never mutes the call. */}
               <CallButton
-                icon={speakerOn ? 'volume-high-outline' : 'volume-mute-outline'}
-                label={speakerOn ? 'Speaker' : 'Muted'}
+                icon={speakerOn ? 'volume-high-outline' : 'phone-portrait-outline'}
+                label={speakerOn ? 'Speaker' : 'Earpiece'}
                 tone={speakerOn ? 'neutral' : 'active'}
                 onPress={toggleSpeaker}
                 theme={theme}
                 dark={isVideo}
-                accessibilityLabel={speakerOn ? "Mute speaker audio" : "Unmute speaker audio"}
+                accessibilityLabel={speakerOn ? "Switch audio to earphones" : "Switch audio to loudspeaker"}
               />
 
               {isVideo && (

@@ -13,7 +13,7 @@
 import React, { useEffect, useRef } from 'react';
 
 /** Attach a MediaStream to a DOM media element and start playback. */
-function useStreamMedia(ref, stream) {
+function useStreamMedia(ref, stream, sinkId) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
@@ -25,22 +25,29 @@ function useStreamMedia(ref, stream) {
       const p = el.play?.();
       if (p && typeof p.catch === 'function') p.catch(() => {});
     }
+    // Route this element's audio to the chosen output device (the speaker /
+    // earphone toggle). Browsers without setSinkId (Safari) keep the default
+    // output — the promise guard below is a no-op for them.
+    if (sinkId && typeof el.setSinkId === 'function') {
+      el.setSinkId(sinkId).catch(() => {});
+    }
     return undefined;
-  }, [ref, stream]);
+  }, [ref, stream, sinkId]);
 }
 
-/** Remote (their) video. */
-export function RemoteVideo({ stream, style }) {
+/** Remote (their) video. `sinkId` routes the audio track to the chosen
+ *  output device (speaker vs headphones/earphones). */
+export function RemoteVideo({ stream, style, sinkId }) {
   const ref = useRef(null);
-  useStreamMedia(ref, stream);
+  useStreamMedia(ref, stream, sinkId);
   // eslint-disable-next-line jsx-a11y/media-has-caption
   return <video ref={ref} autoPlay playsInline style={style} />;
 }
 
 /** Remote (their) audio — voice calls and voice-only fallback on web. */
-export function RemoteAudio({ stream, style }) {
+export function RemoteAudio({ stream, style, sinkId }) {
   const ref = useRef(null);
-  useStreamMedia(ref, stream);
+  useStreamMedia(ref, stream, sinkId);
   // eslint-disable-next-line jsx-a11y/media-has-caption
   return <audio ref={ref} autoPlay style={style} />;
 }

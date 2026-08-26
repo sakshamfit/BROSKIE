@@ -26,6 +26,55 @@ export const supported = (() => {
   return true;
 })();
 
+/* Audio output routing (web) — the phone-style speaker vs. earphone switch.
+ * Browsers do not expose the handset, but Chromium (desktop + Android)
+ * exposes the available outputs through getSupportedAudioOutputs() and lets
+ * every <audio>/<video> element pick one via setSinkId(). That is enough for
+ * a real toggle:
+ *   speaker on  -> 'default'  (loud speaker / system default output)
+ *   speaker off -> a headphones / earphones / Bluetooth output when one
+ *                  exists — the "normal phone call, sound in your ear" mode
+ * Safari and other browsers without these APIs keep the default output; the
+ * toggle still works, it just cannot reach a private device there.
+ */
+export const audioRoutingSupported = (() => {
+  if (typeof window === 'undefined') return false;
+  return !!(
+    window.navigator?.mediaDevices?.getSupportedAudioOutputs &&
+    window.HTMLMediaElement &&
+    typeof window.HTMLMediaElement.prototype.setSinkId === 'function'
+  );
+})();
+
+/** Available audio output devices: [{ deviceId, label }]. [] when unsupported. */
+export async function listAudioOutputs() {
+  if (!audioRoutingSupported) return [];
+  try {
+    return (await window.navigator.mediaDevices.getSupportedAudioOutputs()) || [];
+  } catch {
+    return [];
+  }
+}
+
+const PRIVATE_OUTPUT_RE = /headset|headphone|earbud|earphone|ear ?piece|bluetooth|airpod|buds|wired|dock|usb|jack|3\.5/i;
+const SPEAKER_OUTPUT_RE = /speaker|built-?in|main out|line out|internal/i;
+
+/**
+ * Best "private" output for earphone-style playback (headphones, earphones,
+ * Bluetooth headset). Returns a deviceId, or null when only the speaker is
+ * available — callers then keep the default output.
+ */
+export function pickPrivateOutput(outputs) {
+  if (!Array.isArray(outputs) || outputs.length < 2) return null;
+  const isSpeaker = (d) => SPEAKER_OUTPUT_RE.test(d.label || '');
+  const byLabel = outputs.find((d) => d.label && !isSpeaker(d) && PRIVATE_OUTPUT_RE.test(d.label));
+  if (byLabel) return byLabel.deviceId;
+  // Labels may be hidden on some platforms: any non-speaker output is a
+  // better "private" destination than the loud speaker.
+  const unlabeled = outputs.find((d) => d.deviceId && !isSpeaker(d) && !d.label);
+  return unlabeled ? unlabeled.deviceId : null;
+}
+
 export function createPeerConnection(config) {
   return new window.RTCPeerConnection(config);
 }
