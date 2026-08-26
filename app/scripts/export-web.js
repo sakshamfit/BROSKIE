@@ -107,6 +107,14 @@ function main() {
   copyDir(path.join(WEB_DIR, 'assets'), path.join(dist, 'assets'));
   console.log('[export-web] static assets copied (images, fonts, QR).');
 
+  // Copy PWA manifest for native-like web app experience
+  const manifestSrc = path.join(WEB_DIR, 'manifest.json');
+  const manifestDest = path.join(dist, 'manifest.json');
+  if (fs.existsSync(manifestSrc)) {
+    fs.copyFileSync(manifestSrc, manifestDest);
+    console.log('[export-web] PWA manifest copied.');
+  }
+
   for (const f of ['index.html', 'privacy.html', 'terms.html', 'support.html']) {
     console.log(`[export-web]   ${f}: ${kmb(fs.statSync(path.join(dist, f)).size)}`);
   }

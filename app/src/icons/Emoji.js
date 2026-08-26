@@ -92,7 +92,7 @@ function Els({ els, P, clipId }) {
   });
 }
 
-export default function Emoji({ char, size = 20, style }) {
+const EmojiComponent = function Emoji({ char, size = 20, style }) {
   // Kick off the async table load on web as soon as an emoji is rendered.
   useEmojiDataState();
   const clipId = React.useId().replace(/[^a-zA-Z0-9]/g, 'c');
@@ -217,3 +217,6 @@ export function EmojiText({ children, style, size, numberOfLines, ...rest }) {
 export function emojiKeys() {
   return Object.keys(getEmojiData()?.E || {});
 }
+
+export const Emoji = React.memo(EmojiComponent);
+export default EmojiComponent;

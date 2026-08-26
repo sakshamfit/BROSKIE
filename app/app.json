@@ -79,7 +79,9 @@
           "backgroundColor": "#fdf8f8",
           "image": "./assets/splash-icon.png",
           "imageWidth": 230,
-          "resizeMode": "contain"
+          "resizeMode": "contain",
+          "duration": 2000,
+          "animationType": "fade"
         }
       ]
     ],
