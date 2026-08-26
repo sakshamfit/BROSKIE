@@ -1,0 +1,9 @@
+# +one web app — crawler rules for https://www.plusoneco.in
+# The app itself is auth-gated; only the public entry page is indexable.
+# /api/* is proxied to the backend and is not for crawlers.
+
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://www.plusoneco.in/sitemap.xml
