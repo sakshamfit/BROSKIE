@@ -25,8 +25,9 @@ export default function SongPicker({ visible, onClose, onSelect }) {
   const [loading, setLoading] = useState(false);
   const [configured, setConfigured] = useState(true);
   const [notice, setNotice] = useState('');
+  const [degraded, setDegraded] = useState(false);
 
-  // Debounce the Jamendo lookup: the picker is typed into rapidly, and each
+  // Debounce the lookup: the picker is typed into rapidly, and each
   // keystroke used to fire a full server-side song search. The input itself
   // (`query`) updates instantly; only the network call waits for a pause.
   // `searchSeq` discards out-of-order responses.
@@ -35,17 +36,19 @@ export default function SongPicker({ visible, onClose, onSelect }) {
     if (q.trim().length < 2) { setResults([]); return; }
     setLoading(true);
     try {
-      const { tracks, configured: c, error } = await api.searchSongs(q.trim());
+      const data = await api.searchSongs(q.trim());
       if (searchSeq.current !== seq) return;
-      setResults(tracks);
-      setConfigured(c !== false);
-      setNotice(error || '');
+      // Phase-9 contract is {results, degraded}; `tracks` kept for old servers.
+      setResults(data.results || data.tracks || []);
+      setConfigured(data.configured !== false);
+      setNotice(data.degraded ? '' : (data.error || ''));
+      setDegraded(!!data.degraded);
     } catch {
-      if (searchSeq.current === seq) setResults([]);
+      if (searchSeq.current === seq) { setResults([]); setDegraded(true); }
     } finally {
       if (searchSeq.current === seq) setLoading(false);
     }
-  }, 300);
+  }, 400);
 
   const search = (q) => {
     setQuery(q);
@@ -85,6 +88,11 @@ export default function SongPicker({ visible, onClose, onSelect }) {
         {configured && !!notice && (
           <Text style={[type.bodySm, { color: theme.muted, marginTop: 16, paddingHorizontal: 4 }]}>
             Song search is temporarily unavailable ({notice}). You can still post text and photos.
+          </Text>
+        )}
+        {configured && degraded && !loading && results.length === 0 && !!query && query.trim().length >= 2 && (
+          <Text style={[type.bodySm, { color: theme.muted, marginTop: 16, paddingHorizontal: 4 }]}>
+            Couldn't load songs right now — try again.
           </Text>
         )}
 
