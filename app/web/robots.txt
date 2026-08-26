@@ -1,4 +1,10 @@
+# +one — crawler rules for https://www.plusoneco.in
+# Public marketing/legal pages are indexable. The app shell under /app is
+# auth-gated and kept out of the index; /api/* is proxied to the backend.
+
 User-agent: *
 Allow: /
+Disallow: /app/
+Disallow: /api/
 
 Sitemap: https://www.plusoneco.in/sitemap.xml

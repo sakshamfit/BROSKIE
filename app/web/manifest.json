@@ -1,5 +1,5 @@
 {
-  "name": "+one — realtime ink-and-paper messenger",
+  "name": "+one \u2014 realtime ink-and-paper messenger",
   "short_name": "+one",
   "description": "A realtime messenger and network: chats, stories, colleagues, polls, calls, and a daily AI greeting.",
   "start_url": "/app",
@@ -8,14 +8,16 @@
   "theme_color": "#fdf8f8",
   "icons": [
     {
-      "src": "/assets/icon.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/assets/icon.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
   "scope": "/"

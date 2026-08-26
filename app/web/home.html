@@ -3,25 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Plus One – Community Social Platform | Connect, Chat &amp; Find Your Community</title>
-  <meta name="description" content="Plus One is a community-based social platform where you can connect with people, chat, share posts and discover communities based on your interests. Find running partners, study groups, colleagues and more." />
-  <meta name="theme-color" content="#f3ead8" />
+  <title>Plus One – Connect, Chat &amp; Find Your Community</title>
+  <meta name="description" content="Plus One is a community-based social platform where you can connect with people, chat, share posts and discover communities based on your interests." />
+  <meta name="theme-color" content="#fdf8f8" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="canonical" href="https://www.plusoneco.in/" />
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="+one" />
-  <meta property="og:title" content="+one — an ink-and-paper messenger" />
-  <meta property="og:description" content="Realtime chats, a worldwide feed, place-based colleagues, stories, polls, calls, and a daily AI greeting. iOS, Android, and web." />
+  <meta property="og:site_name" content="Plus One" />
+  <meta property="og:title" content="Plus One – Connect, Chat &amp; Find Your Community" />
+  <meta property="og:description" content="Plus One is a community-based social platform where you can connect with people, chat, share posts and discover communities based on your interests." />
   <meta property="og:url" content="https://www.plusoneco.in/" />
-  <meta name="twitter:card" content="summary" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23f3ead8' width='32' height='32'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-size='18' font-family='Georgia' fill='%231a1a1a'%3E+%3C/text%3E%3C/svg%3E" />
+  <meta property="og:image" content="https://www.plusoneco.in/assets/images/screen-network.webp" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23fdf8f8' width='32' height='32'/%3E%3Crect x='7' y='7' width='18' height='18' fill='%23ffe24d' transform='rotate(-3 16 16)'/%3E%3Cpath d='M16 8v16M8 16h16' stroke='%231c1b1b' stroke-width='3.4' stroke-linecap='round' transform='rotate(-3 16 16)'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="./styles.css" />
+  <script>document.documentElement.classList.add('js')</script>
+  <script defer src="/assets/js/site.js"></script>
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
     "name": "Plus One",
+    "alternateName": "+one",
     "url": "https://www.plusoneco.in/",
+    "inLanguage": "en",
     "description": "Plus One is a community-based social platform where you can connect with people, chat, share posts and discover communities based on your interests.",
     "potentialAction": {
       "@type": "SearchAction",
@@ -35,9 +40,11 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "Plus One",
+    "alternateName": "+one",
     "operatingSystem": "Web, iOS, Android",
     "applicationCategory": "SocialNetworkingApplication",
     "url": "https://www.plusoneco.in/app",
+    "isAccessibleForFree": true,
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -52,7 +59,7 @@
     "@type": "Organization",
     "name": "Plus One",
     "url": "https://www.plusoneco.in/",
-    "logo": "https://www.plusoneco.in/assets/icon.png",
+    "logo": "https://www.plusoneco.in/icon-512.png",
     "sameAs": [
       "https://github.com/sakshamfit/BROSKIE"
     ]
@@ -69,11 +76,11 @@
         <span></span><span></span><span></span>
       </summary>
       <nav id="site-nav">
-        <a href="/#shots">App</a>
-        <a href="/#features">Features</a>
-        <a href="/#network">Network</a>
-        <a href="/#more">More</a>
-        <a href="/#design">Design</a>
+        <a href="/communities">Communities</a>
+        <a href="/chat">Chat</a>
+        <a href="/network">Network</a>
+        <a href="/about">About</a>
+        <a href="/download">Download</a>
         <a class="btn btn-ink nav-cta" href="/app">Open the app</a>
       </nav>
     </details>
@@ -83,101 +90,233 @@
     <section class="hero">
       <div class="hero-copy">
         <p class="kicker">v1.4 · realtime · iOS / Android / web</p>
-        <h1>Plus One — Find the <em>+ones</em> worth talking to.</h1>
-        <p class="sub-h1">A community-based social platform built to help people connect, communicate and find communities around shared interests.</p>
+        <h1>Plus One — Connect, Chat &amp; Find Your <em>Community</em></h1>
+        <p class="sub-h1">Plus One is a community-based social platform built to help people connect, communicate and find communities around shared interests.</p>
         <p class="lede">
           An ink-and-paper messenger: live chats, a worldwide feed, place-based colleagues,
           stories, polls, WebRTC calls, and a daily AI greeting. Graphite, pulp, people.
         </p>
         <div class="hero-actions">
           <a class="btn btn-ink" href="/app">Open +one</a>
-          <a class="btn btn-ghost apk-download" href="https://github.com/sakshamfit/BROSKIE/releases/download/newrelease/application-59e4e7db-d333-4450-8ced-27726930facc.apk" target="_blank" rel="noopener">Download APK</a>
+          <a class="btn btn-ghost" href="/download">Get the app</a>
         </div>
         <p class="fine">www.plusoneco.in/app · Expo · Node · Socket.IO</p>
       </div>
-      <div class="hero-shot">
-        <img src="assets/images/screen-chats.webp" alt="Chats list in +one with paper graph background" width="700" height="1244" fetchpriority="high" decoding="async" />
-      </div>
-      <aside class="qr-card" aria-label="Scan to install +one on Android">
-        <div class="qr-card-inner">
-          <p class="kicker qr-kicker">Android · v1.4</p>
-          <h3 class="qr-title">Scan to install</h3>
-          <div class="qr-frame">
-            <img src="assets/qr-apk.svg" width="240" height="240" loading="lazy" decoding="async" alt="QR code linking to the +one Android APK" />
-          </div>
-          <p class="qr-caption">Point your phone camera at the code to grab the APK.</p>
-          <a class="btn btn-ink apk-download qr-fallback" href="https://github.com/sakshamfit/BROSKIE/releases/download/newrelease/application-59e4e7db-d333-4450-8ced-27726930facc.apk" target="_blank" rel="noopener">Download APK</a>
+      <figure class="hero-shot">
+        <div class="frame">
+          <img src="assets/images/screen-chats.webp" alt="Chats list in the Plus One app on the Graphite and Pulp drafting-paper background" width="700" height="1244" fetchpriority="high" decoding="async" />
         </div>
-      </aside>
+        <figcaption>the real app · chats</figcaption>
+        <aside class="qr-card" aria-label="Scan to install Plus One on Android">
+          <img src="assets/qr-apk.svg" width="240" height="240" loading="lazy" decoding="async" alt="QR code linking to the Plus One Android APK" />
+          <p>SCAN · ANDROID APK</p>
+        </aside>
+      </figure>
+    </section>
+
+    <section class="demos-sec" id="demos">
+      <div class="sec-head">
+        <p class="kicker">Live from the product</p>
+        <h2>The real UI, actually moving.</h2>
+        <p>These aren't mockups. Every element below is built with the app's own design tokens — Graphite &amp; Pulp — and loops the way the product behaves.</p>
+      </div>
+      <div class="demo-grid">
+
+        <div class="demo-col">
+          <div class="demo" id="chat-demo" aria-label="Animated demo of Plus One chat: typing indicator, a message being sent, read ticks, and a disappearing message">
+            <div class="demo-head">
+              <svg width="11" height="13" viewBox="0 0 12 14" fill="none" aria-hidden="true"><rect x="1" y="6" width="10" height="7" rx="1.5" stroke="#1c1b1b" stroke-width="1.4"/><path d="M3.5 6V4a2.5 2.5 0 0 1 5 0v2" stroke="#1c1b1b" stroke-width="1.4"/></svg>
+              meera
+              <span class="demo-status">ONLINE · E2E-STYLE 1:1</span>
+            </div>
+            <div class="demo-body">
+              <div class="msg them">
+                <span class="lbl">MEERA</span>
+                5:30 chai after the run?
+                <span class="meta">5:28 PM</span>
+              </div>
+              <div class="typing" aria-hidden="true"><span></span><span></span><span></span></div>
+              <div class="msg them msg2">
+                <span class="lbl">MEERA</span>
+                grabbing seats by the lake ☕
+                <span class="meta">5:29 PM</span>
+              </div>
+              <div class="msg me msg3">
+                on my way 🏃
+                <span class="meta">5:30 PM
+                  <span class="ticks">
+                    <svg class="tick1" width="15" height="11" viewBox="0 0 15 11" fill="none" aria-hidden="true"><path d="M1.5 6l3.2 3.2L11 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <svg class="tick2" width="15" height="11" viewBox="0 0 15 11" fill="none" aria-hidden="true"><path d="M1.5 6l3.2 3.2L11 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 9l4.5-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </span>
+                </span>
+              </div>
+              <div class="msg me msg-vanish">
+                this note self-destructs 🕐
+                <span class="meta">
+                  <span class="vanish-tag">
+                    <svg width="11" height="13" viewBox="0 0 11 13" fill="none" aria-hidden="true"><circle cx="5.5" cy="6.5" r="4.8" stroke="currentColor" stroke-width="1.2"/><path class="vanish-hand" d="M5.5 6.5V2.8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                    <span class="vanish-count">5s</span>
+                  </span>
+                  5:31 PM
+                </span>
+              </div>
+            </div>
+            <div class="demo-input">
+              <span class="field">Type a message</span>
+              <span class="send" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 10.5L10.5 6L1.5 1.5L3.2 6L1.5 10.5Z" stroke="#f4f0ef" stroke-width="1.3" stroke-linejoin="round"/></svg>
+              </span>
+            </div>
+          </div>
+          <p class="demo-note">Chat: typing dots, a sent message, ticks turning read, and a disappearing timer — 30s / 5m / 1h / 24h in the app.</p>
+        </div>
+
+        <div class="demo-col">
+          <div class="demo" id="poll-demo" aria-label="Animated demo of a Plus One group poll with bars filling as votes arrive">
+            <div class="demo-head">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><circle cx="6" cy="6" r="4.9" stroke="#1c1b1b" stroke-width="1.4"/><path d="M6 3.4V6l2 1.4" stroke="#1c1b1b" stroke-width="1.4" stroke-linecap="round"/></svg>
+              sunday-runners
+              <span class="demo-status">GROUP · 8 MEMBERS</span>
+            </div>
+            <div class="demo-body">
+              <div class="poll msg them">
+                <span class="lbl">POLL · ADITI</span>
+                <p class="poll-q">Sunday long run — where?</p>
+                <div class="poll-opt mine">
+                  <div class="row"><span>LODHI GARDEN 6AM</span><span class="poll-pct">0%</span></div>
+                  <div class="poll-bar"><div class="poll-fill"></div></div>
+                </div>
+                <div class="poll-opt theirs">
+                  <div class="row"><span>DEW DEGREES 6:30</span><span class="poll-pct">0%</span></div>
+                  <div class="poll-bar"><div class="poll-fill"></div></div>
+                </div>
+                <p class="poll-foot"><span class="voted">YOUR VOTE ✓</span><span class="poll-votes">12 votes</span> · tap an option to vote</p>
+              </div>
+              <span class="tape-chip accent">#running</span>
+            </div>
+            <div class="demo-input">
+              <span class="field">Tap an option to vote</span>
+              <span class="send" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="#f4f0ef" stroke-width="1.4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+          </div>
+          <p class="demo-note">Group polls: live bars, your vote marked, everyone's tick updates in real time.</p>
+        </div>
+
+        <div class="demo-col">
+          <div class="demo" id="feed-demo" aria-label="Animated demo of a Plus One Network feed card being liked and followed">
+            <div class="demo-head">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><circle cx="6" cy="6" r="4.9" stroke="#1c1b1b" stroke-width="1.3"/><ellipse cx="6" cy="6" rx="2.1" ry="4.9" stroke="#1c1b1b" stroke-width="1.3"/><path d="M1.1 6h9.8" stroke="#1c1b1b" stroke-width="1.3"/></svg>
+              The Network
+              <span class="demo-status">PUBLIC</span>
+            </div>
+            <div class="demo-body">
+              <article class="note">
+                <div class="note-head">
+                  <svg width="34" height="34" viewBox="0 0 34 34" fill="none" aria-hidden="true"><path d="M17 2.5C9.5 2.5 3.5 8.5 3.5 16c0 5 3 9.5 8 12 .8.5 1.5 1.5 1.5 2.5v1.5c0 1 .8 1.5 2 1.5s4 0 4 0c1 0 2-.5 2-1.5V30.5c0-1 .7-2 1.5-2.5 5-2.5 8-7 8-12 0-7.5-6-13.5-13.5-13.5Z" stroke="#1c1b1b" stroke-width="1.8" fill="#f1edec"/></svg>
+                  <div>
+                    <p class="note-name">@meera</p>
+                    <p class="note-meta">
+                      <svg width="9" height="9" viewBox="0 0 12 12" fill="none" aria-hidden="true"><circle cx="6" cy="6" r="4.9" stroke="#747878" stroke-width="1.3"/><path d="M1.1 6h9.8M6 1.1c2.6 2.6 2.6 7.2 0 9.8M6 1.1c-2.6 2.6-2.6 7.2 0 9.8" stroke="#747878" stroke-width="1.3"/></svg>
+                      2m · Public
+                    </p>
+                  </div>
+                  <span class="follow-btn">FOLLOW</span>
+                </div>
+                <h3 class="note-title">Sunday long run, anyone?</h3>
+                <p class="note-body">6 am at the gate. 5K easy, chai after. All paces welcome — comment below and I'll make a community for it.</p>
+                <span class="tape-chip">#running</span>
+                <div class="note-rule"></div>
+                <div class="note-actions">
+                  <span class="act heart">
+                    <svg class="heart-ico" width="14" height="13" viewBox="0 0 14 13" fill="none" aria-hidden="true"><path d="M7 12s-6-3.8-6-8a3.4 3.4 0 0 1 6-2.2A3.4 3.4 0 0 1 13 4c0 4.2-6 8-6 8Z" stroke="#1c1b1b" stroke-width="1.5"/></svg>
+                    <span class="like-count">24</span>
+                  </span>
+                  <span class="act">
+                    <svg width="13" height="12" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M1.5 2.5A2 2 0 0 1 3.5 1h6a2 2 0 0 1 2 1.5v5a2 2 0 0 1-2 2h-4L3 12v-2.5h.5a2 2 0 0 1-2-2v-5Z" stroke="#5d5f5b" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                    6
+                  </span>
+                </div>
+              </article>
+            </div>
+          </div>
+          <p class="demo-note">The Network feed: like, follow, and tag — reactions land live for everyone watching.</p>
+        </div>
+
+      </div>
     </section>
 
     <section class="shots" id="shots">
       <p class="kicker">Inside the notebook</p>
-      <h2>The app, not a mock brand deck.</h2>
-      <div class="shot-row">
-        <figure>
-          <img src="assets/images/screen-chat.webp" alt="Conversation with highlighter yellow last message" width="700" height="1244" loading="lazy" decoding="async" />
+      <h2 data-reveal>The app, not a mock brand deck.</h2>
+      <div class="shot-row" data-reveal-group>
+        <figure data-reveal>
+          <img src="assets/images/screen-chat.webp" alt="Conversation in Plus One with ink-filled sent bubbles and highlighter-yellow last message" width="700" height="1244" loading="lazy" decoding="async" />
           <figcaption>1:1 chat · ticks · replies</figcaption>
         </figure>
-        <figure>
-          <img src="assets/images/screen-network.webp" alt="The Network feed with a campus post" width="700" height="1244" loading="lazy" decoding="async" />
+        <figure data-reveal>
+          <img src="assets/images/screen-network.webp" alt="The Network feed in Plus One with a campus post and tags" width="700" height="1244" loading="lazy" decoding="async" />
           <figcaption>The Network · tags</figcaption>
         </figure>
-        <figure>
-          <img src="assets/images/screen-call.webp" alt="Incoming voice call screen" width="700" height="1244" loading="lazy" decoding="async" />
+        <figure data-reveal>
+          <img src="assets/images/screen-call.webp" alt="Incoming voice call screen in Plus One" width="700" height="1244" loading="lazy" decoding="async" />
           <figcaption>Calls · ring &amp; history</figcaption>
         </figure>
-        <figure>
-          <img src="assets/images/screen-status.webp" alt="Status story on mustard paper" width="700" height="1244" loading="lazy" decoding="async" />
+        <figure data-reveal>
+          <img src="assets/images/screen-status.webp" alt="Status story in Plus One on tinted paper" width="700" height="1244" loading="lazy" decoding="async" />
           <figcaption>Status · 24h ink</figcaption>
         </figure>
       </div>
     </section>
 
     <section class="strip" id="features">
-      <h2>Built like a real messenger.<br />Drawn like a notebook.</h2>
-      <div class="grid">
-        <article>
+      <div class="sec-head">
+        <p class="kicker">Everything ships</p>
+        <h2 data-reveal>Built like a real messenger.<br />Drawn like a notebook.</h2>
+      </div>
+      <div class="grid" data-reveal-group>
+        <article data-reveal>
           <span class="tag">01</span>
           <h3>Realtime, not almost</h3>
-          <p>Socket.IO delivery, typing, presence, unread badges, and blue ticks that catch up when someone reconnects.</p>
+          <p>Socket.IO delivery, typing, presence, unread badges, and ticks that catch up when someone reconnects.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">02</span>
           <h3>1:1 + groups</h3>
           <p>Replies, reactions, edits, forwards, voice notes with waveforms, images with lightbox, and delete-for-everyone.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">03</span>
           <h3>Message requests</h3>
           <p>First notes from outside your contacts wait in Requests until you accept, delete, or block.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">04</span>
           <h3>Disappearing ink</h3>
           <p>Chat-wide or per-message timers: 30s, 5m, 1h, 24h. Expired messages are hard-deleted and vanish on every device.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">05</span>
           <h3>Polls &amp; admin</h3>
           <p>Group polls with live bars. Admins rename, promote, and remove — the last admin never vanishes.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">06</span>
           <h3>Voice &amp; video</h3>
           <p>WebRTC on the web: ring, accept, mute, hang up. Call history everywhere. Dedicated Calls tab to call back.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">07</span>
           <h3>Star, pin, search</h3>
           <p>Pin chats to the top. Star any message. Global search plus in-chat search that jumps to the match. Archive and mute.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">08</span>
           <h3>Stories</h3>
           <p>Coloured text statuses, 24-hour expiry, viewed rings, tap-through progress. Paper, then gone.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">09</span>
           <h3>One ID</h3>
           <p>Username + password, JWT sessions, auto-login, editable about. Password-confirmed permanent deletion with safe cleanup.</p>
@@ -185,57 +324,80 @@
       </div>
     </section>
 
-    <section class="split" id="network">
-      <div>
-        <p class="kicker">The Network</p>
-        <h2>A worldwide feed that still feels handwritten.</h2>
-        <p>Post text, a cropped photo, and a tag. Likes and threaded comments land live. Filter by trending tags. Delete your own ink.</p>
-        <ul class="checks">
-          <li>Original, 1:1, 4:5, 16:9, 9:16 framing</li>
-          <li>Colleagues by college, org, or workplace</li>
-          <li>Accepted colleagues open a chat immediately</li>
-          <li>Cursor pagination, author delete, live join updates</li>
-        </ul>
+    <section class="split-wrap" id="network">
+      <div class="split">
+        <div data-reveal>
+          <p class="kicker">The Network</p>
+          <h2>A worldwide feed that still feels handwritten.</h2>
+          <p>Post text, a cropped photo, and a tag. Likes and threaded comments land live. Filter by trending tags. Delete your own ink.</p>
+          <ul class="checks">
+            <li>Original, 1:1, 4:5, 16:9, 9:16 framing</li>
+            <li>Colleagues by college, org, or workplace</li>
+            <li>Accepted colleagues open a chat immediately</li>
+            <li>Cursor pagination, author delete, live join updates</li>
+          </ul>
+          <div class="hero-actions">
+            <a class="btn btn-ghost" href="/network">Explore the Network</a>
+          </div>
+        </div>
+        <img class="split-img" data-reveal src="assets/images/screen-network.webp" alt="Network feed screenshot from the Plus One app" width="700" height="1244" loading="lazy" decoding="async" />
       </div>
-      <img class="split-img" src="assets/images/screen-network.webp" alt="Network feed screenshot" width="700" height="1244" loading="lazy" decoding="async" />
+    </section>
+
+    <section class="strip" id="communities">
+      <div class="sec-head">
+        <p class="kicker">Communities</p>
+        <h2 data-reveal>Purpose-based groups, not follower counts.</h2>
+        <p data-reveal>Start or join a community around a thing you actually do. Open, ask-to-join, or invite-only — with polls, admins, and disappearing ink built in.</p>
+      </div>
+      <div class="cats" data-reveal>
+        <a href="/communities">club night</a>
+        <a href="/communities">house party</a>
+        <a href="/communities">chai chat</a>
+        <a href="/communities">trip planning</a>
+        <a href="/communities">running group</a>
+        <a href="/communities">game night</a>
+        <a href="/communities">study group</a>
+        <a href="/communities">+ your thing</a>
+      </div>
     </section>
 
     <section class="ai" id="ai">
       <p class="kicker">Once a day</p>
-      <h2>A greeting that knows your name and the weather.</h2>
-      <p>After sign-in, a GLB character speaks — first name, real Open-Meteo conditions, unread and request counts — then signs off with “Let’s find the +ones.”</p>
+      <h2 data-reveal>A greeting that knows your name and the weather.</h2>
+      <p data-reveal>After sign-in, a GLB character speaks — first name, real Open-Meteo conditions, unread and request counts — then signs off with <span class="hi">“Let's find the +ones.”</span></p>
     </section>
 
     <section class="strip" id="more">
       <p class="kicker">And the rest of the notebook</p>
-      <h2>More of what shipped.</h2>
-      <div class="grid">
-        <article>
+      <h2 data-reveal style="margin-bottom:1.6rem">More of what shipped.</h2>
+      <div class="grid" data-reveal-group>
+        <article data-reveal>
           <span class="tag">10</span>
           <h3>100% SVG icons &amp; emoji</h3>
           <p>Ionicons vectors and 1445 Twemoji. Same glyphs on iOS, Android, and web — no system emoji lottery.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">11</span>
           <h3>Installable PWA</h3>
           <p>Add to home screen, standalone chrome, paper theme-color, notch-safe padding. Median Android status bar match.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">12</span>
           <h3>Four appearances</h3>
           <p>Light, dark, system, and Kinetic Ink — high-contrast manga-tech with cyan actions and red alerts.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">13</span>
           <h3>Voice notes</h3>
           <p>Real WebM / M4A recording with permission, upload, and a playable waveform bubble with duration.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">14</span>
           <h3>Privacy controls</h3>
           <p>Block, mute, request inbox, status privacy, and a danger-zone Delete One ID that transfers shared groups first.</p>
         </article>
-        <article>
+        <article data-reveal>
           <span class="tag">15</span>
           <h3>Durable backend</h3>
           <p>SQLite on a persistent volume, automatic backups every 6 hours and before shutdown. Only real sign-ups — no fake seed data.</p>
@@ -245,55 +407,62 @@
 
     <section class="platforms">
       <p class="kicker">Where it runs</p>
-      <h2>One codebase. Three surfaces.</h2>
-      <div class="plat-grid">
-        <article>
+      <h2 data-reveal>One codebase. Three surfaces.</h2>
+      <div class="plat-grid" data-reveal-group>
+        <article data-reveal>
           <h3>Web</h3>
           <p>Full PWA with live WebRTC media. Open it in two tabs and watch ticks go blue.</p>
           <a class="btn btn-ink apk-download" href="/app">Open +one</a>
         </article>
-        <article>
+        <article data-reveal>
           <h3>Android</h3>
           <p>Expo Go in a minute, or a side-loaded APK from EAS. Same paper UI.</p>
-          <a class="btn btn-ink apk-download" href="https://github.com/sakshamfit/BROSKIE/releases/download/newrelease/application-59e4e7db-d333-4450-8ced-27726930facc.apk" target="_blank" rel="noopener">Download APK</a>
+          <a class="btn btn-ink apk-download" href="/download">Get the app</a>
         </article>
-        <article>
+        <article data-reveal>
           <h3>iOS</h3>
           <p>Expo Go now, TestFlight when you want a standalone build.</p>
+          <a class="btn btn-ghost apk-download" href="/download">How to install</a>
         </article>
       </div>
     </section>
 
     <section class="design" id="design">
       <p class="kicker">Graphite &amp; Pulp</p>
-      <h2>No shadows. No blur. Depth from stroke.</h2>
-      <p>Hairline graphite → 2px ink → 3px bold. Underline inputs, dashed rules, masking-tape chips, highlighter yellow used like a real marker. Bricolage Grotesque / Karla / JetBrains Mono.</p>
-      <div class="swatches">
-        <span class="sw paper-s">pulp</span>
-        <span class="sw ink-s">ink</span>
-        <span class="sw hi-s">highlight</span>
-        <span class="sw cyan-s">kinetic</span>
+      <h2 data-reveal>No shadows. No blur. Depth from stroke.</h2>
+      <p data-reveal>Hairline graphite → 2px ink → 3px bold. Underline inputs, dashed rules, masking-tape chips, highlighter yellow used like a real marker. Bricolage Grotesque / Karla / JetBrains Mono. This page wears the same tokens as the app.</p>
+      <div class="swatches" data-reveal>
+        <span class="sw paper-s">pulp #fdf8f8</span>
+        <span class="sw ink-s">ink #1c1b1b</span>
+        <span class="sw hi-s">highlight #ffe24d</span>
+        <span class="sw cyan-s">kinetic #00f0ff</span>
       </div>
     </section>
 
     <section class="cta">
-      <h2>Ready when you are.</h2>
-      <p>Create a username, open a second tab, and send something that actually arrives.</p>
-      <div class="hero-actions">
+      <h2 data-reveal>Ready when you are.</h2>
+      <p data-reveal>Create a username, open a second tab, and send something that actually arrives.</p>
+      <div class="hero-actions" data-reveal>
         <a class="btn btn-ink" href="/app">Open +one</a>
-        <a class="btn btn-ghost" href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">Read the repo</a>
+        <a class="btn btn-ghost" href="/download">Download</a>
       </div>
     </section>
   </main>
 
   <footer class="foot">
     <span>+one</span>
-    <div class="foot-links">
+    <nav class="foot-links" aria-label="Site">
+      <a href="/about">About</a>
+      <a href="/communities">Communities</a>
+      <a href="/chat">Chat</a>
+      <a href="/network">Network</a>
+      <a href="/download">Download</a>
+      <a href="/blog/">Blog</a>
       <a href="/privacy">Privacy</a>
       <a href="/terms">Terms</a>
       <a href="/support">Support</a>
-      <a href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">sakshamfit/BROSKIE</a>
-    </div>
+      <a href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">GitHub</a>
+    </nav>
     <span>Not affiliated with WhatsApp. Original messenger.</span>
   </footer>
 </body>

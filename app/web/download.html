@@ -3,26 +3,136 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Download Plus One — APK, iOS, Web</title>
-  <meta name="description" content="Download Plus One for Android (APK), iOS, or open the web app. A community-based social platform with real-time messaging and stories." />
+  <title>Download Plus One — Android APK, iOS &amp; Web App</title>
+  <meta name="description" content="Download Plus One: install the Android APK, run it on iOS via Expo Go, or open the web app instantly at plusoneco.in/app — free on every platform, same account everywhere." />
   <meta name="theme-color" content="#fdf8f8" />
   <link rel="canonical" href="https://www.plusoneco.in/download" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Plus One" />
+  <meta property="og:title" content="Download Plus One — Android APK, iOS &amp; Web App" />
+  <meta property="og:description" content="Install the Android APK, run it on iOS via Expo Go, or open the web app instantly — free on every platform." />
+  <meta property="og:url" content="https://www.plusoneco.in/download" />
+  <meta property="og:image" content="https://www.plusoneco.in/assets/images/screen-chats.webp" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23fdf8f8' width='32' height='32'/%3E%3Crect x='7' y='7' width='18' height='18' fill='%23ffe24d' transform='rotate(-3 16 16)'/%3E%3Cpath d='M16 8v16M8 16h16' stroke='%231c1b1b' stroke-width='3.4' stroke-linecap='round' transform='rotate(-3 16 16)'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="./styles.css" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23f3ead8' width='32' height='32'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-size='18' font-family='Georgia' fill='%231a1a1a'%3E+%3C/text%3E%3C/svg%3E" />
+  <script>document.documentElement.classList.add('js')</script>
+  <script defer src="/assets/js/site.js"></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.plusoneco.in/" },
+      { "@type": "ListItem", "position": 2, "name": "Download", "item": "https://www.plusoneco.in/download" }
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "MobileApplication",
+    "name": "Plus One",
+    "operatingSystem": "Android",
+    "applicationCategory": "SocialNetworkingApplication",
+    "isAccessibleForFree": true,
+    "installUrl": "https://github.com/sakshamfit/BROSKIE/releases/download/newrelease/application-59e4e7db-d333-4450-8ced-27726930facc.apk",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
 </head>
 <body>
+  <div class="paper" aria-hidden="true"></div>
+
   <header class="nav">
     <a class="mark" href="/"><span class="mark-plus">+</span>one</a>
-    <nav><a href="/">Home</a> <a href="/app">Open App</a></nav>
+    <details class="menu">
+      <summary class="menu-btn" aria-label="Open menu" title="Menu">
+        <span></span><span></span><span></span>
+      </summary>
+      <nav id="site-nav">
+        <a href="/communities">Communities</a>
+        <a href="/chat">Chat</a>
+        <a href="/network">Network</a>
+        <a href="/about">About</a>
+        <a href="/download" aria-current="page">Download</a>
+        <a class="btn btn-ink nav-cta" href="/app">Open the app</a>
+      </nav>
+    </details>
   </header>
+
   <main>
-    <h1>Download Plus One</h1>
-    <p>Plus One runs on web, Android (APK), and iOS (TestFlight / Expo Go). All platforms share the same paper UI and real-time messaging.</p>
-    <ul>
-      <li><a href="/app">Web App</a></li>
-      <li><a href="https://github.com/sakshamfit/BROSKIE/releases/download/newrelease/application-59e4e7db-d333-4450-8ced-27726930facc.apk" target="_blank" rel="noopener">Android APK</a></li>
-    </ul>
+    <section class="page-hero">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span>Download</span></nav>
+      <p class="kicker">v1.4 · free · no ads</p>
+      <h1>Get Plus One on <em>anything</em></h1>
+      <p class="sub-h1">Scan the QR for the Android APK, open the web app instantly in any browser, or run the full app on iOS with Expo Go. One account, every device, all free.</p>
+      <div class="hero-actions">
+        <a class="btn btn-ink" href="/app">Open the web app</a>
+        <a class="btn btn-ghost apk-download" href="https://github.com/sakshamfit/BROSKIE/releases/download/newrelease/application-59e4e7db-d333-4450-8ced-27726930facc.apk" target="_blank" rel="noopener">Download APK</a>
+      </div>
+    </section>
+
+    <section class="page-body">
+      <div class="page-cols">
+        <div data-reveal-group>
+          <article data-reveal class="note attention" style="max-width:340px;text-align:center">
+            <img src="assets/qr-apk.svg" width="240" height="240" loading="lazy" decoding="async" alt="QR code linking to the Plus One Android APK" style="width:100%;border:1px solid #c4c7c7;background:#fff;padding:8px" />
+            <p class="note-meta" style="justify-content:center;margin-top:.6rem">SCAN WITH YOUR PHONE CAMERA → INSTALL</p>
+            <div class="note-rule"></div>
+            <p class="note-body">Android APK · v1.4 · side-load build from EAS</p>
+          </article>
+        </div>
+        <div class="grid" data-reveal-group style="grid-template-columns:1fr;gap:1rem">
+          <article data-reveal>
+            <span class="tag">web</span>
+            <h3>Open the web app — no install</h3>
+            <p>plusoneco.in/app is a full installable PWA with live WebRTC calls. Add it to your home screen for the standalone experience.</p>
+            <a class="btn btn-ink apk-download" href="/app">Open +one web</a>
+          </article>
+          <article data-reveal>
+            <span class="tag">android</span>
+            <h3>Android — APK or Expo Go</h3>
+            <p>Scan the QR to side-load the EAS APK, or open the project in Expo Go for live updates. Same paper UI, same account.</p>
+            <a class="btn btn-ghost apk-download" href="https://github.com/sakshamfit/BROSKIE/releases/download/newrelease/application-59e4e7db-d333-4450-8ced-27726930facc.apk" target="_blank" rel="noopener">Download APK</a>
+          </article>
+          <article data-reveal>
+            <span class="tag">ios</span>
+            <h3>iOS — Expo Go today</h3>
+            <p>Install Expo Go from the App Store, scan the project QR from the repo, and +one runs natively. TestFlight builds when you want one.</p>
+            <a class="btn btn-ghost apk-download" href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">Repo &amp; setup</a>
+          </article>
+        </div>
+      </div>
+
+      <div style="max-width:760px;margin:clamp(2.4rem,5vw,3.6rem) auto 0">
+        <h2 data-reveal>After you install</h2>
+        <ul class="checks" data-reveal style="margin-top:1rem">
+          <li>Create a One ID — just a username and password</li>
+          <li>Pick your college or workplace to find colleagues</li>
+          <li>Join a community or post on The Network</li>
+          <li>Open a second tab and watch messages arrive live</li>
+        </ul>
+      </div>
+    </section>
   </main>
+
+  <footer class="foot">
+    <span>+one</span>
+    <nav class="foot-links" aria-label="Site">
+      <a href="/about">About</a>
+      <a href="/communities">Communities</a>
+      <a href="/chat">Chat</a>
+      <a href="/network">Network</a>
+      <a href="/download">Download</a>
+      <a href="/blog/">Blog</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/support">Support</a>
+      <a href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <span>Not affiliated with WhatsApp. Original messenger.</span>
+  </footer>
 </body>
 </html>
