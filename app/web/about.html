@@ -3,29 +3,123 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>About Plus One — Community Social Platform</title>
-  <meta name="description" content="Learn about Plus One, a community-based social platform built to help people connect with like-minded communities and chat in real time." />
+  <title>About Plus One — The Ink-and-Paper Social Platform</title>
+  <meta name="description" content="Plus One is a community-based social platform built to help people connect, communicate and find communities around shared interests. Learn how it's built, why it looks like a sketchbook, and who's behind it." />
   <meta name="theme-color" content="#fdf8f8" />
   <link rel="canonical" href="https://www.plusoneco.in/about" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Plus One" />
+  <meta property="og:title" content="About Plus One — The Ink-and-Paper Social Platform" />
+  <meta property="og:description" content="Plus One is a community-based social platform built to help people connect, communicate and find communities around shared interests." />
+  <meta property="og:url" content="https://www.plusoneco.in/about" />
+  <meta property="og:image" content="https://www.plusoneco.in/assets/images/screen-chats.webp" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23fdf8f8' width='32' height='32'/%3E%3Crect x='7' y='7' width='18' height='18' fill='%23ffe24d' transform='rotate(-3 16 16)'/%3E%3Cpath d='M16 8v16M8 16h16' stroke='%231c1b1b' stroke-width='3.4' stroke-linecap='round' transform='rotate(-3 16 16)'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="./styles.css" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23f3ead8' width='32' height='32'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-size='18' font-family='Georgia' fill='%231a1a1a'%3E+%3C/text%3E%3C/svg%3E" />
+  <script>document.documentElement.classList.add('js')</script>
+  <script defer src="/assets/js/site.js"></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.plusoneco.in/" },
+      { "@type": "ListItem", "position": 2, "name": "About", "item": "https://www.plusoneco.in/about" }
+    ]
+  }
+  </script>
 </head>
 <body>
+  <div class="paper" aria-hidden="true"></div>
+
   <header class="nav">
     <a class="mark" href="/"><span class="mark-plus">+</span>one</a>
-    <nav>
-      <a href="/">Home</a>
-      <a href="/app">Open App</a>
-    </nav>
+    <details class="menu">
+      <summary class="menu-btn" aria-label="Open menu" title="Menu">
+        <span></span><span></span><span></span>
+      </summary>
+      <nav id="site-nav">
+        <a href="/communities">Communities</a>
+        <a href="/chat">Chat</a>
+        <a href="/network">Network</a>
+        <a href="/about" aria-current="page">About</a>
+        <a href="/download">Download</a>
+        <a class="btn btn-ink nav-cta" href="/app">Open the app</a>
+      </nav>
+    </details>
   </header>
+
   <main>
-    <h1>About Plus One</h1>
-    <p>Plus One is a community-based social platform built to help people connect, chat, share posts and discover communities around shared interests. Whether you are looking for a running partner, a study group, or colleagues at work, Plus One helps you find the people worth talking to.</p>
-    <p>Built with Expo, React Native, Node.js, Socket.IO, and a durable SQLite backend. Open source at <a href="https://github.com/sakshamfit/BROSKIE">github.com/sakshamfit/BROSKIE</a>.</p>
+    <section class="page-hero">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span>About</span></nav>
+      <p class="kicker">Why +one exists</p>
+      <h1>A social platform that feels like <em>paper</em></h1>
+      <p class="sub-h1">Plus One is a community-based social platform built to help people connect, communicate and find communities around shared interests — whether that's a running partner, a study group, or the people at your workplace who actually reply.</p>
+      <div class="hero-actions">
+        <a class="btn btn-ink" href="/app">Open the app</a>
+        <a class="btn btn-ghost" href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">Read the repo</a>
+      </div>
+    </section>
+
+    <section class="page-body">
+      <div class="page-cols">
+        <div data-reveal-group>
+          <h2 data-reveal>Interests first, follower counts never</h2>
+          <p data-reveal style="margin-top:.8rem;color:var(--graphite)">Most networks optimise for who you already know. Plus One starts from what you care about: a tag, a community, a run, a chai. Follows turn into colleagues, colleagues turn into chats — the feed is a place to meet, not a place to perform.</p>
+          <h2 data-reveal style="margin-top:2rem">Drawn, not designed into oblivion</h2>
+          <p data-reveal style="margin-top:.8rem;color:var(--graphite)">The interface is "Graphite &amp; Pulp": ink strokes on warm off-white paper, a faint drafting grid, hand-drawn boxes, masking-tape chips, and one highlighter-yellow accent used the way a real marker is — sparingly. Headlines are set in Bricolage Grotesque, body text in Karla, labels in JetBrains Mono. This website wears the exact same tokens as the app.</p>
+          <h2 data-reveal style="margin-top:2rem">Privacy is a feature, not a policy page</h2>
+          <ul class="checks" style="margin-top:1rem" data-reveal>
+            <li>Message requests — unknown senders wait for your approval</li>
+            <li>Disappearing messages hard-deleted from the server</li>
+            <li>Block, mute, status privacy, per-post audiences</li>
+            <li>Password-confirmed account deletion with safe cleanup</li>
+            <li>No fake seed data — every account is a real sign-up</li>
+          </ul>
+        </div>
+        <div data-reveal-group>
+          <article class="note attention" data-reveal style="max-width:none">
+            <h2 class="note-title" style="font-size:1.15rem">How it's built</h2>
+            <p class="note-body" style="margin-top:.6rem">One codebase, three surfaces: Expo / React Native on iOS, Android and web, Node.js + Socket.IO on the backend, SQLite on a persistent volume with automatic backups every six hours.</p>
+            <div class="note-rule"></div>
+            <ul class="checks">
+              <li>Real-time messaging, presence, calls (WebRTC)</li>
+              <li>Installable PWA on the web</li>
+              <li>100% SVG icons and 1445 Twemoji everywhere</li>
+              <li>Open source: github.com/sakshamfit/BROSKIE</li>
+            </ul>
+          </article>
+          <div class="hero-actions" data-reveal style="margin-top:1.4rem">
+            <a class="btn btn-ink" href="/download">Get the app</a>
+            <a class="btn btn-ghost" href="/communities">Explore communities</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="max-width:760px;margin:clamp(2.4rem,5vw,3.6rem) auto 0">
+        <h2 data-reveal>The short version</h2>
+        <p data-reveal style="margin-top:.8rem;color:var(--graphite)">Plus One ("+one") launched as an experiment: what if a messenger looked like a sketchbook and worked like a serious product? It now ships realtime chat, a worldwide feed, communities, stories, polls, calls, voice notes and a daily AI greeting — on iOS, Android and the web, for free.</p>
+        <p data-reveal style="margin-top:.8rem;color:var(--graphite)">The name is the point: everyone you meet here is a potential +1 — the running partner, the study buddy, the colleague who becomes a friend.</p>
+      </div>
+    </section>
   </main>
-  <footer>
-    <a href="/">Back to Plus One</a>
+
+  <footer class="foot">
+    <span>+one</span>
+    <nav class="foot-links" aria-label="Site">
+      <a href="/about">About</a>
+      <a href="/communities">Communities</a>
+      <a href="/chat">Chat</a>
+      <a href="/network">Network</a>
+      <a href="/download">Download</a>
+      <a href="/blog/">Blog</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/support">Support</a>
+      <a href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <span>Not affiliated with WhatsApp. Original messenger.</span>
   </footer>
 </body>
 </html>

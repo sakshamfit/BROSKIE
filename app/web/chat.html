@@ -3,23 +3,216 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Chat — Plus One</title>
-  <meta name="description" content="Real-time messaging on Plus One: 1:1 chats, group conversations, replies, reactions, edits, voice notes, and disappearing ink." />
+  <title>Chat &amp; Real-Time Messaging — Plus One</title>
+  <meta name="description" content="Chat on Plus One: real-time 1:1 and group messaging with typing indicators, read ticks, replies, reactions, voice notes, polls and disappearing messages that self-destruct on every device." />
   <meta name="theme-color" content="#fdf8f8" />
   <link rel="canonical" href="https://www.plusoneco.in/chat" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Plus One" />
+  <meta property="og:title" content="Chat &amp; Real-Time Messaging — Plus One" />
+  <meta property="og:description" content="Real-time 1:1 and group messaging with typing indicators, read ticks, voice notes, polls and disappearing messages." />
+  <meta property="og:url" content="https://www.plusoneco.in/chat" />
+  <meta property="og:image" content="https://www.plusoneco.in/assets/images/screen-chat.webp" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23fdf8f8' width='32' height='32'/%3E%3Crect x='7' y='7' width='18' height='18' fill='%23ffe24d' transform='rotate(-3 16 16)'/%3E%3Cpath d='M16 8v16M8 16h16' stroke='%231c1b1b' stroke-width='3.4' stroke-linecap='round' transform='rotate(-3 16 16)'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="./styles.css" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23f3ead8' width='32' height='32'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-size='18' font-family='Georgia' fill='%231a1a1a'%3E+%3C/text%3E%3C/svg%3E" />
+  <script>document.documentElement.classList.add('js')</script>
+  <script defer src="/assets/js/site.js"></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.plusoneco.in/" },
+      { "@type": "ListItem", "position": 2, "name": "Chat", "item": "https://www.plusoneco.in/chat" }
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Is Plus One chat free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Plus One is completely free on web, Android and iOS — create a username and password and start chatting. There are no ads and no in-app purchases."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do disappearing messages work on Plus One?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "You can set a timer for a whole chat or a single message: 30 seconds, 5 minutes, 1 hour, or 24 hours. When the timer expires the message is hard-deleted from the server and vanishes from every device."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I chat in groups on Plus One?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Groups support replies, reactions, edits, forwards, voice notes with waveforms, image sharing with a lightbox, live polls, and admin controls like renaming, promoting and removing members."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What platforms does Plus One chat run on?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Plus One runs on the web as an installable PWA at plusoneco.in/app, on Android via an APK or Expo Go, and on iOS via Expo Go. Chats sync in real time across every device signed in to your One ID."
+        }
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
+  <div class="paper" aria-hidden="true"></div>
+
   <header class="nav">
     <a class="mark" href="/"><span class="mark-plus">+</span>one</a>
-    <nav><a href="/">Home</a> <a href="/app">Open App</a></nav>
+    <details class="menu">
+      <summary class="menu-btn" aria-label="Open menu" title="Menu">
+        <span></span><span></span><span></span>
+      </summary>
+      <nav id="site-nav">
+        <a href="/communities">Communities</a>
+        <a href="/chat" aria-current="page">Chat</a>
+        <a href="/network">Network</a>
+        <a href="/about">About</a>
+        <a href="/download">Download</a>
+        <a class="btn btn-ink nav-cta" href="/app">Open the app</a>
+      </nav>
+    </details>
   </header>
+
   <main>
-    <h1>Real-time Chat</h1>
-    <p>Send messages that arrive instantly. Replies, reactions, voice notes with waveforms, image lightbox, message requests, archive, mute, and disappearing timers.</p>
-    <a class="btn btn-ink" href="/app">Start Chatting</a>
+    <section class="page-hero">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span>Chat</span></nav>
+      <p class="kicker">Realtime · Socket.IO · WebRTC</p>
+      <h1>Chat that arrives <em>instantly</em></h1>
+      <p class="sub-h1">Plus One chat is real-time 1:1 and group messaging: typing indicators, read ticks, replies, reactions, voice notes, polls — and disappearing ink that self-destructs on every device.</p>
+      <div class="hero-actions">
+        <a class="btn btn-ink" href="/app">Start chatting</a>
+        <a class="btn btn-ghost" href="/download">Get the app</a>
+      </div>
+    </section>
+
+    <section class="page-body">
+      <div class="page-cols">
+        <div>
+          <div class="demo" id="chat-demo" aria-label="Animated demo of Plus One chat: typing indicator, a message being sent, read ticks, and a disappearing message">
+            <div class="demo-head">
+              <svg width="11" height="13" viewBox="0 0 12 14" fill="none" aria-hidden="true"><rect x="1" y="6" width="10" height="7" rx="1.5" stroke="#1c1b1b" stroke-width="1.4"/><path d="M3.5 6V4a2.5 2.5 0 0 1 5 0v2" stroke="#1c1b1b" stroke-width="1.4"/></svg>
+              meera
+              <span class="demo-status">ONLINE · 1:1</span>
+            </div>
+            <div class="demo-body">
+              <div class="msg them">
+                <span class="lbl">MEERA</span>
+                5:30 chai after the run?
+                <span class="meta">5:28 PM</span>
+              </div>
+              <div class="typing" aria-hidden="true"><span></span><span></span><span></span></div>
+              <div class="msg them msg2">
+                <span class="lbl">MEERA</span>
+                grabbing seats by the lake ☕
+                <span class="meta">5:29 PM</span>
+              </div>
+              <div class="msg me msg3">
+                on my way 🏃
+                <span class="meta">5:30 PM
+                  <span class="ticks">
+                    <svg class="tick1" width="15" height="11" viewBox="0 0 15 11" fill="none" aria-hidden="true"><path d="M1.5 6l3.2 3.2L11 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <svg class="tick2" width="15" height="11" viewBox="0 0 15 11" fill="none" aria-hidden="true"><path d="M1.5 6l3.2 3.2L11 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 9l4.5-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </span>
+                </span>
+              </div>
+              <div class="msg me msg-vanish">
+                this note self-destructs 🕐
+                <span class="meta">
+                  <span class="vanish-tag">
+                    <svg width="11" height="13" viewBox="0 0 11 13" fill="none" aria-hidden="true"><circle cx="5.5" cy="6.5" r="4.8" stroke="currentColor" stroke-width="1.2"/><path class="vanish-hand" d="M5.5 6.5V2.8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                    <span class="vanish-count">5s</span>
+                  </span>
+                  5:31 PM
+                </span>
+              </div>
+            </div>
+            <div class="demo-input">
+              <span class="field">Type a message</span>
+              <span class="send" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 10.5L10.5 6L1.5 1.5L3.2 6L1.5 10.5Z" stroke="#f4f0ef" stroke-width="1.3" stroke-linejoin="round"/></svg>
+              </span>
+            </div>
+          </div>
+          <p class="demo-note" style="margin-top:.9rem">The live demo: typing dots, a reply landing, a message sending, ticks turning read, and a disappearing timer counting down to hard-delete.</p>
+        </div>
+        <div data-reveal-group>
+          <article data-reveal>
+            <h2 class="note-title" style="font-size:1.15rem">Everything a messenger should do</h2>
+            <ul class="checks" style="margin-top:.8rem">
+              <li>Real-time delivery over Socket.IO — no pull-to-refresh</li>
+              <li>Typing indicators and online presence</li>
+              <li>Read ticks that catch up when someone reconnects</li>
+              <li>Replies, reactions, edits, forwards, star &amp; pin</li>
+              <li>Voice notes with playable waveforms</li>
+              <li>Photos with lightbox, original to 9:16 framing</li>
+              <li>Message requests — unknown senders wait for approval</li>
+              <li>Archive, mute, block, global + in-chat search</li>
+              <li>Disappearing timers: 30s / 5m / 1h / 24h, hard-deleted</li>
+            </ul>
+          </article>
+          <div class="hero-actions" data-reveal style="margin-top:1.4rem">
+            <a class="btn btn-ink" href="/app">Open the app</a>
+            <a class="btn btn-ghost" href="/communities">See communities</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="max-width:760px;margin:clamp(2rem,5vw,3rem) auto 0">
+        <h2 data-reveal>Chat questions, answered</h2>
+        <div class="faq" data-reveal>
+          <details>
+            <summary>Is Plus One chat free?</summary>
+            <div class="faq-body"><p>Yes. Plus One is completely free on web, Android and iOS — create a username and password and start chatting. No ads, no in-app purchases.</p></div>
+          </details>
+          <details>
+            <summary>How do disappearing messages work?</summary>
+            <div class="faq-body"><p>Set a timer for a whole chat or a single message: 30 seconds, 5 minutes, 1 hour, or 24 hours. When it expires, the message is hard-deleted from the server and vanishes from every device.</p></div>
+          </details>
+          <details>
+            <summary>Can I chat in groups?</summary>
+            <div class="faq-body"><p>Yes. Groups support replies, reactions, edits, forwards, voice notes, images, live polls, and admin controls — rename, promote, remove. The last admin never vanishes.</p></div>
+          </details>
+          <details>
+            <summary>What platforms does it run on?</summary>
+            <div class="faq-body"><p>The web app is an installable PWA at plusoneco.in/app; Android runs via APK or Expo Go; iOS runs via Expo Go. Everything syncs in real time under one One ID.</p></div>
+          </details>
+        </div>
+      </div>
+    </section>
   </main>
+
+  <footer class="foot">
+    <span>+one</span>
+    <nav class="foot-links" aria-label="Site">
+      <a href="/about">About</a>
+      <a href="/communities">Communities</a>
+      <a href="/chat">Chat</a>
+      <a href="/network">Network</a>
+      <a href="/download">Download</a>
+      <a href="/blog/">Blog</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/support">Support</a>
+      <a href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <span>Not affiliated with WhatsApp. Original messenger.</span>
+  </footer>
 </body>
 </html>

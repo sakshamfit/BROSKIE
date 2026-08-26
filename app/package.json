@@ -79,6 +79,8 @@
   "devDependencies": {
     "@config-plugins/react-native-webrtc": "15.0.2",
     "babel-preset-expo": "~57.0.7",
+    "esbuild": "^0.25.12",
+    "gsap": "^3.15.0",
     "jsdom": "^30.0.1"
   }
 }

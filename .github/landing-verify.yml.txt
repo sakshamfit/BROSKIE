@@ -1,0 +1,63 @@
+# ─────────────────────────────────────────────────────────────────
+# ACTIVATION: this file ships as .txt because the Arena bot token
+# cannot create files under .github/workflows/. To turn on real-Chrome
+# Lighthouse verification (score gates + page screenshots), run:
+#
+#   mkdir -p .github/workflows
+#   mv .github/landing-verify.yml.txt .github/workflows/landing-verify.yml
+#   git add .github && git commit -m "ci: landing lighthouse" && git push
+#
+# (or grant the Arena GitHub app Workflows: read+write)
+# ─────────────────────────────────────────────────────────────────
+name: Landing page verify (SEO + motion + Lighthouse)
+
+on:
+  push:
+    branches: ['arena/**']
+    paths: ['app/web/**', 'app/scripts/export-web.js', 'app/scripts/verify-site.mjs', 'app/scripts/lighthouse-ci.mjs', '.github/workflows/landing-verify.yml']
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Build the site (same command Vercel runs)
+        working-directory: app
+        run: |
+          npm ci --no-audit --no-fund
+          CI=true node scripts/export-web.js
+
+      - name: SEO / structured-data checks (view-source level)
+        working-directory: app
+        run: node scripts/verify-site.mjs
+
+      - name: Motion runtime checks (jsdom)
+        working-directory: app
+        run: |
+          node scripts/test-site-motion.mjs index.html
+          node scripts/test-site-motion.mjs chat.html
+
+      - name: Real-browser checks — Lighthouse, tokens, screenshots
+        working-directory: app
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: '1'
+        run: |
+          npm install --no-save --no-audit --no-fund lighthouse@12 puppeteer@23
+          node scripts/lighthouse-ci.mjs
+
+      - name: Upload page screenshots + Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: landing-verification
+          path: app/lighthouse-artifacts/
+          if-no-files-found: warn

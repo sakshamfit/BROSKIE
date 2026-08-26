@@ -6,8 +6,12 @@
  *   npm run export:web
  *   → expo export into app/dist
  *   → moves the app shell to dist/app/index.html   (the app lives at /app)
- *   → copies the static marketing/legal pages from app/web/ to dist/
- *     (home → index.html, privacy/terms/support → *.html)
+ *   → bundles app/web/src/site.js with esbuild (GSAP) → dist/assets/js/site.js
+ *   → copies the static marketing pages from app/web/ to dist/
+ *     (home → index.html; about/communities/chat/network/download → *.html;
+ *      blog → blog/index.html; privacy/terms/support → *.html)
+ *   → copies robots.txt + sitemap.xml over the app-public copies
+ *     (app/web is the single source of truth for the marketing site)
  *   → inlines app/web/styles.css into every page (no render-blocking
  *     <link rel="stylesheet"> on the public site)
  *
@@ -61,12 +65,38 @@ function copyDir(src, dest) {
   }
 }
 
+/* Inlines the shared stylesheet. Pages live at dist/ root and reference
+ * ./styles.css; the blog lives one level deeper and uses ../styles.css.
+ * Both markers resolve to the same file. */
 function inlineStyles(html, css) {
-  const marker = '<link rel="stylesheet" href="./styles.css" />';
-  if (!html.includes(marker)) {
+  const out = html.replace(
+    /<link rel="stylesheet" href="(\.\.\/|\.?\/)?styles\.css" \/>/,
+    () => `<style>\n${css}\n</style>`
+  );
+  if (out === html) {
     throw new Error('Page is missing the styles.css <link> marker for inlining');
   }
-  return html.replace(marker, () => `<style>\n${css}\n</style>`);
+  return out;
+}
+
+/* Bundles the GSAP-driven site runtime (see app/web/src/site.js) into a
+ * single minified iife, cached by the browser as /assets/js/site.js. */
+function bundleSiteJs(dist) {
+  const entry = path.join(WEB_DIR, 'src', 'site.js');
+  const outDir = path.join(dist, 'assets', 'js');
+  fs.mkdirSync(outDir, { recursive: true });
+  const esbuild = path.join(APP_ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'esbuild.cmd' : 'esbuild');
+  const out = path.join(outDir, 'site.js');
+  console.log('[export-web] esbuild → assets/js/site.js');
+  execFileSync(esbuild, [
+    entry,
+    '--bundle',
+    '--minify',
+    '--format=iife',
+    `--outfile=${out}`,
+    '--log-level=warning',
+  ], { cwd: APP_ROOT, stdio: 'inherit' });
+  return out;
 }
 
 function kmb(bytes) {
@@ -93,19 +123,28 @@ function main() {
   const css = fs.readFileSync(path.join(WEB_DIR, 'styles.css'), 'utf8');
   const pages = [
     { src: 'home.html', dest: 'index.html' },
+    { src: 'about.html', dest: 'about.html' },
+    { src: 'communities.html', dest: 'communities.html' },
+    { src: 'chat.html', dest: 'chat.html' },
+    { src: 'network.html', dest: 'network.html' },
+    { src: 'download.html', dest: 'download.html' },
     { src: 'privacy.html', dest: 'privacy.html' },
     { src: 'terms.html', dest: 'terms.html' },
     { src: 'support.html', dest: 'support.html' },
+    { src: 'blog/index.html', dest: 'blog/index.html' },
   ];
   for (const page of pages) {
     const html = fs.readFileSync(path.join(WEB_DIR, page.src), 'utf8');
     const withCss = inlineStyles(html, css);
-    fs.writeFileSync(path.join(dist, page.dest), withCss);
+    const destPath = path.join(dist, page.dest);
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.writeFileSync(destPath, withCss);
     console.log(`[export-web] ${page.src} → ${page.dest} (${kmb(Buffer.byteLength(withCss))})`);
   }
 
   copyDir(path.join(WEB_DIR, 'assets'), path.join(dist, 'assets'));
-  console.log('[export-web] static assets copied (images, fonts, QR).');
+  bundleSiteJs(dist);
+  console.log('[export-web] static assets copied (images, fonts, QR, site.js).');
 
   // Copy PWA manifest for native-like web app experience
   const manifestSrc = path.join(WEB_DIR, 'manifest.json');
@@ -115,8 +154,16 @@ function main() {
     console.log('[export-web] PWA manifest copied.');
   }
 
-  for (const f of ['index.html', 'privacy.html', 'terms.html', 'support.html']) {
-    console.log(`[export-web]   ${f}: ${kmb(fs.statSync(path.join(dist, f)).size)}`);
+  // robots.txt + sitemap.xml: app/web is the source of truth for the
+  // marketing site — overwrite the copies expo brought in from app/public.
+  for (const f of ['robots.txt', 'sitemap.xml']) {
+    fs.copyFileSync(path.join(WEB_DIR, f), path.join(dist, f));
+    console.log(`[export-web] ${f} → dist/${f}`);
+  }
+
+  for (const f of ['index.html', 'about.html', 'communities.html', 'chat.html', 'network.html', 'download.html', 'blog/index.html', 'assets/js/site.js']) {
+    const p = path.join(dist, f);
+    console.log(`[export-web]   ${f}: ${fs.existsSync(p) ? kmb(fs.statSync(p).size) : 'MISSING'}`);
   }
 }
 

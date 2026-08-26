@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Static sitemap for the +one site (Expo web export).
-  Expo copies app/public/* verbatim into app/dist/ on export, and Vercel
-  serves dist/ at the domain root — so this file lands at
-  https://www.plusoneco.in/sitemap.xml as application/xml.
-  Keep <lastmod> fresh whenever a public page ships. The app itself is
-  auth-gated and intentionally not indexed.
+  Sitemap for the +one marketing site (plusoneco.in).
+  app/scripts/export-web.js copies this file into dist/ so it is served at
+  https://www.plusoneco.in/sitemap.xml. Keep <lastmod> fresh when pages ship.
+  The app shell under /app is auth-gated and intentionally not indexed.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
@@ -13,6 +11,48 @@
     <lastmod>2026-08-26</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.plusoneco.in/communities</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://www.plusoneco.in/chat</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://www.plusoneco.in/network</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://www.plusoneco.in/download</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.plusoneco.in/about</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.plusoneco.in/blog/</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.plusoneco.in/support</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
   </url>
   <url>
     <loc>https://www.plusoneco.in/privacy</loc>
@@ -25,11 +65,5 @@
     <lastmod>2026-08-26</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
-  </url>
-  <url>
-    <loc>https://www.plusoneco.in/support</loc>
-    <lastmod>2026-08-26</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
   </url>
 </urlset>
