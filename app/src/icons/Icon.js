@@ -43,7 +43,7 @@ function elementProps(el, color) {
   return p;
 }
 
-export default function Icon({ name, size = 24, color = '#000', style, ...rest }) {
+export default React.memo(function Icon({ name, size = 24, color = '#000', style, ...rest }) {
   const icon = DATA[name] || DATA[String(name).replace(/-outline$/, '')] || null;
   if (!icon) {
     if (__DEV__) console.warn(`[Icon] unknown icon "${name}"`);

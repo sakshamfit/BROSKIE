@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>+one — an ink-and-paper messenger | realtime chat, stories, calls &amp; the Network</title>
-  <meta name="description" content="+one is a real-time messenger and network: chats, stories, colleagues, polls, calls, and a daily AI greeting. iOS, Android, and web." />
+  <title>Plus One – Community Social Platform | Connect, Chat &amp; Find Your Community</title>
+  <meta name="description" content="Plus One is a community-based social platform where you can connect with people, chat, share posts and discover communities based on your interests. Find running partners, study groups, colleagues and more." />
   <meta name="theme-color" content="#f3ead8" />
+  <link rel="manifest" href="/manifest.json" />
   <link rel="canonical" href="https://www.plusoneco.in/" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="+one" />
@@ -18,13 +19,43 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "+one",
-    "description": "A realtime ink-and-paper messenger: chats, stories, colleagues, polls, calls and a daily AI greeting.",
-    "applicationCategory": "SocialNetworkingApplication",
-    "operatingSystem": "iOS, Android, Web",
+    "@type": "WebSite",
+    "name": "Plus One",
     "url": "https://www.plusoneco.in/",
-    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    "description": "Plus One is a community-based social platform where you can connect with people, chat, share posts and discover communities based on your interests.",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://www.plusoneco.in/app?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Plus One",
+    "operatingSystem": "Web, iOS, Android",
+    "applicationCategory": "SocialNetworkingApplication",
+    "url": "https://www.plusoneco.in/app",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "description": "A community-based social platform: connect with people, chat, share posts and discover communities around shared interests. Real-time messaging, stories, polls, voice notes, and group communities."
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Plus One",
+    "url": "https://www.plusoneco.in/",
+    "logo": "https://www.plusoneco.in/assets/icon.png",
+    "sameAs": [
+      "https://github.com/sakshamfit/BROSKIE"
+    ]
   }
   </script>
 </head>
@@ -52,7 +83,8 @@
     <section class="hero">
       <div class="hero-copy">
         <p class="kicker">v1.4 · realtime · iOS / Android / web</p>
-        <h1>Find the <em>+ones</em> worth talking to.</h1>
+        <h1>Plus One — Find the <em>+ones</em> worth talking to.</h1>
+        <p class="sub-h1">A community-based social platform built to help people connect, communicate and find communities around shared interests.</p>
         <p class="lede">
           An ink-and-paper messenger: live chats, a worldwide feed, place-based colleagues,
           stories, polls, WebRTC calls, and a daily AI greeting. Graphite, pulp, people.

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence, withDelay } from 'react-native-reanimated';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { mediaUrl } from '../api';
@@ -213,32 +214,59 @@ export default PostCard;
  */
 function LikeAction({ post, onToggleLike, theme, s }) {
   const liked = !!post.liked;
+  const scale = useSharedValue(1);
+  const colorValue = useSharedValue(liked ? 1 : 0);
+
+  const animatedScale = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const animatedColor = useAnimatedStyle(() => ({
+    opacity: colorValue.value,
+  }));
+
+  const handlePress = () => {
+    haptic(liked ? 'selection' : 'impact');
+    // Native-thread sequence: bounce up, hold briefly, spring back — smooth on all devices
+    scale.value = withSequence(
+      withSpring(1.3, { damping: 12, stiffness: 300, mass: 0.7 }),
+      withDelay(100, withSpring(1, { damping: 15, stiffness: 320, mass: 0.75 }))
+    );
+    colorValue.value = withSpring(liked ? 0 : 1, { damping: 15, stiffness: 320, mass: 0.75 });
+    onToggleLike?.(post);
+  };
+
   return (
-    <SpringPressable
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={liked ? 'Unlike' : 'Like'}
-      onPress={() => { haptic(liked ? 'selection' : 'impact'); onToggleLike?.(post); }}
-      scaleTo={0.88}
+      onPress={handlePress}
+      onPressIn={() => { scale.value = 0.88; }}
+      onPressOut={() => { scale.value = 1; }}
       style={s.action}
       hitSlop={10}
     >
-      <View style={s.actionInner}>
-        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-          <Bloom active={liked} color={INSTAGRAM_HEART} size={30} />
-          <IconSwap
-            active={liked}
-            size={24}
-            on={<Icon name="heart" size={24} color={INSTAGRAM_HEART} />}
-            off={<Icon name="heart-outline" size={24} color={theme.ink} />}
-          />
+      <Animated.View style={[animatedScale, { alignItems: 'center', justifyContent: 'center' }]}>
+        <View style={s.actionInner}>
+          <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+            <Animated.View style={[animatedColor, { position: 'absolute' }]}>
+              <Icon name="heart" size={24} color={INSTAGRAM_HEART} />
+            </Animated.View>
+            <IconSwap
+              active={liked}
+              size={24}
+              on={<Icon name="heart" size={24} color={INSTAGRAM_HEART} />}
+              off={<Icon name="heart-outline" size={24} color={theme.ink} />}
+            />
+          </View>
+          {post.likes > 0 && (
+            <Pop trigger={post.likes} firstStatic from={0.6}>
+              <Text style={[type.labelSm, { color: liked ? INSTAGRAM_HEART : theme.ink }]}>{post.likes}</Text>
+            </Pop>
+          )}
         </View>
-        {post.likes > 0 && (
-          <Pop trigger={post.likes} firstStatic from={0.6}>
-            <Text style={[type.labelSm, { color: liked ? INSTAGRAM_HEART : theme.ink }]}>{post.likes}</Text>
-          </Pop>
-        )}
-      </View>
-    </SpringPressable>
+      </Animated.View>
+    </Pressable>
   );
 }
 

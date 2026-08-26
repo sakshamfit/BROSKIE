@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { View, Pressable, StyleSheet, Platform, Animated } from 'react-native';
+import AnimatedReanimated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -148,7 +149,8 @@ function HomeTabs({ navigation }) {
             },
           ]}
         >
-          {TABS.map((t) => {
+          <SlidingIndicator activeIndex={PAGES.findIndex((p) => p.key === tab)} count={PAGES.length} theme={theme} />
+          {TABS.map((t, i) => {
             const active = tab === t.key;
             // How far this tab sits from the current page (−1/0/+1). The
             // settings tab is a pushed screen, outside the swipe strip.
@@ -188,6 +190,29 @@ function HomeTabs({ navigation }) {
  * the outgoing tab's icon eases down, the incoming tab's icon rises, driven
  * by the pager's shared Animated progress (no re-renders, 60fps).
  */
+function SlidingIndicator({ activeIndex, count, theme }) {
+  const translateX = useSharedValue(activeIndex);
+  useEffect(() => {
+    translateX.value = withSpring(activeIndex, { damping: 20, stiffness: 300, mass: 0.8 });
+  }, [activeIndex]);
+  const AnimatedView = AnimatedReanimated?.View || View;
+  const anim = useAnimatedStyle(() => ({
+    transform: [{ translateX: (translateX.value / Math.max(1, count - 1)) * 100 + '%' }],
+  }));
+  return (
+    <AnimatedView
+      pointerEvents="none"
+      style={[
+        {
+          position: 'absolute', bottom: 6, left: '8%', width: '16%', height: 3,
+          borderRadius: 999, backgroundColor: theme.ink,
+        },
+        anim,
+      ]}
+    />
+  );
+}
+
 function TabButton({ label, active, onPress, icon, outlineOnly, color, badge, theme, progress, rel }) {
   const { scale, onPressIn, onPressOut } = usePressScale(motion.scale.icon);
   const activePop = useRef(new Animated.Value(1)).current;
