@@ -7,7 +7,10 @@
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://broskie-h.up.railway.app/api/:path*" },
     { "source": "/uploads/:path*", "destination": "https://broskie-h.up.railway.app/uploads/:path*" },
-    { "source": "/((?!_vercel/).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!_vercel/|sitemap\\.xml$|robots\\.txt$).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
@@ -38,6 +41,18 @@
       "source": "/_expo/static/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/sitemap.xml",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/robots.txt",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600, must-revalidate" }
       ]
     }
   ]
