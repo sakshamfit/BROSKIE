@@ -366,7 +366,7 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
 
   if (section === 'communities') {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <View style={{ flex: 1, backgroundColor: 'transparent' }}>
         <View style={[s.communitiesHeaderWrap, isTablet && s.listWide]}>
           <Text style={s.pageTitle}>The Network</Text>
           <Text style={[type.labelXs, { color: theme.muted, marginBottom: 14 }]}>
@@ -387,7 +387,7 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
     // of an empty screen: the feed looks like it is already arriving, and
     // nothing shifts when it does.
     return (
-      <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <View style={{ flex: 1, backgroundColor: 'transparent' }}>
         <BrandHeader navigation={navigation} />
         <PostSkeletonList count={3} style={[s.list, isTablet && s.listWide]} />
       </View>
@@ -395,7 +395,7 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
       <BrandHeader navigation={navigation} />
       <FlatList
         data={posts}

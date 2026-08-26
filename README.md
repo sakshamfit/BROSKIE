@@ -259,8 +259,8 @@ graphite → 2px ink → 3px bold) and physical overlap. Underline-only inputs,
 dashed hand-drawn rules, masking-tape chips, X-mark checkboxes, and a
 highlighter-yellow accent used sparingly for focus and active states. Signed-in screens
 use a lightly uneven hand-sketched graph with pencil fibres and graphite smudges on warm
-paper. Login and signup keep their original manga halftone/speed-line background without
-the graph overlay.
+paper, drawn behind the UI so posts and photos stay clear. Login and signup keep their
+original manga halftone/speed-line background without the graph overlay.
 Bricolage Grotesque headlines / Karla body / JetBrains Mono labels.
 
 **Icons & emoji — 100% SVG** — every icon is a true vector (`react-native-svg`) rendered

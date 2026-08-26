@@ -262,7 +262,7 @@ export default function SplitLayout() {
   }, [overlay, tab, settingsSub, selectedChatId, gcSub, gcPrevSub]);
 
   return (
-    <View style={[s.root, { backgroundColor: theme.bg }]}>
+    <View style={[s.root, { backgroundColor: 'transparent' }]}>
       <SideNav
         active={tab}
         railOnly={true}

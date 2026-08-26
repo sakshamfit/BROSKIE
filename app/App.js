@@ -224,9 +224,14 @@ function Root() {
       <OrientationManager />
       <VercelObservability />
       <PhoneFrame>
-        <View style={styles.appCanvas}>
-          <Navigation />
+        <View style={[styles.appCanvas, { backgroundColor: theme.bg }]}>
+          {/* Paper lives BEHIND the UI so posts, photos and status sit on
+              top of it. A zIndex of 9999 used to paint the grid over the
+              feed. */}
           {user && <SketchGraphPaper />}
+          <View style={styles.appForeground}>
+            <Navigation />
+          </View>
         </View>
       </PhoneFrame>
       {/* Registers this device for push, syncs the unread badge, and routes
@@ -303,9 +308,10 @@ const styles = StyleSheet.create({
   webRoot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   fullBleed: { flex: 1, width: '100%', height: '100%' },
   appCanvas: { flex: 1, width: '100%', height: '100%' },
+  appForeground: { flex: 1, width: '100%', height: '100%', zIndex: 1 },
   paperOverlay: {
     position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
-    zIndex: 9999,
+    zIndex: 0,
   },
   startupError: {
     flex: 1, backgroundColor: '#131313', alignItems: 'center', justifyContent: 'center',

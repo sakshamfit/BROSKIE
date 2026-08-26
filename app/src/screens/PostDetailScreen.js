@@ -114,7 +114,7 @@ export default function PostDetailScreen({ navigation, route, embedded = false }
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
       <View style={[s.header, !embedded && { paddingTop: 14 + insets.top }]}>
         <Pressable onPress={() => navigation?.goBack?.()} hitSlop={9} style={{ padding: 6 }}>
           <Icon name="arrow-back" size={22} color={theme.ink} />

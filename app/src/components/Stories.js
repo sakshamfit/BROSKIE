@@ -111,8 +111,8 @@ export default function StoriesRow({ reloadKey = 0, active = true }) {
 
       <GridPaper
         color={theme.graphiteLine}
-        opacity={theme.dark ? 0.28 : 0.22}
-        style={[s.heroCard, { borderColor: theme.ink, backgroundColor: theme.card }]}
+        opacity={theme.dark ? 0.22 : 0.16}
+        style={[s.statusBoard, { borderColor: theme.ink, backgroundColor: theme.card }]}
       >
         <SpringPressable
           accessibilityRole="button"
@@ -151,85 +151,85 @@ export default function StoriesRow({ reloadKey = 0, active = true }) {
             <Text style={[type.labelXs, { color: theme.onPrimary }]}>ADD</Text>
           </SpringPressable>
         </SpringPressable>
+
+        {(others.length > 0 || loading) && (
+          <>
+            <Text style={[type.labelXs, { color: theme.muted, marginTop: 16, marginBottom: 8 }]}>RECENT</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.storiesRow}
+            >
+              {others.map((group, i) => (
+                <Stagger key={group.user.id} index={i}>
+                  <StoryCircle
+                    accessibilityLabel={`View ${group.user.name}'s status update`}
+                    onPress={() => setViewerGroup(group)}
+                    segments={group.items.length}
+                    seen={!!group.allViewed}
+                    avatar={group.user}
+                    label={group.user.name}
+                    theme={theme}
+                    styles={s}
+                  />
+                </Stagger>
+              ))}
+              {loading && [0, 1, 2, 3].map((i) => (
+                <View key={`sk-${i}`} style={s.circleCol}>
+                  <Skeleton width={68} height={68} radius={999} />
+                  <Skeleton width={44} height={9} radius={4} />
+                </View>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        {others.length > 0 && (
+          <>
+            <Text style={[type.labelXs, { color: theme.muted, marginTop: 16, marginBottom: 8 }]}>PEOPLE</Text>
+            <View style={s.peopleGrid}>
+              {others.slice(0, 12).map((group) => {
+                const last = group.items[group.items.length - 1];
+                return (
+                  <SpringPressable
+                    key={`card-${group.user.id}`}
+                    onPress={() => setViewerGroup(group)}
+                    style={[s.personCard, { borderColor: theme.ink, backgroundColor: theme.card }]}
+                    scaleTo={motion.scale.card}
+                    haptic="selection"
+                  >
+                    <View style={s.personPreview}>
+                      {last?.type === 'image' && last.mediaUrl ? (
+                        <Image source={{ uri: mediaUrl(last.mediaUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                      ) : (
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: last?.bg || theme.highlighter, alignItems: 'center', justifyContent: 'center', padding: 8 }]}>
+                          <EmojiText style={[type.labelXs, { color: foregroundFor(last), textAlign: 'center' }]} numberOfLines={4}>
+                            {last?.body || 'Status'}
+                          </EmojiText>
+                        </View>
+                      )}
+                    </View>
+                    <View style={s.personMeta}>
+                      <StatusRing
+                        size={28}
+                        segments={group.items.length}
+                        seen={!!group.allViewed}
+                        color={theme.ink}
+                        seenColor={theme.graphiteLine}
+                      >
+                        <Avatar uri={group.user.avatar} name={group.user.name} id={group.user.id} size={20} />
+                      </StatusRing>
+                      <EmojiText style={[type.labelXs, { color: theme.text, flex: 1 }]} numberOfLines={1}>
+                        {group.user.name}
+                      </EmojiText>
+                    </View>
+                  </SpringPressable>
+                );
+              })}
+            </View>
+          </>
+        )}
       </GridPaper>
-
-      {(others.length > 0 || loading) && (
-        <>
-          <Text style={[type.labelXs, { color: theme.muted, marginTop: 16, marginBottom: 8 }]}>RECENT</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.storiesRow}
-          >
-            {others.map((group, i) => (
-              <Stagger key={group.user.id} index={i}>
-                <StoryCircle
-                  accessibilityLabel={`View ${group.user.name}'s status update`}
-                  onPress={() => setViewerGroup(group)}
-                  segments={group.items.length}
-                  seen={!!group.allViewed}
-                  avatar={group.user}
-                  label={group.user.name}
-                  theme={theme}
-                  styles={s}
-                />
-              </Stagger>
-            ))}
-            {loading && [0, 1, 2, 3].map((i) => (
-              <View key={`sk-${i}`} style={s.circleCol}>
-                <Skeleton width={68} height={68} radius={999} />
-                <Skeleton width={44} height={9} radius={4} />
-              </View>
-            ))}
-          </ScrollView>
-        </>
-      )}
-
-      {others.length > 0 && (
-        <>
-          <Text style={[type.labelXs, { color: theme.muted, marginTop: 16, marginBottom: 8 }]}>PEOPLE</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.cardRow}>
-            {others.slice(0, 12).map((group) => {
-              const last = group.items[group.items.length - 1];
-              return (
-                <SpringPressable
-                  key={`card-${group.user.id}`}
-                  onPress={() => setViewerGroup(group)}
-                  style={[s.personCard, { borderColor: theme.ink, backgroundColor: theme.card }]}
-                  scaleTo={motion.scale.card}
-                  haptic="selection"
-                >
-                  <GridPaper color={theme.graphiteLine} opacity={0.16} animate={false} style={s.personPreview}>
-                    {last?.type === 'image' && last.mediaUrl ? (
-                      <Image source={{ uri: mediaUrl(last.mediaUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                    ) : (
-                      <View style={[StyleSheet.absoluteFill, { backgroundColor: last?.bg || theme.highlighter, alignItems: 'center', justifyContent: 'center', padding: 8 }]}>
-                        <EmojiText style={[type.labelXs, { color: foregroundFor(last), textAlign: 'center' }]} numberOfLines={4}>
-                          {last?.body || 'Status'}
-                        </EmojiText>
-                      </View>
-                    )}
-                  </GridPaper>
-                  <View style={s.personMeta}>
-                    <StatusRing
-                      size={28}
-                      segments={group.items.length}
-                      seen={!!group.allViewed}
-                      color={theme.ink}
-                      seenColor={theme.graphiteLine}
-                    >
-                      <Avatar uri={group.user.avatar} name={group.user.name} id={group.user.id} size={20} />
-                    </StatusRing>
-                    <EmojiText style={[type.labelXs, { color: theme.text, flex: 1 }]} numberOfLines={1}>
-                      {group.user.name}
-                    </EmojiText>
-                  </View>
-                </SpringPressable>
-              );
-            })}
-          </ScrollView>
-        </>
-      )}
 
       <StatusComposer
         visible={!!composerMode}
@@ -498,8 +498,8 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
             s.viewer,
             {
               backgroundColor: current.type === 'image' ? '#090909' : current.bg,
-              paddingTop: Math.max(insets.top, 14) + 14,
-              paddingBottom: Math.max(insets.bottom, 16),
+              paddingTop: Math.max(insets.top, 10),
+              paddingBottom: 0,
               transform: [{ translateY: dismissY }, { scale: viewerScale }],
             },
           ]}
@@ -564,38 +564,29 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
 
           <View style={s.viewerBody} pointerEvents="box-none">
             {/* each story segment enters with a soft settle */}
-            <FadeSlide key={current.id} from="up" distance={14} scale={0.985} style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
+            <FadeSlide key={current.id} from="up" distance={14} scale={0.985} style={{ flex: 1, width: '100%' }}>
             {current.type === 'image' ? (
-              <View
-                style={[
-                  s.viewerImageFrame,
-                  {
-                    aspectRatio: current.mediaAspect || 9 / 16,
-                    width: (current.mediaAspect || 9 / 16) < 0.7 ? '72%' : '100%',
-                  },
-                ]}
-              >
+              <View style={s.viewerMediaFill}>
                 <Image source={{ uri: mediaUrl(current.mediaUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                 {!!current.song && (
-                  <View style={s.viewerSongOnMedia}>
+                  <View style={s.viewerSongOnMedia} pointerEvents="auto">
                     <SongCard song={current.song} variant="sticker" autoPlay paused={held || replyFocused} />
+                  </View>
+                )}
+                {!!current.body && (
+                  <View style={s.viewerCaption}>
+                    <EmojiText style={[type.bodyMd, { color: '#ffffff', textAlign: 'center' }]}>{current.body}</EmojiText>
                   </View>
                 )}
               </View>
             ) : (
-              <>
+              <View style={s.viewerTextFill}>
                 <EmojiText style={[s.viewerText, { color: foregroundFor(current) }]}>{current.body}</EmojiText>
                 {!!current.song && (
                   <View style={s.viewerSong} pointerEvents="auto">
                     <SongCard song={current.song} variant="sticker" autoPlay paused={held || replyFocused} />
                   </View>
                 )}
-              </>
-            )}
-
-            {current.type === 'image' && !!current.body && (
-              <View style={s.viewerCaption}>
-                <EmojiText style={[type.bodyMd, { color: '#ffffff', textAlign: 'center' }]}>{current.body}</EmojiText>
               </View>
             )}
             </FadeSlide>
@@ -950,15 +941,7 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
             <View style={s.photoStage}>
               {image ? (
                 <>
-                  <View
-                    style={[
-                      s.composerImageFrame,
-                      {
-                        aspectRatio: image.displayAspect || 9 / 16,
-                        width: (image.displayAspect || 9 / 16) < 0.7 ? '72%' : '100%',
-                      },
-                    ]}
-                  >
+                  <View style={s.composerImageFrame}>
                     <Image source={{ uri: image.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                     <Pressable onPress={() => openEditor(image.uri)} style={s.editCropButton}>
                       <Icon name="create-outline" size={14} color="#ffffff" />
@@ -1214,16 +1197,18 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
 
 const makeStyles = (t) => StyleSheet.create({
   /* story ring strip */
-  storiesWrap: { marginTop: 14 },
+  storiesWrap: { marginTop: 14, width: '100%' },
   statusHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   statusAddBtn: { width: 32, height: 32, borderWidth: 1.5, borderColor: t.ink, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  statusBoard: { borderWidth: 2, borderRadius: 14, overflow: 'hidden', width: '100%', padding: 12 },
   heroCard: { borderWidth: 2, borderRadius: 14, overflow: 'hidden' },
-  heroInner: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
+  heroInner: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 4 },
   heroCta: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999 },
   cardRow: { flexDirection: 'row', gap: 10, paddingBottom: 4 },
-  personCard: { width: 132, borderWidth: 1.5, borderRadius: 12, overflow: 'hidden' },
-  personPreview: { height: 148 },
-  personMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 8 },
+  peopleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: '100%' },
+  personCard: { width: '47.5%', minWidth: 140, maxWidth: '48.5%', flexGrow: 1, borderWidth: 1.5, borderRadius: 12, overflow: 'hidden' },
+  personPreview: { width: '100%', aspectRatio: 3 / 4, backgroundColor: t.cardAlt },
+  personMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 8, backgroundColor: t.card },
   storiesRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: 2 },
   circleCol: { alignItems: 'center', width: 70 },
   circlePress: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
@@ -1242,12 +1227,14 @@ const makeStyles = (t) => StyleSheet.create({
   progressRow: { flexDirection: 'row', gap: 5, paddingHorizontal: 14, marginBottom: 12, zIndex: 3 },
   progressBar: { flex: 1, height: 3, borderRadius: 3 },
   viewerHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, zIndex: 3 },
-  viewerBody: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 22, paddingVertical: 20, zIndex: 2 },
+  viewerBody: { flex: 1, zIndex: 2 },
+  viewerMediaFill: { flex: 1, width: '100%', overflow: 'hidden', backgroundColor: '#111111' },
+  viewerTextFill: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 22, paddingVertical: 20 },
   viewerText: { ...type.headlineMd, fontSize: 28, lineHeight: 39, textAlign: 'center', maxWidth: 680 },
-  viewerImageFrame: { maxWidth: 720, maxHeight: '72%', overflow: 'hidden', backgroundColor: '#111111' },
+  viewerImageFrame: { flex: 1, width: '100%', overflow: 'hidden', backgroundColor: '#111111' },
   viewerSong: { marginTop: 18, width: '100%', maxWidth: 360, alignItems: 'center' },
-  viewerSongOnMedia: { position: 'absolute', left: 10, bottom: 12, right: 10, zIndex: 4 },
-  viewerCaption: { maxWidth: 620, marginTop: 15, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.58)' },
+  viewerSongOnMedia: { position: 'absolute', left: 14, bottom: 88, right: 14, zIndex: 4 },
+  viewerCaption: { position: 'absolute', left: 18, right: 18, bottom: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.58)' },
 
   composer: { flex: 1 },
   composerTopBar: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, zIndex: 4 },
@@ -1256,8 +1243,8 @@ const makeStyles = (t) => StyleSheet.create({
   chooseStage: { flex: 1, width: '100%', maxWidth: 560, alignSelf: 'center', justifyContent: 'center', padding: 24 },
   chooseCard: { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 2, borderRadius: 12, padding: 16, marginBottom: 14 },
   chooseIcon: { width: 46, height: 46, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  photoStage: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18, paddingBottom: 4 },
-  composerImageFrame: { flexShrink: 1, maxWidth: 720, maxHeight: '68%', overflow: 'hidden', backgroundColor: '#111111', position: 'relative' },
+  photoStage: { flex: 1, alignItems: 'stretch', justifyContent: 'flex-end', paddingHorizontal: 0, paddingBottom: 4 },
+  composerImageFrame: { flex: 1, width: '100%', overflow: 'hidden', backgroundColor: '#111111', position: 'relative' },
   composerSongOnMedia: { position: 'absolute', left: 10, bottom: 12, right: 10 },
   editCropButton: { position: 'absolute', right: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.72)' },
   emptyPhoto: { minWidth: 260, alignItems: 'center', padding: 32, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.38)', borderRadius: 12 },
