@@ -326,6 +326,16 @@ async function pushToUser(userId, opts) {
 
 function messagePreview(message, recipientSettings) {
   const n = recipientSettings?.notifications || {};
+  // E2EE: never include ciphertext or decrypted content in push preview.
+  // If message is encrypted, show generic label; if preview disabled, also generic.
+  if (message.is_encrypted || message.isEncrypted) {
+    // Even if user has preview on, we cannot show plaintext in push (server doesn't have it).
+    // Show generic encrypted notice, matching WhatsApp/Signal behavior.
+    if (message.type === 'image') return '📷 Encrypted photo';
+    if (message.type === 'voice') return '🎤 Encrypted voice message';
+    if (message.type === 'poll') return '📊 Encrypted poll';
+    return '🔒 Encrypted message';
+  }
   if (n.messagePreview === false) return 'New message';
   const body = String(message.body || '').trim();
   switch (message.type) {

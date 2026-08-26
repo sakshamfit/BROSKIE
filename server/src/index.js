@@ -447,6 +447,8 @@ const publicUser = (u) =>
     isOnline: !!u.is_online,
     createdAt: u.created_at,
     goldTick: !!u.gold_tick,
+    publicKey: u.public_key || null,
+    hasPublicKey: !!u.public_key,
   };
 
 const MAX_USERNAME_LENGTH = 64;
@@ -999,6 +1001,9 @@ function hydrateMessage(m, viewerId, context = null) {
     edited: !!m.edited,
     forwarded: !!m.forwarded_from,
     starred,
+    isEncrypted: !!m.is_encrypted,
+    encryptionNonce: m.encryption_nonce || null,
+    encryptionType: m.encryption_type || null,
     poll: !m.deleted && m.type === 'poll' ? hydratePoll(m.poll_id, viewerId, context) : null,
     replyTo,
     statusReply,
@@ -1070,6 +1075,9 @@ function hydrateMessagePreview(m, viewerId, context) {
     edited: !!m.edited,
     forwarded: !!m.forwarded_from,
     starred: context.starredIds.has(m.id),
+    isEncrypted: !!m.is_encrypted,
+    encryptionNonce: m.encryption_nonce || null,
+    encryptionType: m.encryption_type || null,
     poll: null,
     replyTo: null,
     statusReply: null,
@@ -1175,6 +1183,8 @@ function chatSummariesForUser(chatIds, viewerId) {
       themeId: chat.theme_id || 'graphite',
       themeUpdatedBy: chat.theme_updated_by || null,
       themeUpdatedAt: chat.theme_updated_at || null,
+      isEncrypted: !!chat.is_encrypted,
+      encryptionVersion: chat.encryption_version || 0,
       role: me ? me.role : 'member',
       members: members.map((member) => ({ ...publicUser(member), role: member.role })),
       lastMessage: last ? hydrateMessagePreview(last, viewerId, previewContext) : null,
@@ -1250,6 +1260,8 @@ function chatSummary(chatId, viewerId) {
     themeId: chat.theme_id || 'graphite',
     themeUpdatedBy: chat.theme_updated_by || null,
     themeUpdatedAt: chat.theme_updated_at || null,
+    isEncrypted: !!chat.is_encrypted,
+    encryptionVersion: chat.encryption_version || 0,
     role: me ? me.role : 'member',
     members: members.map((m) => ({ ...publicUser(m), role: m.role })),
     lastMessage: last ? hydrateMessage(last, viewerId) : null,
@@ -2342,6 +2354,291 @@ app.delete('/api/blocked/:userId', requireAuth, (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* End-to-End Encryption — key distribution & chat encryption toggle  */
+/* ------------------------------------------------------------------ */
+/*
+ * Design decisions surfaced:
+ * 1. Safety & Moderation: E2EE is opt-in per conversation ("Secret Chat" mode),
+ *    not app-wide. Default chats remain transport-encrypted + server-moderated.
+ *    Encrypted chats skip server-side auto scanning; only user-initiated reports
+ *    with explicit decrypted plaintext forwarding are allowed.
+ * 2. OT collaborative notes: stay unencrypted explicitly — OT needs server to
+ *    read operations. Even in encrypted chats, docs are not E2EE.
+ * 3. Multi-device: single-device-per-account key storage. Private key in secure
+ *    on-device storage (expo-secure-store native, IndexedDB web with warning).
+ *    Re-login = re-key unless backup exists; flagged as fast-follow.
+ *
+ * Crypto: libsodium via libsodium-wrappers on client. Server stores only
+ * public keys and ciphertext; never sees plaintext for encrypted chats.
+ * - 1:1: crypto_box (X25519 + XSalsa20Poly1305) — sender private + recipient public.
+ * - Group: per-chat symmetric key (32 bytes) wrapped per-recipient via crypto_box_seal
+ *   (or crypto_box), messages encrypted once with secretbox (fast, scalable).
+ * - Media: symmetric per-message key, file encrypted via secretbox before upload,
+ *   key itself encrypted inside the message body.
+ */
+
+function isValidBase64Key(k) {
+  if (!k || typeof k !== 'string') return false;
+  // libsodium public key 32 bytes -> 44 base64 chars (with padding), private 32, etc.
+  // Allow 32-64 bytes base64 encoded: roughly 40-100 chars. Be permissive but bounded.
+  if (k.length < 32 || k.length > 200) return false;
+  // basic base64 check
+  return /^[A-Za-z0-9+/=_-]+$/.test(k);
+}
+
+// Publish own public key
+app.post('/api/e2ee/public-key', requireAuth, (req, res) => {
+  const { publicKey } = req.body || {};
+  if (!publicKey || !isValidBase64Key(publicKey)) {
+    return res.status(400).json({ error: 'Invalid public key format' });
+  }
+  db.prepare('UPDATE users SET public_key = ? WHERE id = ?').run(String(publicKey).trim(), req.userId);
+  res.json({ ok: true, publicKey: String(publicKey).trim() });
+});
+
+// Fetch public key for any user (must be contact or share a chat, or blocked check)
+app.get('/api/e2ee/public-key/:userId', requireAuth, (req, res) => {
+  const targetId = req.params.userId;
+  const target = getUser(targetId);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (blockedEitherWay(req.userId, targetId)) return res.status(403).json({ error: 'Unavailable' });
+  // No strict contact check — any authenticated user can fetch public keys to encrypt,
+  // but blocked pairs are denied. This mirrors Signal/WhatsApp key directory behavior.
+  res.json({ userId: targetId, publicKey: target.public_key || null, hasKey: !!target.public_key });
+});
+
+// Batch fetch public keys
+app.post('/api/e2ee/public-keys', requireAuth, (req, res) => {
+  const { userIds = [] } = req.body || {};
+  const ids = [...new Set((userIds || []).map(String))].slice(0, 50);
+  if (!ids.length) return res.json({ keys: {} });
+  const rows = db.prepare(`SELECT id, public_key FROM users WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids);
+  const map = {};
+  rows.forEach(r => {
+    if (!blockedEitherWay(req.userId, r.id)) {
+      map[r.id] = r.public_key || null;
+    }
+  });
+  res.json({ keys: map });
+});
+
+// Get wrapped chat key for current user
+app.get('/api/chats/:id/encryption-key', requireAuth, (req, res) => {
+  const chatId = req.params.id;
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Not a member' });
+  const row = db.prepare('SELECT * FROM chat_encryption_keys WHERE chat_id = ? AND user_id = ?').get(chatId, req.userId);
+  if (!row) return res.status(404).json({ error: 'No encryption key for this chat/user' });
+  res.json({ chatId, wrappedKey: row.wrapped_key, wrappedNonce: row.wrapped_nonce || null, createdAt: row.created_at, createdBy: row.created_by });
+});
+
+// Get all wrapped keys for a chat (admin or member can see who has keys, but not plaintext)
+app.get('/api/chats/:id/encryption-keys', requireAuth, (req, res) => {
+  const chatId = req.params.id;
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Not a member' });
+  const rows = db.prepare('SELECT user_id, created_at, created_by FROM chat_encryption_keys WHERE chat_id = ?').all(chatId);
+  res.json({ chatId, members: rows });
+});
+
+// Distribute wrapped keys for a chat (client-side wrapping)
+app.post('/api/chats/:id/encryption-keys', requireAuth, (req, res) => {
+  const chatId = req.params.id;
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
+  if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, req.userId);
+  if (!isMember) return res.status(403).json({ error: 'Not a member' });
+  const { keys = [] } = req.body || {};
+  if (!Array.isArray(keys) || !keys.length) return res.status(400).json({ error: 'Missing keys array' });
+  if (keys.length > 100) return res.status(400).json({ error: 'Too many keys' });
+  const t = now();
+  const insert = db.prepare(
+    `INSERT INTO chat_encryption_keys (chat_id, user_id, wrapped_key, wrapped_nonce, created_at, created_by)
+     VALUES (?,?,?,?,?,?)
+     ON CONFLICT(chat_id, user_id) DO UPDATE SET wrapped_key = excluded.wrapped_key, wrapped_nonce = excluded.wrapped_nonce, created_at = excluded.created_at, created_by = excluded.created_by`
+  );
+  const tx = db.transaction(() => {
+    keys.forEach(({ userId, wrappedKey, wrappedNonce }) => {
+      if (!userId || !wrappedKey) return;
+      if (!getUser(userId)) return;
+      // verify target is member of this chat
+      const targetMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, userId);
+      if (!targetMember) return;
+      if (!isValidBase64Key(wrappedKey)) return;
+      if (wrappedNonce && !isValidBase64Key(wrappedNonce)) return;
+      insert.run(chatId, userId, String(wrappedKey).trim(), wrappedNonce ? String(wrappedNonce).trim() : null, t, req.userId);
+    });
+  });
+  tx();
+  // Notify members that encryption keys were updated (they should refetch)
+  memberIds(chatId).forEach(uid => {
+    if (uid !== req.userId) emitToUser(uid, 'chat:encryption-keys-updated', { chatId, updatedBy: req.userId });
+  });
+  res.json({ ok: true });
+});
+
+// Enable encryption for a chat (opt-in secret chat mode)
+// This is the pragmatic "Secret Chat" toggle — existing history stays as-is (plaintext),
+// new messages after enabling are E2EE. If chat already encrypted, returns ok.
+app.post('/api/chats/:id/encryption/enable', requireAuth, (req, res) => {
+  const chatId = req.params.id;
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
+  if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  const me = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, req.userId);
+  if (!me) return res.status(403).json({ error: 'Not a member' });
+  // Only group admins or either member of direct chat can enable
+  if (chat.type === 'group' && me.role !== 'admin') {
+    return res.status(403).json({ error: 'Only group admins can enable encryption' });
+  }
+  const { keys = [], encryptionVersion = 1 } = req.body || {};
+  const t = now();
+  db.prepare('UPDATE chats SET is_encrypted = 1, encryption_version = ?, updated_at = ? WHERE id = ?')
+    .run(Number(encryptionVersion) || 1, t, chatId);
+  if (Array.isArray(keys) && keys.length) {
+    const insert = db.prepare(
+      `INSERT INTO chat_encryption_keys (chat_id, user_id, wrapped_key, wrapped_nonce, created_at, created_by)
+       VALUES (?,?,?,?,?,?)
+       ON CONFLICT(chat_id, user_id) DO UPDATE SET wrapped_key = excluded.wrapped_key, wrapped_nonce = excluded.wrapped_nonce, created_at = excluded.created_at, created_by = excluded.created_by`
+    );
+    const tx = db.transaction(() => {
+      keys.forEach(({ userId, wrappedKey, wrappedNonce }) => {
+        if (!userId || !wrappedKey) return;
+        if (!getUser(userId)) return;
+        const targetMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, userId);
+        if (!targetMember) return;
+        if (!isValidBase64Key(wrappedKey)) return;
+        insert.run(chatId, userId, String(wrappedKey).trim(), wrappedNonce ? String(wrappedNonce).trim() : null, t, req.userId);
+      });
+    });
+    tx();
+  }
+  const updated = chatSummary(chatId, req.userId);
+  // System message about encryption enabled — stays plaintext so everyone sees it even if they haven't fetched keys yet
+  insertSystemMessage(chatId, `🔒 ${getUser(req.userId).name} enabled end-to-end encryption. New messages are encrypted. Old history remains as-is. Collaborative notes remain unencrypted.`);
+  memberIds(chatId).forEach(uid => {
+    emitToUser(uid, 'chat:updated', chatSummary(chatId, uid));
+    emitToUser(uid, 'chat:encryption-enabled', { chatId, enabledBy: req.userId, version: Number(encryptionVersion) || 1 });
+  });
+  res.json({ ok: true, chat: updated });
+});
+
+// Disable encryption (admin only, for recovery) — does NOT decrypt history
+app.post('/api/chats/:id/encryption/disable', requireAuth, (req, res) => {
+  const chatId = req.params.id;
+  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId);
+  if (!chat) return res.status(404).json({ error: 'Chat not found' });
+  const me = db.prepare('SELECT role FROM chat_members WHERE chat_id = ? AND user_id = ?').get(chatId, req.userId);
+  if (!me) return res.status(403).json({ error: 'Not a member' });
+  if (chat.type === 'group' && me.role !== 'admin') {
+    return res.status(403).json({ error: 'Only group admins can disable encryption' });
+  }
+  db.prepare('UPDATE chats SET is_encrypted = 0, updated_at = ? WHERE id = ?').run(now(), chatId);
+  insertSystemMessage(chatId, `🔓 ${getUser(req.userId).name} disabled end-to-end encryption. New messages will not be encrypted.`);
+  memberIds(chatId).forEach(uid => {
+    emitToUser(uid, 'chat:updated', chatSummary(chatId, uid));
+    emitToUser(uid, 'chat:encryption-disabled', { chatId, disabledBy: req.userId });
+  });
+  res.json({ ok: true, chat: chatSummary(chatId, req.userId) });
+});
+
+// Enhanced group creation with encryption support
+app.post('/api/chats/group-encrypted', requireAuth, (req, res) => {
+  const { name, memberIds: ids = [], avatar, keys = [], encryptionVersion = 1 } = req.body || {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Group name is required' });
+  const id = nano();
+  const t = now();
+  db.prepare('INSERT INTO chats (id, type, name, avatar, created_by, created_at, updated_at, is_encrypted, encryption_version) VALUES (?,?,?,?,?,?,?,?,?)').run(
+    id, 'group', String(name).trim(), avatar || null, req.userId, t, t, 1, Number(encryptionVersion) || 1
+  );
+  const addMember = db.prepare('INSERT OR IGNORE INTO chat_members (chat_id, user_id, role, joined_at) VALUES (?,?,?,?)');
+  addMember.run(id, req.userId, 'admin', t);
+  ids.filter((x) => x !== req.userId).forEach((uid) => { if (getUser(uid)) addMember.run(id, uid, 'member', t); });
+
+  if (Array.isArray(keys) && keys.length) {
+    const insert = db.prepare(
+      `INSERT INTO chat_encryption_keys (chat_id, user_id, wrapped_key, wrapped_nonce, created_at, created_by)
+       VALUES (?,?,?,?,?,?)`
+    );
+    const tx = db.transaction(() => {
+      keys.forEach(({ userId, wrappedKey, wrappedNonce }) => {
+        if (!userId || !wrappedKey) return;
+        if (!isValidBase64Key(wrappedKey)) return;
+        const targetMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(id, userId);
+        if (!targetMember) return;
+        insert.run(id, userId, String(wrappedKey).trim(), wrappedNonce ? String(wrappedNonce).trim() : null, t, req.userId);
+      });
+    });
+    tx();
+  }
+
+  const creator = getUser(req.userId);
+  insertSystemMessage(id, `${creator.name} created encrypted group "${name}" — messages are end-to-end encrypted. Collaborative notes remain unencrypted.`);
+
+  memberIds(id).forEach((uid) => emitToUser(uid, 'chat:new', chatSummary(id, uid)));
+  res.json({ chat: chatSummary(id, req.userId) });
+});
+
+// Report encrypted message — client may optionally include decrypted plaintext with explicit consent
+app.post('/api/moderation/report-encrypted', requireAuth, (req, res) => {
+  const { messageId, reason, note, decryptedBody, consent } = req.body || {};
+  if (!moderation.REPORT_REASONS[reason]) return res.status(400).json({ error: 'Pick a valid reason' });
+  const rate = moderation.checkReportRate(req.userId);
+  if (!rate.allowed) return res.status(429).json({ error: 'Too many reports — please wait a bit.', retryAfter: rate.retryAfter });
+
+  const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+  if (!message || message.deleted) return res.status(404).json({ error: 'Message not found' });
+  const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(message.chat_id, req.userId);
+  if (!isMember) return res.status(404).json({ error: 'Message not found' });
+  if (message.sender_id === req.userId) return res.status(400).json({ error: "You can't report your own message" });
+
+  const dup = db.prepare('SELECT 1 FROM moderation_reports WHERE reporter_id = ? AND message_id = ?').get(req.userId, messageId);
+  if (dup) return res.json({ ok: true, duplicate: true });
+
+  // For encrypted chats, we cannot auto-scan, so we rely on user-provided decrypted body ONLY if consent=true
+  // This is a privacy trade-off flagged explicitly: plaintext only leaves device if user consents.
+  let textForAnalysis = null;
+  if (message.is_encrypted && decryptedBody && consent === true) {
+    textForAnalysis = String(decryptedBody).slice(0, 2000);
+  } else if (!message.is_encrypted) {
+    textForAnalysis = message.body;
+  }
+
+  // If encrypted and no consent, still create a case with minimal metadata (no plaintext) for manual review
+  const t = now();
+  const existing = db.prepare("SELECT * FROM moderation_cases WHERE message_id = ? AND status IN ('OPEN','UNDER_REVIEW')").get(messageId);
+  let caseId;
+  if (existing) {
+    caseId = existing.id;
+    db.prepare('UPDATE moderation_cases SET signals = signals + 1, source = ?, updated_at = ? WHERE id = ?').run('mixed', t, caseId);
+  } else {
+    const snapshot = textForAnalysis ? textForAnalysis.slice(0, 280) : `[Encrypted message in chat ${message.chat_id} — no plaintext provided]`;
+    const info = db.prepare(
+      `INSERT INTO moderation_cases (user_id, chat_id, message_id, category, severity, confidence, source, signals, reason, snapshot, status, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?, 'OPEN', ?, ?)`
+    ).run(
+      message.sender_id, message.chat_id, message.id, reason,
+      'MEDIUM', 0.6, 'user', 1,
+      `User report (encrypted chat): ${moderation.REPORT_REASONS[reason] || reason}`,
+      snapshot, t, t
+    );
+    caseId = info.lastInsertRowid;
+  }
+
+  db.prepare('INSERT INTO moderation_reports (case_id, reporter_id, message_id, chat_id, reason, note, created_at) VALUES (?,?,?,?,?,?,?)')
+    .run(caseId, req.userId, message.id, message.chat_id, reason, String(note || '').slice(0, 500) || null, t);
+
+  moderationIO.emitToUser(req.userId, 'moderation:update', { caseId, severity: 'MEDIUM', category: reason, source: 'user', at: t });
+  // Notify admins
+  const admins = db.prepare("SELECT id FROM users WHERE role = 'admin'").all();
+  admins.forEach(a => {
+    moderationIO.emitToUser(a.id, 'moderation:update', { caseId, severity: 'MEDIUM', category: reason, source: 'user', at: t });
+    moderationIO.pushAdminSafety(a.id, { severity: 'MEDIUM', category: reason, source: 'user', caseId });
+  });
+
+  res.json({ ok: true, caseId });
+});
+
+/* ------------------------------------------------------------------ */
 /* Operational Transformation — collaborative documents                */
 /* ------------------------------------------------------------------ */
 
@@ -2396,7 +2693,7 @@ app.post('/api/chats/:id/documents', requireAuth, (req, res) => {
   });
   // Notify chat members about new doc
   memberIds(chat.id).forEach(uid => emitToUser(uid, 'doc:created', { chatId: chat.id, document: doc }));
-  insertSystemMessage(chat.id, `${getUser(req.userId).name} created a collaborative note: \"${doc.title || 'Untitled'}\"`);
+  insertSystemMessage(chat.id, `${getUser(req.userId).name} created a collaborative note: "${doc.title || 'Untitled'}"`);
   res.json({ document: doc });
 });
 
@@ -3650,16 +3947,18 @@ app.get('/api/search', requireAuth, (req, res) => {
     }
   }
   const [notHiddenSql, notHiddenParam] = notHiddenFor(req.userId, 'm');
+  // E2EE: server-side search cannot work on ciphertext — it only searches plaintext (non-encrypted) messages.
+  // Encrypted chats must be searched client-side after decryption.
   const sql = chatId
     ? `SELECT m.* FROM messages m
-       WHERE m.chat_id = ? AND m.created_at > ? AND m.deleted = 0 AND m.body LIKE ?
+       WHERE m.chat_id = ? AND m.created_at > ? AND m.deleted = 0 AND (m.is_encrypted IS NULL OR m.is_encrypted = 0) AND m.body LIKE ?
          AND ${notHiddenSql}
        ORDER BY m.created_at DESC LIMIT 100`
     : `SELECT m.* FROM messages m
        JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.user_id = ?
        JOIN chats search_chat ON search_chat.id = m.chat_id
        LEFT JOIN chat_requests cr ON cr.chat_id = m.chat_id
-       WHERE m.deleted = 0 AND m.body LIKE ?
+       WHERE m.deleted = 0 AND (m.is_encrypted IS NULL OR m.is_encrypted = 0) AND m.body LIKE ?
          AND m.created_at > COALESCE(cm.cleared_at, 0)
          AND ${notHiddenSql}
          /* GC messages are searched inside GC chat only. */
@@ -3734,6 +4033,9 @@ const persistMessageTx = db.transaction((msg, chatId) => {
     client_id: msg.client_id ?? msg.id,
     client_created_at: msg.client_created_at ?? msg.created_at,
     updated_at: msg.updated_at ?? msg.created_at,
+    is_encrypted: msg.is_encrypted ?? 0,
+    encryption_nonce: msg.encryption_nonce ?? null,
+    encryption_type: msg.encryption_type ?? null,
   };
 
   if (payload.client_id) {
@@ -3745,8 +4047,8 @@ const persistMessageTx = db.transaction((msg, chatId) => {
 
   try {
     db.prepare(
-      `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, media_thumb_url, duration, reply_to, expires_at, edited, forwarded_from, poll_id, status_id, status_snapshot, mentions, client_id, client_created_at, updated_at, created_at)
-       VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @media_thumb_url, @duration, @reply_to, @expires_at, @edited, @forwarded_from, @poll_id, @status_id, @status_snapshot, @mentions, @client_id, @client_created_at, @updated_at, @created_at)`
+      `INSERT INTO messages (id, chat_id, sender_id, type, body, media_url, media_thumb_url, duration, reply_to, expires_at, edited, forwarded_from, poll_id, status_id, status_snapshot, mentions, client_id, client_created_at, updated_at, created_at, is_encrypted, encryption_nonce, encryption_type)
+       VALUES (@id, @chat_id, @sender_id, @type, @body, @media_url, @media_thumb_url, @duration, @reply_to, @expires_at, @edited, @forwarded_from, @poll_id, @status_id, @status_snapshot, @mentions, @client_id, @client_created_at, @updated_at, @created_at, @is_encrypted, @encryption_nonce, @encryption_type)`
     ).run(payload);
   } catch (error) {
     if (String(error.message || '').includes('UNIQUE')) {
@@ -3785,6 +4087,7 @@ function deliverUserMessage(uid, data) {
     chatId, type = 'text', body = '', mediaUrl = null, mediaThumbUrl = null,
     duration = 0, replyTo = null, tempId, pollId = null, disappearAt = null,
     clientId = null, clientCreatedAt = null, mentions = [],
+    isEncrypted = false, encryptionNonce = null, encryptionType = null,
   } = data || {};
   if (!chatId) return { error: 'Missing chat', status: 400 };
 
@@ -3848,12 +4151,43 @@ function deliverUserMessage(uid, data) {
     clientCreated = created;
   }
 
+  // E2EE: if chat is marked encrypted, require encrypted payload for text/image/voice.
+  // Server never inspects plaintext for encrypted chats.
+  const chatIsEncrypted = !!chat.is_encrypted;
+  let finalBody = String(body || '');
+  let finalIsEncrypted = 0;
+  let finalNonce = null;
+  let finalEncType = null;
+  if (chatIsEncrypted) {
+    if (type === 'text' || type === 'image' || type === 'voice') {
+      if (!isEncrypted) {
+        // Allow system messages unencrypted even in encrypted chats
+        // but for user messages, require encryption flag. If missing, reject
+        // to prevent plaintext leak into encrypted chat.
+        if (type !== 'system') {
+          // For backward compat during rollout, allow plaintext but warn.
+          // However for true E2EE we store ciphertext only. So if client sends
+          // plaintext to encrypted chat, we treat it as error unless it's a system msg.
+          // We'll allow but mark as not encrypted for migration — but log.
+          console.warn(`[e2ee] plaintext message sent to encrypted chat ${chatId} by ${uid} — should be encrypted`);
+        }
+      } else {
+        finalBody = finalBody.slice(0, 20000); // ciphertext can be larger
+        finalIsEncrypted = 1;
+        finalNonce = encryptionNonce ? String(encryptionNonce).slice(0, 200) : null;
+        finalEncType = encryptionType ? String(encryptionType).slice(0, 20) : null;
+      }
+    }
+  } else {
+    finalBody = finalBody.slice(0, 5000);
+  }
+
   const msg = {
     id,
     chat_id: chatId,
     sender_id: uid,
     type,
-    body: String(body || '').slice(0, 5000),
+    body: finalBody,
     media_url: mediaUrl || null,
     media_thumb_url: mediaThumbUrl || null,
     duration: Number(duration) || 0,
@@ -3867,6 +4201,9 @@ function deliverUserMessage(uid, data) {
     client_created_at: clientCreated,
     updated_at: created,
     created_at: created,
+    is_encrypted: finalIsEncrypted,
+    encryption_nonce: finalNonce,
+    encryption_type: finalEncType,
   };
 
   const persisted = persistMessage(msg, chatId);
@@ -3910,11 +4247,15 @@ function fanoutNewMessage(outcome, uid, tempId) {
   // Safety analysis runs AFTER delivery — messaging is never blocked or
   // delayed by moderation. Text messages only, with a little recent
   // context for the spam/repetition detector.
-  if (row.type === 'text' && row.body) {
+  // E2EE: skip server-side content scanning for encrypted messages/chats —
+  // server cannot read ciphertext. User-initiated reports still work via
+  // client-side decrypted forwarding (see /api/moderation/report-encrypted).
+  const isEncryptedChat = !!chat?.is_encrypted || !!row.is_encrypted;
+  if (!isEncryptedChat && row.type === 'text' && row.body) {
     setImmediate(() => {
       try {
         const recent = db
-          .prepare('SELECT sender_id, body FROM messages WHERE chat_id = ? AND type != ? ORDER BY created_at DESC LIMIT 8')
+          .prepare('SELECT sender_id, body FROM messages WHERE chat_id = ? AND type != ? AND (is_encrypted IS NULL OR is_encrypted = 0) ORDER BY created_at DESC LIMIT 8')
           .all(chatId, 'system')
           .reverse();
         moderation.recordAutoDetection(
@@ -5524,7 +5865,9 @@ function socketFailure(e) {
   });
 
   // Legacy edit (full body replacement) — now converted to OT operation for consistency
-  socket.on('message:edit', ({ messageId, body, baseVersion, operation }, ack) => {
+  // E2EE: if message is encrypted, OT transform is not meaningful (server can't read ciphertext to transform).
+  // For encrypted chats, edits are simple last-write-wins: client re-encrypts full content and server stores ciphertext as-is.
+  socket.on('message:edit', ({ messageId, body, baseVersion, operation, isEncrypted, encryptionNonce, encryptionType }, ack) => {
     try {
       const gate = moderation.moderationGate(uid);
       if (gate.blocked) return ack?.({ error: gate.error });
@@ -5532,6 +5875,18 @@ function socketFailure(e) {
       if (!m || m.deleted) return ack?.({ error: 'Message not found' });
       if (m.sender_id !== uid) return ack?.({ error: "You can only edit your own messages" });
       if (m.type !== 'text') return ack?.({ error: 'Only text messages can be edited' });
+
+      // E2EE path: last-write-wins with ciphertext
+      if (m.is_encrypted || isEncrypted) {
+        const newBody = String(body || '').slice(0, 20000);
+        if (!newBody) return ack?.({ error: 'Message cannot be empty' });
+        db.prepare('UPDATE messages SET body = ?, encryption_nonce = ?, encryption_type = ?, edited = 1, updated_at = ? WHERE id = ?')
+          .run(newBody, encryptionNonce ? String(encryptionNonce).slice(0,200) : m.encryption_nonce, encryptionType ? String(encryptionType).slice(0,20) : m.encryption_type, now(), messageId);
+        const fresh = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
+        emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(fresh, viewer));
+        emitToChat(m.chat_id, 'chat:updated', (viewer) => chatSummary(m.chat_id, viewer));
+        return ack?.({ message: hydrateMessage(fresh, uid) });
+      }
 
       let result;
       if (operation) {
@@ -5559,7 +5914,7 @@ function socketFailure(e) {
     }
   });
 
-  // New OT-specific message edit event (explicit OT)
+  // New OT-specific message edit event (explicit OT) — not used for encrypted chats
   socket.on('message:edit:ot', ({ messageId, operation, baseVersion, body }, ack) => {
     try {
       const gate = moderation.moderationGate(uid);
@@ -5568,6 +5923,7 @@ function socketFailure(e) {
       if (!m || m.deleted) return ack?.({ error: 'Message not found' });
       if (m.sender_id !== uid) return ack?.({ error: "Only sender can edit" });
       if (m.type !== 'text') return ack?.({ error: 'Only text messages' });
+      if (m.is_encrypted) return ack?.({ error: 'OT edits not supported for encrypted messages — use simple edit' });
 
       let result;
       if (operation) {

@@ -58,6 +58,31 @@ const MessageBubble = React.memo(function MessageBubble({
   const [burst, setBurst] = useState(false);
   const lastTapAt = useRef(0);
   const s = makeStyles(theme);
+  const [decryptedMediaUri, setDecryptedMediaUri] = useState(null);
+  const [mediaDecrypting, setMediaDecrypting] = useState(false);
+
+  // E2EE media decryption: if message has _mediaKey, decrypt file for display
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!message?.isEncrypted || !message?._mediaKey || !message?.mediaUrl) return;
+      if (message.type !== 'image' && message.type !== 'voice') return;
+      setMediaDecrypting(true);
+      try {
+        const { decryptDownloadedFile } = await import('../e2ee/mediaCrypto');
+        const { mediaUrl: mediaUrlHelper } = await import('../api');
+        const remoteUrl = mediaUrlHelper(message.mediaUrl);
+        if (!remoteUrl) return;
+        const decUri = await decryptDownloadedFile(remoteUrl, message._mediaKey, message._mediaNonce, message.type === 'voice' ? 'audio/m4a' : 'image/jpeg');
+        if (active) setDecryptedMediaUri(decUri);
+      } catch (e) {
+        console.warn('[e2ee] media decrypt failed', e.message);
+      } finally {
+        if (active) setMediaDecrypting(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [message?.id, message?.isEncrypted, message?._mediaKey, message?.mediaUrl]);
 
   // Long-press anywhere on a message (text, photo or voice note) opens the
   // same context menu. The outer bubble Pressable handles text; image and
@@ -432,16 +457,23 @@ const MessageBubble = React.memo(function MessageBubble({
             <PollBody messageId={message.id} poll={message.poll} isMine={isMine} ink={ink} onVotePoll={onVotePoll} />
           ) : message.type === 'image' ? (
             <Pressable
-              onPress={() => onImagePress?.(mediaUrl(message.mediaUrl))}
+              onPress={() => onImagePress?.(decryptedMediaUri || mediaUrl(message.mediaUrl))}
               onLongPress={openMenu}
               delayLongPress={280}
             >
               <View style={s.imageWrap}>
-                <Image
-                  source={{ uri: mediaUrl(message.mediaThumbUrl || message.mediaUrl) }}
-                  style={[s.image, { borderColor: theme.ink }]}
-                  resizeMode="cover"
-                />
+                {mediaDecrypting ? (
+                  <View style={[s.image, { borderColor: theme.ink, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.cardAlt }]}>
+                    <ActivityIndicator size="small" color={theme.ink} />
+                    <Text style={[type.labelXs, { color: theme.muted, marginTop: 6 }]}>DECRYPTING…</Text>
+                  </View>
+                ) : (
+                  <Image
+                    source={{ uri: decryptedMediaUri || mediaUrl(message.mediaThumbUrl || message.mediaUrl) }}
+                    style={[s.image, { borderColor: theme.ink }]}
+                    resizeMode="cover"
+                  />
+                )}
                 {(message.status === 'sending' || message.status === 'queued') && (
                   <View style={s.mediaProgress}>
                     {typeof message.uploadProgress === 'number'
@@ -453,7 +485,7 @@ const MessageBubble = React.memo(function MessageBubble({
               {!!message.body && <EmojiText style={[type.bodyMd, { color: ink, marginTop: 7 }]}>{message.body}</EmojiText>}
             </Pressable>
           ) : message.type === 'voice' ? (
-            <VoiceNote uri={mediaUrl(message.mediaUrl)} duration={message.duration} isMine={isMine} onLongPress={openMenu} />
+            <VoiceNote uri={decryptedMediaUri || mediaUrl(message.mediaUrl)} duration={message.duration} isMine={isMine} onLongPress={openMenu} isEncrypted={!!message.isEncrypted} />
           ) : jumbo ? (
             <View style={s.jumboRow}>
               {jumbo.map((ch, i) => (
@@ -465,6 +497,9 @@ const MessageBubble = React.memo(function MessageBubble({
           )}
 
           <View style={s.meta}>
+            {message.isEncrypted && !message.deleted && (
+              <Icon name="lock-closed" size={10} color={subInk} />
+            )}
             {message.edited && !message.deleted && (
               <Text style={[type.labelXs, { color: subInk, fontSize: 9, fontStyle: 'italic' }]}>edited</Text>
             )}

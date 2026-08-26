@@ -7,7 +7,7 @@ import Svg, { Polyline } from 'react-native-svg';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import BrandHeader from '../components/BrandHeader';
-import { useChatListState, useChatRealtime, useChatActions } from '../store/ChatContext';
+import { useChatListState, useChatMessageState, useChatRealtime, useChatActions } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../store/ThemeContext';
 import {
@@ -53,6 +53,7 @@ export default function ChatListScreen({ navigation }) {
     chats, chatsLoaded, chatsError, inboxFilter,
     chatRequests, chatRequestsLoaded, chatRequestsError,
   } = useChatListState();
+  const { messages } = useChatMessageState();
   const { typing } = useChatRealtime();
   const { refreshChats, markRead, upsertChat, setInboxFilter, refreshChatRequests } = useChatActions();
 
@@ -90,18 +91,44 @@ export default function ChatListScreen({ navigation }) {
   // to onChangeText is safe; the latest query wins. `searchSeq` discards
   // out-of-order responses so a slow result can't resurrect itself after
   // the box was cleared.
+  // E2EE: server-side search only works on plaintext (non-encrypted) messages.
+  // For encrypted chats, search is client-side only over locally decrypted messages.
   const searchSeq = useRef(0);
   const searchMessages = useDebouncedCallback(async (q, seq, category) => {
     if (category === INBOX_FILTERS.requests) {
       if (searchSeq.current === seq) setMsgResults([]);
       return;
     }
+    const queryTrim = q.trim().toLowerCase();
+    let serverResults = [];
     try {
-      const { messages } = await api.search(q.trim());
-      if (searchSeq.current === seq) setMsgResults(filterSearchMessages(messages, chats, category));
+      const { messages: srv } = await api.search(q.trim());
+      serverResults = srv || [];
     } catch {
-      if (searchSeq.current === seq) setMsgResults([]);
+      serverResults = [];
     }
+    // Client-side search for encrypted chats (local decrypted messages)
+    let localEncryptedResults = [];
+    try {
+      const allLocal = Object.values(messages || {}).flat();
+      localEncryptedResults = allLocal.filter(m => {
+        if (!m.isEncrypted) return false;
+        if (!m.body) return false;
+        return String(m.body).toLowerCase().includes(queryTrim);
+      }).map(m => ({
+        ...m,
+        chatName: chats.find(c => c.id === m.chatId)?.name || 'Encrypted chat',
+      }));
+    } catch {}
+    const combined = [...serverResults, ...localEncryptedResults];
+    // Deduplicate by id
+    const seen = new Set();
+    const deduped = combined.filter(m => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
+    if (searchSeq.current === seq) setMsgResults(filterSearchMessages(deduped, chats, category));
   }, 300);
 
   const runSearch = useCallback((q) => {
@@ -644,7 +671,13 @@ const ChatRow = React.memo(function ChatRow({ item, index, typing, user, theme, 
   let senderPrefix = null;
   if (lm) {
     if (lm.deleted) preview = 'message deleted';
-    else if (lm.type === 'image') preview = 'Photo';
+    else if (lm.isEncrypted) {
+      // Server stores ciphertext — show generic preview, never ciphertext
+      if (lm.type === 'image') preview = '🔒 Encrypted photo';
+      else if (lm.type === 'voice') preview = '🔒 Encrypted voice';
+      else if (lm.type === 'poll') preview = '🔒 Encrypted poll';
+      else preview = '🔒 Encrypted message';
+    } else if (lm.type === 'image') preview = 'Photo';
     else if (lm.type === 'voice') preview = 'Voice message';
     else if (lm.type === 'poll') preview = '📊 Poll';
     else if (lm.type === 'system') preview = lm.body;
@@ -721,6 +754,7 @@ const ChatRow = React.memo(function ChatRow({ item, index, typing, user, theme, 
           <View style={s.rowTop}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginRight: 10 }}>
               {item.pinned && <Icon name="pin" size={13} color={theme.highlighter} />}
+              {item.isEncrypted && <Icon name="lock-closed" size={12} color={theme.highlighter} />}
               <EmojiText style={s.name} numberOfLines={1}>{item.name}</EmojiText>
               {hasGoldTick(item) && <GoldTick size={15} />}
               {item.requestStatus === 'pending' && item.requestDirection === 'outgoing' && (

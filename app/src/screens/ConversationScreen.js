@@ -89,17 +89,30 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
     setReportMsg(message);
   }, []);
 
+  const [reportConsent, setReportConsent] = useState(false);
+
   const submitReport = async () => {
     if (!reportReason || reportBusy) return;
     setReportBusy(true);
     try {
-      const r = await api.reportMessage(reportMsg.id, reportReason, reportNote.trim() || undefined);
+      let r;
+      if (reportMsg?.isEncrypted) {
+        // E2EE: reporting encrypted message — client may include decrypted plaintext with explicit consent
+        // Privacy trade-off flagged: plaintext only leaves device if user consents
+        const decryptedBody = reportConsent ? (reportMsg._decryptedBody || reportMsg.body) : undefined;
+        r = await api.reportEncryptedMessage(reportMsg.id, reportReason, reportNote.trim() || undefined, decryptedBody, reportConsent);
+      } else {
+        r = await api.reportMessage(reportMsg.id, reportReason, reportNote.trim() || undefined);
+      }
       setReportMsg(null);
+      setReportConsent(false);
       Alert.alert(
         'Report submitted',
         r?.duplicate
           ? 'You already reported this message — our safety team has it.'
-          : 'Thank you. Our safety team will review this privately.'
+          : reportMsg?.isEncrypted && !reportConsent
+            ? 'Report submitted with minimal metadata (no plaintext). Admin will see encrypted reference only. Enable consent to include decrypted text.'
+            : 'Thank you. Our safety team will review this privately.'
       );
     } catch (e) {
       Alert.alert('Could not report', e.message || 'Please try again in a moment.');
@@ -707,6 +720,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <EmojiText style={[type.headlineSm, { color: theme.text, flexShrink: 1 }]} numberOfLines={1}>{chat.name}</EmojiText>
                 {hasGoldTick(chat) && <GoldTick size={16} />}
+                {chat.isEncrypted && <Icon name="lock-closed" size={14} color={theme.ink} />}
               </View>
               {typers.length ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
@@ -716,9 +730,12 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
                   </Text>
                 </View>
               ) : (
-                <Text style={[type.bodySm, { fontSize: 12.5, color: theme.subtext }]} numberOfLines={1}>
-                  {subtitle}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[type.bodySm, { fontSize: 12.5, color: theme.subtext, flexShrink: 1 }]} numberOfLines={1}>
+                    {subtitle}
+                  </Text>
+                  {chat.isEncrypted && <Text style={[type.labelXs, { color: theme.ink, fontSize: 9 }]}>ENCRYPTED</Text>}
+                </View>
               )}
             </View>
           </Pressable>
@@ -1013,11 +1030,13 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
       {/* -------- safety: report a message -------- */}
       <Modal visible={!!reportMsg} transparent animationType="fade" onRequestClose={() => setReportMsg(null)}>
         {reportMsg && (
-          <Pressable style={s.dimOverlay} onPress={() => setReportMsg(null)}>
+          <Pressable style={s.dimOverlay} onPress={() => { setReportMsg(null); setReportConsent(false); }}>
             <Pressable style={[s.reportSheet, inkBox(theme, 'ink'), { backgroundColor: theme.bg }]} onPress={() => {}}>
               <Text style={[type.headlineSm, { color: theme.text }]}>Report this message</Text>
               <Text style={[type.bodySm, { color: theme.muted, marginTop: 4 }]}>
-                Your report goes to the +one safety team privately. The sender is not told.
+                {reportMsg.isEncrypted
+                  ? 'This chat is end-to-end encrypted — server cannot read messages. Your report goes to safety team privately with minimal metadata unless you consent to share decrypted text. Privacy trade-off: decrypted text only leaves device if you consent.'
+                  : 'Your report goes to the +one safety team privately. The sender is not told.'}
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
                 {[
@@ -1043,8 +1062,17 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
                   maxLength={500}
                 />
               </InkField>
+              {reportMsg?.isEncrypted && (
+                <Pressable
+                  onPress={() => setReportConsent(v => !v)}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, padding: 8, borderWidth: 1, borderColor: reportConsent ? theme.ink : theme.graphiteLine, backgroundColor: reportConsent ? theme.highlighterSoft : 'transparent' }}
+                >
+                  <Icon name={reportConsent ? 'checkbox' : 'square-outline'} size={18} color={theme.ink} />
+                  <Text style={[type.bodySm, { color: theme.text, flex: 1 }]}>Share decrypted message text with safety team (explicit consent — privacy trade-off)</Text>
+                </Pressable>
+              )}
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
-                <Pressable onPress={() => setReportMsg(null)} style={[s.reportBtn, { borderColor: theme.ink }]}>
+                <Pressable onPress={() => { setReportMsg(null); setReportConsent(false); }} style={[s.reportBtn, { borderColor: theme.ink }]}>
                   <Text style={[type.labelSm, { color: theme.ink }]}>CANCEL</Text>
                 </Pressable>
                 <Pressable
