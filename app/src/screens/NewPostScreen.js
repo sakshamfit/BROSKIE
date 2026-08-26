@@ -159,15 +159,17 @@ export default function NewPostScreen({ visible, onClose, onPosted }) {
               <Icon name="create-outline" size={12} color={theme.onPrimary} />
               <Text style={[type.labelXs, { color: theme.onPrimary }]}>EDIT FRAME</Text>
             </Pressable>
+            {!!song && (
+              <View style={s.songOnImage}>
+                <SongCard song={song} variant="sticker" onRemove={() => setSong(null)} />
+              </View>
+            )}
           </View>
         )}
 
-        {!!song && (
+        {!!song && !image && (
           <View style={[s.songPreviewWrap, { borderColor: theme.graphiteLine }]}>
-            <SongCard song={song} />
-            <Pressable onPress={() => setSong(null)} hitSlop={8} style={{ padding: 8 }}>
-              <Icon name="close" size={16} color={theme.muted} />
-            </Pressable>
+            <SongCard song={song} variant="sticker" onRemove={() => setSong(null)} />
           </View>
         )}
 

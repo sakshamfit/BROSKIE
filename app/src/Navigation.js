@@ -121,8 +121,8 @@ function HomeTabs({ navigation }) {
   }, [PAGES]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.bg }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: 'transparent' }}>
         {/* Finger-driven page navigation. The active section and its two
             neighbours stay mounted, so a swipe reveals the next page already
             rendered — the whole page tracks the finger, then settles with a

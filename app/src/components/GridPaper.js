@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
 import Svg, { Defs, Pattern, Path, Rect } from 'react-native-svg';
 import { useReducedMotion } from '../motion';
@@ -17,6 +17,8 @@ export default function GridPaper({
 }) {
   const reduced = useReducedMotion();
   const drift = useRef(new Animated.Value(0)).current;
+  const reactId = useId();
+  const patternId = `broskieGrid-${String(reactId).replace(/[^a-zA-Z0-9_-]/g, '') || 'g'}`;
 
   useEffect(() => {
     if (!animate || reduced) return undefined;
@@ -40,11 +42,11 @@ export default function GridPaper({
       >
         <Svg width="100%" height="100%">
           <Defs>
-            <Pattern id="broskieGrid" x="0" y="0" width={size} height={size} patternUnits="userSpaceOnUse">
+            <Pattern id={patternId} x="0" y="0" width={size} height={size} patternUnits="userSpaceOnUse">
               <Path d={`M ${size} 0 L 0 0 0 ${size}`} fill="none" stroke={line} strokeWidth={0.6} />
             </Pattern>
           </Defs>
-          <Rect x="0" y="0" width="100%" height="100%" fill="url(#broskieGrid)" />
+          <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${patternId})`} />
         </Svg>
       </Animated.View>
       {children}
@@ -53,5 +55,5 @@ export default function GridPaper({
 }
 
 const styles = StyleSheet.create({
-  host: { overflow: 'hidden' },
+  host: { overflow: 'hidden', width: '100%' },
 });

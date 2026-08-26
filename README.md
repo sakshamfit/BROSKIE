@@ -119,10 +119,14 @@ web-only for now — see "Notes & limits" below.
 ## Features
 
 **Song attachments** — the post and status composers can attach a song via the iTunes
-Search API (free, no key) with an automatic Deezer fallback; results are proxied, cached
-and rate-limited through the backend (`/api/songs/search`, `/api/songs/:id`). ~30-second
-previews play inline anywhere the song appears (feed, post detail, status) — one preview
-at a time, with a progress bar, and playback stops when the card scrolls off-screen.
+Search API (free, no key) plus Deezer in parallel (so tracks missing from one store still
+show up). Results are proxied, cached, vibe-ranked from your favourite artists / recents,
+and rate-limited through the backend (`/api/songs/search`, `/api/songs/browse`, `/api/songs/:id`). ~30-second
+previews play like Instagram: a small music sticker on the post or status (not a card
+underneath), autoplay when a post scrolls into view or a status opens, and a mute
+control that works on web, iOS and Android. One shared player (`previewPlayer.js`)
+owns the only audio instance — mute lasts for the session, clips loop while visible,
+and leaving the story/post or backgrounding the app unloads the sound.
 **Previews only, by design** — full-track playback would require a licensing agreement
 with a music provider and is intentionally not implemented.
 **Accounts & profile** — register/login with a unique username + password (phone is
@@ -256,8 +260,8 @@ graphite → 2px ink → 3px bold) and physical overlap. Underline-only inputs,
 dashed hand-drawn rules, masking-tape chips, X-mark checkboxes, and a
 highlighter-yellow accent used sparingly for focus and active states. Signed-in screens
 use a lightly uneven hand-sketched graph with pencil fibres and graphite smudges on warm
-paper. Login and signup keep their original manga halftone/speed-line background without
-the graph overlay.
+paper, drawn behind the UI so posts and photos stay clear. Login and signup keep their
+original manga halftone/speed-line background without the graph overlay.
 Bricolage Grotesque headlines / Karla body / JetBrains Mono labels.
 
 **Icons & emoji — 100% SVG** — every icon is a true vector (`react-native-svg`) rendered

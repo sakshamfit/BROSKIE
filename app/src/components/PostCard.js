@@ -37,6 +37,7 @@ const PostCard = React.memo(function PostCard({
   activeTag = null,
   onOpenImage,
   showFollow = true,
+  playbackActive = false,
 }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -143,12 +144,23 @@ const PostCard = React.memo(function PostCard({
           ]}
         >
           <Image source={{ uri: mediaUrl(post.mediaUrl) }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          {!!post.song && (
+            <View style={s.songOnMedia} pointerEvents="box-none">
+              <SongCard song={post.song} variant="sticker" autoPlay={playbackActive} />
+            </View>
+          )}
         </DoubleTapLike>
       )}
 
-      {!!post.song && (
-        <View style={{ marginTop: 12 }}>
-          <SongCard song={post.song} compact />
+      {!!post.song && !post.mediaUrl && (
+        <View style={[s.songOnly, inkBox(theme, 'thin')]}>
+          {(post.song.artwork || post.song.albumArt) ? (
+            <Image source={{ uri: post.song.artwork || post.song.albumArt }} style={StyleSheet.absoluteFill} blurRadius={18} />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.cardAlt }]} />
+          )}
+          <View style={s.songOnlyScrim} />
+          <SongCard song={post.song} variant="sticker" autoPlay={playbackActive} />
         </View>
       )}
 
@@ -234,9 +246,16 @@ const makeStyles = (t) => StyleSheet.create({
   note: {
     padding: 18, marginBottom: 22, borderWidth: 1, borderColor: t.graphiteLine,
     borderTopLeftRadius: 2, borderTopRightRadius: 5, borderBottomRightRadius: 2, borderBottomLeftRadius: 4,
+    overflow: 'hidden',
   },
   noteHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  noteImage: { marginTop: 14, overflow: 'hidden', alignSelf: 'center' },
+  noteImage: { marginTop: 14, overflow: 'hidden', alignSelf: 'center', backgroundColor: t.cardAlt },
+  songOnMedia: { position: 'absolute', left: 10, bottom: 12, right: 10, zIndex: 4 },
+  songOnly: {
+    marginTop: 14, minHeight: 168, justifyContent: 'flex-end', padding: 12,
+    overflow: 'hidden', position: 'relative', backgroundColor: t.cardAlt,
+  },
+  songOnlyScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.28)' },
   actions: { flexDirection: 'row', gap: 22 },
   action: { paddingVertical: 2, paddingHorizontal: 2 },
   actionInner: { flexDirection: 'row', alignItems: 'center', gap: 7 },

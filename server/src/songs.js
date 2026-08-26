@@ -1,5 +1,5 @@
 /**
- * Song search — iTunes Search API primary, Deezer API automatic fallback.
+ * Song search — iTunes Search API + Deezer API, queried together.
  *
  * Both providers are free, key-less, and return ~30-second preview clips —
  * previews only, by design (the same model Instagram/TikTok use for music
@@ -9,15 +9,16 @@
  * The client NEVER calls Apple/Deezer directly — everything is proxied
  * through this module so providers can be swapped without an app update:
  *
- *   searchSongs(query, limit) -> { results, degraded }   (never throws)
- *   lookupSong(id)            -> song | null             (e.g. "itunes:1440857781")
+ *   searchSongs(query, limit, profile) -> { results, degraded }   (never throws)
+ *   lookupSong(id)                     -> song | null
+ *   rankSongs(songs, profile, query)   -> songs (vibe-first)
  *
  * Normalized song shape (this is the contract stored on posts/statuses):
  *   { id, provider, title, artist, album, artwork, previewUrl, durationMs }
  *
  * A shared LRU-TTL cache (15 min, 500 entries) keeps typing in the picker
  * well inside the providers' informal rate limits. Every outbound call has
- * a hard 3-second timeout; if both providers fail the caller gets a
+ * a hard 5-second timeout; if both providers fail the caller gets a
  * `degraded` flag instead of an exception — a broken song search must never
  * crash post creation.
  */
@@ -64,7 +65,17 @@ function sanitizeQuery(raw) {
     .slice(0, 100);
 }
 
-async function fetchJson(url, timeoutMs = 3000) {
+function sanitizeArtistName(raw) {
+  return String(raw || '')
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+    .trim()
+    .slice(0, 80);
+}
+
+async function fetchJson(url, timeoutMs = 5000) {
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = setTimeout(() => controller?.abort(), timeoutMs);
   try {
@@ -76,9 +87,10 @@ async function fetchJson(url, timeoutMs = 3000) {
   }
 }
 
-/** artworkUrl100 is always `.../100x100bb.jpg` — request 512px instead. */
+/** artworkUrl100 is usually `.../100x100bb.jpg` — request 512px instead. */
 function upscaleArtwork(url) {
-  return url ? String(url).replace('/100x100bb.jpg', '/512x512bb.jpg') : null;
+  if (!url) return null;
+  return String(url).replace(/\/\d+x\d+([a-z]*)\.(jpg|png|webp)/i, '/512x512$1.$2');
 }
 
 function mapItunes(t) {
@@ -90,7 +102,7 @@ function mapItunes(t) {
     artist: t.artistName || 'Unknown artist',
     album: t.collectionName || '',
     artwork: upscaleArtwork(t.artworkUrl100),
-    previewUrl: t.previewUrl || null, // ~30s m4a clip
+    previewUrl: t.previewUrl || null, // ~30s m4a clip (may be missing in some stores)
     durationMs: Number(t.trackTimeMillis) || 0,
   };
 }
@@ -109,48 +121,195 @@ function mapDeezer(t) {
   };
 }
 
-async function searchItunes(q, limit) {
-  const url = `${ITUNES_BASE}/search?term=${encodeURIComponent(q)}&media=music&entity=song&country=${encodeURIComponent(COUNTRY)}&limit=${limit}`;
+function fold(s) {
+  return String(s || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function songKey(song) {
+  return `${fold(song?.title)}|${fold(song?.artist)}`;
+}
+
+function tokens(s) {
+  return fold(s).split(' ').filter((w) => w.length > 1);
+}
+
+function tokenOverlap(a, b) {
+  const A = new Set(tokens(a));
+  const B = new Set(tokens(b));
+  if (!A.size || !B.size) return 0;
+  let hit = 0;
+  for (const t of A) if (B.has(t)) hit += 1;
+  return hit / Math.max(A.size, B.size);
+}
+
+/** Merge provider lists. Same title+artist keeps the copy that has a preview
+ *  (and otherwise the first one seen). */
+function mergeSongs(lists) {
+  const byKey = new Map();
+  const extras = [];
+  for (const list of lists) {
+    for (const song of list || []) {
+      if (!song || !song.id) continue;
+      const key = songKey(song);
+      if (!key || key === '|') {
+        extras.push(song);
+        continue;
+      }
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, song);
+        continue;
+      }
+      if (!existing.previewUrl && song.previewUrl) byKey.set(key, song);
+    }
+  }
+  return [...byKey.values(), ...extras];
+}
+
+function artistMatches(songArtist, fav) {
+  const a = fold(songArtist);
+  const f = fold(fav);
+  if (!a || !f) return 0;
+  if (a === f) return 1;
+  if (a.includes(f) || f.includes(a)) return 0.7;
+  const overlap = tokenOverlap(a, f);
+  return overlap >= 0.5 ? overlap : 0;
+}
+
+/**
+ * Rank songs so the user's vibe lands first: favourite artists, songs they
+ * already attached, then preview availability and query closeness.
+ */
+function rankSongs(songs, profile, query) {
+  const list = Array.isArray(songs) ? songs.slice() : [];
+  const favs = (profile?.favoriteArtists || []).map(sanitizeArtistName).filter(Boolean);
+  const recents = profile?.recents || [];
+  const q = fold(query);
+  const scored = list.map((song, index) => {
+    let score = 0;
+    if (song.previewUrl) score += 8;
+    for (const fav of favs) {
+      const m = artistMatches(song.artist, fav);
+      if (m >= 1) score += 100;
+      else if (m >= 0.7) score += 55;
+      else if (m > 0) score += Math.round(35 * m);
+    }
+    for (const recent of recents) {
+      if (recent?.id && recent.id === song.id) score += 90;
+      else if (fold(recent?.title) === fold(song.title) && fold(recent?.artist) === fold(song.artist)) score += 80;
+      else if (fold(recent?.artist) && fold(recent.artist) === fold(song.artist)) score += 40;
+    }
+    if (q) {
+      const title = fold(song.title);
+      const artist = fold(song.artist);
+      if (title === q || artist === q) score += 25;
+      else if (title.startsWith(q) || artist.startsWith(q)) score += 12;
+      else if (title.includes(q) || artist.includes(q)) score += 6;
+    }
+    return { song, score, index };
+  });
+  scored.sort((a, b) => b.score - a.score || a.index - b.index);
+  return scored.map((row) => row.song);
+}
+
+function itunesCountries() {
+  const extras = String(process.env.ITUNES_COUNTRIES || 'IN,GB')
+    .split(',')
+    .map((c) => c.trim().toUpperCase())
+    .filter((c) => /^[A-Z]{2}$/.test(c));
+  return [...new Set([String(COUNTRY || 'US').toUpperCase(), ...extras])].slice(0, 3);
+}
+
+function queryVariants(q) {
+  const variants = [q];
+  const stripped = q
+    .replace(/\s*[([{].+$/, '')
+    .replace(/\s+(feat\.?|ft\.?|featuring)\s+.+$/i, '')
+    .trim();
+  if (stripped && stripped !== q && stripped.length >= 2) variants.push(stripped);
+  return variants.slice(0, 2);
+}
+
+async function searchItunes(q, limit, country = COUNTRY) {
+  const url = `${ITUNES_BASE}/search?term=${encodeURIComponent(q)}&media=music&entity=song&country=${encodeURIComponent(country)}&limit=${limit}`;
   const data = await fetchJson(url);
-  return (data?.results || []).map(mapItunes).filter((s) => s && s.previewUrl);
+  return (data?.results || []).map(mapItunes).filter(Boolean);
 }
 
 async function searchDeezer(q, limit) {
   const url = `${DEEZER_BASE}/search?q=${encodeURIComponent(q)}&limit=${limit}`;
   const data = await fetchJson(url);
-  return (data?.data || []).map(mapDeezer).filter((s) => s && s.previewUrl);
+  return (data?.data || []).map(mapDeezer).filter(Boolean);
+}
+
+async function settledList(promise) {
+  try {
+    return await promise;
+  } catch (e) {
+    console.error('[songs] provider:', e.message);
+    return null; // null = failed (distinct from empty [])
+  }
 }
 
 /**
  * Search songs. Never throws: if both providers fail or time out the caller
  * gets `{ results: [], degraded: true }` and the composer keeps working.
+ *
+ * Both providers are queried in parallel (and extra iTunes storefronts when
+ * the first pass is thin) so a track that only lives on Deezer, or only in
+ * the IN/GB iTunes store, still shows up.
  */
-async function searchSongs(query, limit = 15) {
+async function searchSongs(query, limit = 20, profile = null) {
   const q = sanitizeQuery(query);
-  const capped = Math.min(25, Math.max(1, Number(limit) || 15));
+  const capped = Math.min(40, Math.max(1, Number(limit) || 20));
   if (!q) return { results: [], degraded: false };
 
   const key = `search:${q.toLowerCase()}|${capped}`;
   const cached = cacheGet(key);
-  if (cached) return { results: cached, degraded: false };
-
-  let results = [];
-  try {
-    results = await searchItunes(q, capped);
-  } catch (e) {
-    console.error('[songs] itunes search:', e.message);
+  if (cached) {
+    return { results: rankSongs(cached, profile, q).slice(0, capped), degraded: false };
   }
-  if (!results.length) {
-    // Apple doesn't have it (or failed) — try Deezer before giving up.
-    try {
-      results = await searchDeezer(q, capped);
-    } catch (e) {
-      console.error('[songs] deezer search:', e.message);
+
+  const countries = itunesCountries();
+  const primaryCountry = countries[0];
+  const [itunesPrimary, deezerPrimary] = await Promise.all([
+    settledList(searchItunes(q, capped, primaryCountry)),
+    settledList(searchDeezer(q, capped)),
+  ]);
+
+  let lists = [itunesPrimary || [], deezerPrimary || []];
+  let failed = itunesPrimary === null && deezerPrimary === null;
+  let merged = mergeSongs(lists);
+
+  // Thin first pass: try other storefronts + a stripped query variant so
+  // regional / "feat." titles aren't dropped just because the US catalog
+  // ranked something else.
+  if (merged.length < Math.min(8, capped)) {
+    const extras = [];
+    for (const country of countries.slice(1)) {
+      extras.push(settledList(searchItunes(q, capped, country)));
+    }
+    for (const variant of queryVariants(q).slice(1)) {
+      extras.push(settledList(searchItunes(variant, capped, primaryCountry)));
+      extras.push(settledList(searchDeezer(variant, capped)));
+    }
+    if (extras.length) {
+      const more = await Promise.all(extras);
+      if (more.some((r) => r !== null)) failed = false;
+      merged = mergeSongs([...lists, ...more.map((r) => r || [])]);
     }
   }
-  if (!results.length) return { results: [], degraded: true };
-  cacheSet(key, results);
-  return { results, degraded: false };
+
+  if (!merged.length) return { results: [], degraded: failed || true };
+  cacheSet(key, merged);
+  return { results: rankSongs(merged, profile, q).slice(0, capped), degraded: false };
 }
 
 /** Look one song back up by its normalized id ("itunes:1440857781") — used
@@ -187,7 +346,7 @@ async function lookupSong(id) {
 
 /**
  * Validate a client-supplied song attachment for a post/status.
- *  - New-format ids ("itunes:…"/"deezer:…") are RE-VERIFIED against the
+ *  - New-format ids ("itunes:…"/ "deezer:…") are RE-VERIFIED against the
  *    provider and the provider's own data is stored — a user cannot spoof
  *    arbitrary title/artist text (or a malicious artwork URL) into a feed.
  *  - Legacy ids (plain numeric / jamendo:*, sent by app versions released
@@ -222,4 +381,31 @@ async function verifyAttachment(song) {
   return { song: out };
 }
 
-module.exports = { searchSongs, lookupSong, verifyAttachment, sanitizeQuery, mapItunes, mapDeezer };
+function uniqueArtists(songs, limit = 12) {
+  const seen = new Set();
+  const out = [];
+  for (const song of songs || []) {
+    const name = sanitizeArtistName(song?.artist);
+    const key = fold(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+module.exports = {
+  searchSongs,
+  lookupSong,
+  verifyAttachment,
+  sanitizeQuery,
+  sanitizeArtistName,
+  mapItunes,
+  mapDeezer,
+  mergeSongs,
+  rankSongs,
+  songKey,
+  uniqueArtists,
+  upscaleArtwork,
+};

@@ -24,6 +24,7 @@ import { confirm } from '../hooks/confirm';
 import { onNetworkFilterRequest, consumePendingNetworkFilter, onOpenCommunity, consumePendingCommunity, onProfileWillOpen } from '../push/routing';
 import NewPostScreen from './NewPostScreen';
 import CommunitiesScreen from './CommunitiesScreen';
+import { stopPreview } from '../previewPlayer';
 
 /* Phase 2 feed lenses: the whole world, your college/workplace people, or
  * just the authors you follow. */
@@ -57,6 +58,7 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
   const [composerOpen, setComposerOpen] = useState(false);
   const [commentsFor, setCommentsFor] = useState(null);
   const [lightbox, setLightbox] = useState(null);
+  const [activeSongPostId, setActiveSongPostId] = useState(null);
 
   const s = makeStyles(theme);
   const reducedMotion = useReducedMotion();
@@ -248,6 +250,16 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
   const onTagPress = useCallback((tag) => {
     setActiveTag((current) => (tag === current ? null : tag));
   }, []);
+  useEffect(() => {
+    if (!active) stopPreview();
+  }, [active]);
+
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    const hit = (viewableItems || []).find((v) => v.isViewable && v.item?.song?.previewUrl);
+    setActiveSongPostId(hit?.item?.id || null);
+  }).current;
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 55, minimumViewTime: 180 }).current;
+
   const renderPost = useCallback(({ item, index }) => (
     <PostCard
       post={item}
@@ -259,8 +271,9 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
       onTagPress={onTagPress}
       activeTag={activeTag}
       onOpenImage={setLightbox}
+      playbackActive={active && !commentsFor && !composerOpen && activeSongPostId === item.id}
     />
-  ), [toggleLike, toggleFollow, removePost, onTagPress, activeTag]);
+  ), [toggleLike, toggleFollow, removePost, onTagPress, activeTag, active, commentsFor, composerOpen, activeSongPostId]);
 
   const SectionToggle = (
     <View style={s.sectionRow}>
@@ -353,7 +366,7 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
 
   if (section === 'communities') {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <View style={{ flex: 1, backgroundColor: 'transparent' }}>
         <View style={[s.communitiesHeaderWrap, isTablet && s.listWide]}>
           <Text style={s.pageTitle}>The Network</Text>
           <Text style={[type.labelXs, { color: theme.muted, marginBottom: 14 }]}>
@@ -374,7 +387,7 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
     // of an empty screen: the feed looks like it is already arriving, and
     // nothing shifts when it does.
     return (
-      <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <View style={{ flex: 1, backgroundColor: 'transparent' }}>
         <BrandHeader navigation={navigation} />
         <PostSkeletonList count={3} style={[s.list, isTablet && s.listWide]} />
       </View>
@@ -382,7 +395,7 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
       <BrandHeader navigation={navigation} />
       <FlatList
         data={posts}
@@ -395,6 +408,8 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
         scrollEventThrottle={16}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
         ListFooterComponent={
           loadingMore ? <ActivityIndicator style={{ marginVertical: 24 }} color={theme.ink} />
             : posts.length > 0 && !nextBefore

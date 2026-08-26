@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Keyboard, PanResponder, Platform, StyleSheet, View } from 'react-native';
-import { useTheme } from '../store/ThemeContext';
 import { haptic, useReducedMotion, MotionActive } from '../motion';
 import { PAGE_SWIPE, resolveGesture, rubberBand, shouldCommitPageSwipe, isTouchInput } from '../gestures';
 
@@ -38,7 +37,6 @@ export default function PageSwipePager({
   enabled = true,
   style,
 }) {
-  const { theme } = useTheme();
   const reduced = useReducedMotion();
   const [width, setWidth] = useState(0);
 
@@ -188,7 +186,7 @@ export default function PageSwipePager({
     <View
       {...(enabled ? panResponder.panHandlers : {})}
       onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))}
-      style={[s.container, { backgroundColor: theme.bg }, style]}
+      style={[s.container, { backgroundColor: 'transparent' }, style]}
     >
       {width > 0 && (
         <Animated.View
