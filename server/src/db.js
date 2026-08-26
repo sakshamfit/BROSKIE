@@ -115,6 +115,11 @@ try {
   db.pragma('journal_mode = DELETE');
 }
 db.pragma('foreign_keys = ON');
+// WAL pairing: NORMAL fsyncs only at checkpoints (safe with WAL, much faster
+// than FULL on volume mounts) and a busy timeout so a concurrent writer can
+// never surface SQLITE_BUSY to a route handler.
+db.pragma('synchronous = NORMAL');
+db.pragma('busy_timeout = 5000');
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (

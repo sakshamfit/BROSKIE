@@ -98,7 +98,6 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
   const typingTimer = useRef(null);
   const typingThrottle = useRef(null);
   const suppressFocusScroll = useRef(false);
-  const suppressScrollToEnd = useRef(false);
   const recSecs = Math.max(0, Math.floor((audioRecorderState.durationMillis || 0) / 1000));
   const [forwardMsg, setForwardMsg] = useState(null);
   const [timerMsg, setTimerMsg] = useState(null);
@@ -109,10 +108,12 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
 
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const keyboardScrollTimer = useRef(null);
+  // Bottom-anchored (inverted) list: offset 0 IS the latest message, so
+  // "scroll to latest" is a zero-distance no-op on open.
   const scrollToLatest = useCallback((delay = 0) => {
     clearTimeout(keyboardScrollTimer.current);
     keyboardScrollTimer.current = setTimeout(() => {
-      listRef.current?.scrollToEnd({ animated: delay > 0 });
+      listRef.current?.scrollToOffset({ offset: 0, animated: delay > 0 });
     }, delay);
   }, []);
 
@@ -395,7 +396,9 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
       if (day !== lastDay) { out.push({ _type: 'day', id: 'day_' + day, label: formatDayLabel(ts) }); lastDay = day; }
       out.push({ _type: 'msg', ...m });
     });
-    return out;
+    // Newest first — pairs with the `inverted` FlatList below so the GC
+    // opens directly on the latest message (no top-of-chat scroll jump).
+    return out.reverse();
   }, [list]);
 
   const openReply = useCallback((messageId) => {
@@ -406,13 +409,13 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
       replyMissingTimer.current = setTimeout(() => setReplyMissing(false), 2000);
       return;
     }
-    suppressScrollToEnd.current = true;
+    suppressFocusScroll.current = true;
     listRef.current?.scrollToIndex({ index: idx, viewPosition: 0.4, animated: true });
     setReplyHighlightId(messageId);
     clearTimeout(replyHighlightTimer.current);
     replyHighlightTimer.current = setTimeout(() => {
       setReplyHighlightId(null);
-      suppressScrollToEnd.current = false;
+      suppressFocusScroll.current = false;
     }, 1600);
   }, [rows]);
 
@@ -515,16 +518,28 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
 
   const onListScroll = useCallback((event) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    if (contentSize.height <= layoutMeasurement.height + 48 || contentOffset.y > 90 || loadingOlderRef.current) return;
+    if (contentSize.height <= layoutMeasurement.height + 48) return;
+    // Inverted geometry: the visual TOP (oldest messages) sits near the end
+    // of the scroll range, so "near the top" means offset + viewport ≈ size.
+    if (contentOffset.y + layoutMeasurement.height < contentSize.height - 90 || loadingOlderRef.current) return;
     loadingOlderRef.current = true;
-    suppressScrollToEnd.current = true;
     Promise.resolve(loadOlderGCMessages(chatId)).finally(() => {
-      setTimeout(() => { suppressScrollToEnd.current = false; loadingOlderRef.current = false; }, 400);
+      setTimeout(() => { loadingOlderRef.current = false; }, 400);
     });
   }, [chatId, loadOlderGCMessages]);
-  const onContentSizeChange = useCallback(() => {
-    if (suppressScrollToEnd.current || suppressFocusScroll.current) return;
-    listRef.current?.scrollToEnd({ animated: false });
+  // Inverted list: prepended history never shifts the view and new messages
+  // render at offset 0 by themselves on native. Web-only compensation keeps
+  // the reading position stable while scrolled up (RNW has no
+  // maintainVisibleContentPosition); see ConversationScreen for the details.
+  const contentHeightRef = useRef(0);
+  const onContentSizeChange = useCallback((_, nextHeight) => {
+    if (Platform.OS !== 'web' || typeof nextHeight !== 'number') return;
+    const prev = contentHeightRef.current;
+    contentHeightRef.current = nextHeight;
+    if (!prev || nextHeight <= prev) return;
+    const node = listRef.current?.getScrollableNode?.();
+    if (!node || node.scrollTop <= 1) return;
+    node.scrollTop += (nextHeight - prev);
   }, []);
   const onScrollToIndexFailed = useCallback((info) => {
     setTimeout(() => {
@@ -533,7 +548,7 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
   }, []);
   const keyExtractor = useCallback((item) => item.id, []);
   const listContentStyle = useMemo(() => ({
-    paddingVertical: 14, flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 8,
+    paddingVertical: 14, flexGrow: 1,
   }), []);
   const keyboardPad = Platform.OS === 'android' || Platform.OS === 'web' ? keyboardHeight : 0;
   const openInfo = useCallback(() => navigation?.navigate?.('GCDetail', { chatId }), [navigation, chatId]);
@@ -628,6 +643,10 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
           style={s.messagesList}
           data={rows}
           keyExtractor={keyExtractor}
+          // Bottom-anchored chat list: the newest message is index 0 at the
+          // visual bottom — the GC opens on the latest message instantly.
+          inverted
+          windowSize={9}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           automaticallyAdjustContentInsets={false}

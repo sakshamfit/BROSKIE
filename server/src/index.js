@@ -12,7 +12,34 @@ const { customAlphabet } = require('nanoid');
 
 const db = require('./db');
 const { sign, verify, requireAuth } = require('./auth');
-const jamendo = require('./jamendo');
+const songs = require('./songs');
+
+/**
+ * Stored song blobs come from two eras: pre-Phase-9 clients stored the old
+ * picker shape ({id, name, artist, albumArt, source, …}), Phase-9+ store the
+ * canonical provider-verified shape ({id, provider, title, artist, album,
+ * artwork, previewUrl, durationMs}). This normalizes BOTH to the canonical
+ * shape at serialization time, so every client — old and new — always reads
+ * one consistent shape. Returns null for absent/corrupt blobs.
+ */
+function normalizeStoredSong(raw) {
+  if (!raw) return null;
+  let s = raw;
+  if (typeof raw === 'string') {
+    try { s = JSON.parse(raw); } catch { return null; }
+  }
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+  return {
+    id: String(s.id || '').slice(0, 64) || null,
+    provider: String(s.provider || s.source || '').slice(0, 24) || null,
+    title: String(s.title || s.name || '').slice(0, 120),
+    artist: String(s.artist || '').slice(0, 120),
+    album: String(s.album || '').slice(0, 160),
+    artwork: /^https:\/\/[^\s"'<>\\]+$/.test(String(s.artwork || s.albumArt || '')) ? String(s.artwork || s.albumArt) : null,
+    previewUrl: /^https:\/\/[^\s"'<>\\]+$/.test(String(s.previewUrl || '')) ? String(s.previewUrl) : null,
+    durationMs: Math.max(0, Math.min(600000, Math.round(Number(s.durationMs) || 0))),
+  };
+}
 const TextOperation = require('./ot/textOperation');
 const OTStore = require('./ot/otStore');
 
@@ -74,13 +101,143 @@ const corsOrigin = configuredCorsOrigins.length === 0 || configuredCorsOrigins.i
 // the raw HTTP server), and tiny responses skip compression via `threshold`.
 app.use(compression({ threshold: 1024 }));
 app.use(cors({ origin: corsOrigin }));
-app.use(express.json({ limit: '25mb' }));
+app.use(express.json({ limit: '1mb' }));
+
+/* ------------------------------------------------------------------ */
+/* security & abuse hardening                                          */
+/* ------------------------------------------------------------------ */
+
+// Railway/Vercel terminate TLS in front of this process; without this the
+// "real" client IP is the proxy's, which would make per-IP rate limiting
+// throttle everyone together (and let attackers rotate fake IPs).
+app.set('trust proxy', 1);
+
+// Baseline security headers for every response. The API also serves the SPA
+// and uploads in single-host mode, so these apply to the whole origin.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // Camera/mic stay same-origin only; the site itself never embeds third-party
+  // frames that would need them.
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self)');
+  const proto = String(req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http')).split(',')[0].trim();
+  if (proto === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  }
+  next();
+});
+
+/**
+ * Tiny fixed-window in-memory rate limiter (no external dependency).
+ *
+ * Requests from loopback (the offline test suites, local dev, health checks)
+ * are exempt so CI pipelines that hammer the API are never throttled.
+ * Set RATE_LIMIT_DISABLED=true to bypass everything (emergencies only).
+ */
+const rateBuckets = new Map(); // key -> { count, resetAt }
+let lastSweep = 0;
+function clientKey(req) {
+  return String(req.ip || req.socket?.remoteAddress || 'unknown');
+}
+function isLoopbackReq(req) {
+  // Tests can set RATE_LIMIT_ENFORCE_LOOPBACK=1 to exercise the limiters on
+  // localhost; by default loopback (CI suites, health checks) is exempt.
+  if (process.env.RATE_LIMIT_ENFORCE_LOOPBACK === '1') return false;
+  const raw = String(req.socket?.remoteAddress || '');
+  return raw === '127.0.0.1' || raw === '::1' || raw === '::ffff:127.0.0.1';
+}
+function rateLimit({ windowMs, max, message, keyFn }) {
+  return function rateLimiter(req, res, next) {
+    if (process.env.RATE_LIMIT_DISABLED === 'true' || isLoopbackReq(req)) return next();
+    const key = `${keyFn ? keyFn(req) : clientKey(req)}`;
+    const t = now();
+    if (t - lastSweep > 300000) {
+      lastSweep = t;
+      for (const [k, b] of rateBuckets) if (b.resetAt <= t) rateBuckets.delete(k);
+    }
+    let bucket = rateBuckets.get(key);
+    if (!bucket || bucket.resetAt <= t) {
+      bucket = { count: 0, resetAt: t + windowMs };
+      rateBuckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    if (bucket.count > max) {
+      const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - t) / 1000));
+      res.set('Retry-After', String(retryAfter));
+      return res.status(429).json({ error: message || 'Too many requests. Please slow down and try again shortly.' });
+    }
+    next();
+  };
+}
+
+// Brute-force protection for the password login: per-IP budget plus a tighter
+// per-username budget so one IP rotating names can't grind a single account.
+const loginFailures = new Map(); // "ip|username" -> { count, resetAt }
+function loginFailureKey(req) {
+  const u = String(req.body?.username || '').trim().toLowerCase();
+  return `${clientKey(req)}|${u}`;
+}
+function loginThrottle(req, res, next) {
+  if (process.env.RATE_LIMIT_DISABLED === 'true' || isLoopbackReq(req)) return next();
+  const t = now();
+  const key = loginFailureKey(req);
+  const bucket = loginFailures.get(key);
+  if (bucket && bucket.resetAt > t && bucket.count >= 10) {
+    const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - t) / 1000));
+    res.set('Retry-After', String(retryAfter));
+    return res.status(429).json({ error: 'Too many attempts. Please wait a few minutes and try again.' });
+  }
+  next();
+}
+function recordLoginFailure(req) {
+  if (isLoopbackReq(req)) return;
+  const key = loginFailureKey(req);
+  const t = now();
+  const bucket = loginFailures.get(key);
+  if (!bucket || bucket.resetAt <= t) loginFailures.set(key, { count: 1, resetAt: t + 15 * 60 * 1000 });
+  else bucket.count += 1;
+}
+// Periodic cleanup so the maps cannot grow unbounded on a long-lived server.
+setInterval(() => {
+  const t = now();
+  for (const [k, b] of rateBuckets) if (b.resetAt <= t) rateBuckets.delete(k);
+  for (const [k, b] of loginFailures) if (b.resetAt <= t) loginFailures.delete(k);
+}, 600000).unref();
+
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, message: 'Too many attempts from this network. Try again in a few minutes.' });
+const otpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 6, message: 'Too many verification codes requested. Try again in a few minutes.' });
+const uploadLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60, message: 'Upload limit reached for now. Try again in a few minutes.' });
+// Song search is keyed PER USER (carriers/NAT share IPs, so an IP key would
+// throttle whole networks together): 30 searches/minute per account.
+const songsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyFn: (req) => `user:${req.userId}`,
+  message: 'You are searching songs too fast — give it a few seconds.',
+});
 
 const storage = require('./storage');
 
 // Local files are still served when the disk backend is in use (and harmless
 // otherwise — old /uploads/... URLs in the DB keep resolving).
-app.use('/uploads', express.static(storage.UPLOAD_DIR));
+// Hardened serving: uploads are untrusted user content. Executable document
+// types (SVG/HTML) are never served — they are stored-XSS vectors when this
+// origin hosts the web app; everything else gets nosniff + a sandboxing CSP
+// so a mislabelled file can never run script on our origin.
+app.use('/uploads', (req, res, next) => {
+  let ext = '';
+  try { ext = path.extname(decodeURIComponent(req.path || '')).toLowerCase(); } catch { ext = '.%bad'; }
+  if (['.html', '.htm', '.svg', '.xhtml', '.xml', '.js', '.mjs', '.css'].includes(ext)) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  next();
+}, express.static(storage.UPLOAD_DIR, {
+  setHeaders: (res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self' data:; style-src 'unsafe-inline'");
+  },
+}));
 
 // Google Search Console ownership verification. Served directly by the backend
 // so it resolves on this domain even when no web build is present. (The Expo
@@ -713,7 +870,7 @@ function hydrateMessage(m, viewerId, context = null) {
         const statusAuthor = context?.usersById?.get(st.user_id) || getUser(st.user_id);
         statusReply = {
           id: st.id, type: st.type, body: st.body, mediaUrl: st.media_url, mediaAspect: st.media_aspect || null, bg: st.bg,
-          song: st.song ? JSON.parse(st.song) : null, audience: st.audience || 'public', createdAt: st.created_at,
+          song: normalizeStoredSong(st.song), audience: st.audience || 'public', createdAt: st.created_at,
           author: publicUser(statusAuthor),
         };
       } else {
@@ -1250,7 +1407,7 @@ app.get('/api/auth/username-available', (req, res) => {
   res.json({ available: !taken, error: taken ? 'That username is already taken' : null });
 });
 
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', authLimiter, (req, res) => {
   const { username, phone, name, password } = req.body || {};
   if (!String(name || '').trim()) return res.status(400).json({ error: 'Name is required' });
   const passwordValidationError = passwordError(password);
@@ -1306,7 +1463,7 @@ app.post('/api/auth/register', (req, res) => {
 const otps = new Map(); // phone -> { otp, expiresAt, attempts, userId }
 const resetTokens = new Map(); // token -> { userId, expiresAt }
 
-app.post('/api/auth/forgot-password', (req, res) => {
+app.post('/api/auth/forgot-password', otpLimiter, (req, res) => {
   const { phone } = req.body || {};
   if (!phone) return res.status(400).json({ error: 'Phone number is required' });
 
@@ -1325,7 +1482,7 @@ app.post('/api/auth/forgot-password', (req, res) => {
   res.json({ success: true, message: 'OTP sent successfully' });
 });
 
-app.post('/api/auth/verify-otp', (req, res) => {
+app.post('/api/auth/verify-otp', otpLimiter, (req, res) => {
   const { phone, otp } = req.body || {};
   if (!phone || !otp) return res.status(400).json({ error: 'Phone and OTP are required' });
 
@@ -1356,7 +1513,7 @@ app.post('/api/auth/verify-otp', (req, res) => {
   res.json({ success: true, resetToken });
 });
 
-app.post('/api/auth/reset-password', (req, res) => {
+app.post('/api/auth/reset-password', otpLimiter, (req, res) => {
   const { resetToken, newPassword } = req.body || {};
   if (!resetToken || !newPassword) return res.status(400).json({ error: 'Reset token and new password are required' });
 
@@ -1380,11 +1537,13 @@ app.post('/api/auth/reset-password', (req, res) => {
   res.json({ success: true, message: 'Password updated successfully' });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', authLimiter, loginThrottle, (req, res) => {
   const { username, password } = req.body || {};
   const user = getUserByUsername(username);
-  if (!user || !bcrypt.compareSync(String(password || ''), user.password_hash))
+  if (!user || !bcrypt.compareSync(String(password || ''), user.password_hash)) {
+    recordLoginFailure(req);
     return res.status(401).json({ error: 'Invalid username or password' });
+  }
   // Enforcement state is checked server-side on login.
   const gate = moderation.moderationGate(user.id);
   if (gate.blocked) return res.status(403).json({ error: gate.error });
@@ -2239,14 +2398,52 @@ app.get('/api/messages/:id/edits', requireAuth, (req, res) => {
 /* uploads                                                             */
 /* ------------------------------------------------------------------ */
 
-app.post('/api/upload', requireAuth, upload.single('file'), async (req, res) => {
+/* Uploads are stored with a server-chosen extension derived from the
+ * VALIDATED mimetype — the client-provided filename/mimetype are never
+ * trusted. Only known image/audio/video types are accepted (never SVG/HTML,
+ * which would be stored-XSS when /uploads is same-origin with the web app),
+ * and image payloads must match their declared magic bytes so a text/html or
+ * script payload cannot smuggle in as "image/png". */
+const UPLOAD_MIME_EXT = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+  'audio/m4a': '.m4a',
+  'audio/mp4': '.m4a',
+  'audio/aac': '.aac',
+  'audio/mpeg': '.mp3',
+  'audio/wav': '.wav',
+  'audio/x-wav': '.wav',
+  'audio/webm': '.webm',
+  'audio/ogg': '.ogg',
+  'audio/3gpp': '.3gp',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/quicktime': '.mov',
+};
+const sniffImageMime = (buf) => {
+  if (!buf || buf.length < 12) return null;
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return 'image/gif';
+  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  return null;
+};
+
+app.post('/api/upload', requireAuth, uploadLimiter, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  const declaredMime = String(req.file.mimetype || '').split(';')[0].trim().toLowerCase();
+  const ext = UPLOAD_MIME_EXT[declaredMime];
+  if (!ext) {
+    return res.status(415).json({ error: 'This file type is not supported. Images, voice notes and short videos only.' });
+  }
+  if (declaredMime.startsWith('image/') && sniffImageMime(req.file.buffer) !== declaredMime) {
+    return res.status(415).json({ error: 'That image file is corrupted or mislabelled.' });
+  }
   try {
-    const url = await storage.save(
-      req.file.buffer,
-      req.file.originalname || 'upload.bin',
-      req.file.mimetype || 'application/octet-stream'
-    );
+    // Storage keys come from the validated mimetype, never the original name.
+    const url = await storage.save(req.file.buffer, `upload${ext}`, declaredMime);
     res.json({ url });
   } catch (e) {
     console.error('[upload]', e.message);
@@ -3688,7 +3885,7 @@ function postAudienceIds(postId, authorId, audience) {
 function hydrateStatus(s, viewerId, context = null) {
   return {
     id: s.id, type: s.type, body: s.body, mediaUrl: s.media_url, mediaAspect: s.media_aspect || null, bg: s.bg,
-    song: s.song ? JSON.parse(s.song) : null,
+    song: normalizeStoredSong(s.song),
     audience: s.audience || 'public',
     createdAt: s.created_at,
     viewed: context ? context.viewedIds.has(s.id) : !!db.prepare('SELECT 1 FROM status_views WHERE status_id = ? AND user_id = ?').get(s.id, viewerId),
@@ -3730,13 +3927,22 @@ app.get('/api/status', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/status', requireAuth, (req, res) => {
+app.post('/api/status', requireAuth, async (req, res) => {
   const {
     type = 'text', body = '', mediaUrl = null, mediaAspect = null, bg = '#075E54',
     song = null, audience = 'public', recipientIds = [],
   } = req.body || {};
   const statusGate = moderation.moderationGate(req.userId);
   if (statusGate.blocked) return res.status(403).json({ error: statusGate.error });
+
+  // Same contract as posts: provider-verify new song ids, allowlist legacy
+  // ones (see songs.verifyAttachment).
+  let verifiedSong = null;
+  if (song) {
+    const verdict = await songs.verifyAttachment(song);
+    if (verdict.error) return res.status(400).json({ error: verdict.error });
+    verifiedSong = verdict.song;
+  }
 
   const allowedAudiences = ['public', 'contacts', 'contacts_except', 'selected'];
   if (!allowedAudiences.includes(audience)) {
@@ -3766,7 +3972,7 @@ app.post('/api/status', requireAuth, (req, res) => {
       ? Math.max(0.4, Math.min(2.5, Number(mediaAspect)))
       : null,
     bg: String(bg || '#075E54').slice(0, 32),
-    song: song ? JSON.stringify(song) : null, audience: aud,
+    song: verifiedSong ? JSON.stringify(verifiedSong) : null, audience: aud,
     created_at: now(), expires_at: now() + 24 * 3600 * 1000,
   };
   db.prepare(
@@ -3866,7 +4072,7 @@ app.post('/api/status/:id/reply', requireAuth, (req, res) => {
     mediaUrl: s.media_url,
     mediaAspect: s.media_aspect || null,
     bg: s.bg,
-    song: s.song ? JSON.parse(s.song) : null,
+    song: normalizeStoredSong(s.song),
     audience: s.audience || 'public',
     createdAt: s.created_at,
     author: author ? { id: author.id, name: author.name, avatar: author.avatar, username: author.username } : null,
@@ -3921,20 +4127,28 @@ app.post('/api/status/:id/reply', requireAuth, (req, res) => {
 });
 
 /** Song search for status composer — proxies Jamendo's public track search API. */
-app.get('/api/songs/search', requireAuth, async (req, res) => {
-  if (!jamendo.isConfigured()) return res.json({ tracks: [], configured: false });
-  const q = String(req.query.q || '').trim();
-  if (!q) return res.json({ tracks: [], configured: true });
-  try {
-    const tracks = await jamendo.searchTracks(q);
-    res.json({ tracks, configured: true });
-  } catch (e) {
-    console.error('[jamendo]', e.message);
-    // Surface a 200 with an explanatory message instead of a hard error —
-    // song attachment is optional, the rest of the status composer must
-    // keep working even if the song search API has a hiccup.
-    res.json({ tracks: [], configured: true, error: e.message });
-  }
+app.get('/api/songs/search', requireAuth, songsLimiter, async (req, res) => {
+  // iTunes Search is the primary provider, Deezer the automatic fallback
+  // (see server/src/songs.js). The client never calls the providers directly
+  // — results are proxied, normalized, cached, and rate-limited per user.
+  // Sanitization also happens inside songs.js; applied here first so even a
+  // bypassed module can't forward junk outbound (defense in depth).
+  const q = songs.sanitizeQuery(req.query.q);
+  if (!q) return res.json({ results: [], tracks: [], degraded: false, configured: true });
+  const limit = Math.min(25, Math.max(1, Number(req.query.limit) || 15));
+  const { results, degraded } = await songs.searchSongs(q, limit);
+  // `tracks`/`configured` are legacy keys kept for app versions released
+  // before Phase 9 — new clients read `results`/`degraded`.
+  res.json({ results, tracks: results, degraded, configured: true });
+});
+
+// Single-song lookup by normalized id ("itunes:1440857781") — lets a client
+// rehydrate full details for an old post that only stored the id. Registered
+// AFTER /api/songs/search so "search" is never captured as an :id.
+app.get('/api/songs/:id', requireAuth, songsLimiter, async (req, res) => {
+  const song = await songs.lookupSong(String(req.params.id || ''));
+  if (!song) return res.status(404).json({ error: 'Song not found' });
+  res.json({ song });
 });
 
 // Backwards-compatible alias for the older Spotify-named route.
@@ -4006,7 +4220,7 @@ function hydratePost(row, viewerId, context = null) {
     body: row.body,
     mediaUrl: row.media_url,
     mediaAspect: row.media_aspect || null,
-    song: row.song ? JSON.parse(row.song) : null,
+    song: normalizeStoredSong(row.song),
     tag: row.tag,
     audience: row.audience || 'public',
     createdAt: row.created_at,
@@ -4100,7 +4314,7 @@ app.get('/api/posts/:id', requireAuth, (req, res) => {
   res.json({ post: hydratePost(row, req.userId) });
 });
 
-app.post('/api/posts', requireAuth, (req, res) => {
+app.post('/api/posts', requireAuth, async (req, res) => {
   const {
     body = '', title = '', mediaUrl = null, mediaAspect = null, tag = null,
     song = null, audience = 'public', recipientIds = [],
@@ -4108,6 +4322,17 @@ app.post('/api/posts', requireAuth, (req, res) => {
   const text = String(body).trim();
   if (!text && !mediaUrl && !song) return res.status(400).json({ error: 'Write something, or attach a photo or a song' });
   if (text.length > 2000) return res.status(400).json({ error: 'Post is too long (2000 characters max)' });
+
+  // Song attachments are never trusted from the client: new-format ids are
+  // re-verified against the provider and the PROVIDER's data is stored (so
+  // no spoofed titles/artwork URLs can reach a feed); legacy app versions
+  // get a strictly allowlisted copy. See songs.verifyAttachment.
+  let verifiedSong = null;
+  if (song) {
+    const verdict = await songs.verifyAttachment(song);
+    if (verdict.error) return res.status(400).json({ error: verdict.error });
+    verifiedSong = verdict.song;
+  }
 
   const gate = moderation.moderationGate(req.userId);
   if (gate.blocked) return res.status(403).json({ error: gate.error });
@@ -4128,7 +4353,7 @@ app.post('/api/posts', requireAuth, (req, res) => {
     media_aspect: Number.isFinite(Number(mediaAspect))
       ? Math.max(0.4, Math.min(2.5, Number(mediaAspect)))
       : null,
-    song: song ? JSON.stringify(song) : null,
+    song: verifiedSong ? JSON.stringify(verifiedSong) : null,
     tag: tag ? String(tag).replace(/^#/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24) || null : null,
     audience: aud,
     created_at: now(),
@@ -4994,7 +5219,11 @@ app.put('/api/admin/moderation/settings', requireAuth, requireAdmin, (req, res) 
 /* ------------------------------------------------------------------ */
 
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: corsOrigin }, maxHttpBufferSize: 3e7 });
+// 30MB per socket frame was an easy remote-DoS vector (one authenticated
+// socket could pin the event loop parsing huge frames). Legit realtime
+// payloads are tiny — messages cap at 5 000 chars, media goes through the
+// HTTP upload path, OT ops/selections are bytes — so 1MB is ~200x headroom.
+const io = new Server(server, { cors: { origin: corsOrigin }, maxHttpBufferSize: 1e6 });
 
 const sockets = new Map(); // userId -> Set<socketId>
 const activeCalls = new Map(); // userId -> callId, for busy-detection and cleanup on disconnect
@@ -5006,6 +5235,28 @@ function emitToUser(userId, event, payload) {
   const set = sockets.get(userId);
   if (!set) return;
   set.forEach((sid) => io.to(sid).emit(event, payload));
+}
+
+/**
+ * Privacy-aware presence broadcast. The old `io.emit('presence', …)` shipped
+ * every user's online status and exact last-seen timestamp to every connected
+ * socket — ignoring the target's "last seen: nobody/contacts" setting. This
+ * applies the same presenceFor() policy as the REST payloads, per viewer.
+ */
+function broadcastPresence(userId, isOnline) {
+  const target = getUser(userId);
+  const t = now();
+  const payloadFor = (viewerId) => {
+    const p = presenceFor({ ...target, is_online: isOnline ? 1 : 0, last_seen: t }, viewerId);
+    return { userId, isOnline: !!p.isOnline, lastSeen: p.lastSeen };
+  };
+  for (const viewerId of sockets.keys()) {
+    if (viewerId === userId) continue;
+    const set = sockets.get(viewerId);
+    if (!set) continue;
+    const payload = payloadFor(viewerId);
+    set.forEach((sid) => io.to(sid).emit('presence', payload));
+  }
 }
 
 /* Adapter the moderation engine uses for realtime + pushes (kept tiny so
@@ -5051,13 +5302,13 @@ function socketFailure(e) {
   return { error: 'Something went wrong. Please try again.' };
 }
 
-io.on('connection', (socket) => {
+  io.on('connection', (socket) => {
   const uid = socket.userId;
   if (!sockets.has(uid)) sockets.set(uid, new Set());
   sockets.get(uid).add(socket.id);
 
   db.prepare('UPDATE users SET is_online = 1, last_seen = ? WHERE id = ?').run(now(), uid);
-  io.emit('presence', { userId: uid, isOnline: true, lastSeen: now() });
+  broadcastPresence(uid, true);
 
   // deliver receipts for anything pending
   const pending = db
@@ -5423,13 +5674,29 @@ io.on('connection', (socket) => {
     } catch { /* presence events are best-effort */ }
   });
 
+  // Reactions are member-scoped: a user who only knows a message id must not
+  // be able to write rows into (or emit updates to) a chat they are not in.
+  // The emoji is validated to keep arbitrary junk out of the DB and payloads.
+  const reactTimes = []; // per-socket sliding window
   socket.on('message:react', ({ messageId, emoji }) => {
-    const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
-    if (!m) return;
-    const existing = db.prepare('SELECT emoji FROM reactions WHERE message_id = ? AND user_id = ?').get(messageId, uid);
-    if (existing && existing.emoji === emoji) db.prepare('DELETE FROM reactions WHERE message_id = ? AND user_id = ?').run(messageId, uid);
-    else db.prepare('INSERT OR REPLACE INTO reactions (message_id, user_id, emoji) VALUES (?,?,?)').run(messageId, uid, emoji);
-    emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(m, viewer));
+    try {
+      const t = now();
+      while (reactTimes.length && t - reactTimes[0] > 10000) reactTimes.shift();
+      if (reactTimes.length >= 25) return; // burst guard: 25 reactions / 10s
+      const m = db.prepare('SELECT * FROM messages WHERE id = ?').get(String(messageId || ''));
+      if (!m) return;
+      const isMember = db.prepare('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?').get(m.chat_id, uid);
+      if (!isMember) return;
+      const emojiText = String(emoji || '');
+      if (!emojiText || emojiText.length > 16) return;
+      reactTimes.push(t);
+      const existing = db.prepare('SELECT emoji FROM reactions WHERE message_id = ? AND user_id = ?').get(m.id, uid);
+      if (existing && existing.emoji === emojiText) db.prepare('DELETE FROM reactions WHERE message_id = ? AND user_id = ?').run(m.id, uid);
+      else db.prepare('INSERT OR REPLACE INTO reactions (message_id, user_id, emoji) VALUES (?,?,?)').run(m.id, uid, emojiText);
+      emitToChat(m.chat_id, 'message:updated', (viewer) => hydrateMessage(m, viewer));
+    } catch (e) {
+      console.error('[socket handler] message:react', e?.message);
+    }
   });
 
   // Delete a message. `scope`:
@@ -5573,7 +5840,7 @@ io.on('connection', (socket) => {
       if (!set.size) {
         sockets.delete(uid);
         db.prepare('UPDATE users SET is_online = 0, last_seen = ? WHERE id = ?').run(now(), uid);
-        io.emit('presence', { userId: uid, isOnline: false, lastSeen: now() });
+        broadcastPresence(uid, false);
         // Hang up any in-progress call for a user whose last tab just closed —
         // otherwise the other side rings/talks into a call that's already gone.
         const callId = activeCalls.get(uid);

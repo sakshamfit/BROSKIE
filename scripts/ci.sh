@@ -19,6 +19,9 @@ echo "  ✓ all server files parse"
 echo "━━━ [3/5] server: test suites ━━━"
 (cd server && \
   npm run test:data-dir           && \
+  npm run test:hardening          && \
+  npm run test:e2e-journey        && \
+  npm run test:songs             && \
   npm run test:message-state      && \
   npm run test:chat-history       && \
   npm run test:offline-messaging  && \
@@ -36,7 +39,7 @@ echo "━━━ [4/6] app: install deps ━━━"
 (cd app && npm ci --no-audit --no-fund)
 
 echo "━━━ [5/6] app: image editor unit tests ━━━"
-(cd app && npm run test:image-editor)
+(cd app && npm run test:image-editor && npm run test:chat-inbox && node --test scripts/chat-anchor.test.mjs)
 
 echo "━━━ [6/6] app: production web bundle ━━━"
 (cd app && CI=true npx expo export --platform web --output-dir dist)

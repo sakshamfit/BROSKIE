@@ -188,6 +188,19 @@ async function getBundle(argPath) {
 
     // long-press a bubble → the action menu must open
     if (inThread) {
+      // Bottom-anchored chat list (see ConversationScreen): the newest
+      // message must render immediately and NO programmatic corrective
+      // scroll may have happened anywhere in the thread — the old build
+      // rendered from the top and scrollToEnd'd on content-size changes,
+      // which users saw as "chat opens at the top, then scrolls down".
+      // (jsdom has no layout engine, so position assertions live in the
+      // source-level regression test instead: scripts/check-chat-anchor.mjs)
+      const touched = [...window.document.querySelectorAll('div')]
+        .filter((el) => /overflow(-y)?:\s*(auto|scroll)/.test(el.getAttribute('style') || ''))
+        .some((el) => (el.scrollTop ?? 0) > 1);
+      check('no corrective scroll ran while opening the chat', !touched);
+      check('newest message is rendered', /Message 2/.test(bodyText()));
+
       const bubble = [...window.document.querySelectorAll('div')]
         .find((el) => (el.textContent || '').trim() === 'Try long-pressing this bubble.');
       // Synthesised long-press: hold past delayLongPress, then release.

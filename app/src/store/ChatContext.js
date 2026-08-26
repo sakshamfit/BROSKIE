@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { io } from 'socket.io-client';
 import { SOCKET_URL, api } from '../api';
 import { useAuth } from './AuthContext';
@@ -985,6 +985,10 @@ export function ChatProvider({ children }) {
     if (!RTC_SUPPORTED) return;
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // iOS Safari mints AudioContexts in the suspended state until a user
+      // gesture resumes one. Best effort: try to resume, stay silent if the
+      // browser refuses (the in-app ring UI still shows).
+      if (ctx.state === 'suspended' && typeof ctx.resume === 'function') ctx.resume().catch(() => {});
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.frequency.value = 440;
@@ -1001,14 +1005,51 @@ export function ChatProvider({ children }) {
     }
   };
 
+  // Media acquired inside the user gesture (Accept/Call tap) — reused by
+  // ensurePeerConnection so the browser prompts exactly once, synchronously
+  // from the tap. iOS Safari and Android Chrome are unreliable at showing the
+  // microphone/camera prompt from a socket callback; iOS can stall the very
+  // first prompt entirely when it is requested outside a gesture.
+  const prewarmedMediaRef = useRef(null); // { type, stream }
+
+  const takePrewarmedMedia = useCallback((type) => {
+    const held = prewarmedMediaRef.current;
+    if (held && held.stream && (type === 'video' ? held.type === 'video' : true)) {
+      prewarmedMediaRef.current = null;
+      return held.stream;
+    }
+    return null;
+  }, []);
+
+  /** Grab mic/camera ahead of the signalling round-trip. Call from the
+   * Accept/Call button handlers so the permission prompt lives inside the
+   * gesture. Errors carry a user-safe message (see webrtc/rtc.js). */
+  const prewarmCallMedia = useCallback(async (type) => {
+    if (Platform.OS !== 'web') return null;
+    if (!RTC_SUPPORTED) throw new Error('Calling is not supported on this device');
+    const existing = prewarmedMediaRef.current;
+    if (existing?.stream && (type === 'video' ? existing.type === 'video' : true)) return existing.stream;
+    const stream = await RTC.getUserMedia({ audio: true, video: type === 'video' });
+    // A previous prewarm may hold stale tracks (e.g. audio-only then video).
+    if (existing?.stream) existing.stream.getTracks().forEach((t) => { try { t.stop(); } catch {} });
+    // The user may have cancelled the call while the permission prompt was
+    // still up — never hold a live stream without an active call.
+    if (!callRef.current || callRef.current.status === 'ended') {
+      stream.getTracks().forEach((t) => { try { t.stop(); } catch {} });
+      return null;
+    }
+    prewarmedMediaRef.current = { type, stream };
+    return stream;
+  }, []);
+
   const ensurePeerConnection = useCallback(async (callId, type) => {
     if (pcRef.current) return pcRef.current;
     if (!RTC_SUPPORTED) throw new Error('Calling is not supported on this device');
 
-    const stream = await RTC.getUserMedia({
-      audio: true,
-      video: type === 'video',
-    });
+    // Prefer the stream acquired inside the user gesture (web); fall back to
+    // requesting it now (native asks via PermissionsAndroid, web re-prompts).
+    const stream = takePrewarmedMedia(type)
+      || await RTC.getUserMedia({ audio: true, video: type === 'video' });
     setLocalStream(stream);
     setMicOn(true);
     setCamOn(type === 'video');
@@ -1038,18 +1079,30 @@ export function ChatProvider({ children }) {
         return prev;
       });
     };
+    // Recovery + clear failure instead of an endless "Connecting…" state.
+    // Mobile-carrier networks without a TURN relay often end here — surface
+    // it honestly so the user knows to try Wi-Fi.
     pc.oniceconnectionstatechange = () => {
+      const state = pc.iceConnectionState;
       setCall((prev) => {
         if (prev && prev.id === callId) {
-          return { ...prev, iceConnectionState: pc.iceConnectionState };
+          return { ...prev, iceConnectionState: state };
         }
         return prev;
       });
+      if (state === 'failed') {
+        try { pc.restartIce?.(); } catch {}
+        setTimeout(() => {
+          if (pcRef.current === pc && pc.iceConnectionState === 'failed') {
+            endFailedCall(callId, 'The network blocked the call (no direct route). Try Wi-Fi or a different network.');
+          }
+        }, 4000);
+      }
     };
 
     pcRef.current = pc;
     return pc;
-  }, []);
+  }, [takePrewarmedMedia]);
 
   const startWebRTC = useCallback(async (callId, isCaller, type) => {
     try {
@@ -1081,6 +1134,12 @@ export function ChatProvider({ children }) {
       }
       pcRef.current = null;
     }
+    // Prewarmed gesture media is dropped with the call — a stale held stream
+    // would keep the mic/camera light on and block the next getUserMedia.
+    if (prewarmedMediaRef.current?.stream) {
+      prewarmedMediaRef.current.stream.getTracks().forEach((t) => { try { t.stop(); } catch {} });
+    }
+    prewarmedMediaRef.current = null;
     setLocalStream((prev) => {
       if (prev) {
         prev.getTracks().forEach((t) => {
@@ -1092,6 +1151,36 @@ export function ChatProvider({ children }) {
     setRemoteStream(null);
     pendingCandidates.current = [];
   }, []);
+
+  /** Fail the current call cleanly (WebRTC could not connect). */
+  const endFailedCall = useCallback((callId, message) => {
+    socketRef.current?.emit('call:hangup', { callId });
+    teardownWebRTC();
+    setCall((prev) => (prev && prev.id === callId && prev.status !== 'ended'
+      ? { ...prev, status: 'ended', endedReason: 'failed', error: message }
+      : prev));
+    setTimeout(() => setCall((prev) => (prev && prev.status === 'ended' ? null : prev)), 3500);
+  }, [teardownWebRTC]);
+
+  // Connecting watchdog: if ICE never leaves checking/disconnected within
+  // 25s of going ongoing, fail the call with a clear message instead of
+  // leaving both callers stuck on "Connecting…" (classic no-TURN symptom).
+  const watchdogRef = useRef(null);
+  useEffect(() => {
+    if (!call || call.status !== 'ongoing') return undefined;
+    if (watchdogRef.current?.callId === call.id) return undefined;
+    clearTimeout(watchdogRef.current?.timer);
+    const timer = setTimeout(() => {
+      const pc = pcRef.current;
+      const state = pc?.connectionState || pc?.iceConnectionState;
+      if (callRef.current?.id === call.id && callRef.current?.status === 'ongoing'
+        && state && state !== 'connected' && state !== 'closed') {
+        endFailedCall(call.id, "Couldn't complete the connection. Mobile networks often need a stronger signal or Wi-Fi.");
+      }
+    }, 25000);
+    watchdogRef.current = { callId: call.id, timer };
+    return () => clearTimeout(timer);
+  }, [call?.status, call?.id, endFailedCall]);
 
   /** Start an outgoing call to `calleeId` in `chatId`. */
   const startCall = useCallback((chatId, calleeId, type = 'audio') => {
@@ -1119,35 +1208,71 @@ export function ChatProvider({ children }) {
       startedAt: Date.now(),
     });
 
-    socketRef.current?.emit('call:invite', { chatId, calleeId, type }, (res) => {
-      if (res?.error) {
-        setCall({ id: 'error', chatId, type, direction: 'outgoing', status: 'ended', endedReason: res.busy ? 'busy' : 'failed', error: res.error });
-        setTimeout(() => setCall(null), 3500);
-        return;
-      }
-      setCall({ id: res.call.id, chatId, type, direction: 'outgoing', status: 'ringing', with: res.call.with, startedAt: res.call.startedAt });
-    });
-  }, [teardownWebRTC]);
+    // Mobile web: acquire the mic/camera NOW, inside this tap, and only then
+    // invite. Requesting it later (from the call:accepted socket event) can
+    // silently stall on iOS Safari; and inviting before media is confirmed
+    // would ring the other side for a call that can never start.
+    if (Platform.OS === 'web') {
+      prewarmCallMedia(type)
+        .catch((e) => {
+          setCall({ id: 'perm', chatId, type, direction: 'outgoing', status: 'ended', endedReason: 'failed', error: e.message });
+          setTimeout(() => setCall(null), 4200);
+          return null;
+        })
+        .then((stream) => { if (stream) emitInvite(); });
+    } else {
+      emitInvite();
+    }
+
+    function emitInvite() {
+      socketRef.current?.emit('call:invite', { chatId, calleeId, type }, (res) => {
+        if (res?.error) {
+          setCall({ id: 'error', chatId, type, direction: 'outgoing', status: 'ended', endedReason: res.busy ? 'busy' : 'failed', error: res.error });
+          setTimeout(() => setCall(null), 3500);
+          return;
+        }
+        setCall({ id: res.call.id, chatId, type, direction: 'outgoing', status: 'ringing', with: res.call.with, startedAt: res.call.startedAt });
+      });
+    }
+  }, [teardownWebRTC, prewarmCallMedia]);
 
   const acceptCall = useCallback(() => {
     if (!call) return;
     stopRingtone();
     teardownWebRTC();
-    socketRef.current?.emit('call:accept', { callId: call.id }, async (res) => {
-      if (res?.error) { setCall(null); return; }
-      callTypeRef.current = call.type;
-      setCall((prev) => (prev ? { ...prev, status: 'connecting' } : prev));
-      // Callee waits for the caller's offer (see socket.on('call:offer') above)
-      // but still needs its own media/peer connection ready to receive it.
-      try {
-        await ensurePeerConnection(call.id, call.type);
-      } catch (e) {
-        socketRef.current?.emit('call:hangup', { callId: call.id });
-        teardownWebRTC();
-        setCall((prev) => (prev ? { ...prev, status: 'ended', endedReason: 'failed', error: e.message } : prev));
-      }
+    // Mobile web: ask for the mic/camera inside this Accept tap, before the
+    // socket round-trip (see prewarmCallMedia — iOS stalls prompts that are
+    // requested from a socket callback).
+    const prewarm = Platform.OS === 'web'
+      ? prewarmCallMedia(call.type).catch((e) => {
+          setCall((prev) => (prev ? { ...prev, status: 'ended', endedReason: 'failed', error: e.message } : prev));
+          setTimeout(() => setCall((prev) => (prev && prev.status === 'ended' ? null : prev)), 4200);
+          // Tell the caller we bailed — otherwise their side keeps ringing.
+          if (call.id !== 'initiating' && call.id !== 'error' && call.id !== 'unsupported') {
+            socketRef.current?.emit('call:decline', { callId: call.id });
+          }
+          return null;
+        })
+      : Promise.resolve(null);
+
+    prewarm.then((stream) => {
+      if (!stream && Platform.OS === 'web') return; // prewarm failed — call already marked failed
+      socketRef.current?.emit('call:accept', { callId: call.id }, async (res) => {
+        if (res?.error) { setCall(null); return; }
+        callTypeRef.current = call.type;
+        setCall((prev) => (prev ? { ...prev, status: 'connecting' } : prev));
+        // Callee waits for the caller's offer (see socket.on('call:offer') above)
+        // but still needs its own media/peer connection ready to receive it.
+        try {
+          await ensurePeerConnection(call.id, call.type);
+        } catch (e) {
+          socketRef.current?.emit('call:hangup', { callId: call.id });
+          teardownWebRTC();
+          setCall((prev) => (prev ? { ...prev, status: 'ended', endedReason: 'failed', error: e.message } : prev));
+        }
+      });
     });
-  }, [call, ensurePeerConnection, teardownWebRTC]);
+  }, [call, ensurePeerConnection, teardownWebRTC, prewarmCallMedia]);
 
   const declineCall = useCallback(() => {
     if (!call) return;

@@ -26,7 +26,10 @@
     "test:gc": "node test-gc-isolation.js",
     "test:chat-inbox": "node test-chat-inbox.js",
     "test:features": "node test-features.js",
-    "test:data-dir": "node test-data-dir.js"
+    "test:data-dir": "node test-data-dir.js",
+    "test:hardening": "node test-hardening.js",
+    "test:songs": "node test-songs.js",
+    "test:e2e-journey": "node test-e2e-journey.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",

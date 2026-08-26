@@ -118,6 +118,13 @@ web-only for now — see "Notes & limits" below.
 
 ## Features
 
+**Song attachments** — the post and status composers can attach a song via the iTunes
+Search API (free, no key) with an automatic Deezer fallback; results are proxied, cached
+and rate-limited through the backend (`/api/songs/search`, `/api/songs/:id`). ~30-second
+previews play inline anywhere the song appears (feed, post detail, status) — one preview
+at a time, with a progress bar, and playback stops when the card scrolls off-screen.
+**Previews only, by design** — full-track playback would require a licensing agreement
+with a music provider and is intentionally not implemented.
 **Accounts & profile** — register/login with a unique username + password (phone is
 optional, for display only), bcrypt hashing, JWT sessions persisted via AsyncStorage,
 editable name/username/about, auto-login on relaunch, and password-confirmed permanent
