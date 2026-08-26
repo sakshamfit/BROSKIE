@@ -136,6 +136,10 @@ export function ChatProvider({ children }) {
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [speakerOn, setSpeakerOn] = useState(true);
+  // Web only: output device the remote <audio>/<video> is routed to via
+  // setSinkId. 'default' = loud speaker; anything else is a private output
+  // (headphones / earphones / Bluetooth) chosen by toggleSpeaker.
+  const [remoteSinkId, setRemoteSinkId] = useState('default');
   const pcRef = useRef(null);
   const pendingCandidates = useRef([]);
   const ringtoneRef = useRef(null);
@@ -1053,7 +1057,13 @@ export function ChatProvider({ children }) {
     setLocalStream(stream);
     setMicOn(true);
     setCamOn(type === 'video');
+    // Every call starts on the loud speaker (phone default); the user can
+    // switch to earphone/headphone output mid-call.
     setSpeakerOn(true);
+    setRemoteSinkId('default');
+    if (Platform.OS !== 'web' && typeof RTC.setSpeakerphoneOn === 'function') {
+      RTC.setSpeakerphoneOn(true).catch(() => {});
+    }
 
     const pc = RTC.createPeerConnection({ iceServers: ICE_SERVERS });
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -1309,9 +1319,24 @@ export function ChatProvider({ children }) {
     });
   }, [localStream]);
 
+  // Phone-style speaker toggle. It routes the REMOTE audio — it never mutes:
+  //   speaker on  -> loud speaker (web: default output; native: speakerphone)
+  //   speaker off -> earphone / headphone / Bluetooth output when one exists
+  // On web the chosen device is stored in remoteSinkId and applied to the
+  // <audio>/<video> element by CallVideo (setSinkId). On native the audio
+  // session itself is switched (rtc.setSpeakerphoneOn).
   const toggleSpeaker = useCallback(() => {
-    setSpeakerOn((prev) => !prev);
-  }, []);
+    const next = !speakerOn;
+    setSpeakerOn(next);
+    if (Platform.OS === 'web') {
+      RTC.listAudioOutputs().then((outputs) => {
+        const privateId = RTC.pickPrivateOutput(outputs);
+        setRemoteSinkId(next ? 'default' : (privateId || 'default'));
+      });
+    } else if (typeof RTC.setSpeakerphoneOn === 'function') {
+      RTC.setSpeakerphoneOn(next).catch(() => {});
+    }
+  }, [speakerOn]);
 
   const switchCamera = useCallback(async () => {
     if (!localStream) return;
@@ -1852,8 +1877,8 @@ export function ChatProvider({ children }) {
   }), [gcChats, gcMessages, gcMessagesLoaded, gcMessagesLoading, gcMessageErrors, gcTyping, gcCursors, connected]);
   const realtimeValue = useMemo(() => ({ typing, connected, activityUnread }), [typing, connected, activityUnread]);
   const callStateValue = useMemo(() => ({
-    call, localStream, remoteStream, micOn, camOn, speakerOn, callSupported: RTC_SUPPORTED,
-  }), [call, localStream, remoteStream, micOn, camOn, speakerOn]);
+    call, localStream, remoteStream, micOn, camOn, speakerOn, remoteSinkId, callSupported: RTC_SUPPORTED,
+  }), [call, localStream, remoteStream, micOn, camOn, speakerOn, remoteSinkId]);
   const actionsValue = useMemo(() => ({
     setInboxFilter, refreshChatRequests, refreshChats, refreshActivity, loadMessages, loadOlderMessages,
     sendMessage, markRead, setTypingState, react, deleteMessage, removeMessageLocal, editMessage,

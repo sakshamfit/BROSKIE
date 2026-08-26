@@ -43,6 +43,37 @@ export async function getUserMedia(constraints) {
   return mediaDevices.getUserMedia(constraints);
 }
 
+/* Real handset routing on native. The browser twin (rtc.js) routes the
+ * remote <audio>/<video> element via setSinkId; native has no such element,
+ * so the audio session itself switches:
+ *   Android -> RTCView.setAudioSource('speaker' | 'earpiece')
+ *   iOS     -> RTCView.setSpeakerphoneOn(true | false)
+ * Both are guarded: older or stripped react-native-webrtc builds simply keep
+ * the default routing instead of crashing the call. */
+export function setSpeakerphoneOn(on) {
+  try {
+    if (Platform.OS === 'android' && typeof RTCView.setAudioSource === 'function') {
+      return Promise.resolve(RTCView.setAudioSource(on ? 'speaker' : 'earpiece'));
+    }
+    if (Platform.OS === 'ios' && typeof RTCView.setSpeakerphoneOn === 'function') {
+      return Promise.resolve(RTCView.setSpeakerphoneOn(on));
+    }
+  } catch (e) {
+    console.warn('[WebRTC] speaker routing unavailable:', e);
+  }
+  return Promise.resolve();
+}
+
+// Interface parity with the web adapter — native routing is session-wide,
+// there is no per-element sink to enumerate or pick.
+export const audioRoutingSupported = false;
+export async function listAudioOutputs() {
+  return [];
+}
+export function pickPrivateOutput() {
+  return null;
+}
+
 export function createPeerConnection(config) {
   return new RTCPeerConnection(config);
 }
