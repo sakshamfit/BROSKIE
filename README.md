@@ -122,8 +122,10 @@ web-only for now — see "Notes & limits" below.
 Search API (free, no key) plus Deezer in parallel (so tracks missing from one store still
 show up). Results are proxied, cached, vibe-ranked from your favourite artists / recents,
 and rate-limited through the backend (`/api/songs/search`, `/api/songs/browse`, `/api/songs/:id`). ~30-second
-previews play inline anywhere the song appears (feed, post detail, status) — one preview
-at a time, with a progress bar, and playback stops when the card scrolls off-screen.
+previews play like Instagram: a small music sticker on the post or status (not a card
+underneath), autoplay when a post scrolls into view or a status opens, and a mute
+control that works on web, iOS and Android. One preview at a time; it stops when the
+post leaves the screen or the status closes.
 **Previews only, by design** — full-track playback would require a licensing agreement
 with a music provider and is intentionally not implemented.
 **Accounts & profile** — register/login with a unique username + password (phone is
