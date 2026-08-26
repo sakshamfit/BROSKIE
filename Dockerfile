@@ -12,7 +12,12 @@
 FROM node:24.18.0-bookworm-slim AS web-build
 WORKDIR /app/app
 
-COPY app/package.json app/package-lock.json ./
+# .npmrc must be present BEFORE `npm ci`: npm reads install config from the
+# project directory, and a lockfile is only valid for the config it was
+# generated with. Installing without it silently uses different resolution
+# rules than `npm install` did locally, and `npm ci` then refuses the lockfile
+# ("package.json and package-lock.json are not in sync").
+COPY app/package.json app/package-lock.json app/.npmrc ./
 RUN npm ci --no-audit --no-fund
 
 COPY app/ ./
