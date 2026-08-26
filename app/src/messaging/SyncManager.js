@@ -2,6 +2,53 @@ import { api } from '../api';
 import { mergeMessageLists, messageTime } from './messageState';
 
 const PAGE = 50;
+
+async function tryDecryptBatch(messages, getChats) {
+  if (!messages || !messages.length) return messages;
+  try {
+    const { initSodium } = await import('../e2ee/crypto');
+    await initSodium();
+    const { decryptMessage } = await import('../e2ee/messageCrypto');
+    const out = [];
+    for (const msg of messages) {
+      if (!msg.isEncrypted) { out.push(msg); continue; }
+      try {
+        const chat = getChats ? getChats().find(c => c.id === msg.chatId) : null;
+        const plain = await decryptMessage(msg, chat);
+        if (plain == null) {
+          out.push({ ...msg, body: '🔒 Encrypted message — unable to decrypt', _decryptFailed: true });
+        } else {
+          // Handle media payload inside decrypted body
+          try {
+            const { parseEncryptedMediaPayload } = await import('../e2ee/mediaCrypto');
+            const mediaPayload = parseEncryptedMediaPayload(plain);
+            if (mediaPayload) {
+              out.push({
+                ...msg,
+                body: mediaPayload.body || '',
+                mediaUrl: mediaPayload.mediaUrl || msg.mediaUrl,
+                _mediaKey: mediaPayload.mediaKey,
+                _mediaNonce: mediaPayload.mediaNonce,
+                _decrypted: true,
+                _decryptedBody: plain,
+              });
+            } else {
+              out.push({ ...msg, body: plain, _decrypted: true, _decryptedBody: plain });
+            }
+          } catch {
+            out.push({ ...msg, body: plain, _decrypted: true, _decryptedBody: plain });
+          }
+        }
+      } catch (e) {
+        console.warn('[e2ee] decrypt batch failed', e.message);
+        out.push({ ...msg, body: '🔒 Encrypted message — decryption error', _decryptFailed: true });
+      }
+    }
+    return out;
+  } catch {
+    return messages;
+  }
+}
 // Global catch-up sync is deliberately lighter than per-chat paging: on a
 // flaky, low-bandwidth connection the socket reconnects often, and every
 // reconnect must not re-download a large backlog. A smaller page, fewer
@@ -29,7 +76,7 @@ function applyCursorFromList(store, chatId, list, { hasMore } = {}) {
   store.touchGlobalCursorFromMessages(list);
 }
 
-export function createSyncManager({ store, outbox, connectivity }) {
+export function createSyncManager({ store, outbox, connectivity, getChats }) {
   let pulling = false;
   let pullAgain = false;
   let disposed = false;
@@ -60,7 +107,8 @@ export function createSyncManager({ store, outbox, connectivity }) {
     let cursor = after;
     for (let i = 0; i < MAX_SYNC_PAGES; i += 1) {
       const page = await api.syncMessages({ after: cursor, limit: SYNC_PAGE });
-      const messages = Array.isArray(page?.messages) ? page.messages : [];
+      let messages = Array.isArray(page?.messages) ? page.messages : [];
+      messages = await tryDecryptBatch(messages, getChats);
       const byChat = {};
       messages.forEach((message) => {
         (byChat[message.chatId] ||= []).push(message);
@@ -112,7 +160,8 @@ export function createSyncManager({ store, outbox, connectivity }) {
       let page;
       if (cursor?.after) {
         page = await api.messages(chatId, { after: cursor.after, afterId: cursor.afterId, limit: PAGE });
-        const incoming = Array.isArray(page?.messages) ? page.messages : [];
+        let incoming = Array.isArray(page?.messages) ? page.messages : [];
+        incoming = await tryDecryptBatch(incoming, getChats);
         if (incoming.length) {
           store.setMessages(chatId, mergeMessageLists(store.getMessages(chatId), incoming));
         } else {
@@ -120,7 +169,8 @@ export function createSyncManager({ store, outbox, connectivity }) {
         }
       } else {
         page = await api.messages(chatId, { limit: PAGE });
-        const incoming = Array.isArray(page?.messages) ? page.messages : [];
+        let incoming = Array.isArray(page?.messages) ? page.messages : [];
+        incoming = await tryDecryptBatch(incoming, getChats);
         store.setMessages(chatId, mergeMessageLists(store.getMessages(chatId), incoming));
         store.setCursor(chatId, { hasMore: !!page?.hasMore });
       }
@@ -152,7 +202,8 @@ export function createSyncManager({ store, outbox, connectivity }) {
       beforeId: oldest.id,
       limit: PAGE,
     });
-    const incoming = Array.isArray(page?.messages) ? page.messages : [];
+    let incoming = Array.isArray(page?.messages) ? page.messages : [];
+    incoming = await tryDecryptBatch(incoming, getChats);
     if (incoming.length) {
       store.setMessages(chatId, mergeMessageLists(store.getMessages(chatId), incoming));
     }

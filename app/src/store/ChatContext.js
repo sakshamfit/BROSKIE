@@ -9,6 +9,7 @@ import * as RTC from '../webrtc/rtc';
 import TextOperation from '../ot/TextOperation';
 import { OTManager } from '../ot/OTManager';
 import { INBOX_FILTERS, isInboxFilter } from '../chatInbox';
+import { initSodium, getChatKey, fetchAndUnwrapChatKey, decryptMessage as decryptE2EEMsg, fetchPublicKey, clearPublicKeyCache } from '../e2ee';
 
 // Keep the historical `useChat()` API for compatibility, but publish focused
 // contexts as well. A socket typing event or a call timer must not re-render
@@ -44,6 +45,51 @@ const sortChats = (list) =>
     ((b.lastMessage?.createdAt || b.lastMessage?.clientCreatedAt || b.updatedAt || 0)
       - (a.lastMessage?.createdAt || a.lastMessage?.clientCreatedAt || a.updatedAt || 0))
   );
+
+// --- E2EE helpers ---
+
+async function decryptMessageIfNeeded(rawMsg, chat) {
+  if (!rawMsg) return rawMsg;
+  if (!rawMsg.isEncrypted) return rawMsg;
+  try {
+    await initSodium();
+    const decryptedBody = await decryptE2EEMsg(rawMsg, chat);
+    if (decryptedBody == null) {
+      // Decryption failed — keep ciphertext but mark as failed
+      return { ...rawMsg, body: '🔒 Encrypted message — unable to decrypt (keys missing or changed)', _decryptFailed: true, _decrypted: false };
+    }
+    // Handle encrypted media payload
+    try {
+      const { parseEncryptedMediaPayload } = await import('../e2ee/mediaCrypto');
+      const mediaPayload = parseEncryptedMediaPayload(decryptedBody);
+      if (mediaPayload) {
+        return {
+          ...rawMsg,
+          body: mediaPayload.body || '',
+          mediaUrl: mediaPayload.mediaUrl || rawMsg.mediaUrl,
+          _mediaKey: mediaPayload.mediaKey,
+          _mediaNonce: mediaPayload.mediaNonce,
+          _decrypted: true,
+          _decryptedBody: decryptedBody,
+        };
+      }
+    } catch {}
+    return { ...rawMsg, body: decryptedBody, _decrypted: true, _decryptedBody: decryptedBody };
+  } catch (e) {
+    console.warn('[e2ee] decryptMessageIfNeeded failed', e.message);
+    return { ...rawMsg, body: '🔒 Encrypted message — decryption error', _decryptFailed: true };
+  }
+}
+
+async function decryptMessagesBatch(msgs, getChat) {
+  const out = [];
+  for (const msg of msgs) {
+    const chat = getChat ? getChat(msg.chatId) : null;
+    const dec = await decryptMessageIfNeeded(msg, chat);
+    out.push(dec);
+  }
+  return out;
+}
 
 // WebRTC media comes from the platform adapter in src/webrtc: the browser's
 // native API on web, react-native-webrtc on Android/iOS (added in Phase 3 —
@@ -275,8 +321,20 @@ export function ChatProvider({ children }) {
     const engine = createMessagingEngine({
       userId,
       getSocket: () => socketRef.current,
+      getChats: () => engineRef.current?.store?.getChats() || chatsRef.current || [],
     });
     engineRef.current = engine;
+
+    // E2EE: init sodium and ensure keys exist
+    (async () => {
+      try {
+        await initSodium();
+        const { getOrCreateIdentityKeyPair } = await import('../e2ee/keyStore');
+        await getOrCreateIdentityKeyPair(userId);
+      } catch (e) {
+        console.warn('[e2ee] init failed in ChatProvider', e.message);
+      }
+    })();
 
     // OT Manager for collaborative editing
     const otManager = new OTManager({
@@ -597,53 +655,84 @@ export function ChatProvider({ children }) {
     socket.on('account:deleted', () => logout());
     socket.on('settings:updated', ({ settings }) => applySettings(settings));
 
-    socket.on('message:new', ({ message, tempId }) => {
+    socket.on('message:new', async ({ message, tempId }) => {
       // Route by explicit conversation type: GC messages land in the GC
       // store ONLY — they never touch direct chat state.
       if (message?.conversationType === 'gc' || gcIdsRef.current.has(message?.chatId)) {
-        applyIncomingGCMessage(message, tempId);
+        // E2EE decrypt for GC as well
+        try {
+          const chat = gcStoreRef.current?.getChats()?.find(c => c.id === message.chatId) || chatsRef.current?.find(c => c.id === message.chatId);
+          const dec = await decryptMessageIfNeeded(message, chat);
+          applyIncomingGCMessage(dec, tempId);
+        } catch {
+          applyIncomingGCMessage(message, tempId);
+        }
         return;
       }
+      // E2EE: decrypt if needed
+      let finalMsg = message;
+      try {
+        const chat = chatsRef.current?.find(c => c.id === message.chatId) || null;
+        finalMsg = await decryptMessageIfNeeded(message, chat);
+      } catch {}
       const engine = engineRef.current;
-      if (engine) engine.repository.applyIncoming(message, tempId);
+      if (engine) engine.repository.applyIncoming(finalMsg, tempId);
       else {
         setMessages((prev) => {
-          const list = prev[message.chatId] || [];
+          const list = prev[finalMsg.chatId] || [];
           const replaced = tempId ? list.find((m) => m.id === tempId) : null;
           const withoutTemp = replaced ? list.filter((m) => m.id !== tempId) : list;
-          if (withoutTemp.some((m) => m.id === message.id)) return prev;
-          return { ...prev, [message.chatId]: [...withoutTemp, { ...message, _new: !replaced }] };
+          if (withoutTemp.some((m) => m.id === finalMsg.id)) return prev;
+          return { ...prev, [finalMsg.chatId]: [...withoutTemp, { ...finalMsg, _new: !replaced }] };
         });
       }
-      setMessagesLoaded((prev) => ({ ...prev, [message.chatId]: true }));
+      setMessagesLoaded((prev) => ({ ...prev, [finalMsg.chatId]: true }));
       setMessageErrors((prev) => {
-        if (!prev[message.chatId]) return prev;
+        if (!prev[finalMsg.chatId]) return prev;
         const next = { ...prev };
-        delete next[message.chatId];
+        delete next[finalMsg.chatId];
         return next;
       });
     });
 
     // Dedicated GC realtime event (server also sends message:new for older
     // clients; dedupe by message id is harmless).
-    socket.on('gc:message', ({ message, tempId }) => {
-      if (message) applyIncomingGCMessage(message, tempId);
+    socket.on('gc:message', async ({ message, tempId }) => {
+      if (!message) return;
+      try {
+        const chat = gcStoreRef.current?.getChats()?.find(c => c.id === message.chatId) || chatsRef.current?.find(c => c.id === message.chatId);
+        const dec = await decryptMessageIfNeeded(message, chat);
+        applyIncomingGCMessage(dec, tempId);
+      } catch {
+        applyIncomingGCMessage(message, tempId);
+      }
     });
 
-    socket.on('message:updated', (message) => {
+    socket.on('message:updated', async (message) => {
       if (message?.conversationType === 'gc' || gcIdsRef.current.has(message?.chatId)) {
-        gcStoreRef.current?.upsertMessage(message.chatId, message);
+        try {
+          const chat = gcStoreRef.current?.getChats()?.find(c => c.id === message.chatId) || chatsRef.current?.find(c => c.id === message.chatId);
+          const dec = await decryptMessageIfNeeded(message, chat);
+          gcStoreRef.current?.upsertMessage(dec.chatId, dec);
+        } catch {
+          gcStoreRef.current?.upsertMessage(message.chatId, message);
+        }
         return;
       }
+      let finalMsg = message;
+      try {
+        const chat = chatsRef.current?.find(c => c.id === message.chatId) || null;
+        finalMsg = await decryptMessageIfNeeded(message, chat);
+      } catch {}
       const engine = engineRef.current;
       if (engine) {
-        engine.repository.applyUpdated(message);
+        engine.repository.applyUpdated(finalMsg);
         return;
       }
       setMessages((prev) => {
-        const list = prev[message.chatId];
+        const list = prev[finalMsg.chatId];
         if (!list) return prev;
-        return { ...prev, [message.chatId]: list.map((m) => (m.id === message.id ? message : m)) };
+        return { ...prev, [finalMsg.chatId]: list.map((m) => (m.id === finalMsg.id ? finalMsg : m)) };
       });
     });
 
@@ -775,6 +864,48 @@ export function ChatProvider({ children }) {
       if (engine) engine.store.setChats(engine.store.getChats().map(patch));
       else setChats((prev) => prev.map(patch));
       chatThemeListeners.current.forEach((fn) => fn('chat:theme', payload));
+    });
+
+    // E2EE: encryption enabled/disabled and keys updated
+    socket.on('chat:encryption-enabled', async (payload) => {
+      const { chatId } = payload || {};
+      if (!chatId) return;
+      // Refetch chat summary and try to fetch our wrapped key
+      try {
+        const { fetchAndUnwrapChatKey } = await import('../e2ee/chatKeys');
+        await fetchAndUnwrapChatKey(chatId);
+      } catch {}
+      // Trigger chat list refresh
+      try {
+        const result = await api.chats();
+        if (Array.isArray(result?.chats)) {
+          const engine = engineRef.current;
+          if (engine) engine.store.setChats(result.chats, { fromServer: true });
+          else setChats(sortChats(result.chats.filter(c => c?.type !== 'gc')));
+        }
+      } catch {}
+    });
+    socket.on('chat:encryption-disabled', async (payload) => {
+      const { chatId } = payload || {};
+      if (!chatId) return;
+      try {
+        const result = await api.chats();
+        if (Array.isArray(result?.chats)) {
+          const engine = engineRef.current;
+          if (engine) engine.store.setChats(result.chats, { fromServer: true });
+          else setChats(sortChats(result.chats.filter(c => c?.type !== 'gc')));
+        }
+      } catch {}
+    });
+    socket.on('chat:encryption-keys-updated', async (payload) => {
+      const { chatId } = payload || {};
+      if (!chatId) return;
+      try {
+        const { fetchAndUnwrapChatKey } = await import('../e2ee/chatKeys');
+        await fetchAndUnwrapChatKey(chatId);
+      } catch (e) {
+        console.warn('[e2ee] keys-updated fetch failed', e.message);
+      }
     });
 
     socket.on('chat:request', (payload) => {
@@ -1751,32 +1882,72 @@ export function ChatProvider({ children }) {
     });
   }, []);
 
-  /** Edit one of my own text messages with OT. Resolves with the updated message. */
+  /** Edit one of my own text messages with OT. Resolves with the updated message.
+   *  E2EE: for encrypted chats, OT is not meaningful (server can't transform ciphertext).
+   *  Edits become last-write-wins: client re-encrypts full content.
+   */
   const editMessage = useCallback((messageId, body, options = {}) => {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const engine = engineRef.current;
       let oldBody = '';
       let baseVersion = options.baseVersion;
+      let chatId = null;
+      let isEncryptedMsg = false;
+      let chat = null;
 
       if (engine) {
         const all = engine.store.getAllMessagesCopy();
-        for (const list of Object.values(all)) {
+        for (const [cid, list] of Object.entries(all)) {
           const found = list.find(m => m.id === messageId);
           if (found) {
             oldBody = found.body || '';
             if (baseVersion == null) baseVersion = found.otVersion || 0;
+            chatId = cid;
+            isEncryptedMsg = !!found.isEncrypted;
             break;
           }
         }
       } else {
-        // Fallback search in state
-        for (const list of Object.values(messagesRef.current)) {
+        for (const [cid, list] of Object.entries(messagesRef.current)) {
           const found = list.find(m => m.id === messageId);
           if (found) {
             oldBody = found.body || '';
             if (baseVersion == null) baseVersion = found.otVersion || 0;
+            chatId = cid;
+            isEncryptedMsg = !!found.isEncrypted;
             break;
           }
+        }
+      }
+      if (chatId) {
+        chat = chatsRef.current?.find(c => c.id === chatId) || null;
+      }
+      const chatIsEncrypted = !!(chat && chat.isEncrypted) || isEncryptedMsg;
+
+      if (chatIsEncrypted) {
+        try {
+          await initSodium();
+          const { encryptEditedMessage } = await import('../e2ee/messageCrypto');
+          const enc = await encryptEditedMessage(body, chat);
+          socketRef.current?.emit('message:edit', {
+            messageId,
+            body: enc.body,
+            isEncrypted: true,
+            encryptionNonce: enc.nonce,
+            encryptionType: enc.type,
+          }, async (res) => {
+            if (res?.error) return reject(new Error(res.error));
+            // Decrypt server response for local state
+            try {
+              const dec = await decryptMessageIfNeeded(res.message, chat);
+              resolve(dec);
+            } catch {
+              resolve(res.message);
+            }
+          });
+          return;
+        } catch (e) {
+          return reject(new Error('Encryption failed for edit: ' + e.message));
         }
       }
 
@@ -1843,6 +2014,87 @@ export function ChatProvider({ children }) {
     return res.document;
   }, []);
 
+  // --- E2EE actions ---
+
+  const enableChatEncryption = useCallback(async (chatId) => {
+    const chat = chatsRef.current?.find(c => c.id === chatId);
+    if (!chat) throw new Error('Chat not found');
+    if (chat.isEncrypted) return chat;
+    await initSodium();
+    const { getChatKey, generateAndWrapChatKey, fetchAndUnwrapChatKey } = await import('../e2ee/chatKeys');
+    const { fetchPublicKeysBatch } = await import('../e2ee/messageCrypto');
+    // Get member ids
+    const memberIds = chat.members?.map(m => m.id) || [];
+    const pubKeysMap = await fetchPublicKeysBatch(memberIds);
+    // Check if we already have a key locally (e.g., re-enabling)
+    let existingKey = await getChatKey(chatId);
+    if (!existingKey) {
+      try {
+        existingKey = await fetchAndUnwrapChatKey(chatId);
+      } catch {}
+    }
+    let wrapped = [];
+    if (existingKey) {
+      // Wrap existing key for members who might be missing it
+      const { sealKey } = await import('../e2ee/crypto');
+      for (const uid of memberIds) {
+        const pk = pubKeysMap[uid];
+        if (!pk) continue;
+        try {
+          const sealed = await sealKey(existingKey, pk);
+          wrapped.push({ userId: uid, wrappedKey: sealed.wrappedKeyBase64, wrappedNonce: sealed.wrappedNonce });
+        } catch {}
+      }
+    } else {
+      // Generate new key and wrap
+      const result = await generateAndWrapChatKey(chatId, memberIds, pubKeysMap, user?.id);
+      wrapped = result.wrapped;
+    }
+    const res = await api.enableChatEncryption(chatId, wrapped, 1);
+    if (res?.chat) {
+      upsertChat(res.chat);
+    }
+    return res?.chat || null;
+  }, [user?.id, upsertChat]);
+
+  const createEncryptedGroupChat = useCallback(async ({ name, memberIds: mIds = [], avatar }) => {
+    await initSodium();
+    const { generateAndWrapChatKey } = await import('../e2ee/chatKeys');
+    const { fetchPublicKeysBatch } = await import('../e2ee/messageCrypto');
+    const allMemberIds = [...new Set([user?.id, ...mIds].filter(Boolean))];
+    const pubKeysMap = await fetchPublicKeysBatch(allMemberIds);
+    // We need to generate key first, but group doesn't exist yet — generate key locally then create group with wrapped keys
+    // Use a temp chatId for key generation? Actually generate key now and keep in memory, then create group.
+    const { generateSymmetricKey, sealKey } = await import('../e2ee/crypto');
+    const { keyBase64 } = await generateSymmetricKey();
+    const wrapped = [];
+    for (const uid of allMemberIds) {
+      const pk = pubKeysMap[uid];
+      if (!pk) continue;
+      try {
+        const sealed = await sealKey(keyBase64, pk);
+        wrapped.push({ userId: uid, wrappedKey: sealed.wrappedKeyBase64, wrappedNonce: sealed.wrappedNonce });
+      } catch (e) {
+        console.warn('[e2ee] wrap failed for', uid, e.message);
+      }
+    }
+    // Create group via encrypted endpoint
+    const res = await api.createEncryptedGroup({ name, memberIds: mIds, avatar, keys: wrapped, encryptionVersion: 1 });
+    const chat = res?.chat;
+    if (chat) {
+      // Store key locally for this new chat
+      const { setChatKey } = await import('../e2ee/chatKeys');
+      await setChatKey(chat.id, keyBase64);
+      upsertChat(chat);
+    }
+    return chat;
+  }, [user?.id, upsertChat]);
+
+  const getChatEncryptionStatus = useCallback((chatId) => {
+    const chat = chatsRef.current?.find(c => c.id === chatId);
+    return { isEncrypted: !!(chat && chat.isEncrypted), version: chat?.encryptionVersion || 0 };
+  }, []);
+
   const setGcMessagesLocal = useCallback((updater) => {
     const store = gcStoreRef.current;
     if (!store) return;
@@ -1889,6 +2141,7 @@ export function ChatProvider({ children }) {
     markGCRead, setGCTypingState, joinGCRoom, leaveGCRoom, setGcMessages: setGcMessagesLocal,
     setMessages: setMessagesLocal, otManager: otManagerRef.current,
     startCall, acceptCall, declineCall, hangUp, toggleMic, toggleCam, toggleSpeaker, switchCamera,
+    enableChatEncryption, createEncryptedGroupChat, getChatEncryptionStatus,
   }), [
     setInboxFilter, refreshChatRequests, refreshChats, refreshActivity, loadMessages, loadOlderMessages,
     sendMessage, markRead, setTypingState, react, deleteMessage, removeMessageLocal, editMessage,
@@ -1897,7 +2150,8 @@ export function ChatProvider({ children }) {
     refreshDocuments, createDocument, refreshGCs, loadGCMessages, loadOlderGCMessages, sendGCMessage,
     retryGCMessage, editGCMessage, markGCRead, setGCTypingState, joinGCRoom, leaveGCRoom,
     setGcMessagesLocal, setMessagesLocal, otReady, startCall, acceptCall, declineCall, hangUp,
-    toggleMic, toggleCam, toggleSpeaker, switchCamera,
+    toggleMic, toggleCam, toggleSpeaker, switchCamera, enableChatEncryption, createEncryptedGroupChat,
+    getChatEncryptionStatus,
   ]);
   // Legacy consumers still receive the same shape. New consumers below use a
   // focused context so unrelated high-frequency updates stay isolated.

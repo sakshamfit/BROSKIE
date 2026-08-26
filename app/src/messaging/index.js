@@ -11,12 +11,12 @@ export { sortChats };
 export { createMessageId, isClientMessageId } from './ids';
 export { messageTime, isPendingMessage, isOutboxStatus } from './messageState';
 
-export function createMessagingEngine({ userId, getSocket }) {
+export function createMessagingEngine({ userId, getSocket, getChats }) {
   const persistence = createPersistence();
   const store = new LocalMessageStore(userId, persistence);
   const connectivity = createConnectivityManager();
-  const outbox = createOutboxManager({ store, getSocket, connectivity });
-  const sync = createSyncManager({ store, outbox, connectivity });
+  const outbox = createOutboxManager({ store, getSocket, connectivity, getChats });
+  const sync = createSyncManager({ store, outbox, connectivity, getChats });
   const repository = createMessageRepository({ store, outbox });
   const otCache = new OTDocumentCache(userId, persistence);
   const otManager = new OTManager({ getSocket });

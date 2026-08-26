@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { appStorage } from '../storage';
 import { api, setToken } from '../api';
+import { initSodium, getOrCreateIdentityKeyPair, clearKeys as clearE2EEKeys, isWebStorageInsecure } from '../e2ee';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -50,6 +51,11 @@ export function AuthProvider({ children }) {
           if (!active) return;
           setUser(restored);
           appStorage.setItem(USER_KEY, JSON.stringify(restored)).catch(() => {});
+          // E2EE: ensure keys exist after session restore
+          try {
+            await initSodium();
+            await getOrCreateIdentityKeyPair(restored.id);
+          } catch {}
         } catch (error) {
           // A temporary network outage must not erase a valid remembered
           // session. Only a real 401 means the token itself is no longer valid.
@@ -88,16 +94,35 @@ export function AuthProvider({ children }) {
         console.warn('Could not remember this session:', error?.message);
       }
     });
+    // E2EE: generate identity keypair on first launch after auth
+    try {
+      await initSodium();
+      await getOrCreateIdentityKeyPair(usr.id);
+      if (isWebStorageInsecure()) {
+        console.warn('[e2ee] Web storage is not a secure enclave — keys stored in browser storage are less secure than native secure storage. E2EE is native-first; web shows clear indicator.');
+      }
+    } catch (e) {
+      console.warn('[e2ee] key generation failed:', e.message);
+    }
   }, []);
 
   const login = useCallback(async (username, password) => {
     const { token, user } = await api.login({ username, password });
     await persist(token, user);
+    // Ensure E2EE keys exist even if persist's async key gen hasn't finished
+    try {
+      await initSodium();
+      await getOrCreateIdentityKeyPair(user.id);
+    } catch {}
   }, [persist]);
 
   const register = useCallback(async (username, name, password, phone) => {
     const { token, user } = await api.register({ username, name, password, phone });
     await persist(token, user);
+    try {
+      await initSodium();
+      await getOrCreateIdentityKeyPair(user.id);
+    } catch {}
   }, [persist]);
 
   const logout = useCallback(() => {

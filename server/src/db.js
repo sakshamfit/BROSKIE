@@ -774,7 +774,29 @@ CREATE TABLE IF NOT EXISTS user_song_history (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_song_history_user ON user_song_history(user_id, last_at DESC);
+
+/* ---- End-to-End Encryption ---- */
+CREATE TABLE IF NOT EXISTS chat_encryption_keys (
+  chat_id      TEXT NOT NULL,
+  user_id      TEXT NOT NULL,
+  wrapped_key  TEXT NOT NULL,              -- base64 sealed box of the symmetric key (or box)
+  wrapped_nonce TEXT,                      -- base64 nonce if using crypto_box (null for sealed box)
+  created_at   INTEGER NOT NULL,
+  created_by   TEXT,
+  PRIMARY KEY (chat_id, user_id),
+  FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_chat_enc_keys_chat ON chat_encryption_keys(chat_id);
+CREATE INDEX IF NOT EXISTS idx_chat_enc_keys_user ON chat_encryption_keys(user_id);
 `);
+
+addColumnIfMissing('users', 'public_key', 'public_key TEXT');
+addColumnIfMissing('chats', 'is_encrypted', 'is_encrypted INTEGER DEFAULT 0');
+addColumnIfMissing('chats', 'encryption_version', 'encryption_version INTEGER DEFAULT 0');
+addColumnIfMissing('messages', 'is_encrypted', 'is_encrypted INTEGER DEFAULT 0');
+addColumnIfMissing('messages', 'encryption_nonce', 'encryption_nonce TEXT');
+addColumnIfMissing('messages', 'encryption_type', 'encryption_type TEXT');
 
 module.exports = db;
 module.exports.DATA_DIR = DATA_DIR;

@@ -13,7 +13,7 @@ import { SpringPressable, motion } from '../motion';
 export default function NewChatScreen({ navigation, embedded = false }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { upsertChat, refreshChats, refreshActivity } = useChatActions();
+  const { upsertChat, refreshChats, refreshActivity, createEncryptedGroupChat } = useChatActions();
   const [users, setUsers] = useState([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -23,6 +23,7 @@ export default function NewChatScreen({ navigation, embedded = false }) {
   const [busy, setBusy] = useState(false);
   const [connectBusy, setConnectBusy] = useState(null);
   const [connectError, setConnectError] = useState('');
+  const [encryptedGroup, setEncryptedGroup] = useState(false);
 
   const s = makeStyles(theme);
 
@@ -88,7 +89,14 @@ export default function NewChatScreen({ navigation, embedded = false }) {
     if (!groupName.trim() || !selected.length) return;
     setBusy(true);
     try {
-      const { chat } = await api.groupChat({ name: groupName.trim(), memberIds: selected });
+      let chat;
+      if (encryptedGroup) {
+        chat = await createEncryptedGroupChat({ name: groupName.trim(), memberIds: selected });
+      } else {
+        const res = await api.groupChat({ name: groupName.trim(), memberIds: selected });
+        chat = res.chat;
+      }
+      if (!chat?.id) throw new Error('Could not create group');
       upsertChat(chat);
       await refreshChats();
       navigation.replace('Conversation', { chatId: chat.id, initialChat: chat });
@@ -117,16 +125,29 @@ export default function NewChatScreen({ navigation, embedded = false }) {
       </View>
 
       {groupMode && (
-        <InkField style={s.groupNameWrap}>
-          <Icon name="camera-outline" size={20} color={theme.muted} />
-          <TextInput
-            style={s.groupInput}
-            placeholder="Group name"
-            placeholderTextColor={theme.muted}
-            value={groupName}
-            onChangeText={setGroupName}
-          />
-        </InkField>
+        <>
+          <InkField style={s.groupNameWrap}>
+            <Icon name="camera-outline" size={20} color={theme.muted} />
+            <TextInput
+              style={s.groupInput}
+              placeholder="Group name"
+              placeholderTextColor={theme.muted}
+              value={groupName}
+              onChangeText={setGroupName}
+            />
+          </InkField>
+          <Pressable
+            onPress={() => setEncryptedGroup(v => !v)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginBottom: 14, padding: 10, borderWidth: encryptedGroup ? 2 : 1, borderColor: encryptedGroup ? theme.ink : theme.graphiteLine, backgroundColor: encryptedGroup ? theme.highlighterSoft : 'transparent' }}
+          >
+            <Icon name={encryptedGroup ? 'lock-closed' : 'lock-open-outline'} size={18} color={theme.ink} />
+            <View style={{ flex: 1 }}>
+              <Text style={[type.bodyMd, { color: theme.text }]}>{encryptedGroup ? 'Encrypted group — E2EE' : 'Enable encryption for this group'}</Text>
+              <Text style={[type.labelXs, { color: theme.muted, marginTop: 2 }]}>{encryptedGroup ? 'Messages encrypted with per-chat symmetric key wrapped per member. Server stores ciphertext only. Collaborative notes remain unencrypted.' : 'Opt-in Secret Group mode — server cannot read messages.'}</Text>
+            </View>
+            <Icon name={encryptedGroup ? 'checkbox' : 'square-outline'} size={20} color={theme.ink} />
+          </Pressable>
+        </>
       )}
 
       <InkField style={s.searchWrap}>

@@ -546,6 +546,19 @@ export const api = {
     const q = since ? `?since=${Math.floor(since)}` : '';
     return request(`/api/today${q}`, { timeoutMs: 15000, retries: 1 });
   },
+  // End-to-End Encryption — key directory & chat keys
+  publishPublicKey: (publicKey) => request('/api/e2ee/public-key', { method: 'POST', body: { publicKey }, timeoutMs: 10000, retries: 1 }),
+  getPublicKey: (userId) => request(`/api/e2ee/public-key/${userId}`, { timeoutMs: 10000, retries: 1 }),
+  getPublicKeysBatch: (userIds) => request('/api/e2ee/public-keys', { method: 'POST', body: { userIds }, timeoutMs: 10000, retries: 1 }),
+  getChatEncryptionKey: (chatId) => request(`/api/chats/${chatId}/encryption-key`, { timeoutMs: 10000, retries: 1 }),
+  getChatEncryptionKeys: (chatId) => request(`/api/chats/${chatId}/encryption-keys`, { timeoutMs: 10000, retries: 0 }),
+  distributeChatKeys: (chatId, keys) => request(`/api/chats/${chatId}/encryption-keys`, { method: 'POST', body: { keys }, timeoutMs: 15000, retries: 1 }),
+  enableChatEncryption: (chatId, keys, encryptionVersion = 1) => request(`/api/chats/${chatId}/encryption/enable`, { method: 'POST', body: { keys, encryptionVersion }, timeoutMs: 15000, retries: 1 }),
+  disableChatEncryption: (chatId) => request(`/api/chats/${chatId}/encryption/disable`, { method: 'POST', body: {}, timeoutMs: 10000, retries: 0 }),
+  createEncryptedGroup: (payload) => request('/api/chats/group-encrypted', { method: 'POST', body: payload, timeoutMs: 15000, retries: 1 }),
+  reportEncryptedMessage: (messageId, reason, note, decryptedBody, consent) =>
+    request('/api/moderation/report-encrypted', { method: 'POST', body: { messageId, reason, note, decryptedBody, consent }, timeoutMs: 12000, retries: 0 }),
+
   // Safety & moderation — user reports (admin API below).
   reportMessage: (messageId, reason, note) =>
     request('/api/moderation/report', { method: 'POST', body: { messageId, reason, note: note || undefined }, timeoutMs: 12000, retries: 0 }),

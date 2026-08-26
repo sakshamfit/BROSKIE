@@ -19,7 +19,7 @@ import CollabDocumentView from '../components/CollabDocumentView';
 export default function ChatInfoScreen({ route, navigation, embedded = false }) {
   const { chatId } = route.params;
   const { chats } = useChatListState();
-  const { refreshChats, socketRef } = useChatActions();
+  const { refreshChats, socketRef, enableChatEncryption } = useChatActions();
   const socket = socketRef?.current || null;
   const { user } = useAuth();
   const { theme } = useTheme();
@@ -32,6 +32,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
   const [renameValue, setRenameValue] = useState('');
   const [disappearOpen, setDisappearOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
+  const [e2eeBusy, setE2eeBusy] = useState(false);
 
   const me = chat?.members?.find((m) => m.id === user.id);
   const isAdmin = me?.role === 'admin';
@@ -131,6 +132,41 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
     finally { setBusy(false); }
   };
 
+  const toggleEncryption = async () => {
+    if (!chat) return;
+    if (chat.isEncrypted) {
+      const ok = await confirm(
+        'Disable end-to-end encryption? New messages will no longer be encrypted. Old encrypted messages may become unreadable if keys are lost. This does NOT decrypt history.',
+        { title: 'Disable encryption', confirmLabel: 'Disable', destructive: true }
+      );
+      if (!ok) return;
+      setE2eeBusy(true);
+      try {
+        await api.disableChatEncryption(chatId);
+        await refreshChats();
+      } catch (e) {
+        console.warn('[e2ee] disable failed', e.message);
+      } finally {
+        setE2eeBusy(false);
+      }
+    } else {
+      const ok = await confirm(
+        'Enable end-to-end encryption? This is opt-in Secret Chat mode. New messages will be encrypted on your device and only decryptable by recipients. Server cannot read them. Server-side moderation auto-scanning will be disabled for this chat (user reports still work with explicit consent). Collaborative notes remain unencrypted. Existing plaintext history stays as-is.',
+        { title: 'Enable encryption', confirmLabel: 'Enable' }
+      );
+      if (!ok) return;
+      setE2eeBusy(true);
+      try {
+        await enableChatEncryption(chatId);
+        await refreshChats();
+      } catch (e) {
+        console.warn('[e2ee] enable failed', e.message);
+      } finally {
+        setE2eeBusy(false);
+      }
+    }
+  };
+
   const Row = ({ icon, label, onPress, danger, sub }) => (
     <SpringPressable style={({ pressed }) => [s.row, pressed && marker(theme, 1)]} onPress={onPress} disabled={busy} scaleTo={motion.scale.row} haptic="selection">
       <Icon name={icon} size={19} color={danger ? theme.danger : theme.ink} style={{ width: 26 }} />
@@ -173,6 +209,45 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
           </PaperCard>
         )}
 
+        {/* E2EE Status — Graphite & Pulp ink-on-paper, lock icon, honest copy */}
+        <PaperCard style={{ padding: 6, borderColor: chat.isEncrypted ? theme.ink : theme.graphiteLine, borderWidth: chat.isEncrypted ? 2 : 1 }}>
+          <Row
+            icon={chat.isEncrypted ? 'lock-closed' : 'lock-open-outline'}
+            label={chat.isEncrypted ? 'End-to-end encrypted' : 'Enable end-to-end encryption'}
+            sub={
+              chat.isEncrypted
+                ? 'New messages are encrypted on device, only recipients can read. Server stores ciphertext only. Collaborative notes remain unencrypted. Server-side moderation scanning disabled for this chat; user reports work with explicit consent.'
+                : 'Opt-in Secret Chat mode — server cannot read messages after enabling. Existing history stays as-is. Collaborative notes stay unencrypted.'
+            }
+            onPress={toggleEncryption}
+          />
+          {chat.isEncrypted && (
+            <View style={{ paddingHorizontal: 12, paddingBottom: 10, gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Icon name="shield-checkmark-outline" size={14} color={theme.ink} />
+                <Text style={[type.labelXs, { color: theme.muted }]}>ENCRYPTION VERSION {chat.encryptionVersion || 1} · {chat.type === 'direct' ? 'X25519 crypto_box' : 'Per-chat symmetric key (sender key) + secretbox'}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Icon name="document-text-outline" size={14} color={theme.muted} />
+                <Text style={[type.labelXs, { color: theme.muted }]}>Collaborative notes are NOT encrypted — OT requires server to read operations.</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Icon name="search-outline" size={14} color={theme.muted} />
+                <Text style={[type.labelXs, { color: theme.muted }]}>Search is client-side only for encrypted chats — server stores ciphertext.</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Icon name="flag-outline" size={14} color={theme.muted} />
+                <Text style={[type.labelXs, { color: theme.muted }]}>Moderation: auto-scanning disabled; reports require your explicit consent to share decrypted text.</Text>
+              </View>
+            </View>
+          )}
+          {e2eeBusy && (
+            <View style={{ padding: 12, alignItems: 'center' }}>
+              <Text style={[type.labelXs, { color: theme.muted }]}>{chat.isEncrypted ? 'DISABLING…' : 'ENABLING…'}</Text>
+            </View>
+          )}
+        </PaperCard>
+
         <PaperCard style={{ padding: 6 }}>
           <Row
             icon={chat.muted ? 'volume-mute' : 'notifications-outline'}
@@ -187,7 +262,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
           />
           <Row icon="archive-outline" label={chat.archived ? 'Unarchive chat' : 'Archive chat'} onPress={toggleArchive} />
           <Row icon="star-outline" label="Starred messages" onPress={() => navigation.navigate('Starred')} />
-          <Row icon="document-text-outline" label="Collaborative notes" sub="Real-time OT docs for this chat" onPress={() => setDocsOpen(true)} />
+          <Row icon="document-text-outline" label="Collaborative notes" sub={chat.isEncrypted ? 'Real-time OT docs — NOT encrypted (explicit)' : 'Real-time OT docs for this chat'} onPress={() => setDocsOpen(true)} />
         </PaperCard>
 
         {isGroupChat(chat) && isAdmin && (
