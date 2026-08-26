@@ -1,24 +1,24 @@
 import React from 'react';
-import { Text, Platform } from 'react-native';
+import { Image, Text, Platform } from 'react-native';
 import Svg, { Path, Circle, Ellipse, Rect, Polygon, Polyline, Line, G, Defs, ClipPath } from 'react-native-svg';
 import { getEmojiData, useEmojiDataState } from './emojiDataState';
+import FLUENT_3D_ASSETS from './fluentEmojiAssets';
 
 /**
- * True-vector colour emoji, rendered with react-native-svg from official
- * Twemoji artwork (the same flat, familiar set X/Twitter and Discord ship).
- * Replaces system font glyphs so emoji look identical — and premium — on
- * every platform, web and native.
+ * Cross-platform Microsoft Fluent Emoji in the official 3D style. Fluent's
+ * 3D originals are PNG artwork, so matched records render through a static
+ * React Native image asset. The packed table keeps Twemoji vectors only for
+ * exact Unicode sequences for which Microsoft supplies no 3D asset.
  *
- * The packed table (emojiData.json, v2 — see scripts/generate-emoji-data.js)
- * covers the full RGI set: every Unicode emoji incl. flags, keycaps, ZWJ
- * families, all five skin tones, and the newest additions — plus typing
- * aliases for the ways keyboards actually emit emoji (bare "❤" for "❤️",
- * digit+keycap without VS16, FE0F-stripped ZWJ forms…) so any typed or
- * received text matches vector art instead of falling back to a system glyph.
+ * The packed table (emojiData.json, v3 — see
+ * scripts/generate-fluent-emoji-data.js) covers the full existing set: flags,
+ * keycaps, ZWJ families, skin tones, and newer additions. Canonical keys and
+ * typing aliases remain stable, so picker search and EmojiText auto-swapping
+ * use the same resolution path on web, iOS, and Android.
  *
- * On web the table lives in its own async chunk, fetched the first time an
- * emoji is actually rendered; until it arrives we show the system glyph so
- * the app shell never waits on ~4 MB of path data before painting.
+ * Web exports each Fluent glyph as an independently cacheable asset. The app
+ * bundle contains only the compact key/index map and vector fallback table;
+ * browsers fetch 3D artwork only for emoji that are actually rendered.
  */
 
 const TAGS = { p: Path, c: Circle, e: Ellipse, r: Rect, y: Polygon, l: Polyline, n: Line };
@@ -60,7 +60,11 @@ function resolveEmoji(char) {
     const canon = data.A[char];
     if (canon) raw = data.E[canon];
   }
-  if (raw) entry = { vb: raw.b, els: raw.z };
+  if (raw) {
+    entry = raw.i != null
+      ? { image: raw.i }
+      : { vb: raw.b, els: raw.z };
+  }
   decodeCache.set(char, { data, entry });
   if (decodeCache.size > 12000) decodeCache.clear(); // bound memory in long sessions
   return entry;
@@ -101,9 +105,29 @@ const EmojiComponent = function Emoji({ char, size = 20, style }) {
     // graceful fallback to the system glyph for anything not loaded/known
     return <Text style={[{ fontSize: size }, style]}>{char}</Text>;
   }
+  if (entry.image != null) {
+    const source = FLUENT_3D_ASSETS[entry.image];
+    if (!source) return <Text style={[{ fontSize: size }, style]}>{char}</Text>;
+    return (
+      <Image
+        source={source}
+        resizeMode="contain"
+        accessibilityRole="image"
+        accessibilityLabel={char}
+        style={[{ width: size, height: size }, style]}
+      />
+    );
+  }
   const P = getEmojiData().P;
   return (
-    <Svg width={size} height={size} viewBox={entry.vb} style={style}>
+    <Svg
+      width={size}
+      height={size}
+      viewBox={entry.vb}
+      style={style}
+      accessibilityRole="image"
+      accessibilityLabel={char}
+    >
       <Els els={entry.els} P={P} clipId={clipId} />
     </Svg>
   );

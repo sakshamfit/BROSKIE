@@ -189,9 +189,9 @@ function GCScreen({ navigation, onOpenChat, active = true }) {
               <Text style={[type.labelXs, { color: theme.muted }]}>{item.members?.length || 1}</Text>
             </View>
           </View>
-          <Text style={[type.bodySm, { color: isTyping ? theme.highlighter : theme.subtext, marginTop: 2, fontStyle: isTyping ? 'italic' : null }]} numberOfLines={1}>
+          <EmojiText style={[type.bodySm, { color: isTyping ? theme.highlighter : theme.subtext, marginTop: 2, fontStyle: isTyping ? 'italic' : null }]} numberOfLines={1}>
             {isTyping ? 'typing…' : preview}
-          </Text>
+          </EmojiText>
         </View>
         <View style={{ alignItems: 'flex-end', gap: 7 }}>
           <Text style={[type.labelXs, { color: theme.muted }]}>

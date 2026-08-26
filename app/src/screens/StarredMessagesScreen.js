@@ -79,9 +79,9 @@ export default function StarredMessagesScreen({ navigation, embedded = false }) 
             <View style={[s.quote, { borderLeftColor: theme.ink }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Icon name="chatbubble-outline" size={13} color={theme.graphite} />
-                <Text style={[type.labelXs, { color: theme.graphite, flex: 1 }]} numberOfLines={1}>
+                <EmojiText style={[type.labelXs, { color: theme.graphite, flex: 1 }]} numberOfLines={1}>
                   {item.chatName?.toUpperCase()}
-                </Text>
+                </EmojiText>
                 <Text style={[type.labelXs, { color: theme.muted }]}>{formatChatTime(item.createdAt)}</Text>
               </View>
               {item.type === 'image' && item.mediaUrl ? (

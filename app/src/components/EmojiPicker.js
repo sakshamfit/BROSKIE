@@ -8,10 +8,10 @@ import { inkBox, type } from '../theme';
 import META from '../icons/emojiMeta.json';
 
 /**
- * Full-vector emoji picker. Every glyph renders through <Emoji> from the
- * complete Twemoji table — the entire RGI set (flags, keycaps, ZWJ
- * families, newest emoji), so nothing ever falls back to inconsistent
- * system font art.
+ * Cross-platform emoji picker. Every glyph renders through <Emoji> from the
+ * complete Fluent Emoji 3D table, with per-sequence Twemoji vector fallbacks
+ * only where Microsoft has no exact 3D asset. Flags, keycaps, ZWJ families,
+ * and newer emoji therefore never render blank.
  *
  * Tabbed by category (Smileys … Symbols, Flags), CLDR-name + keyword-tag
  * search ("fire" finds 🔥, "lit" finds it too), and WhatsApp-style

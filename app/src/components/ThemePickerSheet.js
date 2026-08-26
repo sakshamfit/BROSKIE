@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
+import { EmojiText } from '../icons/Emoji';
 import useResponsive from '../hooks/useResponsive';
 import { ThemeRegistry, resolveChatTheme, alpha } from '../chatThemes';
 import { SpringPressable, Pop, haptic, BottomSheet, SheetHandle, motion } from '../motion';
@@ -133,9 +134,9 @@ export default function ThemePickerSheet({
                     pressed ? marker(g, 1) : null,
                   ]}
                 >
-                  <Text style={[type.labelXs, { color: g.ink }]}>
+                  <EmojiText style={[type.labelXs, { color: g.ink }]}>
                     {m.emoji} {m.label.toUpperCase()}
-                  </Text>
+                  </EmojiText>
                 </SpringPressable>
               );
             })}

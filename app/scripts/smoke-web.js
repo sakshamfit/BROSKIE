@@ -127,7 +127,12 @@ async function getBundle(argPath) {
 
   // ---- drive real interactions and assert on the outcome ----
   const settle = (ms = 500) => new Promise((r) => setTimeout(r, ms));
-  const byLabel = (label) => window.document.querySelector(`[aria-label="${label}"]`);
+  // jsdom's selector engine mishandles astral Unicode in attribute selectors,
+  // so compare values in JS (real browsers are unaffected).
+  const elementsByLabel = (label) => [...window.document.querySelectorAll('[aria-label], [alt]')]
+    .filter((element) => element.getAttribute('aria-label') === label || element.getAttribute('alt') === label);
+  const byLabel = (label) => elementsByLabel(label)[0] || null;
+  const countByLabel = (label) => elementsByLabel(label).length;
   const press = (el) => {
     if (!el) return false;
     ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach((type) => {
@@ -147,6 +152,33 @@ async function getBundle(argPath) {
     return false;
   };
   const bodyText = () => window.document.body.textContent || '';
+  const setInputValue = (element, value) => {
+    if (!element) return false;
+    const proto = element.tagName === 'TEXTAREA'
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    if (setter) setter.call(element, value);
+    else element.value = value;
+    element.dispatchEvent(new window.Event('input', { bubbles: true, cancelable: true }));
+    element.dispatchEvent(new window.Event('change', { bubbles: true, cancelable: true }));
+    return true;
+  };
+
+  if (process.env.SMOKE_EMOJI) {
+    const statusEmojiReady = await waitFor(() => !!byLabel('🚀') && !!byLabel('🔥'), 8000);
+    check('status/story preview renders Fluent emoji images', statusEmojiReady);
+    const rocket = byLabel('🚀');
+    const rocketImage = rocket?.tagName === 'IMG' ? rocket : rocket?.querySelector?.('img');
+    const rocketSource = decodeURIComponent(rocketImage?.getAttribute('src') || '');
+    const rocketStyle = rocketImage ? window.getComputedStyle(rocketImage) : null;
+    check('web uses a visible, independently loaded Fluent image asset',
+      !!rocketImage
+        && rocketSource.includes('fluent-3d')
+        && rocketSource.includes('.webp')
+        && parseFloat(rocketStyle?.width || '0') > 0
+        && parseFloat(rocketStyle?.height || '0') > 0);
+  }
 
   const clickable = [...window.document.querySelectorAll('[role="button"], button')];
 
@@ -201,6 +233,47 @@ async function getBundle(argPath) {
       check('no corrective scroll ran while opening the chat', !touched);
       check('newest message is rendered', /Message 2/.test(bodyText()));
 
+      if (process.env.SMOKE_EMOJI) {
+        for (const char of ['😀', '🔥', '❤️']) {
+          check(`message bubble renders ${char} through EmojiText`, !!byLabel(char));
+        }
+
+        const showEmoji = byLabel('Show emoji');
+        check('conversation exposes emoji picker', press(showEmoji));
+        const categories = {
+          Smileys: '😀', People: '👋', Nature: '🐶', Food: '🍕', Travel: '✈️',
+          Activities: '⚽️', Objects: '💡', Symbols: '❤️', Flags: '🇮🇳',
+        };
+        for (const [category, representative] of Object.entries(categories)) {
+          const categoryReady = await waitFor(() => !!byLabel(category), 3000);
+          check(`emoji picker has ${category} category`, categoryReady);
+          if (categoryReady) press(byLabel(category));
+          check(`${category} category populates`, await waitFor(() => !!byLabel(representative), 3000));
+        }
+
+        const search = [...window.document.querySelectorAll('input, textarea')]
+          .find((el) => el.getAttribute('placeholder') === 'Search emoji…');
+        check('emoji picker search input renders', !!search);
+        const fireBeforeSearch = countByLabel('🔥');
+        setInputValue(search, 'fire');
+        check('search by name finds fire', await waitFor(
+          () => countByLabel('🔥') > fireBeforeSearch,
+          3000,
+        ));
+
+        press(byLabel('Show keyboard'));
+        const composer = [...window.document.querySelectorAll('input, textarea')]
+          .find((el) => el.getAttribute('placeholder') === 'Message');
+        check('message composer is available', setInputValue(composer, 'Emoji pass 😀🔥❤️'));
+        check('emoji message becomes sendable', await waitFor(() => !!byLabel('Send message'), 3000));
+        if (byLabel('Send message')) press(byLabel('Send message'));
+        check('sent multi-emoji message renders in a bubble', await waitFor(
+          () => /Emoji pass/.test(bodyText())
+            && ['😀', '🔥', '❤️'].every((char) => !!byLabel(char)),
+          5000,
+        ));
+      }
+
       const bubble = [...window.document.querySelectorAll('div')]
         .find((el) => (el.textContent || '').trim() === 'Try long-pressing this bubble.');
       // Synthesised long-press: hold past delayLongPress, then release.
@@ -232,6 +305,9 @@ async function getBundle(argPath) {
     press(byLabel('GC'));
     const gcListShown = await waitFor(() => /Gaming Hub/.test(bodyText()));
     check('GC tab shows GC list', gcListShown);
+    if (process.env.SMOKE_EMOJI) {
+      check('group name renders Fluent emoji through EmojiText', await waitFor(() => !!byLabel('🎮'), 3000));
+    }
 
     const gcRow = [...window.document.querySelectorAll('[aria-label^="Open GC "]')][0]
       || [...window.document.querySelectorAll('[role="button"], button')]

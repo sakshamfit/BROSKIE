@@ -1006,9 +1006,9 @@ export function StatusComposer({ visible, initialMode, onClose, onPosted }) {
             <View style={s.overlayChips}>
               {overlays.map((o) => (
                 <View key={o.id || o.label} style={s.overlayChip}>
-                  <Text style={[type.labelXs, { color: '#ffffff' }]}>
+                  <EmojiText style={[type.labelXs, { color: '#ffffff' }]}>
                     {o.kind === 'location' ? `📍 ${o.label}` : o.glyph}
-                  </Text>
+                  </EmojiText>
                 </View>
               ))}
             </View>

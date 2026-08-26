@@ -1,9 +1,6 @@
-import { useEffect, useState } from 'react';
 import emojiData from './emojiData.json';
 
-/**
- * Web emoji-data accessor (statically loaded).
- */
+/** Web accessor for the compact Fluent image-index/vector-fallback table. */
 const data = emojiData;
 
 export function getEmojiData() {

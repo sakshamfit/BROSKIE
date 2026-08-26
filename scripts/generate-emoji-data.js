@@ -1,15 +1,14 @@
 #!/usr/bin/env node
 /**
- * generate-emoji-data.js — builds app/src/icons/emojiData.json + emojiMeta.json
- * from the official Twemoji SVG artwork (what X/Twitter, Discord, etc. ship —
- * the flat, familiar "premium social app" emoji look) plus emojibase metadata
- * (labels, category groups, search tags, skin-tone variants).
+ * generate-emoji-data.js — builds the complete Twemoji vector baseline and
+ * emojiMeta.json from official Twemoji SVG artwork plus emojibase metadata.
+ * Run generate-fluent-emoji-data.js afterwards to replace exact matches with
+ * Microsoft Fluent Emoji 3D assets and compact this table to fallbacks only.
  *
- * Why: the app renders every emoji as true vector art (react-native-svg) from
- * this packed table, so emoji look identical on every platform and never fall
- * back to inconsistent system font glyphs. This generator keeps that table
- * complete: full RGI coverage — flags, keycaps, ZWJ families, all five skin
- * tones, and the latest Unicode emoji.
+ * Why: this baseline guarantees a non-empty vector fallback for every existing
+ * key before the Fluent 3D postprocessor runs. Together the two stages keep
+ * full coverage — flags, keycaps, ZWJ families, skin tones, and recent Unicode
+ * emoji — without falling back to inconsistent system font glyphs.
  *
  * Usage:
  *   # 1. get official Twemoji SVGs (any checkout of the repo's assets/svg)
