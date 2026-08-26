@@ -14,7 +14,7 @@
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
     "docker:smoke": "bash scripts/docker-smoke.sh",
-    "build:cloudflare": "cd app && npm ci && EXPO_PUBLIC_API_URL=https://broskie-h.up.railway.app CI=true npx expo export --platform web --output-dir dist",
+    "build:cloudflare": "cd app && npm ci && EXPO_PUBLIC_API_URL=https://broskie-h.up.railway.app CI=true node scripts/export-web.js --app-only",
     "deploy:cloudflare": "npx wrangler deploy",
     "backup": "cd server && npm run backup",
     "ci": "bash scripts/ci.sh",

@@ -3,7 +3,7 @@
   "name": "broskie",
   "compatibility_date": "2026-08-18",
   "build": {
-    "command": "cd app && npm ci && EXPO_PUBLIC_API_URL=https://broskie-h.up.railway.app CI=true npx expo export --platform web --output-dir dist"
+    "command": "cd app && npm ci && EXPO_PUBLIC_API_URL=https://broskie-h.up.railway.app CI=true node scripts/export-web.js --app-only"
   },
   "assets": {
     "directory": "./app/dist",

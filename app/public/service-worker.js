@@ -16,7 +16,11 @@
  * holds the message data, and this cache holds the shell + the last API GET
  * responses. Socket.IO and media uploads are never cached; neither are
  * auth/profile endpoints, so a cached login is never served to anyone. */
-const CACHE_NAME = 'plusone-shell-v3';
+const CACHE_NAME = 'plusone-shell-v4';
+/* The app shell lives under /app on this site (the public homepage is a
+ * static marketing page). Offline navigation and cold notification opens
+ * must land on the app shell, never the marketing page. */
+const APP_SHELL = '/app/';
 
 function isCacheable(request) {
   if (request.method !== 'GET') return false;
@@ -47,7 +51,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     try {
       const cache = await caches.open(CACHE_NAME);
-      await cache.add('/');
+      await cache.add(APP_SHELL);
     } catch (e) { /* offline install — the fetch handler will fill it in */ }
   })());
 });
@@ -95,7 +99,7 @@ self.addEventListener('fetch', (event) => {
       const cached = await cache.match(event.request);
       if (cached) return cached;
       if (event.request.mode === 'navigate') {
-        const shell = await cache.match('/');
+        const shell = await cache.match(APP_SHELL);
         if (shell) return shell;
       }
       throw err;
@@ -178,10 +182,10 @@ self.addEventListener('notificationclick', (event) => {
     }
     // No window to hand the payload to — carry it in the launch URL so the
     // freshly opened app can still deep-link to the tapped chat.
-    let url = '/';
+    let url = APP_SHELL;
     if (data && data.route) {
       try {
-        url = `/?push=${encodeURIComponent(btoa(encodeURIComponent(JSON.stringify(data))))}`;
+        url = `${APP_SHELL}?push=${encodeURIComponent(btoa(encodeURIComponent(JSON.stringify(data))))}`;
       } catch {}
     }
     return self.clients.openWindow(url);

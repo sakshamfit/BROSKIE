@@ -1,12 +1,16 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd app && npm install && CI=true npx expo export --platform web",
+  "buildCommand": "cd app && npm install && CI=true node scripts/export-web.js",
   "outputDirectory": "app/dist",
   "installCommand": "echo 'deps installed in buildCommand'",
   "framework": null,
+  "cleanUrls": true,
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://broskie-h.up.railway.app/api/:path*" },
     { "source": "/uploads/:path*", "destination": "https://broskie-h.up.railway.app/uploads/:path*" },
+    { "source": "/app/:path*", "destination": "/app/index.html" },
+    { "source": "/c/:path*", "destination": "/app/index.html" },
+    { "source": "/gc/:path*", "destination": "/app/index.html" },
     {
       "source": "/((?!_vercel/|sitemap\\.xml$|robots\\.txt$).*)",
       "destination": "/index.html"
@@ -22,13 +26,43 @@
     {
       "source": "/",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate, max-age=0" }
       ]
     },
     {
       "source": "/index.html",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/app",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/app/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/assets/images/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/assets/fonts/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/assets/qr-apk.svg",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400, must-revalidate" }
       ]
     },
     {
