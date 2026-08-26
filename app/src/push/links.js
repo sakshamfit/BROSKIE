@@ -7,6 +7,18 @@ import { Linking, Platform } from 'react-native';
 import { api } from '../api';
 import { routeFromNotification, routeFromUrl, openCommunity } from './routing';
 
+/* The web app is served from /app on the public site and from / on
+ * single-host deployments — always clean URLs back to the app, not to the
+ * marketing homepage. */
+function appBase() {
+  try {
+    const p = window.location.pathname;
+    return p === '/app' || p.startsWith('/app/') ? '/app' : '/';
+  } catch {
+    return '/';
+  }
+}
+
 async function joinCommunityByCode(code) {
   try {
     const result = await api.joinCommunityByCode(code);
@@ -43,11 +55,11 @@ export function setupDeepLinks() {
       if (/^\/c\/[a-z0-9]+\/?$/i.test(path)) {
         const code = path.split('/')[2];
         // Strip the path so a refresh doesn't re-join; history stays clean.
-        window.history.replaceState({}, '', '/');
+        window.history.replaceState({}, '', appBase());
         if (code) joinCommunityByCode(code.toLowerCase());
       } else if (/^\/gc\/[0-9a-z]+\/?$/i.test(path)) {
         const gcId = path.split('/')[2];
-        window.history.replaceState({}, '', '/');
+        window.history.replaceState({}, '', appBase());
         if (gcId) handleDeepLink(`plusone://gc/${gcId}`);
       }
     } catch {}

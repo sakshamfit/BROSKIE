@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Privacy Policy — +one</title>
+  <meta name="description" content="How +one handles your data: what we collect, why, how long we keep it, and how to delete your account." />
+  <meta name="theme-color" content="#f3ead8" />
+  <link rel="canonical" href="https://www.plusoneco.in/privacy" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="+one" />
+  <meta property="og:title" content="Privacy Policy — +one" />
+  <meta property="og:description" content="How +one handles your data: what we collect, why, how long we keep it, and how to delete your account." />
+  <meta property="og:url" content="https://www.plusoneco.in/privacy" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23f3ead8' width='32' height='32'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-size='18' font-family='Georgia' fill='%231a1a1a'%3E+%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="paper" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="mark" href="/"><span class="mark-plus">+</span>one</a>
+    <details class="menu">
+      <summary class="menu-btn" aria-label="Open menu" title="Menu">
+        <span></span><span></span><span></span>
+      </summary>
+      <nav id="site-nav">
+        <a href="/#shots">App</a>
+        <a href="/#features">Features</a>
+        <a href="/#network">Network</a>
+        <a href="/#more">More</a>
+        <a href="/#design">Design</a>
+        <a class="btn btn-ink nav-cta" href="/app">Open the app</a>
+      </nav>
+    </details>
+  </header>
+
+  <main class="doc">
+    <h1>Privacy Policy</h1>
+    <p class="doc-meta">Effective 26 August 2026 · applies to +one on iOS, Android, and the web<br />
+      One-page plain-language version of how your data works.</p>
+
+    <p class="lead">+one is a messenger first. Messages are delivered to the people you send them to, and we use your account data to run the service — not to sell it.</p>
+
+    <h2>What we collect</h2>
+    <ul>
+      <li><strong>Account basics</strong> — your username, a password (stored only as a bcrypt hash), and optionally your phone number, display name, about text, and profile photo.</li>
+      <li><strong>Affiliations</strong> — college, organization, or workplace you add, so colleague discovery works.</li>
+      <li><strong>Messages &amp; media</strong> — text, images, voice notes, reactions, and their delivery/read state. We store them so your chats sync across your devices and history survives app restarts.</li>
+      <li><strong>Status &amp; last seen</strong> — your online dot and read receipts, governed by the privacy controls you choose in Settings → Privacy.</li>
+      <li><strong>Location (optional)</strong> — only if you allow it, and only once per day, to put real weather into your daily AI greeting via Open-Meteo. We do not build a location history.</li>
+      <li><strong>Camera and microphone</strong> — used only at the moment you record a voice note or take a call; nothing is recorded in the background.</li>
+      <li><strong>Push tokens</strong> — a device identifier so chat notifications reach you. It is used only for that.</li>
+      <li><strong>Technical logs</strong> — standard request metadata (IP, user agent, timestamps) kept briefly by our hosting providers to keep the service secure and reliable.</li>
+    </ul>
+
+    <h2>How we use it</h2>
+    <ul>
+      <li>Delivering your messages, calls, and posts to the people you choose.</li>
+      <li>Syncing your chats and settings across your devices.</li>
+      <li>Showing you your Network feed, statuses, communities, and colleagues.</li>
+      <li>Sending the notifications you asked for.</li>
+      <li>Keeping the service safe: abuse prevention, spam handling, and account recovery.</li>
+    </ul>
+    <p>We do not sell or rent your data, and we don't run third-party ad networks. Aggregate, anonymized web analytics (page views, load performance) are collected by our deployment provider to help us improve the site.</p>
+
+    <h2>What we don't do with it</h2>
+    <ul>
+      <li>No ad targeting, no data brokering, no sale of your contact lists.</li>
+      <li>We don't read your chats to advertise to you.</li>
+      <li>We don't ask for contacts-book access on Android or iOS.</li>
+    </ul>
+
+    <h2>How long we keep it</h2>
+    <p>We keep your data for as long as your account exists. The database is backed up automatically every six hours (and before each redeploy); backups are rotated and older copies are discarded.</p>
+    <p><strong>Deleting your account</strong> — Settings → Danger Zone → <em>Delete One ID</em> permanently removes your account after you verify your password. Shared groups, communities, and institutions transfer safely to the remaining members. Messages in chats with other people may remain for those other members, exactly as their own copies of your conversation.</p>
+    <p>Messages you delete on your side are deleted from your history; disappearing-ink messages (30s–24h timers) are hard-deleted on expiry and vanish from every device.</p>
+
+    <h2>Security</h2>
+    <ul>
+      <li>Passwords are stored only as bcrypt hashes — nobody, including us, can read them.</li>
+      <li>Sessions use signed JWTs over HTTPS; the web app and API never mix traffic with third-party origins.</li>
+      <li>Privacy settings (last seen, read receipts, status audience, blocks) are enforced on the server, not just hidden in the app.</li>
+      <li>Uploaded media is served with strict content-type and sandboxing headers.</li>
+    </ul>
+
+    <h2>Age</h2>
+    <p>+one is intended for people aged 13 and over. If you're under 13, please don't create an account — contact us and we'll help.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes in a meaningful way, the new version is published here with a new effective date, and notable changes are announced in the app. Continued use after changes means you accept the updated policy.</p>
+
+    <h2>Contact</h2>
+    <div class="box attention">
+      <p>Questions about your data, or requests to export or delete it: open the app and go to <strong>Settings → Help &amp; Support</strong>, or file an issue at <a href="https://github.com/sakshamfit/BROSKIE/issues" target="_blank" rel="noopener">github.com/sakshamfit/BROSKIE/issues</a>. You can also start here: <a href="/support">Support</a>.</p>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <span>+one</span>
+    <div class="foot-links">
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/support">Support</a>
+      <a href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">sakshamfit/BROSKIE</a>
+    </div>
+    <span>Not affiliated with WhatsApp. Original messenger.</span>
+  </footer>
+</body>
+</html>

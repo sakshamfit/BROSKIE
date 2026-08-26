@@ -34,6 +34,24 @@ is not worth doubling the moving parts.
 **Use two hosts only if** you expect heavy global traffic on the static bundle,
 or you want Vercel preview deployments per pull request.
 
+### Public site layout (plusoneco.in)
+
+`app/scripts/export-web.js` is the single web build entry point (run from
+`app/`):
+
+- **Default (Vercel / plusoneco.in):** the static marketing/legal pages in
+  `app/web/` are copied to the site root — `/` (home), `/privacy`, `/terms`,
+  `/support` — with `app/web/styles.css` inlined so the public pages ship
+  zero render-blocking CSS and **no JavaScript**. The Expo app shell moves to
+  `/app`; legacy deep links `/c/<code>` and `/gc/<id>` are rewritten to the
+  app shell so invite links keep working.
+- **`--app-only` (Railway single host, Cloudflare Workers):** the app keeps
+  serving at the domain root, exactly as before. We use that flag because the
+  Workers SPA fallback points at the root `index.html`.
+
+`robots.txt` keeps crawlers out of `/app/` and `/api/`; `sitemap.xml` lists
+the four public pages.
+
 ---
 
 ## ✅ Recommended: single host
@@ -115,9 +133,10 @@ npx wrangler deploy
 ```
 
 Do not point Wrangler directly at the source tree. Its custom build command
-installs `app/`, exports to `app/dist`, and inlines the production Railway API
-URL before uploading those files. You can reproduce the complete build and
-asset detection locally without publishing:
+installs `app/`, runs `node scripts/export-web.js --app-only` (app shell stays
+at the domain root), and inlines the production Railway API URL before
+uploading those files. You can reproduce the complete build and asset
+detection locally without publishing:
 
 ```bash
 npx wrangler deploy --dry-run

@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
-    "build": "cd ../app && npm install && CI=true npx expo export --platform web --output-dir ../server/public",
+    "build": "cd ../app && npm install && CI=true node scripts/export-web.js --app-only --output-dir ../server/public",
     "postinstall": "echo 'run npm run build to bundle the web app into ./public'",
     "backup": "node src/backup.js",
     "audit:chats": "node src/chat-audit.js",

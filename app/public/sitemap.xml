@@ -1,17 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Static sitemap for the +one web app (Expo web export).
+  Static sitemap for the +one site (Expo web export).
   Expo copies app/public/* verbatim into app/dist/ on export, and Vercel
   serves dist/ at the domain root — so this file lands at
   https://www.plusoneco.in/sitemap.xml as application/xml.
-  Keep <lastmod> fresh whenever a public page ships. The rest of the app
-  is auth-gated and intentionally not indexed.
+  Keep <lastmod> fresh whenever a public page ships. The app itself is
+  auth-gated and intentionally not indexed.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://www.plusoneco.in/</loc>
     <lastmod>2026-08-26</lastmod>
-    <changefreq>daily</changefreq>
+    <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.plusoneco.in/privacy</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://www.plusoneco.in/terms</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://www.plusoneco.in/support</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
   </url>
 </urlset>

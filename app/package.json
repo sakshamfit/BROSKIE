@@ -58,6 +58,7 @@
     "build:ios": "eas build -p ios --profile preview",
     "build:android": "eas build -p android --profile preview",
     "submit:ios": "eas submit -p ios --profile production",
+    "export:web": "node scripts/export-web.js",
     "mock-api": "node scripts/mock-api.js",
     "smoke": "node scripts/smoke-web.js",
     "smoke:app": "SMOKE_LOGGED_IN=1 node scripts/smoke-web.js",

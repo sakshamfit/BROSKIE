@@ -82,7 +82,9 @@ function consumeLaunchPushFromUrl(onRoute) {
   try {
     const encoded = new URLSearchParams(window.location.search).get('push');
     if (!encoded) return;
-    window.history.replaceState({}, '', '/');
+    const p = window.location.pathname;
+    const appBase = p === '/app' || p.startsWith('/app/') ? '/app' : '/';
+    window.history.replaceState({}, '', appBase);
     const data = JSON.parse(decodeURIComponent(atob(encoded)));
     if (data?.route) onRoute?.(data);
   } catch {}
