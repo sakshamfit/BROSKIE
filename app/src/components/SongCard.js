@@ -75,6 +75,16 @@ export default function SongCard({
     return undefined;
   }, [variant, autoPlay, paused, canPlay, key, song?.previewUrl]);
 
+  const onStickerPress = (event) => {
+    event?.stopPropagation?.();
+    if (!canPlay) return;
+    if (playing) {
+      togglePreviewMuted();
+      return;
+    }
+    playPreview(song.previewUrl, key, { loop: true });
+  };
+
   useEffect(() => {
     if (!playing) {
       spin.stopAnimation();
@@ -124,7 +134,9 @@ export default function SongCard({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={muted ? 'Unmute song' : 'Mute song'}
-          onPress={() => { if (canPlay) togglePreviewMuted(); }}
+          onPress={onStickerPress}
+          onPressIn={(event) => event?.stopPropagation?.()}
+          hitSlop={10}
           style={({ pressed }) => [s.sticker, pressed && { opacity: 0.88 }]}
         >
           {artwork ? (

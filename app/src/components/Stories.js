@@ -336,6 +336,11 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
     onClose?.();
   }, [onClose]);
 
+  useEffect(() => {
+    if (!group) return undefined;
+    return () => stopPreview();
+  }, [group]);
+
   const moveStatus = async (direction) => {
     if (!group) return;
     const next = index + direction;
@@ -504,7 +509,7 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
             },
           ]}
         >
-          <View style={s.tapZones}>
+          <View style={s.tapZones} pointerEvents="box-none">
             <Pressable
               style={{ flex: 0.34 }}
               onPress={() => moveStatus(-1)}
@@ -566,13 +571,8 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
             {/* each story segment enters with a soft settle */}
             <FadeSlide key={current.id} from="up" distance={14} scale={0.985} style={{ flex: 1, width: '100%' }}>
             {current.type === 'image' ? (
-              <View style={s.viewerMediaFill}>
+              <View style={s.viewerMediaFill} pointerEvents="none">
                 <Image source={{ uri: mediaUrl(current.mediaUrl) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                {!!current.song && (
-                  <View style={s.viewerSongOnMedia} pointerEvents="auto">
-                    <SongCard song={current.song} variant="sticker" autoPlay paused={held || replyFocused} />
-                  </View>
-                )}
                 {!!current.body && (
                   <View style={s.viewerCaption}>
                     <EmojiText style={[type.bodyMd, { color: '#ffffff', textAlign: 'center' }]}>{current.body}</EmojiText>
@@ -580,17 +580,18 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
                 )}
               </View>
             ) : (
-              <View style={s.viewerTextFill}>
+              <View style={s.viewerTextFill} pointerEvents="none">
                 <EmojiText style={[s.viewerText, { color: foregroundFor(current) }]}>{current.body}</EmojiText>
-                {!!current.song && (
-                  <View style={s.viewerSong} pointerEvents="auto">
-                    <SongCard song={current.song} variant="sticker" autoPlay paused={held || replyFocused} />
-                  </View>
-                )}
               </View>
             )}
             </FadeSlide>
           </View>
+
+          {!!current.song && (
+            <View style={s.viewerSongOverlay} pointerEvents="box-none">
+              <SongCard song={current.song} variant="sticker" autoPlay paused={held || replyFocused} />
+            </View>
+          )}
 
           {/* ── gentle update: reply composer (not a rebuild) ── */}
           {burst ? (
@@ -1234,6 +1235,9 @@ const makeStyles = (t) => StyleSheet.create({
   viewerImageFrame: { flex: 1, width: '100%', overflow: 'hidden', backgroundColor: '#111111' },
   viewerSong: { marginTop: 18, width: '100%', maxWidth: 360, alignItems: 'center' },
   viewerSongOnMedia: { position: 'absolute', left: 14, bottom: 88, right: 14, zIndex: 4 },
+  viewerSongOverlay: {
+    position: 'absolute', left: 14, right: 14, bottom: 118, zIndex: 20, alignItems: 'flex-start',
+  },
   viewerCaption: { position: 'absolute', left: 18, right: 18, bottom: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.58)' },
 
   composer: { flex: 1 },

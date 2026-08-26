@@ -124,8 +124,9 @@ show up). Results are proxied, cached, vibe-ranked from your favourite artists /
 and rate-limited through the backend (`/api/songs/search`, `/api/songs/browse`, `/api/songs/:id`). ~30-second
 previews play like Instagram: a small music sticker on the post or status (not a card
 underneath), autoplay when a post scrolls into view or a status opens, and a mute
-control that works on web, iOS and Android. One preview at a time; it stops when the
-post leaves the screen or the status closes.
+control that works on web, iOS and Android. One shared player (`previewPlayer.js`)
+owns the only audio instance — mute lasts for the session, clips loop while visible,
+and leaving the story/post or backgrounding the app unloads the sound.
 **Previews only, by design** — full-track playback would require a licensing agreement
 with a music provider and is intentionally not implemented.
 **Accounts & profile** — register/login with a unique username + password (phone is
