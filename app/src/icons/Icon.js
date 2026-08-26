@@ -59,6 +59,6 @@ export default React.memo(function Icon({ name, size = 24, color = '#000', style
       })}
     </Svg>
   );
-}
+});
 
 export const ICON_NAMES = Object.keys(DATA);
