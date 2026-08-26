@@ -21,7 +21,7 @@ echo "━━━ [3/5] server: test suites ━━━"
   npm run test:data-dir           && \
   npm run test:hardening          && \
   npm run test:e2e-journey        && \
-  npm run test:itunes-songs       && \
+  npm run test:songs             && \
   npm run test:message-state      && \
   npm run test:chat-history       && \
   npm run test:offline-messaging  && \

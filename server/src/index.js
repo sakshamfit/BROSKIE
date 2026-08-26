@@ -12,8 +12,34 @@ const { customAlphabet } = require('nanoid');
 
 const db = require('./db');
 const { sign, verify, requireAuth } = require('./auth');
-const jamendo = require('./jamendo');
-const itunes = require('./itunes');
+const songs = require('./songs');
+
+/**
+ * Stored song blobs come from two eras: pre-Phase-9 clients stored the old
+ * picker shape ({id, name, artist, albumArt, source, …}), Phase-9+ store the
+ * canonical provider-verified shape ({id, provider, title, artist, album,
+ * artwork, previewUrl, durationMs}). This normalizes BOTH to the canonical
+ * shape at serialization time, so every client — old and new — always reads
+ * one consistent shape. Returns null for absent/corrupt blobs.
+ */
+function normalizeStoredSong(raw) {
+  if (!raw) return null;
+  let s = raw;
+  if (typeof raw === 'string') {
+    try { s = JSON.parse(raw); } catch { return null; }
+  }
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+  return {
+    id: String(s.id || '').slice(0, 64) || null,
+    provider: String(s.provider || s.source || '').slice(0, 24) || null,
+    title: String(s.title || s.name || '').slice(0, 120),
+    artist: String(s.artist || '').slice(0, 120),
+    album: String(s.album || '').slice(0, 160),
+    artwork: /^https:\/\/[^\s"'<>\\]+$/.test(String(s.artwork || s.albumArt || '')) ? String(s.artwork || s.albumArt) : null,
+    previewUrl: /^https:\/\/[^\s"'<>\\]+$/.test(String(s.previewUrl || '')) ? String(s.previewUrl) : null,
+    durationMs: Math.max(0, Math.min(600000, Math.round(Number(s.durationMs) || 0))),
+  };
+}
 const TextOperation = require('./ot/textOperation');
 const OTStore = require('./ot/otStore');
 
@@ -115,6 +141,9 @@ function clientKey(req) {
   return String(req.ip || req.socket?.remoteAddress || 'unknown');
 }
 function isLoopbackReq(req) {
+  // Tests can set RATE_LIMIT_ENFORCE_LOOPBACK=1 to exercise the limiters on
+  // localhost; by default loopback (CI suites, health checks) is exempt.
+  if (process.env.RATE_LIMIT_ENFORCE_LOOPBACK === '1') return false;
   const raw = String(req.socket?.remoteAddress || '');
   return raw === '127.0.0.1' || raw === '::1' || raw === '::ffff:127.0.0.1';
 }
@@ -179,6 +208,14 @@ setInterval(() => {
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, message: 'Too many attempts from this network. Try again in a few minutes.' });
 const otpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 6, message: 'Too many verification codes requested. Try again in a few minutes.' });
 const uploadLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60, message: 'Upload limit reached for now. Try again in a few minutes.' });
+// Song search is keyed PER USER (carriers/NAT share IPs, so an IP key would
+// throttle whole networks together): 30 searches/minute per account.
+const songsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyFn: (req) => `user:${req.userId}`,
+  message: 'You are searching songs too fast — give it a few seconds.',
+});
 
 const storage = require('./storage');
 
@@ -833,7 +870,7 @@ function hydrateMessage(m, viewerId, context = null) {
         const statusAuthor = context?.usersById?.get(st.user_id) || getUser(st.user_id);
         statusReply = {
           id: st.id, type: st.type, body: st.body, mediaUrl: st.media_url, mediaAspect: st.media_aspect || null, bg: st.bg,
-          song: st.song ? JSON.parse(st.song) : null, audience: st.audience || 'public', createdAt: st.created_at,
+          song: normalizeStoredSong(st.song), audience: st.audience || 'public', createdAt: st.created_at,
           author: publicUser(statusAuthor),
         };
       } else {
@@ -3848,7 +3885,7 @@ function postAudienceIds(postId, authorId, audience) {
 function hydrateStatus(s, viewerId, context = null) {
   return {
     id: s.id, type: s.type, body: s.body, mediaUrl: s.media_url, mediaAspect: s.media_aspect || null, bg: s.bg,
-    song: s.song ? JSON.parse(s.song) : null,
+    song: normalizeStoredSong(s.song),
     audience: s.audience || 'public',
     createdAt: s.created_at,
     viewed: context ? context.viewedIds.has(s.id) : !!db.prepare('SELECT 1 FROM status_views WHERE status_id = ? AND user_id = ?').get(s.id, viewerId),
@@ -3890,13 +3927,22 @@ app.get('/api/status', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/status', requireAuth, (req, res) => {
+app.post('/api/status', requireAuth, async (req, res) => {
   const {
     type = 'text', body = '', mediaUrl = null, mediaAspect = null, bg = '#075E54',
     song = null, audience = 'public', recipientIds = [],
   } = req.body || {};
   const statusGate = moderation.moderationGate(req.userId);
   if (statusGate.blocked) return res.status(403).json({ error: statusGate.error });
+
+  // Same contract as posts: provider-verify new song ids, allowlist legacy
+  // ones (see songs.verifyAttachment).
+  let verifiedSong = null;
+  if (song) {
+    const verdict = await songs.verifyAttachment(song);
+    if (verdict.error) return res.status(400).json({ error: verdict.error });
+    verifiedSong = verdict.song;
+  }
 
   const allowedAudiences = ['public', 'contacts', 'contacts_except', 'selected'];
   if (!allowedAudiences.includes(audience)) {
@@ -3926,7 +3972,7 @@ app.post('/api/status', requireAuth, (req, res) => {
       ? Math.max(0.4, Math.min(2.5, Number(mediaAspect)))
       : null,
     bg: String(bg || '#075E54').slice(0, 32),
-    song: song ? JSON.stringify(song) : null, audience: aud,
+    song: verifiedSong ? JSON.stringify(verifiedSong) : null, audience: aud,
     created_at: now(), expires_at: now() + 24 * 3600 * 1000,
   };
   db.prepare(
@@ -4026,7 +4072,7 @@ app.post('/api/status/:id/reply', requireAuth, (req, res) => {
     mediaUrl: s.media_url,
     mediaAspect: s.media_aspect || null,
     bg: s.bg,
-    song: s.song ? JSON.parse(s.song) : null,
+    song: normalizeStoredSong(s.song),
     audience: s.audience || 'public',
     createdAt: s.created_at,
     author: author ? { id: author.id, name: author.name, avatar: author.avatar, username: author.username } : null,
@@ -4081,45 +4127,28 @@ app.post('/api/status/:id/reply', requireAuth, (req, res) => {
 });
 
 /** Song search for status composer — proxies Jamendo's public track search API. */
-app.get('/api/songs/search', requireAuth, async (req, res) => {
-  // iTunes Search is the primary source: it needs no API key, so song
-  // attachment works out of the box on every deployment. When a
-  // JAMENDO_CLIENT_ID is configured, its full-length Creative-Commons
-  // tracks are appended after the iTunes results.
-  const q = String(req.query.q || '').trim();
-  if (!q) return res.json({ tracks: [], configured: true });
-  const limit = Math.min(25, Math.max(1, Number(req.query.limit) || 16));
-  try {
-    let tracks = [];
-    let firstError = null;
-    try {
-      tracks = await itunes.searchTracks(q, limit);
-    } catch (e) {
-      firstError = e.message;
-      console.error('[itunes]', e.message);
-    }
-    if (jamendo.isConfigured() && tracks.length < limit) {
-      try {
-        const extra = await jamendo.searchTracks(q, limit);
-        const seen = new Set(tracks.map((t) => `${(t.name || '').toLowerCase()}|${(t.artist || '').toLowerCase()}`));
-        for (const t of extra) {
-          const k = `${(t.name || '').toLowerCase()}|${(t.artist || '').toLowerCase()}`;
-          if (seen.has(k)) continue;
-          seen.add(k);
-          tracks.push(t);
-        }
-      } catch (e) {
-        console.error('[jamendo]', e.message);
-      }
-    }
-    // Surface a 200 with an explanatory message instead of a hard error —
-    // song attachment is optional, the rest of the status composer must
-    // keep working even if the song search API has a hiccup.
-    res.json({ tracks, configured: true, ...(firstError && !tracks.length ? { error: firstError } : {}) });
-  } catch (e) {
-    console.error('[songs]', e.message);
-    res.json({ tracks: [], configured: true, error: e.message });
-  }
+app.get('/api/songs/search', requireAuth, songsLimiter, async (req, res) => {
+  // iTunes Search is the primary provider, Deezer the automatic fallback
+  // (see server/src/songs.js). The client never calls the providers directly
+  // — results are proxied, normalized, cached, and rate-limited per user.
+  // Sanitization also happens inside songs.js; applied here first so even a
+  // bypassed module can't forward junk outbound (defense in depth).
+  const q = songs.sanitizeQuery(req.query.q);
+  if (!q) return res.json({ results: [], tracks: [], degraded: false, configured: true });
+  const limit = Math.min(25, Math.max(1, Number(req.query.limit) || 15));
+  const { results, degraded } = await songs.searchSongs(q, limit);
+  // `tracks`/`configured` are legacy keys kept for app versions released
+  // before Phase 9 — new clients read `results`/`degraded`.
+  res.json({ results, tracks: results, degraded, configured: true });
+});
+
+// Single-song lookup by normalized id ("itunes:1440857781") — lets a client
+// rehydrate full details for an old post that only stored the id. Registered
+// AFTER /api/songs/search so "search" is never captured as an :id.
+app.get('/api/songs/:id', requireAuth, songsLimiter, async (req, res) => {
+  const song = await songs.lookupSong(String(req.params.id || ''));
+  if (!song) return res.status(404).json({ error: 'Song not found' });
+  res.json({ song });
 });
 
 // Backwards-compatible alias for the older Spotify-named route.
@@ -4191,7 +4220,7 @@ function hydratePost(row, viewerId, context = null) {
     body: row.body,
     mediaUrl: row.media_url,
     mediaAspect: row.media_aspect || null,
-    song: row.song ? JSON.parse(row.song) : null,
+    song: normalizeStoredSong(row.song),
     tag: row.tag,
     audience: row.audience || 'public',
     createdAt: row.created_at,
@@ -4285,7 +4314,7 @@ app.get('/api/posts/:id', requireAuth, (req, res) => {
   res.json({ post: hydratePost(row, req.userId) });
 });
 
-app.post('/api/posts', requireAuth, (req, res) => {
+app.post('/api/posts', requireAuth, async (req, res) => {
   const {
     body = '', title = '', mediaUrl = null, mediaAspect = null, tag = null,
     song = null, audience = 'public', recipientIds = [],
@@ -4293,6 +4322,17 @@ app.post('/api/posts', requireAuth, (req, res) => {
   const text = String(body).trim();
   if (!text && !mediaUrl && !song) return res.status(400).json({ error: 'Write something, or attach a photo or a song' });
   if (text.length > 2000) return res.status(400).json({ error: 'Post is too long (2000 characters max)' });
+
+  // Song attachments are never trusted from the client: new-format ids are
+  // re-verified against the provider and the PROVIDER's data is stored (so
+  // no spoofed titles/artwork URLs can reach a feed); legacy app versions
+  // get a strictly allowlisted copy. See songs.verifyAttachment.
+  let verifiedSong = null;
+  if (song) {
+    const verdict = await songs.verifyAttachment(song);
+    if (verdict.error) return res.status(400).json({ error: verdict.error });
+    verifiedSong = verdict.song;
+  }
 
   const gate = moderation.moderationGate(req.userId);
   if (gate.blocked) return res.status(403).json({ error: gate.error });
@@ -4313,7 +4353,7 @@ app.post('/api/posts', requireAuth, (req, res) => {
     media_aspect: Number.isFinite(Number(mediaAspect))
       ? Math.max(0.4, Math.min(2.5, Number(mediaAspect)))
       : null,
-    song: song ? JSON.stringify(song) : null,
+    song: verifiedSong ? JSON.stringify(verifiedSong) : null,
     tag: tag ? String(tag).replace(/^#/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24) || null : null,
     audience: aud,
     created_at: now(),
