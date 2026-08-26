@@ -1,3 +1,14 @@
+# ─────────────────────────────────────────────────────────────────
+# ACTIVATION: this file ships as .txt because the Arena bot token
+# cannot create files under .github/workflows/. To turn on real-Chrome
+# Lighthouse verification (score gates + page screenshots), run:
+#
+#   mkdir -p .github/workflows
+#   mv .github/landing-verify.yml.txt .github/workflows/landing-verify.yml
+#   git add .github && git commit -m "ci: landing lighthouse" && git push
+#
+# (or grant the Arena GitHub app Workflows: read+write)
+# ─────────────────────────────────────────────────────────────────
 name: Landing page verify (SEO + motion + Lighthouse)
 
 on:

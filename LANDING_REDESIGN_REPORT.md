@@ -102,7 +102,7 @@ react-dom (~45 KB gz extra) and hydrating static markup, directly violating the
 | `scripts/check-links.mjs` — 12 pages, 215 asset refs, 187 internal links | **PASS** (all resolve) |
 | `scripts/test-site-motion.mjs` — jsdom: no runtime errors, reveals fire, demos build; bundle parse+init 27.9 ms jsdom-reduced (~10–15 ms Chrome) | **PASS** (index, chat, network) |
 | Page weight (gzip) | home 13 KB HTML + 28 KB deferred JS + 74 KB LCP webp + ~21 KB font; sub-pages 8–10 KB |
-| Lighthouse (real Chrome) | **Blocked in this sandbox** (browser cannot execute; Chrome CDNs blocked). `.github/workflows/landing-verify.yml` runs it on GitHub runners (scores gated: perf ≥ 90, a11y/bp ≥ 90, seo ≥ 95) + saves full-page screenshots + reports as artifacts. Push blocked by expired GitHub auth — run after reconnecting. |
+| Lighthouse (real Chrome) | **Could not execute in this sandbox** (Chromium's process model cannot bootstrap here; Chrome/electron/PSI CDNs blocked by egress allowlist; the Arena GitHub App token cannot create `.github/workflows/*` files). Delivered instead: (a) the workflow as `.github/landing-verify.yml.txt` — one `mv` + push activates real-Chrome Lighthouse (gates: perf ≥ 90, a11y/bp ≥ 90, seo ≥ 95) with full-page screenshots as artifacts; (b) the local measured proxies above. After merge, run PageSpeed Insights on `https://www.plusoneco.in/`. |
 | Rich Results Test | JSON-LD validated structurally offline (per-type required fields + shapes). Re-run Google's live test after deploy. |
 
 ## Files changed
@@ -115,12 +115,17 @@ react-dom (~45 KB gz extra) and hydrating static markup, directly violating the
   step), **new** `verify-site.mjs`, `test-site-motion.mjs`, `lighthouse-ci.mjs`,
   `check-links.mjs`, `preview-site.mjs`
 - `app/package.json` (+dev: `gsap`, `esbuild`), `app/public/robots.txt`,
-  `app/public/sitemap.xml`, `vercel.json`, `.github/workflows/landing-verify.yml`
+  `app/public/sitemap.xml`, `vercel.json`, `.github/landing-verify.yml.txt`
+  (activatable CI workflow)
 
 ## Remaining (outside the repo)
 
-1. **Reconnect GitHub auth in Arena** → push branch → the landing-verify
-   workflow runs real-Chrome Lighthouse + screenshots (artifacts).
-2. Deploy to Vercel (buildCommand unchanged) → confirm live
-   `plusoneco.in/robots.txt`, `/sitemap.xml`, `/about` … view-source.
-3. Google Rich Results Test + Search Console submission after deploy.
+1. Activate CI Lighthouse: `mv .github/landing-verify.yml.txt
+   .github/workflows/landing-verify.yml` + push (the Arena bot token lacks
+   `workflows` permission) — or grant the app Workflows read+write.
+2. Merge the PR → Vercel builds (`cd app && npm install && node
+   scripts/export-web.js`) → verify live: plusoneco.in/about, /communities,
+   /chat, /network, /download, /blog/, /robots.txt, /sitemap.xml all 200 with
+   unique titles in view-source.
+3. Google Rich Results Test on the live homepage (FAQ + SoftwareApplication
+   eligible) + submit sitemap.xml in Search Console.
