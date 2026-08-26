@@ -215,7 +215,7 @@ every afternoon without opening Chats.
 | **Community invite links** | 8-char code per community (admins only see it), `Share` sheet with `https://…/c/<code>`, join-by-code bypasses every join policy (the link IS the approval), long-press rotates/revokes. Web `/c/<code>` and native `plusone://c/<code>` both deep-link: join → open the community detail. |
 | **Hold-to-record voice notes** | Hold the mic button to record, release to send; quick taps cancel (never send accidents). Race-safe: a release during recorder start-up parks the stop. |
 | **Activity grouping** | Likes/comments on your posts collapse into one row per post ("7 people liked your post") with stacked avatars; latest comment as preview. 7-day window. |
-| Songs on See/Network | Already existed (crop + upload + Jamendo picker) — verified, no change needed. |
+| Songs on See/Network | iTunes Search API picker (zero-config, 30s previews) with optional Jamendo full-length tracks appended — see QA_LOOP2_REPORT addendum. |
 | **CI** | Workflow file shipped at `docs/ci.workflow.yml` — activate once via GitHub → Add file → Create new file → name it `.github/workflows/ci.yml` → paste it in (the sandbox's git token cannot create workflow files). CI runs every server suite (chat history 14, offline messaging 14, message state 15, push 33, phase 2 39, phase 3 27, moderation 61, OT 33, features 27 — 263 checks) + web and Android bundle exports. |
 
 New endpoints: `GET /api/push/web-config`, `POST/DELETE /api/push/web-subscription`,

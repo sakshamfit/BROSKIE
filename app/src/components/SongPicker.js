@@ -10,9 +10,11 @@ import { type, inkBox, marker, dashedRule } from '../theme';
 import { SpringPressable, motion } from '../motion';
 
 /**
- * Full-screen Jamendo song search sheet — shared by the Status composer and
+ * Full-screen song search sheet — shared by the Status composer and
  * the Network "New Post" composer so attaching a song works identically
- * (and looks identical) in both places.
+ * (and looks identical) in both places. Results come from the iTunes
+ * Search API (zero-config, 30-second previews); full-length Jamendo
+ * tracks are appended when the server has a JAMENDO_CLIENT_ID.
  */
 export default function SongPicker({ visible, onClose, onSelect }) {
   const { theme } = useTheme();
@@ -77,7 +79,7 @@ export default function SongPicker({ visible, onClose, onSelect }) {
 
         {!configured && (
           <Text style={[type.bodySm, { color: theme.muted, marginTop: 16, paddingHorizontal: 4 }]}>
-            Song search isn't configured on the server yet — set JAMENDO_CLIENT_ID.
+            Song search isn't available on the server right now.
           </Text>
         )}
         {configured && !!notice && (

@@ -92,3 +92,19 @@ Also: ringtone `AudioContext` now attempts `resume()` (iOS mints suspended conte
 - `.env.example` — TURN/ICE documentation.
 
 **LOOP #2 STATUS: chat-open bug fixed · mobile-web calling fixed · 9 security holes closed · perf tuned · full pipeline green · production build verified live.**
+
+---
+
+## 8. ADDENDUM — SONG SEARCH NOW POWERED BY THE ITUNES SEARCH API
+
+**Change:** `/api/songs/search` (the "Add a song" picker on statuses and Network posts) now uses the **iTunes Search API** (`https://itunes.apple.com/search?term=…&media=music&entity=song`) as its primary source:
+
+- **Zero configuration** — no API key, so song attachment works on every deployment out of the box (previously it silently showed "not configured" until a `JAMENDO_CLIENT_ID` was set).
+- Results carry **30-second preview clips** (`previewUrl`, .m4a — played inline by the existing SongCard player), **album artwork** (requested at 300px) and durations.
+- Same response shape as before (`id/name/artist/albumArt/previewUrl/durationMs/source`), so stored songs on existing statuses/posts keep rendering and playing unchanged.
+- **Jamendo stays as an optional bonus source**: when `JAMENDO_CLIENT_ID` is configured, its full-length Creative-Commons tracks are dedup-appended after the iTunes results.
+- Server-side TTL cache (10 min, LRU-capped) keeps typing in the picker well inside iTunes' ~20 req/min guidance; upstream failures degrade to a 200 + friendly message (the composer never breaks); `ITUNES_COUNTRY` env selects the storefront (default US).
+
+**Files:** `server/src/itunes.js` (new), `server/src/index.js` (route), `app/src/components/SongPicker.js` / `SongCard.js` (copy), `.env.example`, `server/test-itunes-songs.js` (new — 12 checks: mapper unit + integration against a fixture iTunes API, incl. auth gate, empty catalogue, upstream-failure degradation, cache, legacy alias). Wired into `scripts/ci.sh`.
+
+**Verification:** `test:itunes-songs` 12/12 against the real server booted with a fixture upstream; full `ci.sh` pipeline green. Live calls to itunes.apple.com from the production host (Railway) are ordinary outbound HTTPS — not exercisable from this sandbox (egress-blocked), but covered by the fixture integration end-to-end.

@@ -28,6 +28,7 @@
     "test:features": "node test-features.js",
     "test:data-dir": "node test-data-dir.js",
     "test:hardening": "node test-hardening.js",
+    "test:itunes-songs": "node test-itunes-songs.js",
     "test:e2e-journey": "node test-e2e-journey.js"
   },
   "dependencies": {

@@ -13,6 +13,7 @@ const { customAlphabet } = require('nanoid');
 const db = require('./db');
 const { sign, verify, requireAuth } = require('./auth');
 const jamendo = require('./jamendo');
+const itunes = require('./itunes');
 const TextOperation = require('./ot/textOperation');
 const OTStore = require('./ot/otStore');
 
@@ -4081,17 +4082,42 @@ app.post('/api/status/:id/reply', requireAuth, (req, res) => {
 
 /** Song search for status composer — proxies Jamendo's public track search API. */
 app.get('/api/songs/search', requireAuth, async (req, res) => {
-  if (!jamendo.isConfigured()) return res.json({ tracks: [], configured: false });
+  // iTunes Search is the primary source: it needs no API key, so song
+  // attachment works out of the box on every deployment. When a
+  // JAMENDO_CLIENT_ID is configured, its full-length Creative-Commons
+  // tracks are appended after the iTunes results.
   const q = String(req.query.q || '').trim();
   if (!q) return res.json({ tracks: [], configured: true });
+  const limit = Math.min(25, Math.max(1, Number(req.query.limit) || 16));
   try {
-    const tracks = await jamendo.searchTracks(q);
-    res.json({ tracks, configured: true });
-  } catch (e) {
-    console.error('[jamendo]', e.message);
+    let tracks = [];
+    let firstError = null;
+    try {
+      tracks = await itunes.searchTracks(q, limit);
+    } catch (e) {
+      firstError = e.message;
+      console.error('[itunes]', e.message);
+    }
+    if (jamendo.isConfigured() && tracks.length < limit) {
+      try {
+        const extra = await jamendo.searchTracks(q, limit);
+        const seen = new Set(tracks.map((t) => `${(t.name || '').toLowerCase()}|${(t.artist || '').toLowerCase()}`));
+        for (const t of extra) {
+          const k = `${(t.name || '').toLowerCase()}|${(t.artist || '').toLowerCase()}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          tracks.push(t);
+        }
+      } catch (e) {
+        console.error('[jamendo]', e.message);
+      }
+    }
     // Surface a 200 with an explanatory message instead of a hard error —
     // song attachment is optional, the rest of the status composer must
     // keep working even if the song search API has a hiccup.
+    res.json({ tracks, configured: true, ...(firstError && !tracks.length ? { error: firstError } : {}) });
+  } catch (e) {
+    console.error('[songs]', e.message);
     res.json({ tracks: [], configured: true, error: e.message });
   }
 });

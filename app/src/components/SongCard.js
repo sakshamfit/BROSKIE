@@ -7,8 +7,9 @@ import { SpringPressable, motion } from '../motion';
 
 /**
  * A "song sketched onto paper" card — album art behind an ink frame, with a
- * play/pause control for the streamed preview (when one exists) — Jamendo
- * returns full-length tracks, so this plays the whole song, not just 30s.
+ * play/pause control for the streamed preview (when one exists). iTunes
+ * results carry ~30-second preview clips; Jamendo results (when configured)
+ * stream full-length tracks.
  */
 export default function SongCard({ song, compact = false, tint }) {
   const { theme } = useTheme();
