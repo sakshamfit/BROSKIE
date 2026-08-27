@@ -52,7 +52,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
   const { user } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { height: windowHeight, isTablet } = useResponsive();
+  const { height: windowHeight } = useResponsive();
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   // The recorder hook polls even while the composer is idle. 100ms caused the
   // entire conversation tree to render ten times per second; the timer only
@@ -902,7 +902,7 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         ? { paddingBottom: 8 }
         : !embedded ? { paddingBottom: Math.max(insets.bottom, 12) } : null
       ]}>
-        <View style={[s.composerRow, isTablet && s.composerRowWide]}>
+        <View style={[s.composerRow, s.composerRowWide]}>
         {recording ? (
           <InkField style={s.inputBar}>
             <View style={[s.recDot, { backgroundColor: theme.danger }]} />
