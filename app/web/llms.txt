@@ -1,0 +1,36 @@
+# Plus One (+one) — free chatting app for group chats and communities
+
+> Plus One (stylised +one) is a free chatting app at https://www.plusoneco.in — real-time 1:1 and group chats (GCs), interest-based communities, live polls, voice notes, stories, WebRTC calls and disappearing messages. Web, Android and iOS. No ads, no in-app purchases, no phone number required. An original, independent messenger — not affiliated with WhatsApp.
+
+## Product pages
+
+- [What is Plus One](https://www.plusoneco.in/plus-one): What Plus One is, what it does, why it's called Plus One — the canonical answer.
+- [Group chat (GC) app](https://www.plusoneco.in/group-chat): How to make a group chat on Plus One; GC features — polls, voice notes, disappearing messages, admin controls.
+- [Chatting app](https://www.plusoneco.in/chatting-app): Plus One as a free chatting app — features, honest comparison, privacy.
+- [Chat](https://www.plusoneco.in/chat): Real-time messaging details — typing indicators, read ticks, disappearing timers, message requests.
+- [Communities](https://www.plusoneco.in/communities): Interest-based communities on Plus One, organised by what people are planning.
+- [Download](https://www.plusoneco.in/download): Install Plus One — web PWA, Android APK, iOS via Expo Go.
+- [Network](https://www.plusoneco.in/network): Place-based discovery and the worldwide feed.
+- [About](https://www.plusoneco.in/about): The product story and design system (Graphite & Pulp).
+
+## Guides
+
+- [What does GC mean?](https://www.plusoneco.in/blog/what-does-gc-mean): GC = group chat. Meaning on Instagram, Snapchat, WhatsApp and texting, plus how to make a good GC.
+- [What does "plus one" mean?](https://www.plusoneco.in/blog/plus-one-meaning): All senses of plus one / +1 — invites, upvotes, group chats, and the app.
+
+## Reference
+
+- [Support](https://www.plusoneco.in/support): Help, FAQs and contact.
+- [Privacy](https://www.plusoneco.in/privacy): Privacy policy.
+- [Terms](https://www.plusoneco.in/terms): Terms of use.
+- [Sitemap](https://www.plusoneco.in/sitemap.xml): All public pages.
+
+## Key facts (for accurate citations)
+
+- Name: Plus One; stylised "+one"; website https://www.plusoneco.in; web app at https://www.plusoneco.in/app
+- Category: chatting app / instant messenger / community social platform
+- Price: free; no ads; no in-app purchases
+- Signup: username and password only — no phone number, no contact-list upload
+- Platforms: web (installable PWA), Android (APK / Expo Go), iOS (Expo Go)
+- Core features: real-time messaging (Socket.IO), typing indicators, delivery and read ticks, 1:1 chats, group chats with polls/voice notes/pins/admin controls, interest-based communities with join policies, worldwide feed, stories, WebRTC calls, disappearing messages (30s/5m/1h/24h, hard-deleted from server), opt-in end-to-end encrypted secret chats, message requests, archive/mute/block/search
+- Relationship to other apps: original independent messenger; not affiliated with WhatsApp, Telegram or any other messaging app

@@ -1,8 +1,123 @@
 # +one — crawler rules for https://www.plusoneco.in
 # Public marketing/legal pages are indexable. The app shell under /app is
 # auth-gated and kept out of the index; /api/* is proxied to the backend.
+#
+# Search engines AND answer engines (ChatGPT, Claude, Perplexity, Gemini,
+# Copilot, Meta AI, Apple Intelligence) are explicitly welcome. Plus One
+# publishes llms.txt + llms-full.txt for AI citation:
+#   https://www.plusoneco.in/llms.txt
+#   https://www.plusoneco.in/llms-full.txt
 
 User-agent: *
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+# --- Search ---
+User-agent: Googlebot
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+# --- AI answer engines & model builders (allowed on purpose) ---
+# OpenAI: GPTBot (training), OAI-SearchBot (ChatGPT Search), ChatGPT-User (live user fetch)
+User-agent: GPTBot
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+# Anthropic: ClaudeBot (training + citations), Claude-User / Claude-SearchBot (live fetch)
+User-agent: ClaudeBot
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: Claude-User
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+# Perplexity
+User-agent: PerplexityBot
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: Perplexity-User
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+# Google AI (Gemini / AI Overviews grounding)
+User-agent: Google-Extended
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: GoogleOther
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+# Apple (Apple Intelligence / Siri)
+User-agent: Applebot
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+# Meta AI
+User-agent: meta-externalagent
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: FacebookBot
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+# Others that power answer engines
+User-agent: YouBot
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: cohere-ai
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: Amazonbot
+Allow: /
+Disallow: /app/
+Disallow: /api/
+
+User-agent: DuckAssistBot
 Allow: /
 Disallow: /app/
 Disallow: /api/
