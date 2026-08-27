@@ -59,7 +59,7 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
   const { user } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { height: windowHeight, isTablet } = useResponsive();
+  const { height: windowHeight } = useResponsive();
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   // Only whole recording seconds are displayed. Polling at 100ms made the
   // whole GC message list render ten times per second even when idle.
@@ -741,7 +741,7 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
               ? { paddingBottom: 8 }
               : !embedded ? { paddingBottom: Math.max(insets.bottom, 12) } : null
             ]}>
-              <View style={[s.composerRow, isTablet && s.composerRowWide]}>
+              <View style={[s.composerRow, s.composerRowWide]}>
               {recording ? (
                 <InkField style={s.inputBar}>
                   <View style={[s.recDot, { backgroundColor: theme.danger }]} />

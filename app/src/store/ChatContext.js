@@ -186,6 +186,7 @@ export function ChatProvider({ children }) {
   // setSinkId. 'default' = loud speaker; anything else is a private output
   // (headphones / earphones / Bluetooth) chosen by toggleSpeaker.
   const [remoteSinkId, setRemoteSinkId] = useState('default');
+  const speakerOnRef = useRef(true);
   const pcRef = useRef(null);
   const pendingCandidates = useRef([]);
   const ringtoneRef = useRef(null);
@@ -1116,6 +1117,30 @@ export function ChatProvider({ children }) {
   const callRef = useRef(null);
   const callTypeRef = useRef('audio');
   useEffect(() => { callRef.current = call; }, [call]);
+  useEffect(() => { speakerOnRef.current = speakerOn; }, [speakerOn]);
+
+  const defaultSpeakerStateFor = useCallback((type) => (
+    // Native voice calls should begin privately in the receiver/earpiece.
+    // Video stays speaker-first; web keeps the browser/system default output.
+    Platform.OS === 'web' ? true : type === 'video'
+  ), []);
+
+  const applySpeakerRoute = useCallback((next) => {
+    if (Platform.OS === 'web') {
+      if (next) {
+        setRemoteSinkId('default');
+        return;
+      }
+      RTC.listAudioOutputs().then((outputs) => {
+        const privateId = RTC.pickPrivateOutput(outputs);
+        setRemoteSinkId(privateId || 'default');
+      });
+      return;
+    }
+    if (typeof RTC.setSpeakerphoneOn === 'function') {
+      RTC.setSpeakerphoneOn(next).catch(() => {});
+    }
+  }, []);
 
   const flushPendingCandidates = (pc) => {
     pendingCandidates.current.forEach((c) => pc.addIceCandidate(RTC.IceCandidate(c)).catch(() => {}));
@@ -1196,13 +1221,14 @@ export function ChatProvider({ children }) {
     facingRef.current = 'user';
     setMicOn(true);
     setCamOn(type === 'video');
-    // Every call starts on the loud speaker (phone default); the user can
-    // switch to earphone/headphone output mid-call.
-    setSpeakerOn(true);
-    setRemoteSinkId('default');
-    if (Platform.OS !== 'web' && typeof RTC.setSpeakerphoneOn === 'function') {
-      RTC.setSpeakerphoneOn(true).catch(() => {});
-    }
+    // Default route by call type: voice begins privately on native; video
+    // stays speaker-first. The chosen route is also re-applied on connect /
+    // reconnect below so a library/OS hand-off cannot silently bounce a voice
+    // call back to speaker.
+    const defaultSpeakerOn = defaultSpeakerStateFor(type);
+    speakerOnRef.current = defaultSpeakerOn;
+    setSpeakerOn(defaultSpeakerOn);
+    applySpeakerRoute(defaultSpeakerOn);
 
     const pc = RTC.createPeerConnection({ iceServers: ICE_SERVERS });
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -1221,6 +1247,7 @@ export function ChatProvider({ children }) {
       }
     };
     pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connected') applySpeakerRoute(speakerOnRef.current);
       setCall((prev) => {
         if (prev && prev.id === callId) {
           return { ...prev, connectionState: pc.connectionState };
@@ -1233,6 +1260,7 @@ export function ChatProvider({ children }) {
     // it honestly so the user knows to try Wi-Fi.
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState;
+      if (state === 'connected' || state === 'completed') applySpeakerRoute(speakerOnRef.current);
       setCall((prev) => {
         if (prev && prev.id === callId) {
           return { ...prev, iceConnectionState: state };
@@ -1251,7 +1279,7 @@ export function ChatProvider({ children }) {
 
     pcRef.current = pc;
     return pc;
-  }, [takePrewarmedMedia]);
+  }, [takePrewarmedMedia, defaultSpeakerStateFor, applySpeakerRoute]);
 
   const startWebRTC = useCallback(async (callId, isCaller, type) => {
     try {
@@ -1466,16 +1494,10 @@ export function ChatProvider({ children }) {
   // session itself is switched (rtc.setSpeakerphoneOn).
   const toggleSpeaker = useCallback(() => {
     const next = !speakerOn;
+    speakerOnRef.current = next;
     setSpeakerOn(next);
-    if (Platform.OS === 'web') {
-      RTC.listAudioOutputs().then((outputs) => {
-        const privateId = RTC.pickPrivateOutput(outputs);
-        setRemoteSinkId(next ? 'default' : (privateId || 'default'));
-      });
-    } else if (typeof RTC.setSpeakerphoneOn === 'function') {
-      RTC.setSpeakerphoneOn(next).catch(() => {});
-    }
-  }, [speakerOn]);
+    applySpeakerRoute(next);
+  }, [speakerOn, applySpeakerRoute]);
 
   const switchCamera = useCallback(async () => {
     if (!localStream) return;

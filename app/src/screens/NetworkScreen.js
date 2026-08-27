@@ -534,13 +534,13 @@ function CommentsSheet({ post, onClose, onCounted }) {
             { backgroundColor: theme.bg, borderTopWidth: stroke.bold, borderTopColor: theme.ink, paddingBottom: Math.max(insets.bottom, 24) },
           ]}
         >
-          <View style={s.sheetHead}>
+          <View style={[s.sheetHead, s.listWide]}>
             <Text style={[type.headlineSm, { color: theme.text, flex: 1 }]}>Comments</Text>
             <Pressable onPress={onClose} hitSlop={10}>
               <Icon name="close" size={22} color={theme.ink} />
             </Pressable>
           </View>
-          <Rule style={{ marginTop: 0, marginBottom: 8 }} />
+          <Rule style={[s.listWide, { marginTop: 0, marginBottom: 8 }]} />
 
           {loading ? (
             <ActivityIndicator style={{ marginVertical: 30 }} color={theme.ink} />
@@ -548,7 +548,7 @@ function CommentsSheet({ post, onClose, onCounted }) {
             <FlatList
               data={list}
               keyExtractor={(c) => c.id}
-              style={{ maxHeight: 320 }}
+              style={[{ maxHeight: 320 }, s.listWide]}
               contentContainerStyle={{ paddingBottom: 8 }}
               ListEmptyComponent={
                 <Text style={[type.bodySm, { color: theme.muted, textAlign: 'center', paddingVertical: 28 }]}>
@@ -571,7 +571,7 @@ function CommentsSheet({ post, onClose, onCounted }) {
             />
           )}
 
-          <View style={s.commentBar}>
+          <View style={[s.commentBar, s.listWide]}>
             <TextInput
               style={s.commentInput}
               placeholder="Add a comment…"
