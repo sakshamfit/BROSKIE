@@ -121,6 +121,14 @@ const PostCard = React.memo(function PostCard({
         )}
       </View>
 
+      {/* Instagram-style: the song rides with the username in the card header,
+          aligned under the handle — never floating over the photo. */}
+      {!!post.song && !!post.mediaUrl && (
+        <View style={s.songInHeader}>
+          <SongCard song={post.song} variant="sticker" autoPlay={playbackActive} />
+        </View>
+      )}
+
       {!!post.title && (
         <EmojiText style={[type.headlineSm, { color: theme.text, marginTop: 12 }]}>{post.title}</EmojiText>
       )}
@@ -145,11 +153,6 @@ const PostCard = React.memo(function PostCard({
           ]}
         >
           <Image source={{ uri: mediaUrl(post.mediaUrl) }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-          {!!post.song && (
-            <View style={s.songOnMedia} pointerEvents="box-none">
-              <SongCard song={post.song} variant="sticker" autoPlay={playbackActive} />
-            </View>
-          )}
         </DoubleTapLike>
       )}
 
@@ -278,7 +281,8 @@ const makeStyles = (t) => StyleSheet.create({
   },
   noteHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   noteImage: { marginTop: 14, overflow: 'hidden', alignSelf: 'center', backgroundColor: t.cardAlt },
-  songOnMedia: { position: 'absolute', left: 10, bottom: 12, right: 10, zIndex: 4 },
+  // avatar (38) + noteHead gap (12) — lines the chip up under the handle
+  songInHeader: { marginTop: 8, marginLeft: 50, alignSelf: 'flex-start', maxWidth: '100%' },
   songOnly: {
     marginTop: 14, minHeight: 168, justifyContent: 'flex-end', padding: 12,
     overflow: 'hidden', position: 'relative', backgroundColor: t.cardAlt,

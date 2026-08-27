@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 1244" width="700" height="1244" role="img" aria-label="Placeholder: real CHATS screenshot pending">
+  <title>Placeholder — real CHATS screenshot pending</title>
+  <defs>
+    <pattern id="grid-screen-chats" width="22" height="22" patternUnits="userSpaceOnUse">
+      <path d="M22 0H0V22" fill="none" stroke="rgba(28,27,27,0.10)" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="700" height="1244" fill="#fdf8f8"/>
+  <rect width="700" height="1244" fill="url(#grid-screen-chats)"/>
+  <rect x="3" y="3" width="694" height="1238" fill="none" stroke="#1c1b1b" stroke-width="6"/>
+  <g text-anchor="middle" font-family="'Bricolage Grotesque','Karla',system-ui,sans-serif">
+    <text x="350" y="560" font-size="104" font-weight="800" fill="#1c1b1b">+one</text>
+    <g transform="rotate(-1.2 350 660)">
+      <rect x="150" y="622" width="400" height="62" fill="#ffe24d"/>
+      <text x="350" y="664" font-size="26" font-weight="700" letter-spacing="2"
+            font-family="'JetBrains Mono',ui-monospace,monospace" fill="#1c1b1b">SCREENSHOT PENDING</text>
+    </g>
+    <text x="350" y="742" font-size="34" font-weight="700" letter-spacing="3" fill="#1c1b1b"
+          font-family="'JetBrains Mono',ui-monospace,monospace">CHATS</text>
+    <text x="350" y="786" font-size="22" fill="#5d5f5b">chat list · unread · search</text>
+    <text x="350" y="1150" font-size="18" fill="#747878"
+          font-family="'JetBrains Mono',ui-monospace,monospace">CAPTURE FROM THE REAL APP AND DROP IN HERE</text>
+  </g>
+</svg>

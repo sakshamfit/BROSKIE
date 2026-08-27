@@ -59,7 +59,7 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
   const { user } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useResponsive();
+  const { height: windowHeight, isTablet } = useResponsive();
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   // Only whole recording seconds are displayed. Polling at 100ms made the
   // whole GC message list render ten times per second even when idle.
@@ -741,6 +741,7 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
               ? { paddingBottom: 8 }
               : !embedded ? { paddingBottom: Math.max(insets.bottom, 12) } : null
             ]}>
+              <View style={[s.composerRow, isTablet && s.composerRowWide]}>
               {recording ? (
                 <InkField style={s.inputBar}>
                   <View style={[s.recDot, { backgroundColor: theme.danger }]} />
@@ -844,6 +845,7 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
                   </Pop>
                 )}
               </SpringPressable>
+              </View>
             </View>
           </View>
         </FadeSlide>
@@ -1125,7 +1127,9 @@ const makeStyles = (t) => StyleSheet.create({
   editBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderStyle: 'dashed' },
   mentionPopup: { marginHorizontal: 20, maxHeight: 260, borderWidth: 1, borderRadius: 10, paddingVertical: 4 },
   mentionItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  composerWrap: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 20, paddingBottom: 22, paddingTop: 12, gap: 12, borderTopWidth: 1, borderTopColor: t.graphiteLine, borderStyle: 'dashed' },
+  composerWrap: { paddingHorizontal: 20, paddingBottom: 22, paddingTop: 12, borderTopWidth: 1, borderTopColor: t.graphiteLine, borderStyle: 'dashed' },
+  composerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, width: '100%' },
+  composerRowWide: { maxWidth: 640, width: '100%', alignSelf: 'center' },
   inputBar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 12, minHeight: 48, borderTopLeftRadius: 5, borderTopRightRadius: 3, borderBottomRightRadius: 6, borderBottomLeftRadius: 4, backgroundColor: t.inputBackground },
   input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },
   sendBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },

@@ -561,6 +561,13 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
                   {formatChatTime(current.createdAt)} · {privacyMeta(current.audience).label}
                 </Text>
               </View>
+              {/* Instagram-style: the song sits under the name, in the header
+                  flow — never floating over the photo. */}
+              {!!current.song && (
+                <View style={s.headerSong}>
+                  <SongCard song={current.song} variant="sticker" autoPlay paused={held || replyFocused} />
+                </View>
+              )}
             </View>
             <Pressable onPress={closeViewer} hitSlop={10} style={{ padding: 5 }}>
               <Icon name="close" size={23} color={foregroundFor(current)} />
@@ -586,12 +593,6 @@ export function StatusViewer({ group, startIndex = 0, onClose }) {
             )}
             </FadeSlide>
           </View>
-
-          {!!current.song && (
-            <View style={s.viewerSongOverlay} pointerEvents="box-none">
-              <SongCard song={current.song} variant="sticker" autoPlay paused={held || replyFocused} />
-            </View>
-          )}
 
           {/* ── gentle update: reply composer (not a rebuild) ── */}
           {burst ? (
@@ -1235,9 +1236,7 @@ const makeStyles = (t) => StyleSheet.create({
   viewerImageFrame: { flex: 1, width: '100%', overflow: 'hidden', backgroundColor: '#111111' },
   viewerSong: { marginTop: 18, width: '100%', maxWidth: 360, alignItems: 'center' },
   viewerSongOnMedia: { position: 'absolute', left: 14, bottom: 88, right: 14, zIndex: 4 },
-  viewerSongOverlay: {
-    position: 'absolute', left: 14, right: 14, bottom: 118, zIndex: 20, alignItems: 'flex-start',
-  },
+  headerSong: { marginTop: 6, alignSelf: 'flex-start', maxWidth: '100%' },
   viewerCaption: { position: 'absolute', left: 18, right: 18, bottom: 24, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.58)' },
 
   composer: { flex: 1 },
