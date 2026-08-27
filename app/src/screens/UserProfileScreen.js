@@ -13,6 +13,7 @@ import PostCard from '../components/PostCard';
 import { Avatar, EmptyState, TapeChip, Rule, handleFor, GoldTick, hasGoldTick } from '../components/common';
 import ImageLightbox from '../components/ImageLightbox';
 import { stopPreview } from '../previewPlayer';
+import { pickActiveSongPostId, SONG_SETTLE_MS } from '../feedAudio';
 import { openPost } from '../push/routing';
 import { type, inkBox, marker, stroke } from '../theme';
 import { SpringPressable, motion } from '../motion';
@@ -40,13 +41,16 @@ export default function UserProfileScreen({ navigation, route, embedded = false,
   const [lightbox, setLightbox] = useState(null);
   const [activeSongPostId, setActiveSongPostId] = useState(null);
   const s = makeStyles(theme);
+  // Trailing coalesce for viewability changes — see feedAudio.js.
+  const songSettle = React.useRef(null);
   const onViewableItemsChanged = React.useRef(({ viewableItems }) => {
-    const hit = (viewableItems || []).find((v) => v.isViewable && v.item?.song?.previewUrl);
-    setActiveSongPostId(hit?.item?.id || null);
+    const next = pickActiveSongPostId(viewableItems);
+    clearTimeout(songSettle.current);
+    songSettle.current = setTimeout(() => setActiveSongPostId(next), SONG_SETTLE_MS);
   }).current;
   const viewabilityConfig = React.useRef({ itemVisiblePercentThreshold: 55, minimumViewTime: 180 }).current;
 
-  useEffect(() => () => stopPreview(), []);
+  useEffect(() => () => { clearTimeout(songSettle.current); stopPreview(); }, []);
 
   const load = useCallback(async () => {
     if (!userId) {

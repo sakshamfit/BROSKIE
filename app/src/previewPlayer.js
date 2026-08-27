@@ -22,7 +22,18 @@ let player = null;
 let currentKey = null;
 let muted = false;
 let playGen = 0;
+// Load/unload are async (element load on web, createAudioPlayer on native).
+// Running them through one chain means a second clip can never begin
+// attaching while the previous one is still resolving — the window in which
+// two clips could briefly be audible at once.
+let opChain = Promise.resolve();
 const listeners = new Set();
+
+function enqueue(run) {
+  const next = opChain.then(run, run);
+  opChain = next.then(() => {}, () => {});
+  return next;
+}
 
 function snapshot() {
   const playing = !!(player && !player._paused);
@@ -166,9 +177,18 @@ function attachNative(uri, loop) {
   return p;
 }
 
-export async function playPreview(uri, key, { loop = true } = {}) {
-  if (!uri) return false;
+export function playPreview(uri, key, { loop = true } = {}) {
+  if (!uri) return Promise.resolve(false);
+  // Claim the player synchronously, before queueing: a later request must
+  // always win over an earlier one that is still loading, even if the earlier
+  // one has not reached the front of the queue yet.
   const gen = ++playGen;
+  return enqueue(() => playPreviewQueued(uri, key, gen, loop));
+}
+
+async function playPreviewQueued(uri, key, gen, loop) {
+  // Superseded while waiting our turn — never touch the player.
+  if (gen !== playGen) return false;
 
   if (currentKey === key && player) {
     applyMute();

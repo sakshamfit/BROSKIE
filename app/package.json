@@ -71,6 +71,7 @@
     "test:image-editor": "node --test src/imageEditor/geometry.test.mjs",
     "test:chat-anchor": "node --test scripts/chat-anchor.test.mjs",
     "test:chat-inbox": "node --test src/chatInbox.test.mjs",
+    "test:feed-audio": "node --test src/feedAudio.test.mjs",
     "test:geometry": "node --test src/imageEditor/geometry.test.mjs"
   },
   "private": true,

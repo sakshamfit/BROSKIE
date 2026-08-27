@@ -25,6 +25,7 @@ import { onNetworkFilterRequest, consumePendingNetworkFilter, onOpenCommunity, c
 import NewPostScreen from './NewPostScreen';
 import CommunitiesScreen from './CommunitiesScreen';
 import { stopPreview } from '../previewPlayer';
+import { pickActiveSongPostId, SONG_SETTLE_MS } from '../feedAudio';
 
 /* Phase 2 feed lenses: the whole world, your college/workplace people, or
  * just the authors you follow. */
@@ -250,13 +251,20 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
   const onTagPress = useCallback((tag) => {
     setActiveTag((current) => (tag === current ? null : tag));
   }, []);
+  // Trailing coalesce for viewability changes — see feedAudio.js.
+  const songSettle = useRef(null);
   useEffect(() => {
-    if (!active) stopPreview();
+    if (!active) {
+      clearTimeout(songSettle.current);
+      stopPreview();
+    }
   }, [active]);
+  useEffect(() => () => clearTimeout(songSettle.current), []);
 
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    const hit = (viewableItems || []).find((v) => v.isViewable && v.item?.song?.previewUrl);
-    setActiveSongPostId(hit?.item?.id || null);
+    const next = pickActiveSongPostId(viewableItems);
+    clearTimeout(songSettle.current);
+    songSettle.current = setTimeout(() => setActiveSongPostId(next), SONG_SETTLE_MS);
   }).current;
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 55, minimumViewTime: 180 }).current;
 
