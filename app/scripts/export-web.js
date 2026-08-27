@@ -165,18 +165,23 @@ function main() {
   const generated = fs.readdirSync(path.join(WEB_DIR, 'communities'))
     .filter((f) => f.endsWith('.html'))
     .map((f) => ({ src: `communities/${f}`, dest: `communities/${f}` }));
+  const blogPages = fs.existsSync(path.join(WEB_DIR, 'blog'))
+    ? fs.readdirSync(path.join(WEB_DIR, 'blog'))
+      .filter((f) => f.endsWith('.html'))
+      .map((f) => ({ src: `blog/${f}`, dest: `blog/${f}` }))
+    : [];
   const pages = [
     { src: 'home.html', dest: 'index.html' },
     { src: 'about.html', dest: 'about.html' },
     { src: 'communities.html', dest: 'communities.html' },
     ...generated,
+    ...blogPages,
     { src: 'chat.html', dest: 'chat.html' },
     { src: 'network.html', dest: 'network.html' },
     { src: 'download.html', dest: 'download.html' },
     { src: 'privacy.html', dest: 'privacy.html' },
     { src: 'terms.html', dest: 'terms.html' },
     { src: 'support.html', dest: 'support.html' },
-    { src: 'blog/index.html', dest: 'blog/index.html' },
   ];
   for (const page of pages) {
     const html = fs.readFileSync(path.join(WEB_DIR, page.src), 'utf8');

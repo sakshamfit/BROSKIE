@@ -17,16 +17,18 @@
     "description": "Interest-based communities on Plus One, organised by what you're actually planning: trip planning, running groups, club nights, game nights, study groups, chai chats and house parties — each with live polls, join policies and a real-time group chat."
   },
   "sitemapStatic": [
-    { "path": "/", "lastmod": "2026-08-26", "changefreq": "weekly", "priority": "1.0" },
+    { "path": "/", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "1.0" },
     { "path": "/communities", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.9" },
-    { "path": "/chat", "lastmod": "2026-08-26", "changefreq": "weekly", "priority": "0.9" },
-    { "path": "/network", "lastmod": "2026-08-26", "changefreq": "weekly", "priority": "0.9" },
-    { "path": "/download", "lastmod": "2026-08-26", "changefreq": "monthly", "priority": "0.8" },
-    { "path": "/about", "lastmod": "2026-08-26", "changefreq": "monthly", "priority": "0.7" },
+    { "path": "/chat", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.9" },
+    { "path": "/network", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.9" },
+    { "path": "/download", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.8" },
+    { "path": "/about", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.7" },
     { "path": "/blog/", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.7" },
-    { "path": "/support", "lastmod": "2026-08-26", "changefreq": "monthly", "priority": "0.5" },
-    { "path": "/privacy", "lastmod": "2026-08-26", "changefreq": "yearly", "priority": "0.3" },
-    { "path": "/terms", "lastmod": "2026-08-26", "changefreq": "yearly", "priority": "0.3" }
+    { "path": "/blog/how-to-find-a-running-partner", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.7" },
+    { "path": "/blog/interest-based-social-network", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.7" },
+    { "path": "/support", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.5" },
+    { "path": "/privacy", "lastmod": "2026-08-27", "changefreq": "yearly", "priority": "0.3" },
+    { "path": "/terms", "lastmod": "2026-08-27", "changefreq": "yearly", "priority": "0.3" }
   ],
   "niches": [
     {
