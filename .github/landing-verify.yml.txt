@@ -1,7 +1,8 @@
 # ─────────────────────────────────────────────────────────────────
 # ACTIVATION: this file ships as .txt because the Arena bot token
 # cannot create files under .github/workflows/. To turn on real-Chrome
-# Lighthouse verification (score gates + page screenshots), run:
+# Lighthouse verification (score gates + page screenshots) AND the
+# community-pages freshness gate, run:
 #
 #   mkdir -p .github/workflows
 #   mv .github/landing-verify.yml.txt .github/workflows/landing-verify.yml
@@ -9,12 +10,13 @@
 #
 # (or grant the Arena GitHub app Workflows: read+write)
 # ─────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
 name: Landing page verify (SEO + motion + Lighthouse)
 
 on:
   push:
     branches: ['arena/**']
-    paths: ['app/web/**', 'app/scripts/export-web.js', 'app/scripts/verify-site.mjs', 'app/scripts/lighthouse-ci.mjs', '.github/workflows/landing-verify.yml']
+    paths: ['app/web/**', 'app/scripts/export-web.js', 'app/scripts/build-communities.mjs', 'app/scripts/verify-site.mjs', 'app/scripts/lighthouse-ci.mjs', 'app/src/push/links.js', 'app/src/push/routing.js', '.github/workflows/landing-verify.yml']
   workflow_dispatch:
 
 jobs:
@@ -29,6 +31,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
+
+      - name: Generated pages freshness (community-niches.json ⇄ web output)
+        working-directory: app
+        run: node scripts/build-communities.mjs --check
 
       - name: Build the site (same command Vercel runs)
         working-directory: app

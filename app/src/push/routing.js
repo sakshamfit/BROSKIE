@@ -86,6 +86,36 @@ export function consumePendingCommunity() {
   return id;
 }
 
+/* Communities-tab requests (used by the marketing site's /app?tab=communities
+ * &category=<key> deep links and plusone://communities/<key>). Unlike invite
+ * links there is no id to open — the request just means "show the Communities
+ * grid, filtered to this category if it exists". NetworkScreen and
+ * CommunitiesScreen consume it the same way the network filter does: listeners
+ * if mounted, a pending value if not. */
+const communitiesTabListeners = new Set();
+let pendingCommunitiesTab = null; // { category: string | null }
+export function onCommunitiesTabRequest(fn) {
+  communitiesTabListeners.add(fn);
+  return () => communitiesTabListeners.delete(fn);
+}
+export function openCommunitiesTab(category) {
+  pendingCommunitiesTab = { category: category || null };
+  requestHomeTab('network');
+  communitiesTabListeners.forEach((fn) => {
+    try { fn(pendingCommunitiesTab); } catch {}
+  });
+}
+/** Non-destructive: NetworkScreen peeks it to switch sections on mount. */
+export function peekCommunitiesTab() {
+  return pendingCommunitiesTab;
+}
+/** Destructive: CommunitiesScreen consumes it to set the category filter. */
+export function consumeCommunitiesTab() {
+  const value = pendingCommunitiesTab;
+  pendingCommunitiesTab = null;
+  return value;
+}
+
 /* Profiles & posts — tapping any avatar opens that person's profile, and
  * tapping a "liked your post" activity row opens the post itself. On phones
  * these are real stack screens (UserProfile / PostDetail) reached through
@@ -216,8 +246,12 @@ export function routeFromNotification(data) {
 /** Parse a plusone:// URL (e.g. plusone://chat/abc123) into a route payload. */
 export function routeFromUrl(url) {
   if (!url || !url.startsWith('plusone://')) return null;
-  const path = url.replace(/^plusone:\/\//, '').replace(/\/+$/, '');
-  const [head, id] = path.split('/');
+  const [pathOnly, query = ''] = url.replace(/^plusone:\/\//, '').replace(/\/+$/, '').split('?');
+  const param = (key) => {
+    const m = new RegExp(`(?:^|&)${key}=([^&]*)`).exec(query);
+    return m ? decodeURIComponent(m[1]) : null;
+  };
+  const [head, id] = pathOnly.split('/');
   switch (head) {
     case 'chat': return id ? { route: 'chat', chatId: id } : null;
     case 'gc': return id ? { route: 'gc', chatId: id } : null;
@@ -226,6 +260,12 @@ export function routeFromUrl(url) {
     case 'network': return { route: 'network' };
     case 'post': return id ? { route: 'post', postId: id } : null;
     case 'c': return id ? { route: 'community', code: id } : null;
+    // plusone://communities/<category> or the normalized web form
+    // https://plusoneco.in/app?tab=communities&category=<category>
+    case 'communities': return { route: 'communities', category: (id || param('category') || '').toLowerCase() || null };
+    case 'app': return param('tab') === 'communities'
+      ? { route: 'communities', category: (param('category') || '').toLowerCase() || null }
+      : null;
     default: return null;
   }
 }

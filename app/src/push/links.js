@@ -5,7 +5,7 @@
  */
 import { Linking, Platform } from 'react-native';
 import { api } from '../api';
-import { routeFromNotification, routeFromUrl, openCommunity } from './routing';
+import { routeFromNotification, routeFromUrl, openCommunity, openCommunitiesTab } from './routing';
 
 /* The web app is served from /app on the public site and from / on
  * single-host deployments — always clean URLs back to the app, not to the
@@ -43,6 +43,13 @@ export function handleDeepLink(url) {
     joinCommunityByCode(route.code);
     return;
   }
+  // Marketing deep links (plusone://communities/<category> or
+  // …/app?tab=communities&category=<category>): open the Communities grid,
+  // pre-filtered. Category validity is enforced where it is consumed.
+  if (route.route === 'communities') {
+    openCommunitiesTab(route.category);
+    return;
+  }
   routeFromNotification(route);
 }
 
@@ -52,6 +59,14 @@ export function setupDeepLinks() {
   if (Platform.OS === 'web') {
     try {
       const path = window.location.pathname;
+      // Landing-page CTA links: /app?tab=communities&category=run opens the
+      // Communities grid with that filter. No side effect to guard against,
+      // so the query stays in the URL (a refresh keeps the same view).
+      const search = window.location.search || '';
+      if (/[?&]tab=communities(&|$)/.test(search)) {
+        const category = (search.match(/[?&]category=([a-z-]+)/i) || [])[1];
+        openCommunitiesTab(category || null);
+      }
       if (/^\/c\/[a-z0-9]+\/?$/i.test(path)) {
         const code = path.split('/')[2];
         // Strip the path so a refresh doesn't re-join; history stays clean.

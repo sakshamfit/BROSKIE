@@ -7,8 +7,8 @@ import { useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
 import useResponsive from '../hooks/useResponsive';
 import { Avatar, EmptyState, TapeChip, rippleFor } from '../components/common';
-import { CATEGORY_LIST, categoryMeta } from '../components/communityMeta';
-import { onOpenCommunity, consumePendingCommunity, onProfileWillOpen } from '../push/routing';
+import { CATEGORY, CATEGORY_LIST, categoryMeta } from '../components/communityMeta';
+import { onOpenCommunity, consumePendingCommunity, onProfileWillOpen, consumeCommunitiesTab, onCommunitiesTabRequest } from '../push/routing';
 import { type, inkBox, marker, radius, raised } from '../theme';
 import { SpringPressable, motion } from '../motion';
 import NewCommunityScreen from './NewCommunityScreen';
@@ -49,6 +49,23 @@ export default function CommunitiesScreen({ onOpenChat }) {
     const pending = consumePendingCommunity();
     if (pending) setOpenId(pending);
     return onOpenCommunity((id) => setOpenId(id));
+  }, []);
+
+  // Landing-page deep links (/app?tab=communities&category=run or
+  // plusone://communities/run): pre-filter Discover to that category.
+  // Unknown keys fall back to the unfiltered grid — the marketing pages
+  // only ever link categories that exist in communityMeta.
+  useEffect(() => {
+    const apply = (req) => {
+      const cat = req?.category;
+      if (cat && CATEGORY[cat]) {
+        setScope('discover');
+        setActiveCategory(cat);
+      }
+    };
+    const initial = consumeCommunitiesTab();
+    if (initial) apply(initial);
+    return onCommunitiesTabRequest(apply);
   }, []);
 
   const load = useCallback(async (nextScope, nextCategory) => {
