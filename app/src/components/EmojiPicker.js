@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, TextInput, FlatList } from 'react-native';
+import { View, Pressable, StyleSheet, TextInput, FlatList } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
 import { FadeSlide, SpringPressable, haptic } from '../motion';
 import { inkBox, type } from '../theme';
 import META from '../icons/emojiMeta.json';
+import { Text } from './Text';
 
 /**
  * Cross-platform emoji picker. Every glyph renders through <Emoji> from the

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, Modal, FlatList, ActivityIndicator,
+  View, Pressable, StyleSheet, Modal, FlatList, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -12,6 +12,7 @@ import { confirm } from '../hooks/confirm';
 import { Avatar, EmptyState, Rule, TapeChip, formatChatTime, handleFor, GoldTick, hasGoldTick } from './common';
 import { type, inkBox, marker, stroke } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { Text } from './Text';
 
 /** Full-height inbox for first messages from people outside accepted contacts. */
 export default function MessageRequestsPanel({ visible, onClose, requests, onChanged, navigation }) {

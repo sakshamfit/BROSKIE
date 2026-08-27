@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Image, Pressable, StyleSheet, Animated, Easing, Platform } from 'react-native';
+import { View, Image, Pressable, StyleSheet, Animated, Easing, Platform } from 'react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { type, inkBox, marker } from '../theme';
@@ -8,6 +8,7 @@ import {
   playPreview, stopPreview, pausePreview,
   subscribePreview, togglePreviewMuted, isPreviewMuted,
 } from '../previewPlayer';
+import { Text } from './Text';
 
 /**
  * Song UI + preview audio.

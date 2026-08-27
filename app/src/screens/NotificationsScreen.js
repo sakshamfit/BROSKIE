@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, TextInput, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, ScrollView, TextInput, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { useAuth } from '../store/AuthContext';
@@ -8,6 +8,7 @@ import useResponsive from '../hooks/useResponsive';
 import { api } from '../api';
 import { PaperCard, Rule } from '../components/common';
 import { radius, type, inkBox } from '../theme';
+import { Text } from '../components/Text';
 
 /**
  * "Notifications" — real, persisted preferences (server-stored on the user
@@ -78,7 +79,12 @@ export default function NotificationsScreen({ navigation, embedded = false }) {
         <Text style={[type.headlineMd, { color: theme.text }]}>Notifications</Text>
       </View>
 
-      <ScrollView contentContainerStyle={[s.scroll, isTablet && s.scrollWide]}>
+      <ScrollView
+        // iOS: lift the scroll content clear of the IME so the focused field
+        // is never behind the keyboard (there is no KeyboardAvoidingView here).
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={[s.scroll, isTablet && s.scrollWide]}
+      >
         <Text style={[type.labelXs, { color: theme.muted, marginBottom: 10 }]}>MESSAGES</Text>
         <PaperCard style={{ padding: 6 }} weight="thin">
           <Row icon="chatbubble-outline" title="Chat messages" subtitle="New messages in Chats" settingKey="messages" />
@@ -254,6 +260,9 @@ function HandDrawnToggle({ value, onToggle, theme, busy }) {
     <Pressable
       onPress={onToggle}
       disabled={busy}
+      // The switch draws 28dp tall; hitSlop brings the tappable area to 44dp,
+      // matching the shared HandDrawnToggle in components/common.js.
+      hitSlop={8}
       style={[
         {
           width: 52, height: 28, borderRadius: radius.full, padding: 3, justifyContent: 'center',

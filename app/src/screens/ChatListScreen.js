@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Modal, Alert, Animated, Easing, ActivityIndicator,
+  View, FlatList, Pressable, StyleSheet, TextInput, RefreshControl, Modal, Alert, Animated, Easing, ActivityIndicator,
   Platform,
 } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
@@ -26,6 +26,7 @@ import {
   INBOX_FILTERS, INBOX_LABELS, INBOX_EMPTY, isInboxFilter,
   filterInboxChats, filterInboxRequests, filterSearchMessages, inboxCounts,
 } from '../chatInbox';
+import { Text } from '../components/Text';
 
 /* each divider leans a slightly different way, like a hand-ruled line */
 const TILTS = [-0.5, 0.8, -0.3, 0.6, -0.7, 0.4];

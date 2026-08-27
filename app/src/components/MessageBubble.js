@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, Image, Pressable, StyleSheet, Animated, PanResponder, Platform, ActivityIndicator } from 'react-native';
+import { View, Image, Pressable, StyleSheet, Animated, PanResponder, Platform, ActivityIndicator } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText, jumboEmojiChars } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
@@ -11,6 +11,7 @@ import { confirm } from '../hooks/confirm';
 import { Pop, BottomSheet, SpringPressable, LikeBurst, haptic, useReducedMotion, motion } from '../motion';
 import { MESSAGE_SWIPE, messageTravel, shouldClaimMessageSwipe, isTouchInput, hasTouchScreen } from '../gestures';
 import VoiceNote from './VoiceNote';
+import { Text } from './Text';
 
 const confirmDeleteForEveryone = () => confirm(
   'Delete this message for everyone? This cannot be undone.',
@@ -699,7 +700,10 @@ const makeStyles = (t) => StyleSheet.create({
   highlightWash: { ...StyleSheet.absoluteFillObject },
   deletedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   imageWrap: { width: 224, height: 224 },
-  image: { width: 224, height: 224, borderWidth: 1 },
+  // Fixed 224×224, so the bubble never reflows when the photo arrives — and
+  // the paper tint behind it means a slow image reads as a placeholder
+  // instead of a blank white hole in the conversation.
+  image: { width: 224, height: 224, borderWidth: 1, backgroundColor: t.cardAlt },
   mediaProgress: {
     ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(28,27,27,0.35)',

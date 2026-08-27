@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
+import { View, Pressable, Image, StyleSheet } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence, withDelay } from 'react-native-reanimated';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
@@ -12,6 +12,7 @@ import DoubleTapLike from './DoubleTapLike';
 import { openProfile } from '../push/routing';
 import { SpringPressable, IconSwap, Bloom, Pop, motion, haptic } from '../motion';
 import { type, inkBox, dashedRule, raised } from '../theme';
+import { Text } from './Text';
 
 const INSTAGRAM_HEART = '#ED4956';
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
@@ -9,6 +9,7 @@ import useResponsive from '../hooks/useResponsive';
 import { Avatar, EmptyState, handleFor, GoldTick, hasGoldTick } from '../components/common';
 import { confirm } from '../hooks/confirm';
 import { type, dashedRule } from '../theme';
+import { Text } from '../components/Text';
 
 /** Dedicated list of everyone you've blocked, with a one-tap unblock. */
 export default function BlockedUsersScreen({ navigation, embedded = false }) {

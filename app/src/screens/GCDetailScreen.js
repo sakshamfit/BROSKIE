@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { editorConfigFor } from '../imageEditor/config';
 import UniversalImageEditor from '../components/UniversalImageEditor';
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput, Platform,
+  View, ScrollView, Pressable, StyleSheet, Modal, TextInput, Platform,
   KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +20,7 @@ import { FadeSlide, SheetSpringIn, SpringPressable, haptic, motion } from '../mo
 import { type, inkBox, marker, stroke, raised } from '../theme';
 import { api } from '../api';
 import { confirm } from '../hooks/confirm';
+import { Text } from '../components/Text';
 
 /**
  * GCDetailScreen — the GC environment hub.

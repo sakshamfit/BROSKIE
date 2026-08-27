@@ -1,8 +1,9 @@
 import React from 'react';
-import { Image, Text, Platform } from 'react-native';
+import { Image, Platform } from 'react-native';
 import Svg, { Path, Circle, Ellipse, Rect, Polygon, Polyline, Line, G, Defs, ClipPath } from 'react-native-svg';
 import { getEmojiData, useEmojiDataState } from './emojiDataState';
 import FLUENT_3D_ASSETS from './fluentEmojiAssets';
+import { Text } from '../components/Text';
 
 /**
  * Cross-platform Microsoft Fluent Emoji in the official 3D style. Fluent's

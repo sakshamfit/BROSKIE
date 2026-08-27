@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, BackHandler, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, Modal, BackHandler, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './icons/Icon';
 import SideNav from './components/SideNav';
@@ -35,6 +35,7 @@ import StarredMessagesScreen from './screens/StarredMessagesScreen';
 import AdminSafetyScreen from './screens/AdminSafetyScreen';
 import UserProfileScreen from './screens/UserProfileScreen';
 import PostDetailScreen from './screens/PostDetailScreen';
+import { Text } from './components/Text';
 
 /**
  * Split shell for wide viewports — desktop web AND real tablets/foldables

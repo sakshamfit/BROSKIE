@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, FlatList, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
+  View, FlatList, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
   Platform, Modal, Image, ActivityIndicator, Alert, Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,6 +36,8 @@ import ForwardSheet from '../components/ForwardSheet';
 import PollComposer from '../components/PollComposer';
 import ThemePickerSheet from '../components/ThemePickerSheet';
 import CollabDocumentView from '../components/CollabDocumentView';
+import { Text } from '../components/Text';
+import ChatInput from '../components/ChatInput';
 
 function ConversationContent({ route, navigation, embedded = false, themePicker = null }) {
   const { chatId, initialChat = null } = route.params || {};
@@ -902,19 +904,22 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
         ? { paddingBottom: 8 }
         : !embedded ? { paddingBottom: Math.max(insets.bottom, 12) } : null
       ]}>
-        <View style={[s.composerRow, s.composerRowWide]}>
-        {recording ? (
-          <InkField style={s.inputBar}>
-            <View style={[s.recDot, { backgroundColor: theme.danger }]} />
-            <Text style={[type.bodyLg, { flex: 1, color: theme.text }]}>
-              Recording… {Math.floor(recSecs / 60)}:{String(recSecs % 60).padStart(2, '0')}
-            </Text>
-            <Pressable accessibilityLabel="Cancel voice recording" onPress={cancelRecording} disabled={voiceBusy} hitSlop={8}>
-              <Text style={[type.labelSm, { color: theme.danger, opacity: voiceBusy ? 0.45 : 1 }]}>CANCEL</Text>
-            </Pressable>
-          </InkField>
-        ) : (
-          <InkField style={s.inputBar}>
+        <ChatInput
+          inputRef={inputRef}
+          value={text}
+          onChangeText={onChangeText}
+          placeholder={editing ? 'Edit message…' : 'Message'}
+          onSubmit={send}
+          onFocus={() => {
+            // replying focuses the composer without jumping to the bottom
+            if (suppressFocusScroll.current) return;
+            scrollToLatest(120);
+          }}
+          recording={recording}
+          recordingSeconds={recSecs}
+          onCancelRecording={cancelRecording}
+          cancelDisabled={voiceBusy}
+          leading={
             <SpringPressable
               accessibilityRole="button"
               accessibilityLabel={showEmoji ? 'Show keyboard' : 'Show emoji'}
@@ -931,100 +936,81 @@ function ConversationContent({ route, navigation, embedded = false, themePicker 
                 off={<Icon name="happy-outline" size={23} color={theme.muted} />}
               />
             </SpringPressable>
-            <TextInput
-              ref={inputRef}
-              style={s.input}
-              placeholder={editing ? 'Edit message…' : 'Message'}
-              placeholderTextColor={theme.muted}
-              value={text}
-              onChangeText={onChangeText}
-              onFocus={() => {
-                // replying focuses the composer without jumping to the bottom
-                if (suppressFocusScroll.current) return;
-                scrollToLatest(120);
-              }}
-              multiline
-              disableFullscreenUI
-              onSubmitEditing={send}
-              blurOnSubmit={false}
-              onKeyPress={(e) => {
-                if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
-                  e.preventDefault?.();
-                  send();
+          }
+          trailing={
+            <>
+              {!editing && (
+                <SpringPressable accessibilityRole="button" accessibilityLabel="Attach a photo" onPress={pickImage} hitSlop={6} disabled={uploading} scaleTo={motion.scale.icon} haptic="selection">
+                  {uploading
+                    ? <ActivityIndicator size="small" color={theme.muted} />
+                    : <Icon name="attach" size={22} color={theme.muted} style={{ transform: [{ rotate: '45deg' }] }} />}
+                </SpringPressable>
+              )}
+              {!editing && !text.trim() && (
+                <SpringPressable accessibilityRole="button" accessibilityLabel="Take a photo" onPress={pickImage} hitSlop={6} scaleTo={motion.scale.icon} haptic="selection">
+                  <Icon name="camera-outline" size={22} color={theme.muted} />
+                </SpringPressable>
+              )}
+            </>
+          }
+          send={
+            <SpringPressable
+              accessibilityRole="button"
+              accessibilityLabel={voiceBusy ? 'Sending voice note' : recording ? 'Send voice note' : text.trim() ? 'Send message' : 'Hold to record a voice note'}
+              // WhatsApp-style: HOLD the mic to record — release to send. A quick
+              // tap still toggles recording (accessibility / old habit), and the
+              // existing cancel control keeps working either way.
+              delayLongPress={250}
+              onPressIn={() => {
+                holdStartedAt.current = Date.now();
+                if (!text.trim() && !editing && !recording && !voiceBusy) {
+                  pressOwnsRecording.current = true;
+                  startRecording();
                 }
               }}
-            />
-            {!editing && (
-              <SpringPressable accessibilityRole="button" accessibilityLabel="Attach a photo" onPress={pickImage} hitSlop={6} disabled={uploading} scaleTo={motion.scale.icon} haptic="selection">
-                {uploading
-                  ? <ActivityIndicator size="small" color={theme.muted} />
-                  : <Icon name="attach" size={22} color={theme.muted} style={{ transform: [{ rotate: '45deg' }] }} />}
-              </SpringPressable>
-            )}
-            {!editing && !text.trim() && (
-              <SpringPressable accessibilityRole="button" accessibilityLabel="Take a photo" onPress={pickImage} hitSlop={6} scaleTo={motion.scale.icon} haptic="selection">
-                <Icon name="camera-outline" size={22} color={theme.muted} />
-              </SpringPressable>
-            )}
-          </InkField>
-        )}
-
-        <SpringPressable
-          accessibilityRole="button"
-          accessibilityLabel={voiceBusy ? 'Sending voice note' : recording ? 'Send voice note' : text.trim() ? 'Send message' : 'Hold to record a voice note'}
-          // WhatsApp-style: HOLD the mic to record — release to send. A quick
-          // tap still toggles recording (accessibility / old habit), and the
-          // existing cancel control keeps working either way.
-          delayLongPress={250}
-          onPressIn={() => {
-            holdStartedAt.current = Date.now();
-            if (!text.trim() && !editing && !recording && !voiceBusy) {
-              pressOwnsRecording.current = true;
-              startRecording();
-            }
-          }}
-          onPressOut={() => {
-            const startedAt = holdStartedAt.current;
-            holdStartedAt.current = 0;
-            if (!pressOwnsRecording.current) return;
-            pressOwnsRecording.current = false;
-            const heldMs = startedAt ? Date.now() - startedAt : 0;
-            // A real hold sends on release; a quick tap is treated as an
-            // accidental touch and cancels — nothing half-second-long ever
-            // gets sent. startRecording is async, so stopRecording handles
-            // "still starting" gracefully (it is a no-op until a file lands).
-            stopRecording(heldMs >= 500);
-          }}
-          onPress={() => {
-            if (text.trim()) send();
-            else if (editing) { setEditing(null); setText(''); }
-            // Recording is fully driven by press-in/release above.
-          }}
-          disabled={voiceBusy}
-          android_ripple={rippleFor(theme, { color: alpha(theme.onSendButton, 0.3) })}
-          style={({ pressed }) => [
-            s.sendBtn,
-            inkBox(theme, 'bold'),
-            { backgroundColor: pressed && Platform.OS !== 'android' ? theme.highlighter : theme.sendButton },
-            voiceBusy && { opacity: 0.55 },
-          ]}
-        >
-          {voiceBusy ? (
-            <ActivityIndicator size="small" color={theme.onSendButton} />
-          ) : (
-            // The composer's icon changes meaning as you type (mic → send).
-            // A pop on every change makes the button feel like it *became*
-            // something else, instead of silently swapping glyphs.
-            <Pop trigger={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'} firstStatic from={0.7}>
-              <Icon
-                name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
-                size={18}
-                color={theme.onSendButton}
-              />
-            </Pop>
-          )}
-        </SpringPressable>
-        </View>
+              onPressOut={() => {
+                const startedAt = holdStartedAt.current;
+                holdStartedAt.current = 0;
+                if (!pressOwnsRecording.current) return;
+                pressOwnsRecording.current = false;
+                const heldMs = startedAt ? Date.now() - startedAt : 0;
+                // A real hold sends on release; a quick tap is treated as an
+                // accidental touch and cancels — nothing half-second-long ever
+                // gets sent. startRecording is async, so stopRecording handles
+                // "still starting" gracefully (it is a no-op until a file lands).
+                stopRecording(heldMs >= 500);
+              }}
+              onPress={() => {
+                if (text.trim()) send();
+                else if (editing) { setEditing(null); setText(''); }
+                // Recording is fully driven by press-in/release above.
+              }}
+              disabled={voiceBusy}
+              android_ripple={rippleFor(theme, { color: alpha(theme.onSendButton, 0.3) })}
+              style={({ pressed }) => [
+                s.sendBtn,
+                inkBox(theme, 'bold'),
+                { backgroundColor: pressed && Platform.OS !== 'android' ? theme.highlighter : theme.sendButton },
+                voiceBusy && { opacity: 0.55 },
+              ]}
+            >
+              {voiceBusy ? (
+                <ActivityIndicator size="small" color={theme.onSendButton} />
+              ) : (
+                // The composer's icon changes meaning as you type (mic → send).
+                // A pop on every change makes the button feel like it *became*
+                // something else, instead of silently swapping glyphs.
+                <Pop trigger={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'} firstStatic from={0.7}>
+                  <Icon
+                    name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'}
+                    size={18}
+                    color={theme.onSendButton}
+                  />
+                </Pop>
+              )}
+            </SpringPressable>
+          }
+        />
         </View>
       </View>
       </FadeSlide>
@@ -1426,13 +1412,11 @@ const makeStyles = (t) => StyleSheet.create({
     borderWidth: 1, borderStyle: 'dashed',
   },
   // The raised, irregular composer gives the bottom of the conversation a torn-paper feel.
+  // The field itself lives in components/ChatInput.js — the ONE composer in
+  // the app, shared with GC chat, post comments and the comment sheet, so its
+  // width/height/padding can no longer drift per screen.
   composerWrap: { paddingHorizontal: 20, paddingBottom: 22, paddingTop: 12, borderTopWidth: 1, borderTopColor: t.graphiteLine, borderStyle: 'dashed' },
-  composerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, width: '100%' },
-  composerRowWide: { maxWidth: 640, width: '100%', alignSelf: 'center' },
-  inputBar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 12, minHeight: 48, borderTopLeftRadius: 5, borderTopRightRadius: 3, borderBottomRightRadius: 6, borderBottomLeftRadius: 4, backgroundColor: t.inputBackground },
-  input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },
   sendBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  recDot: { width: 9, height: 9, borderRadius: radius.full },
   dimOverlay: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
   reportSheet: { width: '92%', maxWidth: 460, borderRadius: radius.md, padding: 18 },
   reportChip: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },

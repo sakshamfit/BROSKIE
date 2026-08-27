@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
@@ -9,6 +9,7 @@ import { useTheme } from '../store/ThemeContext';
 import { Avatar, EmptyState, InkField, InkIconButton, InkCheckbox, handleFor, GoldTick, hasGoldTick } from '../components/common';
 import { type, inkBox, marker, dashedRule } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { Text } from '../components/Text';
 
 export default function NewChatScreen({ navigation, embedded = false }) {
   const { theme } = useTheme();

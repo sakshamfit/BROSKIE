@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Image, StyleSheet, Pressable, ActivityIndicator, Platform, Animated, Easing } from 'react-native';
+import { View, Image, StyleSheet, Pressable, ActivityIndicator, Platform, Animated, Easing } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import Icon from '../icons/Icon';
 import {
@@ -10,6 +10,7 @@ import { usePressScale, Pop, FloatLoop, FadeSlide, motion, haptic, useReducedMot
 import { mediaUrl } from '../api';
 import { useTheme } from '../store/ThemeContext';
 import { openProfile } from '../push/routing';
+import { Text } from './Text';
 
 // expo-blur was added after some APKs had already shipped. Keep it optional so
 // OTA bundles remain safe on those installations; newer builds get native

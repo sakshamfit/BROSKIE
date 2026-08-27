@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, Animated, StyleSheet } from 'react-native';
+import { View, Pressable, Animated, StyleSheet } from 'react-native';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
 import { useTheme } from '../store/ThemeContext';
 import { type, inkBox } from '../theme';
 import { motion, useReducedMotion } from '../motion';
+import { Text } from './Text';
 
 /**
  * ReplyBar — the "replying to…" strip above the composer.

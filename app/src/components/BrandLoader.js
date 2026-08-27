@@ -7,11 +7,12 @@
  * src/assets/lottie/loading-brand.json when a branded asset is ready.
  */
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { motion, useReducedMotion, haptic } from '../motion';
+import { Text } from './Text';
 
 export default function BrandLoader({ label, size = 42 }) {
   const { theme } = useTheme();

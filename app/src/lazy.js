@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from './store/ThemeContext';
 import { type, stroke, radius } from './theme';
+import { Text } from './components/Text';
 
 /**
  * Fallback displayed while loading content.

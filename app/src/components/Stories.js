@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput,
+  View, ScrollView, Pressable, StyleSheet, Modal, TextInput,
   ActivityIndicator, Image, KeyboardAvoidingView, Platform, Keyboard, Animated, Easing, PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +23,7 @@ import AudiencePicker from './AudiencePicker';
 import UniversalImageEditor from './UniversalImageEditor';
 import SongPicker from './SongPicker';
 import { stopPreview } from '../previewPlayer';
+import { Text } from './Text';
 
 const BG_COLORS = ['#FFE24D', '#fdf8f8', '#e2e3de', '#5d5f5b', '#1c1b1b', '#39444c'];
 const REACTIONS = ['❤️', '😂', '🔥', '😮', '👏'];

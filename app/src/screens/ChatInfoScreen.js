@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, Modal, TextInput,
+  View, ScrollView, Pressable, StyleSheet, Modal, TextInput,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -15,6 +16,7 @@ import { confirm } from '../hooks/confirm';
 import { api } from '../api';
 import { DISAPPEAR_OPTIONS, disappearLabel } from '../components/MessageBubble';
 import CollabDocumentView from '../components/CollabDocumentView';
+import { Text } from '../components/Text';
 
 export default function ChatInfoScreen({ route, navigation, embedded = false }) {
   const { chatId } = route.params;
@@ -340,6 +342,10 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
 
       {/* rename modal */}
       <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}>
+        {/* iOS Modals do not resize for the keyboard, and this sheet autofocuses
+            its field — without this the sheet (and its Cancel/Save row) sits
+            behind the IME. Same pattern the comment sheet already uses. */}
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <Pressable style={[s.overlay, { backgroundColor: 'transparent' }]} onPress={() => setRenameOpen(false)}>
           <FrostedBackdrop />
           <SheetSpringIn style={{ width: '100%', maxWidth: 380 }}>
@@ -367,6 +373,7 @@ export default function ChatInfoScreen({ route, navigation, embedded = false }) 
           </Pressable>
           </SheetSpringIn>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* OT docs modal */}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { View, StyleSheet, FlatList } from 'react-native';
 import Icon from '../icons/Icon';
 import { useChatListState, useChatActions } from '../store/ChatContext';
 import { useTheme } from '../store/ThemeContext';
@@ -7,6 +7,7 @@ import { Avatar, InkCheckbox, InkButton, EmptyState, Rule, FrostedBackdrop, Gold
 import { BottomSheet, SpringPressable, motion } from '../motion';
 import { type, inkBox, marker, radius, raised } from '../theme';
 import { api } from '../api';
+import { Text } from './Text';
 
 /**
  * Multi-select "forward to…" sheet. The user picks one or more chats, then

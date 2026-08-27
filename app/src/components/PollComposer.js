@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Modal } from 'react-native';
+import { View, TextInput, Pressable, StyleSheet, Modal } from 'react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { InkButton, InkField, Rule, FrostedBackdrop } from './common';
 import { SheetSpringIn, SpringPressable, motion } from '../motion';
 import { type, inkBox, marker, raised } from '../theme';
+import { Text } from './Text';
 
 const MAX_OPTIONS = 6;
 

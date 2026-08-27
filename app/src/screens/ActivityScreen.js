@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, RefreshControl,
+  View, FlatList, Pressable, StyleSheet, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -13,8 +13,9 @@ import {
   Avatar, EmptyState, formatChatTime, handleFor, GoldTick, hasGoldTick,
 } from '../components/common';
 import { openPost, openProfile } from '../push/routing';
-import { type, inkBox, marker, stroke } from '../theme';
+import { type, inkBox, marker, stroke, contentMaxWidth } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { Text } from '../components/Text';
 
 const INSTAGRAM_HEART = '#ED4956';
 
@@ -362,6 +363,9 @@ function MiniButton({ theme, label, filled, busy, disabled, onPress }) {
     <SpringPressable
       onPress={onPress}
       disabled={disabled}
+      // The chip draws at 32dp; hitSlop widens the *touchable* area to 44dp,
+      // the smallest target Apple's HIG allows, without enlarging the chip.
+      hitSlop={6}
       style={({ pressed }) => [
         styles.mini,
         inkBox(theme, filled ? 'ink' : 'thin'),
@@ -387,7 +391,12 @@ const makeStyles = (t) => StyleSheet.create({
     paddingHorizontal: 18, paddingVertical: 14,
     borderBottomWidth: stroke.ink, borderBottomColor: t.ink,
   },
-  list: { width: '100%', maxWidth: 680, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 16, paddingBottom: 70 },
+  // Same content column as every other list in the app (contentMaxWidth).
+  // This one had drifted to 680 while Network, Calls, Post detail, Profiles
+  // and GC all sit at 640, so on a wide screen the Activity rows were
+  // measurably wider than every other list — which reads as "this screen is
+  // zoomed in" even though nothing on it scales.
+  list: { width: '100%', maxWidth: contentMaxWidth, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 16, paddingBottom: 70 },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 10 },
   avatarWrap: { position: 'relative' },
   avatarStack: { flexDirection: 'row', alignItems: 'center' },

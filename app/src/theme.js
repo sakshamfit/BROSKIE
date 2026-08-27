@@ -79,6 +79,19 @@ export const spacing = {
   safeArea: 16,
 };
 
+/**
+ * One ceiling for every content column — feeds, lists, composers, comment
+ * bars. Wide layouts (tablets, landscape, desktop web) centre a column at
+ * this width instead of stretching the content edge to edge.
+ *
+ * This used to be a literal `640` retyped in a dozen places, and one screen
+ * (Activity) had drifted to 680 — so the same list of rows was measurably
+ * wider than every other list in the app, which reads as "this screen is
+ * zoomed" even though nothing is scaling. Import the constant instead of
+ * writing a number.
+ */
+export const contentMaxWidth = 640;
+
 /* ------------------------------------------------------------------ */
 /* stroke weights — depth is line weight, not shadow                   */
 /* ------------------------------------------------------------------ */

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, ScrollView, TextInput, ActivityIndicator,
+  View, Pressable, StyleSheet, ScrollView, TextInput, ActivityIndicator,
   KeyboardAvoidingView, Platform, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { rippleFor } from '../components/common';
 import { CATEGORY_LIST, JOIN_POLICY_LIST } from '../components/communityMeta';
 import { dashedRule, marker, radius, type, raised } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { Text } from '../components/Text';
 
 /**
  * Full-screen "New Community" composer — mirrors NewPostScreen's structure

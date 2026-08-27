@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, TextInput, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, ScrollView, TextInput, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
@@ -9,6 +9,7 @@ import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
 import { PaperCard, InkField, InkButton, Rule } from '../components/common';
 import { type, inkBox } from '../theme';
+import { Text } from '../components/Text';
 
 const PASSWORD_HINT = 'Password must be at least 8 characters.';
 const isValidPassword = (value) => value.length >= 8;
@@ -61,7 +62,12 @@ export default function SecurityScreen({ navigation, embedded = false }) {
         <Text style={[type.headlineMd, { color: theme.text }]}>Security & Privacy</Text>
       </View>
 
-      <ScrollView contentContainerStyle={[s.scroll, isTablet && s.scrollWide]}>
+      <ScrollView
+        // iOS: lift the scroll content clear of the IME so the focused field
+        // is never behind the keyboard (there is no KeyboardAvoidingView here).
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={[s.scroll, isTablet && s.scrollWide]}
+      >
         <View style={s.sectionHead}>
           <Icon name="shield-checkmark-outline" size={18} color={theme.ink} />
           <Text style={[type.labelXs, { color: theme.muted }]}>CHANGE PASSWORD</Text>

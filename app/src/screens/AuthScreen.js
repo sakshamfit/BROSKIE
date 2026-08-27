@@ -1,6 +1,6 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
+  View, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
   Platform, ScrollView, ActivityIndicator, Animated, Easing, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { useAuth } from '../store/AuthContext';
 import { api, authErrorMessage } from '../api';
 import { useDebouncedCallback } from '../rateLimit';
 import { SpringPressable, Shake, motion, haptic } from '../motion';
+import { Text } from '../components/Text';
 
 /**
  * Auth must not subscribe to the live window height. Android and mobile web

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, TextInput, Pressable, StyleSheet, Image, Animated,
+  View, FlatList, Pressable, StyleSheet, Image, Animated,
   ActivityIndicator, RefreshControl, Modal, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +26,8 @@ import NewPostScreen from './NewPostScreen';
 import CommunitiesScreen from './CommunitiesScreen';
 import { stopPreview } from '../previewPlayer';
 import { pickActiveSongPostId, SONG_SETTLE_MS } from '../feedAudio';
+import { Text } from '../components/Text';
+import ChatInput from '../components/ChatInput';
 
 /* Phase 2 feed lenses: the whole world, your college/workplace people, or
  * just the authors you follow. */
@@ -571,36 +573,32 @@ function CommentsSheet({ post, onClose, onCounted }) {
             />
           )}
 
-          <View style={[s.commentBar, s.listWide]}>
-            <TextInput
-              style={s.commentInput}
-              placeholder="Add a comment…"
-              placeholderTextColor={theme.muted}
-              value={text}
-              onChangeText={setText}
-              multiline
-              onKeyPress={(e) => {
-                if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
-                  e.preventDefault?.();
-                  send();
-                }
-              }}
-            />
-            <SpringPressable
-              onPress={send}
-              disabled={busy || !text.trim()}
-              style={({ pressed }) => [
-                s.commentSend,
-                inkBox(theme, 'ink'),
-                { backgroundColor: pressed ? theme.highlighter : theme.ink },
-                (busy || !text.trim()) && { opacity: 0.4 },
-              ]}
-              scaleTo={motion.scale.row}
-              haptic="selection"
-            >
-              <Icon name="send" size={15} color={theme.onPrimary} />
-            </SpringPressable>
-          </View>
+          <ChatInput
+            size="comment"
+            value={text}
+            onChangeText={setText}
+            placeholder="Add a comment…"
+            onSubmit={send}
+            style={s.commentBar}
+            send={
+              <SpringPressable
+                accessibilityRole="button"
+                accessibilityLabel="Post comment"
+                onPress={send}
+                disabled={busy || !text.trim()}
+                style={({ pressed }) => [
+                  s.commentSend,
+                  inkBox(theme, 'ink'),
+                  { backgroundColor: pressed ? theme.highlighter : theme.ink },
+                  (busy || !text.trim()) && { opacity: 0.4 },
+                ]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
+              >
+                <Icon name="send" size={15} color={theme.onPrimary} />
+              </SpringPressable>
+            }
+          />
         </KeyboardAvoidingView>
       </View>
     </Modal>
@@ -638,8 +636,10 @@ const makeStyles = (t) => StyleSheet.create({
   sheet: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24, maxHeight: '85%' },
   sheetHead: { flexDirection: 'row', alignItems: 'center' },
   comment: { flexDirection: 'row', gap: 12, paddingVertical: 11 },
-  commentBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginTop: 10,
-    borderTopWidth: 1, borderTopColor: t.graphiteLine, paddingTop: 12 },
-  commentInput: { flex: 1, ...type.bodyMd, color: t.text, maxHeight: 90, paddingVertical: 8, outlineStyle: 'none' },
-  commentSend: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  // The row layout and the field box now come from components/ChatInput —
+  // what is left here is only the sheet chrome drawn around it.
+  commentBar: { marginTop: 10, borderTopWidth: 1, borderTopColor: t.graphiteLine, paddingTop: 12 },
+  // 44×44 is the smallest tap target Apple's HIG allows; the comment field
+  // beside it is 44 tall, so anything smaller read as a mismatched pair.
+  commentSend: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });

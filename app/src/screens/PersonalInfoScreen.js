@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, TextInput, Modal, ActivityIndicator } from 'react-native';
+import {
+  View, Pressable, StyleSheet, ScrollView, TextInput, Modal, ActivityIndicator,
+  KeyboardAvoidingView, Platform,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { api } from '../api';
@@ -12,6 +15,7 @@ import { PaperCard, InkField, InkButton, TapeChip, FrostedBackdrop, GoldTick, ha
 import { type, inkBox, marker } from '../theme';
 import { SpringPressable, motion } from '../motion';
 import AffiliationPicker from '../components/AffiliationPicker';
+import { Text } from '../components/Text';
 
 /** "Personal Information" — Name, Username, About, Phone. */
 export default function PersonalInfoScreen({ navigation, embedded = false }) {
@@ -99,7 +103,12 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
         <Text style={[type.headlineMd, { color: theme.text }]}>Personal Information</Text>
       </View>
 
-      <ScrollView contentContainerStyle={[s.scroll, isTablet && s.scrollWide]}>
+      <ScrollView
+        // iOS: lift the scroll content clear of the IME so the focused field
+        // is never behind the keyboard (there is no KeyboardAvoidingView here).
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={[s.scroll, isTablet && s.scrollWide]}
+      >
         <Text style={[type.labelXs, { color: theme.muted, marginBottom: 10 }]}>IDENTITY</Text>
         <View style={{ gap: 10, marginBottom: 24 }}>
           <Row icon="person-outline" label="Name" value={user?.name} onPress={() => openEdit('name')} />
@@ -228,6 +237,9 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
       />
 
       <Modal visible={!!editing} transparent animationType="fade" onRequestClose={() => setEditing(null)}>
+        {/* iOS Modals do not resize for the keyboard and this sheet autofocuses
+            its field — without this the Save row can sit behind the IME. */}
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={[s.overlay, { backgroundColor: 'transparent' }]}>
           <FrostedBackdrop />
           <PaperCard style={s.dialog} weight="ink">
@@ -264,6 +276,7 @@ export default function PersonalInfoScreen({ navigation, embedded = false }) {
             </View>
           </PaperCard>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

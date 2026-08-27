@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator, Modal, Share } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, ActivityIndicator, Modal, Share } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
@@ -12,6 +12,7 @@ import { categoryMeta, JOIN_POLICY } from '../components/communityMeta';
 import { radius, type, inkBox, marker, raised } from '../theme';
 import { confirm } from '../hooks/confirm';
 import { SpringPressable, motion } from '../motion';
+import { Text } from '../components/Text';
 
 /**
  * Full-screen community detail: hero (category badge, name, description,

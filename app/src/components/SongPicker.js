@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, TextInput, Modal, ActivityIndicator,
+  View, Pressable, StyleSheet, TextInput, Modal, ActivityIndicator,
   ScrollView, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { useDebouncedCallback } from '../rateLimit';
 import SongCard from './SongCard';
 import { type, inkBox, marker, dashedRule } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { Text } from './Text';
 
 /**
  * Full-screen song search sheet — shared by the Status composer and

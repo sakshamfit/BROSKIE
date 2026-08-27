@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, FlatList, ActivityIndicator, TextInput, Modal, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, FlatList, ActivityIndicator, TextInput, Modal, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '../store/ThemeContext';
 import { useChatActions } from '../store/ChatContext';
 import { useAuth } from '../store/AuthContext';
@@ -9,6 +9,7 @@ import { type, inkBox, alpha, radius } from '../theme';
 import { api } from '../api';
 import { SpringPressable, motion } from '../motion';
 import CollabEditor from './CollabEditor';
+import { Text } from './Text';
 
 /**
  * CollabDocumentView - Lists and manages collaborative documents in a chat

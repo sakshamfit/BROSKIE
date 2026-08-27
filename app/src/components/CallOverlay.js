@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Platform, Modal, Animated } from 'react-native';
+import { View, StyleSheet, Platform, Modal, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { RemoteVideo, LocalVideo, RemoteAudio } from './CallVideo';
@@ -9,6 +9,7 @@ import { Avatar, rippleFor, GoldTick, hasGoldTick } from './common';
 import { radius, type, inkBox, sketchBox, raised, lightTheme } from '../theme';
 import { SpringPressable, motion } from '../motion';
 import GridPaper from './GridPaper';
+import { Text } from './Text';
 
 /**
  * BROSKIE Premium Calling UI & WebRTC overlay.

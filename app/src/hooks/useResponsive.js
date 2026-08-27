@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Platform, useWindowDimensions, PixelRatio, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MAX_FONT_SCALE } from '../components/Text';
 
 /**
  * Breakpoints, in dp width. Chosen to line up with real device classes:
@@ -69,7 +70,9 @@ export default function useResponsive() {
       fontScale,
       // Clamp fontScale so aggressive OS accessibility settings don't break
       // the hand-drawn layouts (still respects moderate user preference).
-      clampedFontScale: Math.min(Math.max(fontScale, 0.9), 1.3),
+      // The ceiling is the same MAX_FONT_SCALE the shared <Text> caps at, so
+      // anything reading this hook and anything rendering text agree.
+      clampedFontScale: Math.min(Math.max(fontScale, 0.9), MAX_FONT_SCALE),
       pixelRatio: PixelRatio.get(),
     };
   }, [width, height, fontScale, insets.top, insets.bottom, insets.left, insets.right]);

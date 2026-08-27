@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, RefreshControl, Modal } from 'react-native';
+import { View, FlatList, Pressable, StyleSheet, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
 import { api } from '../api';
@@ -13,6 +13,7 @@ import { type, inkBox, marker, radius, raised } from '../theme';
 import { SpringPressable, motion } from '../motion';
 import NewCommunityScreen from './NewCommunityScreen';
 import CommunityDetailScreen from './CommunityDetailScreen';
+import { Text } from '../components/Text';
 
 const tiltFor = (i) => (i % 2 === 0 ? '-0.7deg' : '0.6deg');
 

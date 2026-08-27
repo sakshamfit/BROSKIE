@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, TextInput, FlatList, ActivityIndicator } from 'react-native';
+import { View, Pressable, StyleSheet, TextInput, FlatList, ActivityIndicator } from 'react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { api } from '../api';
@@ -8,6 +8,7 @@ import { EmojiText } from '../icons/Emoji';
 import { type, inkBox, marker, dashedRule } from '../theme';
 import { SpringPressable, motion } from '../motion';
 import { AUDIENCE, DEFAULT_AUDIENCE_OPTIONS } from './audienceMeta';
+import { Text } from './Text';
 
 export { AUDIENCE, DEFAULT_AUDIENCE_OPTIONS };
 

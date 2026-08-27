@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, ScrollView, TextInput, ActivityIndicator,
+  View, Pressable, StyleSheet, ScrollView, TextInput, ActivityIndicator,
   Image, KeyboardAvoidingView, Platform, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,7 @@ import { editorConfigFor } from '../imageEditor/config';
 import AudiencePicker from '../components/AudiencePicker';
 import SongPicker from '../components/SongPicker';
 import UniversalImageEditor from '../components/UniversalImageEditor';
+import { Text } from '../components/Text';
 
 /**
  * Full-screen "New Post" composer for The Network — a dedicated page
