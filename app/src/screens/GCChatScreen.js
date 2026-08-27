@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, FlatList, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
+  View, FlatList, TextInput, Pressable, StyleSheet, KeyboardAvoidingView,
   Platform, Modal, Image, ActivityIndicator, Alert, Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,6 +35,8 @@ import ForwardSheet from '../components/ForwardSheet';
 import PollComposer from '../components/PollComposer';
 import ThemePickerSheet from '../components/ThemePickerSheet';
 import CollabDocumentView from '../components/CollabDocumentView';
+import { Text } from '../components/Text';
+import ChatInput from '../components/ChatInput';
 
 /**
  * GCChatScreen — the GC chat environment.
@@ -741,19 +743,22 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
               ? { paddingBottom: 8 }
               : !embedded ? { paddingBottom: Math.max(insets.bottom, 12) } : null
             ]}>
-              <View style={[s.composerRow, s.composerRowWide]}>
-              {recording ? (
-                <InkField style={s.inputBar}>
-                  <View style={[s.recDot, { backgroundColor: theme.danger }]} />
-                  <Text style={[type.bodyLg, { flex: 1, color: theme.text }]}>
-                    Recording… {Math.floor(recSecs / 60)}:{String(recSecs % 60).padStart(2, '0')}
-                  </Text>
-                  <Pressable accessibilityLabel="Cancel voice recording" onPress={cancelRecording} disabled={voiceBusy} hitSlop={8}>
-                    <Text style={[type.labelSm, { color: theme.danger, opacity: voiceBusy ? 0.45 : 1 }]}>CANCEL</Text>
-                  </Pressable>
-                </InkField>
-              ) : (
-                <InkField style={s.inputBar}>
+              <ChatInput
+                inputRef={inputRef}
+                value={text}
+                onChangeText={onChangeText}
+                placeholder={editing ? 'Edit message…' : 'Message the GC'}
+                onSubmit={send}
+                onSelectionChange={(e) => setCursor(e.nativeEvent.selection.start)}
+                onFocus={() => {
+                  if (suppressFocusScroll.current) return;
+                  scrollToLatest(120);
+                }}
+                recording={recording}
+                recordingSeconds={recSecs}
+                onCancelRecording={cancelRecording}
+                cancelDisabled={voiceBusy}
+                leading={
                   <SpringPressable
                     accessibilityRole="button"
                     accessibilityLabel={showEmoji ? 'Show keyboard' : 'Show emoji'}
@@ -770,82 +775,64 @@ function GCConversationContent({ route, navigation, embedded = false, themePicke
                       off={<Icon name="happy-outline" size={23} color={theme.muted} />}
                     />
                   </SpringPressable>
-                  <TextInput
-                    ref={inputRef}
-                    style={s.input}
-                    placeholder={editing ? 'Edit message…' : 'Message the GC'}
-                    placeholderTextColor={theme.muted}
-                    value={text}
-                    onChangeText={onChangeText}
-                    onSelectionChange={(e) => setCursor(e.nativeEvent.selection.start)}
-                    onFocus={() => {
-                      if (suppressFocusScroll.current) return;
-                      scrollToLatest(120);
-                    }}
-                    multiline
-                    disableFullscreenUI
-                    onSubmitEditing={send}
-                    blurOnSubmit={false}
-                    onKeyPress={(e) => {
-                      if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
-                        e.preventDefault?.();
-                        send();
+                }
+                trailing={
+                  <>
+                    {!editing && (
+                      <SpringPressable accessibilityRole="button" accessibilityLabel="Attach a photo" onPress={pickImage} hitSlop={6} disabled={uploading} scaleTo={motion.scale.icon} haptic="selection">
+                        {uploading ? <ActivityIndicator size="small" color={theme.muted} /> : <Icon name="attach" size={22} color={theme.muted} style={{ transform: [{ rotate: '45deg' }] }} />}
+                      </SpringPressable>
+                    )}
+                    {!editing && !text.trim() && (
+                      <SpringPressable accessibilityRole="button" accessibilityLabel="Take a photo" onPress={pickImage} hitSlop={6} scaleTo={motion.scale.icon} haptic="selection">
+                        <Icon name="camera-outline" size={22} color={theme.muted} />
+                      </SpringPressable>
+                    )}
+                  </>
+                }
+                send={
+                  <SpringPressable
+                    accessibilityRole="button"
+                    accessibilityLabel={voiceBusy ? 'Sending voice note' : recording ? 'Send voice note' : text.trim() ? 'Send message' : 'Hold to record a voice note'}
+                    delayLongPress={250}
+                    onPressIn={() => {
+                      holdStartedAt.current = Date.now();
+                      if (!text.trim() && !editing && !recording && !voiceBusy) {
+                        pressOwnsRecording.current = true;
+                        startRecording();
                       }
                     }}
-                  />
-                  {!editing && (
-                    <SpringPressable accessibilityRole="button" accessibilityLabel="Attach a photo" onPress={pickImage} hitSlop={6} disabled={uploading} scaleTo={motion.scale.icon} haptic="selection">
-                      {uploading ? <ActivityIndicator size="small" color={theme.muted} /> : <Icon name="attach" size={22} color={theme.muted} style={{ transform: [{ rotate: '45deg' }] }} />}
-                    </SpringPressable>
-                  )}
-                  {!editing && !text.trim() && (
-                    <SpringPressable accessibilityRole="button" accessibilityLabel="Take a photo" onPress={pickImage} hitSlop={6} scaleTo={motion.scale.icon} haptic="selection">
-                      <Icon name="camera-outline" size={22} color={theme.muted} />
-                    </SpringPressable>
-                  )}
-                </InkField>
-              )}
-              <SpringPressable
-                accessibilityRole="button"
-                accessibilityLabel={voiceBusy ? 'Sending voice note' : recording ? 'Send voice note' : text.trim() ? 'Send message' : 'Hold to record a voice note'}
-                delayLongPress={250}
-                onPressIn={() => {
-                  holdStartedAt.current = Date.now();
-                  if (!text.trim() && !editing && !recording && !voiceBusy) {
-                    pressOwnsRecording.current = true;
-                    startRecording();
-                  }
-                }}
-                onPressOut={() => {
-                  const startedAt = holdStartedAt.current;
-                  holdStartedAt.current = 0;
-                  if (!pressOwnsRecording.current) return;
-                  pressOwnsRecording.current = false;
-                  const heldMs = startedAt ? Date.now() - startedAt : 0;
-                  stopRecording(heldMs >= 500);
-                }}
-                onPress={() => {
-                  if (text.trim()) send();
-                  else if (editing) { setEditing(null); setText(''); }
-                }}
-                disabled={voiceBusy}
-                android_ripple={rippleFor(theme, { color: alpha(theme.onSendButton, 0.3) })}
-                style={({ pressed }) => [
-                  s.sendBtn,
-                  inkBox(theme, 'bold'),
-                  { backgroundColor: pressed && Platform.OS !== 'android' ? theme.highlighter : theme.sendButton },
-                  voiceBusy && { opacity: 0.55 },
-                ]}
-              >
-                {voiceBusy ? (
-                  <ActivityIndicator size="small" color={theme.onSendButton} />
-                ) : (
-                  <Pop trigger={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'} firstStatic from={0.7}>
-                    <Icon name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'} size={18} color={theme.onSendButton} />
-                  </Pop>
-                )}
-              </SpringPressable>
-              </View>
+                    onPressOut={() => {
+                      const startedAt = holdStartedAt.current;
+                      holdStartedAt.current = 0;
+                      if (!pressOwnsRecording.current) return;
+                      pressOwnsRecording.current = false;
+                      const heldMs = startedAt ? Date.now() - startedAt : 0;
+                      stopRecording(heldMs >= 500);
+                    }}
+                    onPress={() => {
+                      if (text.trim()) send();
+                      else if (editing) { setEditing(null); setText(''); }
+                    }}
+                    disabled={voiceBusy}
+                    android_ripple={rippleFor(theme, { color: alpha(theme.onSendButton, 0.3) })}
+                    style={({ pressed }) => [
+                      s.sendBtn,
+                      inkBox(theme, 'bold'),
+                      { backgroundColor: pressed && Platform.OS !== 'android' ? theme.highlighter : theme.sendButton },
+                      voiceBusy && { opacity: 0.55 },
+                    ]}
+                  >
+                    {voiceBusy ? (
+                      <ActivityIndicator size="small" color={theme.onSendButton} />
+                    ) : (
+                      <Pop trigger={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'} firstStatic from={0.7}>
+                        <Icon name={editing ? 'checkmark' : text.trim() ? 'send' : recording ? 'checkmark' : 'mic'} size={18} color={theme.onSendButton} />
+                      </Pop>
+                    )}
+                  </SpringPressable>
+                }
+              />
             </View>
           </View>
         </FadeSlide>
@@ -1127,13 +1114,11 @@ const makeStyles = (t) => StyleSheet.create({
   editBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderStyle: 'dashed' },
   mentionPopup: { marginHorizontal: 20, maxHeight: 260, borderWidth: 1, borderRadius: 10, paddingVertical: 4 },
   mentionItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  // The field itself lives in components/ChatInput.js — the ONE composer in
+  // the app, shared with direct chat, post comments and the comment sheet, so
+  // its width/height/padding can no longer drift per screen.
   composerWrap: { paddingHorizontal: 20, paddingBottom: 22, paddingTop: 12, borderTopWidth: 1, borderTopColor: t.graphiteLine, borderStyle: 'dashed' },
-  composerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, width: '100%' },
-  composerRowWide: { maxWidth: 640, width: '100%', alignSelf: 'center' },
-  inputBar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 12, minHeight: 48, borderTopLeftRadius: 5, borderTopRightRadius: 3, borderBottomRightRadius: 6, borderBottomLeftRadius: 4, backgroundColor: t.inputBackground },
-  input: { flex: 1, ...type.bodyLg, color: t.text, maxHeight: 110, paddingVertical: 11, outlineStyle: 'none' },
   sendBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  recDot: { width: 9, height: 9, borderRadius: radius.full },
   retryBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 11, paddingVertical: 7, borderWidth: 1 },
   dimOverlay: { flex: 1, backgroundColor: 'rgba(28,27,27,0.95)', alignItems: 'center', justifyContent: 'center' },
   reportSheet: { width: '92%', maxWidth: 460, borderRadius: radius.md, padding: 18 },

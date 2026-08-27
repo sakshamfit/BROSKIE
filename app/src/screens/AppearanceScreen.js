@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, ScrollView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
@@ -7,6 +7,7 @@ import useResponsive from '../hooks/useResponsive';
 import { PaperCard } from '../components/common';
 import { type, inkBox, marker, lightTheme, darkTheme, kineticInkTheme } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { Text } from '../components/Text';
 
 const SYSTEM_SETTING_NAME = Platform.select({
   ios: 'your iOS Display & Brightness setting',

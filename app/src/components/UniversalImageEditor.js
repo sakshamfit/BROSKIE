@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, Modal, ActivityIndicator,
+  View, Pressable, StyleSheet, Modal, ActivityIndicator,
   ScrollView, Animated, Easing, Platform,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -13,6 +13,7 @@ import {
   rotatedSize, fitRect, clamp, normalizeRotation, rotatePointClockwise,
   MAX_ZOOM, DOUBLE_TAP_ZOOM,
 } from '../imageEditor/processing';
+import { Text } from './Text';
 
 /* ------------------------------------------------------------------ */
 /* pure transform math (kept out of the component so it is testable)   */
@@ -476,19 +477,19 @@ export default function UniversalImageEditor({
             </ScrollView>
           )}
           <View style={styles.actionsRow}>
-            <Pressable onPress={() => zoomBy(1 / 1.4)} accessibilityRole="button" accessibilityLabel="Zoom out" style={styles.actionBtn}>
+            <Pressable onPress={() => zoomBy(1 / 1.4)} accessibilityRole="button" accessibilityLabel="Zoom out" hitSlop={4} style={styles.actionBtn}>
               <Text style={[type.bodyStrong, styles.actionText]}>−</Text>
             </Pressable>
-            <Pressable onPress={() => zoomBy(1.4)} accessibilityRole="button" accessibilityLabel="Zoom in" style={styles.actionBtn}>
+            <Pressable onPress={() => zoomBy(1.4)} accessibilityRole="button" accessibilityLabel="Zoom in" hitSlop={4} style={styles.actionBtn}>
               <Text style={[type.bodyStrong, styles.actionText]}>+</Text>
             </Pressable>
             {allowRotation && (
-              <Pressable onPress={rotate} accessibilityRole="button" accessibilityLabel="Rotate 90 degrees" style={styles.actionBtnWide}>
+              <Pressable onPress={rotate} accessibilityRole="button" accessibilityLabel="Rotate 90 degrees" hitSlop={4} style={styles.actionBtnWide}>
                 <Icon name="arrow-redo-outline" size={18} color="#ffffff" />
                 <Text style={[type.labelSm, styles.actionText]}>ROTATE</Text>
               </Pressable>
             )}
-            <Pressable onPress={reset} accessibilityRole="button" accessibilityLabel="Reset edits" style={styles.actionBtnWide}>
+            <Pressable onPress={reset} accessibilityRole="button" accessibilityLabel="Reset edits" hitSlop={4} style={styles.actionBtnWide}>
               <Icon name="refresh" size={18} color="#ffffff" />
               <Text style={[type.labelSm, styles.actionText]}>RESET</Text>
             </Pressable>

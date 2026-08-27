@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, TextInput, Pressable, StyleSheet,
+  View, FlatList, Pressable, StyleSheet,
   ActivityIndicator, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,8 @@ import ImageLightbox from '../components/ImageLightbox';
 import { stopPreview } from '../previewPlayer';
 import { type, inkBox, stroke } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { Text } from '../components/Text';
+import ChatInput from '../components/ChatInput';
 
 /**
  * One post, full screen — the destination when you tap a "liked your post" /
@@ -177,36 +179,32 @@ export default function PostDetailScreen({ navigation, route, embedded = false }
             )}
           />
 
-          <View style={[s.commentBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-            <TextInput
-              style={s.commentInput}
-              placeholder="Add a comment…"
-              placeholderTextColor={theme.muted}
-              value={text}
-              onChangeText={setText}
-              multiline
-              onKeyPress={(e) => {
-                if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
-                  e.preventDefault?.();
-                  send();
-                }
-              }}
-            />
-            <SpringPressable
-              onPress={send}
-              disabled={busy || !text.trim()}
-              style={({ pressed }) => [
-                s.commentSend,
-                inkBox(theme, 'ink'),
-                { backgroundColor: pressed ? theme.highlighter : theme.ink },
-                (busy || !text.trim()) && { opacity: 0.4 },
-              ]}
-              scaleTo={motion.scale.row}
-              haptic="selection"
-            >
-              <Icon name="send" size={15} color={theme.onPrimary} />
-            </SpringPressable>
-          </View>
+          <ChatInput
+            size="comment"
+            value={text}
+            onChangeText={setText}
+            placeholder="Add a comment…"
+            onSubmit={send}
+            style={[s.commentBar, { paddingBottom: Math.max(insets.bottom, 12) }]}
+            send={
+              <SpringPressable
+                accessibilityRole="button"
+                accessibilityLabel="Post comment"
+                onPress={send}
+                disabled={busy || !text.trim()}
+                style={({ pressed }) => [
+                  s.commentSend,
+                  inkBox(theme, 'ink'),
+                  { backgroundColor: pressed ? theme.highlighter : theme.ink },
+                  (busy || !text.trim()) && { opacity: 0.4 },
+                ]}
+                scaleTo={motion.scale.row}
+                haptic="selection"
+              >
+                <Icon name="send" size={15} color={theme.onPrimary} />
+              </SpringPressable>
+            }
+          />
         </KeyboardAvoidingView>
       ) : null}
 
@@ -225,12 +223,14 @@ const makeStyles = (t) => StyleSheet.create({
   },
   list: { width: '100%', maxWidth: 640, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 18, paddingBottom: 24 },
   comment: { flexDirection: 'row', gap: 12, paddingVertical: 10, width: '100%', maxWidth: 640, alignSelf: 'center' },
+  // The row layout, the 640dp content cap and the field box now come from
+  // components/ChatInput; this is only the chrome drawn around it, kept at
+  // the same 18dp gutter as the comment list above.
   commentBar: {
-    flexDirection: 'row', alignItems: 'flex-end', gap: 10,
     borderTopWidth: 1, borderTopColor: t.graphiteLine,
     paddingTop: 10, paddingHorizontal: 18,
-    width: '100%', maxWidth: 640, alignSelf: 'center',
   },
-  commentInput: { flex: 1, ...type.bodyMd, color: t.text, maxHeight: 90, paddingVertical: 8, outlineStyle: 'none' },
-  commentSend: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  // 44×44 is the smallest tap target Apple's HIG allows, and it matches the
+  // 44dp comment field sitting next to it.
+  commentSend: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });

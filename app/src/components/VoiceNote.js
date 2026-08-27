@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { radius, type, inkBox, marker, tokens } from '../theme';
 import { alpha } from '../chatThemes';
 import { SpringPressable, motion } from '../motion';
+import { Text } from './Text';
 
 /** Ink voice note: drawn play box + graphite waveform. */
 export default function VoiceNote({ uri, duration = 0, isMine, onLongPress }) {

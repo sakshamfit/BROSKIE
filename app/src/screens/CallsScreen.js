@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, FlatList, Pressable, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
@@ -11,6 +11,7 @@ import { Avatar, EmptyState, formatChatTime, rippleFor, GoldTick, hasGoldTick } 
 import useResponsive from '../hooks/useResponsive';
 import { type, dashedRule, marker } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { Text } from '../components/Text';
 
 /**
  * Real call history — every ringing/accepted/declined/missed/hung-up call
@@ -75,12 +76,22 @@ export default function CallsScreen({ navigation, embedded = false }) {
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[s.header, !embedded && { paddingTop: 20 + insets.top }, isTablet && s.headerWide]}>
-        <Text style={[type.headlineLg, { color: theme.text }]}>Calls</Text>
-        {!callSupported && (
-          <Text style={[type.labelXs, { color: theme.muted, marginTop: 4 }]}>
-            LIVE AUDIO/VIDEO NEEDS A DESKTOP BROWSER ON THIS DEVICE
-          </Text>
+        {/* Calls is pushed on the stack on phones, so it needs the same back
+            control every other pushed screen has. The desktop sidebar renders
+            this screen `embedded`, where a back arrow would be meaningless. */}
+        {!embedded && (
+          <Pressable onPress={() => navigation.goBack()} hitSlop={9} style={{ padding: 6 }}>
+            <Icon name="arrow-back" size={22} color={theme.ink} />
+          </Pressable>
         )}
+        <View style={{ flex: 1 }}>
+          <Text style={[type.headlineLg, { color: theme.text }]}>Calls</Text>
+          {!callSupported && (
+            <Text style={[type.labelXs, { color: theme.muted, marginTop: 4 }]}>
+              LIVE AUDIO/VIDEO NEEDS A DESKTOP BROWSER ON THIS DEVICE
+            </Text>
+          )}
+        </View>
       </View>
 
       {loading ? (
@@ -135,7 +146,10 @@ export default function CallsScreen({ navigation, embedded = false }) {
 }
 
 const makeStyles = (t) => StyleSheet.create({
-  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, minHeight: 84, justifyContent: 'center' },
+  // Row (back arrow + title block) so the header matches every other pushed
+  // screen; alignItems centres it inside the 84dp band, which is what the
+  // old justifyContent: 'center' did for the stacked column.
+  header: { flexDirection: 'row', alignItems: 'center', gap: 13, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, minHeight: 84 },
   headerWide: { maxWidth: 640, width: '100%', alignSelf: 'center' },
   list: { paddingHorizontal: 20, paddingBottom: 40 },
   listWide: { maxWidth: 640, width: '100%', alignSelf: 'center' },

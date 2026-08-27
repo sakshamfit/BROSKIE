@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet, Modal, TextInput, ActivityIndicator,
+  View, FlatList, Pressable, StyleSheet, Modal, TextInput, ActivityIndicator,
   RefreshControl, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +18,7 @@ import BrandHeader from '../components/BrandHeader';
 import { SpringPressable, motion, haptic, FadeSlide } from '../motion';
 import { type, marker, stroke, raised } from '../theme';
 import useResponsive from '../hooks/useResponsive';
+import { Text } from '../components/Text';
 
 /**
  * GC — the group-chat section (Instagram-style GCs). Anyone can make any

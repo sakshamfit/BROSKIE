@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { SpringPressable, IconSwap, motion } from '../motion';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
@@ -7,6 +7,7 @@ import { useAuth } from '../store/AuthContext';
 import { Avatar } from './common';
 import { type, inkBox, marker, stroke } from '../theme';
 import { openProfile } from '../push/routing';
+import { Text } from './Text';
 
 /**
  * Persistent sidebar — the "SideNavBar" from the web mockup. Logo + New-chat

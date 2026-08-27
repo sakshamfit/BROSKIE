@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Pressable, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import Icon from '../icons/Icon';
 import { api } from '../api';
 import { useTheme } from '../store/ThemeContext';
 import { Avatar, PaperCard } from './common';
 import { type, inkBox, radius } from '../theme';
 import { haptic, SpringPressable, motion } from '../motion';
+import { Text } from './Text';
 
 /** Local midnight in ms — "today" follows the viewer's day, not UTC's. */
 function localMidnight() {

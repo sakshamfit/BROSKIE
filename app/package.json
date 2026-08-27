@@ -72,7 +72,10 @@
     "test:chat-anchor": "node --test scripts/chat-anchor.test.mjs",
     "test:chat-inbox": "node --test src/chatInbox.test.mjs",
     "test:feed-audio": "node --test src/feedAudio.test.mjs",
-    "test:geometry": "node --test src/imageEditor/geometry.test.mjs"
+    "test:geometry": "node --test src/imageEditor/geometry.test.mjs",
+    "test:chat-input": "node --test scripts/chat-input-width.test.mjs",
+    "test:call-audio": "node --test scripts/call-audio-routing.test.mjs",
+    "test": "npm run test:image-editor && npm run test:chat-anchor && npm run test:chat-inbox && npm run test:feed-audio && npm run test:chat-input && npm run test:call-audio"
   },
   "private": true,
   "engines": {

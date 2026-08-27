@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, Modal, Platform, Animated, Easing,
+  View, Pressable, StyleSheet, Modal, Platform, Animated, Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, RadialGradient, Stop, Rect, Ellipse } from 'react-native-svg';
@@ -19,6 +19,7 @@ import { Avatar } from './common';
 import { type } from '../theme';
 import { routeFromNotification } from '../push/routing';
 import { SpringPressable, motion } from '../motion';
+import { Text } from './Text';
 
 const EMPTY_SUMMARY = {
   unreadMessages: 0, unreadChats: 0, messageRequests: 0,

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet,
+  View, FlatList, Pressable, StyleSheet,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import { pickActiveSongPostId, SONG_SETTLE_MS } from '../feedAudio';
 import { openPost } from '../push/routing';
 import { type, inkBox, marker, stroke } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { Text } from '../components/Text';
 
 /**
  * Someone's profile — what opens when you tap their avatar circle anywhere

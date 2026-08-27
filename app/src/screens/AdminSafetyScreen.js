@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, ScrollView, TextInput, FlatList,
+  View, Pressable, StyleSheet, ScrollView, TextInput, FlatList,
   ActivityIndicator, Modal, RefreshControl, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +15,7 @@ import { type, inkBox, marker, dashedRule, radius, raised } from '../theme';
 import { haptic, SpringPressable, motion } from '../motion';
 import { confirm } from '../hooks/confirm';
 import { useDebouncedCallback } from '../rateLimit';
+import { Text } from '../components/Text';
 
 /* ------------------------------------------------------------------ */
 /* Admin Safety & Moderation Center                                    */

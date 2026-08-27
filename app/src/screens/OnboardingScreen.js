@@ -8,13 +8,14 @@
  * with custom branded animations.
  */
 import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
+import { View, Pressable, StyleSheet, Dimensions } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import LottieView from 'lottie-react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { type, inkBox, raised } from '../theme';
 import { motion, haptic, useReducedMotion } from '../motion';
+import { Text } from '../components/Text';
 
 const { width } = Dimensions.get('window');
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, TextInput, Modal, ScrollView,
+  View, Pressable, StyleSheet, TextInput, Modal, ScrollView,
   ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { InkButton, InkField, TapeChip } from './common';
 import { type, inkBox, marker, dashedRule, stroke } from '../theme';
 import { SpringPressable, motion } from '../motion';
 import { AFFILIATION_TYPES, affiliationType } from './affiliationMeta';
+import { Text } from './Text';
 
 export { AFFILIATION_TYPES, affiliationType };
 

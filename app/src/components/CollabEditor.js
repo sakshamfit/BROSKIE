@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useTheme } from '../store/ThemeContext';
 import Icon from '../icons/Icon';
 import { Avatar } from './common';
 import { radius, type, inkBox, alpha } from '../theme';
 import useOTDocument from '../hooks/useOTDocument';
+import { Text } from './Text';
 
 /**
  * CollabEditor - Real-time collaborative text editor with OT

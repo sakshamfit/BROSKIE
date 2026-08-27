@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Pressable, StyleSheet, ScrollView, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
@@ -7,6 +7,7 @@ import useResponsive from '../hooks/useResponsive';
 import { PaperCard, TapeChip, Rule } from '../components/common';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { Text } from '../components/Text';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);

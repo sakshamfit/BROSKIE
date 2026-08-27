@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, TextInput, ScrollView,
+  View, Pressable, StyleSheet, TextInput, ScrollView,
   ActivityIndicator, RefreshControl, Platform, Animated,
 } from 'react-native';
 import Icon from '../icons/Icon';
@@ -19,6 +19,7 @@ import { useDebouncedCallback } from '../rateLimit';
 import { type, inkBox, marker, dashedRule, raised } from '../theme';
 import { SpringPressable, motion } from '../motion';
 import AffiliationPicker from '../components/AffiliationPicker';
+import { Text } from '../components/Text';
 
 const FILTERS = [{ key: '', short: 'All', icon: 'globe-outline' }, ...AFFILIATION_TYPES];
 const CARD_TILTS = ['0.5deg', '-0.8deg', '1deg'];

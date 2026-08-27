@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, Platform } from 'react-native';
 import Svg, { Circle, Defs, Pattern, Path, Rect } from 'react-native-svg';
 import { loadAsync, useFonts } from 'expo-font';
 import { BricolageGrotesque_600SemiBold } from '@expo-google-fonts/bricolage-grotesque/600SemiBold';
@@ -34,6 +34,7 @@ import { WEB_BUILD, startUpdateLifecycle } from './src/updates';
 import PushController from './src/push/PushController';
 import CallOverlay from './src/components/CallOverlay';
 import DailyAIGreeting from './src/components/DailyAIGreeting';
+import { Text } from './src/components/Text';
 
 // Keep the authentication path small: the original app requested every font
 // (including the handwriting and chat-only families) before the first signed-in

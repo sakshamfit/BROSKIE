@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { View, FlatList, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import Emoji, { EmojiText } from '../icons/Emoji';
@@ -8,6 +8,7 @@ import { EmptyState, formatChatTime, Rule, InkIconButton } from '../components/c
 import { type, inkBox, marker } from '../theme';
 import { api, mediaUrl } from '../api';
 import { SpringPressable, motion } from '../motion';
+import { Text } from '../components/Text';
 
 /**
  * Starred messages — every message you've bookmarked across all chats,

@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Linking, Modal, TextInput, Alert } from 'react-native';
+import {
+  View, Pressable, StyleSheet, ScrollView, ActivityIndicator, Linking, Modal,
+  TextInput, Alert, KeyboardAvoidingView, Platform,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { EmojiText } from '../icons/Emoji';
@@ -16,6 +19,7 @@ import { openProfile } from '../push/routing';
 import { radius, type, inkBox, marker, dashedRule } from '../theme';
 import { editorConfigFor } from '../imageEditor/config';
 import UniversalImageEditor from '../components/UniversalImageEditor';
+import { Text } from '../components/Text';
 
 /**
  * Settings hub — profile hero (editable avatar) + two grouped sections
@@ -239,6 +243,9 @@ export default function SettingsScreen({ navigation, embedded = false }) {
       </ScrollView>
 
       <Modal visible={deleteOpen} transparent animationType="fade" onRequestClose={closeDelete}>
+        {/* iOS Modals do not resize for the keyboard; without this the password
+            field and the delete button can sit behind the IME. */}
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={[s.deleteOverlay, { backgroundColor: 'transparent' }]}>
           <FrostedBackdrop />
           <PaperCard weight="ink" style={s.deleteDialog}>
@@ -293,6 +300,7 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             </View>
           </PaperCard>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

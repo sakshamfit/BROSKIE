@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
 import { useAuth } from '../store/AuthContext';
@@ -7,6 +7,7 @@ import { useChatRealtime } from '../store/ChatContext';
 import { type, stroke } from '../theme';
 import { SpringPressable, motion } from '../motion';
 import { openProfile } from '../push/routing';
+import { Text } from './Text';
 
 /**
  * Instagram-style top bar: +one wordmark on the left, heart on the right.

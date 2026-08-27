@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { View, Pressable, StyleSheet, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { useAuth } from '../store/AuthContext';
@@ -8,6 +8,7 @@ import useResponsive from '../hooks/useResponsive';
 import { PaperCard, InkButton, marker } from '../components/common';
 import { radius, type, inkBox } from '../theme';
 import { SpringPressable, motion } from '../motion';
+import { Text } from '../components/Text';
 
 const LAST_SEEN_OPTIONS = [
   { key: 'everyone', label: 'Everyone', icon: 'earth-outline', sub: 'Anyone can see when you were last online' },
@@ -128,6 +129,9 @@ function HandDrawnToggle({ value, onToggle, theme, busy }) {
     <Pressable
       onPress={onToggle}
       disabled={busy}
+      // The switch draws 28dp tall; hitSlop brings the tappable area to 44dp,
+      // matching the shared HandDrawnToggle in components/common.js.
+      hitSlop={8}
       style={[
         {
           width: 52, height: 28, borderRadius: radius.full, padding: 3, justifyContent: 'center',

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator,
+  View, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
@@ -9,6 +9,7 @@ import useResponsive from '../hooks/useResponsive';
 import { ThemeRegistry, resolveChatTheme, alpha } from '../chatThemes';
 import { SpringPressable, Pop, haptic, BottomSheet, SheetHandle, motion } from '../motion';
 import { type, inkBox, marker, raised } from '../theme';
+import { Text } from './Text';
 
 /**
  * "Chat theme" picker — the familiar chat-menu flow (⋯ → Theme), built with

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
@@ -16,6 +16,7 @@ import {
   describeInstalled,
   describeLastChecked,
 } from '../updates';
+import { Text } from './Text';
 
 /**
  * "App Updates" settings section.
