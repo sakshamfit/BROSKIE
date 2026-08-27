@@ -189,6 +189,12 @@ export function ChatProvider({ children }) {
   const pcRef = useRef(null);
   const pendingCandidates = useRef([]);
   const ringtoneRef = useRef(null);
+  // Which camera a video call is currently using. Tracked explicitly because
+  // the track's own reported facingMode is unreliable (undefined on most
+  // desktop browsers, and stale on native until applyConstraints resolves) —
+  // deriving "the other side" from it resolved to the same side every tap.
+  const facingRef = useRef('user');
+  const switchingCameraRef = useRef(false);
 
   /** Subscribe to post:* socket events. Returns an unsubscribe fn. */
   const onPostEvent = useCallback((fn) => {
@@ -1186,6 +1192,8 @@ export function ChatProvider({ children }) {
     const stream = takePrewarmedMedia(type)
       || await RTC.getUserMedia({ audio: true, video: type === 'video' });
     setLocalStream(stream);
+    // Both platforms open the front camera by default for a video call.
+    facingRef.current = 'user';
     setMicOn(true);
     setCamOn(type === 'video');
     // Every call starts on the loud speaker (phone default); the user can
@@ -1471,20 +1479,48 @@ export function ChatProvider({ children }) {
 
   const switchCamera = useCallback(async () => {
     if (!localStream) return;
-    const videoTracks = localStream.getVideoTracks();
-    if (videoTracks.length === 0) return;
-    for (const track of videoTracks) {
-      if (typeof track._switchCamera === 'function') {
-        track._switchCamera();
-      } else if (typeof track.applyConstraints === 'function') {
-        const currentFacing = track.getSettings()?.facingMode;
-        const nextFacing = currentFacing === 'user' ? 'environment' : 'user';
-        try {
-          await track.applyConstraints({ facingMode: nextFacing });
-        } catch (e) {
-          console.warn('[WebRTC] switch camera constraint error:', e);
-        }
+    const videoTrack = localStream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    // Rapid taps: the in-flight switch is what decides which side we are on,
+    // so a second tap must not compute "the other side" from a stale value or
+    // point two getUserMedia calls at one camera. Extra taps are dropped.
+    if (switchingCameraRef.current) return;
+    switchingCameraRef.current = true;
+    const nextFacing = facingRef.current === 'user' ? 'environment' : 'user';
+    try {
+      if (Platform.OS !== 'web') {
+        // Native flips the capturer in place — no track swap, no renegotiation.
+        // deviceId must go: it would pin the capture to the current camera.
+        const settings = { ...(videoTrack.getSettings?.() || {}) };
+        delete settings.deviceId;
+        await videoTrack.applyConstraints({ ...settings, facingMode: nextFacing });
+        facingRef.current = nextFacing;
+        return;
       }
+      // Browsers cannot re-point a live track at a different camera, so open
+      // the other one and hand it to both the peer connection and the preview.
+      const fresh = await RTC.getUserMedia({ audio: false, video: { facingMode: { ideal: nextFacing } } });
+      const nextTrack = fresh.getVideoTracks()[0];
+      if (!nextTrack) {
+        fresh.getTracks().forEach((t) => { try { t.stop(); } catch {} });
+        return;
+      }
+      // Keep whatever the camera toggle is currently set to.
+      nextTrack.enabled = videoTrack.enabled;
+      const sender = pcRef.current?.getSenders?.().find((s) => s.track?.kind === 'video');
+      if (sender?.replaceTrack) await sender.replaceTrack(nextTrack);
+      try { videoTrack.stop(); } catch {}
+      try { localStream.removeTrack(videoTrack); } catch {}
+      try { localStream.addTrack(nextTrack); } catch {}
+      facingRef.current = nextFacing;
+      // A new stream identity so the local <video> re-attaches to the new camera.
+      setLocalStream(typeof MediaStream !== 'undefined'
+        ? new MediaStream(localStream.getTracks())
+        : localStream);
+    } catch (e) {
+      console.warn('[WebRTC] switch camera failed:', e);
+    } finally {
+      switchingCameraRef.current = false;
     }
   }, [localStream]);
 
