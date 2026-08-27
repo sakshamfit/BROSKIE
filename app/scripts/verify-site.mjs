@@ -96,16 +96,27 @@ const decode = (s) => s
   .replace(/&#39;|&apos;/g, "'");
 
 const PAGES = [
-  { route: '/', title: 'Plus One – Connect, Chat & Find Your Community',
-    desc: 'Plus One is a community-based social platform where you can connect with people, chat, share posts and discover communities based on your interests.',
-    h1: 'Plus One — Connect, Chat & Find Your Community',
-    mustInclude: ['Plus One is a community-based social platform built to help people connect, communicate and find communities around shared interests.'] },
+  { route: '/', title: 'Plus One — Chatting App for Friends, Group Chats & Communities',
+    desc: 'Plus One (+one) is a free chatting app for 1:1 chats, group chats (GCs) and interest-based communities — realtime messaging, polls, voice notes and disappearing messages on Android, iOS and web.',
+    h1: 'Plus One — the chatting app for friends, GCs & communities',
+    mustInclude: ['Plus One is a free chatting app: real-time 1:1 and group chats (GCs), interest-based communities, polls, voice notes and disappearing messages — on Android, iOS and the web.'] },
   { route: '/about', title: 'About Plus One — The Ink-and-Paper Social Platform', h1: 'A social platform that feels like paper' },
   { route: '/communities', title: 'Communities — Find & Build Interest-Based Groups — Plus One', h1: 'Find your people by what you do' },
-  { route: '/chat', title: 'Chat & Real-Time Messaging — Plus One', h1: 'Chat that arrives instantly' },
+  { route: '/chat', title: 'Chat & Group Chat — Free Real-Time Messaging | Plus One', h1: 'Chat that arrives instantly' },
+  { route: '/group-chat', title: 'Group Chat (GC) App — Start a GC for Your Friends | Plus One',
+    desc: 'Plus One is a group chat app built for real GCs: live polls, voice notes, disappearing messages and admin controls. Make a GC in seconds — free on Android, iOS and web, no phone number.',
+    h1: 'A group chat app that keeps the plan alive' },
+  { route: '/chatting-app', title: 'Plus One — A Free Chatting App for Friends & Communities',
+    desc: 'Looking for a chatting app? Plus One is a free chatting app with real-time messaging, group chats, communities, voice notes and disappearing messages — no ads, no phone number.',
+    h1: 'A chatting app that stays light as paper' },
+  { route: '/plus-one', title: 'What Is Plus One? The Chatting App for Communities & GCs',
+    desc: "Plus One (+one) is a free chatting app for group chats and communities — realtime messaging, polls, voice notes and disappearing messages. What it is, and why it's called Plus One.",
+    h1: 'Plus One is a chatting app for communities & GCs' },
   { route: '/network', title: 'The Network — A Worldwide Social Feed — Plus One', h1: 'A worldwide feed that still feels handwritten' },
   { route: '/download', title: 'Download Plus One — Android APK, iOS & Web App', h1: 'Get Plus One on anything' },
   { route: '/blog/', title: 'Plus One Blog — Community, Connection & Discovery', h1: 'The Plus One blog' },
+  { route: '/blog/what-does-gc-mean', title: 'What Does GC Mean? GC Meaning in Texting & Social Media', h1: 'What Does GC Mean? The Group Chat, Explained' },
+  { route: '/blog/plus-one-meaning', title: 'What Does “Plus One” (+1) Mean? Invites, Texting & the App', h1: 'What Does “Plus One” Mean? Every Sense of +1' },
 ];
 
 /* The /communities/<slug> niche pages are generated from community-niches.json
@@ -137,6 +148,12 @@ const LD_RULES = {
     req: ['mainEntity'],
     custom: (d) => d.mainEntity.every((q) => q['@type'] === 'Question' && q.name && q.acceptedAnswer?.text),
   },
+  HowTo: {
+    req: ['name', 'step'],
+    custom: (d) => Array.isArray(d.step) && d.step.length >= 1
+      && d.step.every((s) => s['@type'] === 'HowToStep' && s.name && s.text),
+  },
+  BlogPosting: { req: ['headline', 'author', 'datePublished'] },
   Blog: { req: ['name', 'url'] },
 };
 
@@ -226,7 +243,9 @@ async function main() {
   const sitemap = await get(port, '/sitemap.xml');
   ok(sitemap.status === 200 && sitemap.type.includes('xml'), '/sitemap.xml: 200 xml');
   const locs = [...sitemap.body.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-  const expectedLocs = ['/', '/communities', '/chat', '/network', '/download', '/about', '/blog/',
+  const expectedLocs = ['/', '/communities', '/chat', '/chatting-app', '/group-chat', '/plus-one',
+    '/network', '/download', '/about', '/blog/',
+    '/blog/what-does-gc-mean', '/blog/plus-one-meaning',
     ...NICHES.map((n) => `/communities/${n.slug}`)];
   const nicheCount = locs.filter((l) => /\/communities\/[a-z-]+$/.test(l)).length;
   ok(nicheCount === NICHES.length, `/sitemap.xml: lists all ${NICHES.length} generated niche pages (found ${nicheCount})`);

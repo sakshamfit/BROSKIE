@@ -177,6 +177,9 @@ function main() {
     ...generated,
     ...blogPages,
     { src: 'chat.html', dest: 'chat.html' },
+    { src: 'group-chat.html', dest: 'group-chat.html' },
+    { src: 'chatting-app.html', dest: 'chatting-app.html' },
+    { src: 'plus-one.html', dest: 'plus-one.html' },
     { src: 'network.html', dest: 'network.html' },
     { src: 'download.html', dest: 'download.html' },
     { src: 'privacy.html', dest: 'privacy.html' },
@@ -215,9 +218,10 @@ function main() {
     console.log('[export-web] PWA manifest copied.');
   }
 
-  // robots.txt + sitemap.xml: app/web is the source of truth for the
-  // marketing site — overwrite the copies expo brought in from app/public.
-  for (const f of ['robots.txt', 'sitemap.xml']) {
+  // robots.txt + sitemap.xml + llms files: app/web is the source of truth
+  // for the marketing site — overwrite the copies expo brought in from
+  // app/public. llms.txt / llms-full.txt brief AI answer engines (GEO).
+  for (const f of ['robots.txt', 'sitemap.xml', 'llms.txt', 'llms-full.txt']) {
     fs.copyFileSync(path.join(WEB_DIR, f), path.join(dist, f));
     console.log(`[export-web] ${f} → dist/${f}`);
   }
