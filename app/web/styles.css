@@ -13,35 +13,35 @@
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url("./assets/fonts/bricolage-600.woff2") format("woff2");
+  src: url("/assets/fonts/bricolage-600.woff2") format("woff2");
 }
 @font-face {
   font-family: "Bricolage Grotesque";
   font-style: normal;
   font-weight: 800;
   font-display: swap;
-  src: url("./assets/fonts/bricolage-800.woff2") format("woff2");
+  src: url("/assets/fonts/bricolage-800.woff2") format("woff2");
 }
 @font-face {
   font-family: "Karla";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("./assets/fonts/karla-400.woff2") format("woff2");
+  src: url("/assets/fonts/karla-400.woff2") format("woff2");
 }
 @font-face {
   font-family: "Karla";
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url("./assets/fonts/karla-600.woff2") format("woff2");
+  src: url("/assets/fonts/karla-600.woff2") format("woff2");
 }
 @font-face {
   font-family: "JetBrains Mono";
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url("./assets/fonts/jetbrains-mono-500.woff2") format("woff2");
+  src: url("/assets/fonts/jetbrains-mono-500.woff2") format("woff2");
 }
 
 :root {
@@ -988,3 +988,19 @@ section { position: relative; }
 @media (max-width: 400px) {
   .shot-row { grid-template-columns: 1fr; }
 }
+
+/* niche directory cards (generated /communities/<slug> pages + hub grid) ---- */
+.grid h3 a { color: inherit; text-decoration: underline; text-decoration-thickness: 2px;
+  text-decoration-color: var(--hi); text-underline-offset: 4px; }
+.grid h3 a:hover { text-decoration-color: var(--ink-pure); }
+.niche-browse {
+  display: inline-block;
+  margin-top: 0.55rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1.5px dashed var(--line);
+}
+.niche-browse:hover { border-bottom-style: solid; border-bottom-color: var(--ink-pure); background: var(--hi-soft); }

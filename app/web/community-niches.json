@@ -1,0 +1,325 @@
+{
+  "_comment": [
+    "Single source of truth for the /communities/<niche> landing pages.",
+    "Adding a niche = add one entry to `niches`, then run:",
+    "  node scripts/build-communities.mjs   (writes pages + hub blocks + sitemap)",
+    "Every page here MUST map 1:1 to a real in-app community category",
+    "(see app/src/components/communityMeta.js). If the app has no category",
+    "for it, do not add it here — landing pages may only promise what exists.",
+    "`related` slugs pick the 3-4 sibling links shown at the bottom of each",
+    "page — contextual neighbours only, not the whole set."
+  ],
+  "origin": "https://www.plusoneco.in",
+  "hub": {
+    "url": "/communities",
+    "title": "Communities — Find & Build Interest-Based Groups — Plus One",
+    "name": "Plus One Communities",
+    "description": "Interest-based communities on Plus One, organised by what you're actually planning: trip planning, running groups, club nights, game nights, study groups, chai chats and house parties — each with live polls, join policies and a real-time group chat."
+  },
+  "sitemapStatic": [
+    { "path": "/", "lastmod": "2026-08-26", "changefreq": "weekly", "priority": "1.0" },
+    { "path": "/communities", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.9" },
+    { "path": "/chat", "lastmod": "2026-08-26", "changefreq": "weekly", "priority": "0.9" },
+    { "path": "/network", "lastmod": "2026-08-26", "changefreq": "weekly", "priority": "0.9" },
+    { "path": "/download", "lastmod": "2026-08-26", "changefreq": "monthly", "priority": "0.8" },
+    { "path": "/about", "lastmod": "2026-08-26", "changefreq": "monthly", "priority": "0.7" },
+    { "path": "/blog/", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.7" },
+    { "path": "/support", "lastmod": "2026-08-26", "changefreq": "monthly", "priority": "0.5" },
+    { "path": "/privacy", "lastmod": "2026-08-26", "changefreq": "yearly", "priority": "0.3" },
+    { "path": "/terms", "lastmod": "2026-08-26", "changefreq": "yearly", "priority": "0.3" }
+  ],
+  "niches": [
+    {
+      "category": "trip",
+      "slug": "travel",
+      "label": "Trip Planning",
+      "tagline": "Weekend getaways, road trips and treks — dates, routes and costs settled by poll.",
+      "browse": "Browse travel communities",
+      "h1": "Find your travel community on +one",
+      "title": "Travel Communities & Trip Planning Groups — Plus One",
+      "metaDesc": "Find or start a trip-planning community on +one: live polls for dates and routes, open or invite-only joining, and one group chat that keeps the whole plan together.",
+      "cta": "Join a travel community on +one",
+      "related": ["nightlife", "running", "chai-chat", "house-parties"],
+      "lastmod": "2026-08-27",
+      "intro": [
+        "Travel communities on +one are purpose-built groups for one specific job: planning an actual trip. The Spiti run next month, a long-weekend beach drive, the “anyone up for a Saturday trek?” post that gets twelve yeses. You find them under the Trip Planning category on the Discover grid, with live member counts so you can see a group is real before you join it.",
+        "Inside, the planning happens in the group chat itself. Who's in? A poll. Which route, homestays or hotel, split-the-cab or overnight bus? Polls with bars that fill as the votes land — no forwarded screenshots, no lost thread. Route pins, photos and voice notes from the trip live in the same chat, and the organiser can pin the decision that settled.",
+        "Trip groups set their own front door: open so anyone in the city can join instantly, ask-to-join so admins approve each request, or invite-only with shareable +one/c/… invite links for the friends who found you elsewhere. And when the trip's over and the noise is done, per-message disappearing ink lets the logistics chatter fade instead of haunting both phones."
+      ],
+      "who": [
+        "You're new to a city and want a trekking, road-trip or travel-buddy group — not cold DMs",
+        "You have a fixed window and need to lock dates, budget and headcount in a day, not a week",
+        "You organise trips for others and want one persistent room for RSVPs, questions and updates"
+      ],
+      "tools": [
+        "Live polls settle dates, routes and cost splits as the votes land",
+        "Open / ask-to-join / invite-only membership — admins pick the door",
+        "Photos, route pins, voice notes and group calls in the community chat",
+        "Invite links that join straight from a shared +one/c/… code"
+      ],
+      "demo": {
+        "name": "delhi→spiti-sep26",
+        "status": "GROUP · 9 MEMBERS",
+        "asker": "MEERA",
+        "question": "Long weekend — how do we go?",
+        "options": [
+          { "text": "CAB CONVOY · LEAVE FRI 5AM", "mine": true },
+          { "text": "OVERNIGHT BUS, FRESH BY MORNING", "mine": false }
+        ],
+        "votes": "9 votes",
+        "chip": "#trip"
+      }
+    },
+    {
+      "category": "run",
+      "slug": "running",
+      "label": "Running Group",
+      "tagline": "Morning loops, Sunday long runs, and a crew that actually shows up.",
+      "browse": "Browse running communities",
+      "h1": "Find a running group on +one",
+      "title": "Running Communities & Running Groups — Plus One",
+      "metaDesc": "Join a running community on +one: settle the Sunday long-run route with a live poll, share pace notes and route pins in the group chat, and find a crew that shows up.",
+      "cta": "Join a running community on +one",
+      "related": ["chai-chat", "travel", "nightlife"],
+      "lastmod": "2026-08-27",
+      "intro": [
+        "Running communities on +one are small public groups built around an actual weekly plan: the 6 am loop, the Sunday long run, the before-work 5k that doesn't get cancelled because someone's alarm didn't. They live in The Network's Communities section under the Running Group category, with member counts on each card so you can tell a living crew from an abandoned one.",
+        "Where the run starts gets decided the way everything on +one does — with a live poll. “Sunday long run — where?” with Lodhi Garden 6 am against Dew DEGREES 6:30, the bars filling as the group votes. Pace talk, route pins and the post-run photo land in the same group chat, so a newcomer who joined on Tuesday already knows the Friday plan.",
+        "Most crews are open — anyone can walk in off the Discover grid and show up Sunday. Others run ask-to-join so the organiser approves first, or hand out invite links for the regulars. Either way, the accountability is the point: the group sees who voted, who confirmed, who's coming."
+      ],
+      "who": [
+        "You tried a fitness app and realised the hard part isn't the plan — it's not running alone",
+        "You're training for a 5k/half/marathon and want pace partners and weekly long-run dates",
+        "You run early and want five people who will still be there when it's raining"
+      ],
+      "tools": [
+        "Polls settle the route, start time and distance in minutes, not days",
+        "Voice notes and shared photos from the run itself in the group chat",
+        "Group calls when someone's running the long loop on their own",
+        "Disappearing ink per message — the logistics chatter cleans itself up"
+      ],
+      "demo": {
+        "name": "sunday-runners",
+        "status": "GROUP · 8 MEMBERS",
+        "asker": "ADITI",
+        "question": "Sunday long run — where?",
+        "options": [
+          { "text": "LODHI GARDEN 6AM", "mine": true },
+          { "text": "DEW DEGREES 6:30", "mine": false }
+        ],
+        "votes": "12 votes",
+        "chip": "#running"
+      }
+    },
+    {
+      "category": "club",
+      "slug": "nightlife",
+      "label": "Club Night",
+      "tagline": "Where the group is going on Friday — decided, counted, confirmed.",
+      "browse": "Browse nightlife communities",
+      "h1": "Find your nightlife crew on +one",
+      "title": "Nightlife & Club Night Communities — Plus One",
+      "metaDesc": "Nightlife communities on +one turn “are we going out?” into one group chat: live venue polls, open or invite-only joining, and a headcount you can see before booking a table.",
+      "cta": "Join a nightlife community on +one",
+      "related": ["house-parties", "gaming", "travel", "running"],
+      "lastmod": "2026-08-27",
+      "intro": [
+        "The in-app category is called Club Night, and it exists for one very specific problem: the 34-message “where are we going Saturday?” that ends with nobody going anywhere. A nightlife community is one persistent group for the going-out crowd — venue decided by poll, headcount visible, logistics said once.",
+        "“Rooftop first or straight to the dance floor?” — the bars fill as the votes land, and the poll lives in the group chat with the aftermovie, the cab-share voices and the “I'm leaving in ten” messages. If the plan changes at 11 pm, everybody in the community sees it at 11:00:01, because this is a real-time messenger.",
+        "Nightlife groups usually run invite-only or ask-to-join, and the admin controls are real: promote someone to organise a night off you, remove the guy who brings plus-ones, and know the last admin can't be locked out because the app won't let them. Open groups exist too, for city-wide “find a crew tonight” communities — the live member count tells you which is which before you tap join."
+      ],
+      "who": [
+        "You want a regular going-out crew, not a fresh group chat every Saturday",
+        "You plan nights out for people and need RSVPs and a headcount before booking the table",
+        "You're new in town and want to find the group that's already out there"
+      ],
+      "tools": [
+        "Live venue and timing polls with results filling as votes land",
+        "Invite-only or ask-to-join doors — no uninvited plus-ones",
+        "Admins rename, promote and remove; the last admin never vanishes",
+        "Voice notes and late-night photos stay in one shared group"
+      ],
+      "demo": {
+        "name": "saturday-crew",
+        "status": "GROUP · 22 MEMBERS",
+        "asker": "NIKHIL",
+        "question": "Friday — which one?",
+        "options": [
+          { "text": "ROOFTOP FIRST, CLUB AFTER 11", "mine": true },
+          { "text": "STRAIGHT TO THE DANCE FLOOR", "mine": false }
+        ],
+        "votes": "17 votes",
+        "chip": "#club"
+      }
+    },
+    {
+      "category": "game",
+      "slug": "gaming",
+      "label": "Game Night",
+      "tagline": "Board games, video games, sports — find your fifth and lock the date.",
+      "browse": "Browse gaming communities",
+      "h1": "Find a game night squad on +one",
+      "title": "Gaming & Game Night Communities — Plus One",
+      "metaDesc": "Gaming communities on +one: find a fifth for the squad night, a carrom table or 5-a-side football — live polls to lock the plan, group calls, and one chat for the banter.",
+      "cta": "Join a gaming community on +one",
+      "related": ["nightlife", "house-parties", "study-groups"],
+      "lastmod": "2026-08-27",
+      "intro": [
+        "The Game Night category covers the whole spectrum the app actually ships for: squad nights, board-game tables, 5-a-side on Sunday. What they all need is the same thing — reliably gathering exactly the right number of people at exactly one time — so a gaming community is basically a standing plan that lives in a group chat.",
+        "“Tonight, 9 pm — what are we running?” goes up as a poll; the answer isn't a wall of replies, it's two bars that fill while everyone's in call-or-no-call arguments. Custom-room links, set times and the “one more round” decisions all land in one place. And when it's game time, the group call is already there — voice with every member, no switching apps mid-match.",
+        "Most squads run invite-only with rotating invite codes — admins can revoke and regenerate +one/c/… links, so the room stays the room. Open gaming communities work the other way: public cards on Discover with live member counts, made for finding the fifth player who isn't your friend yet."
+      ],
+      "who": [
+        "You play a squad game and you're tired of “sorry, can't tonight — need one more”",
+        "You host the Friday board-game night and need RSVPs, headcount and the playlist in one place",
+        "You want a Sunday football/cricket group where the pitch and time get settled by the group, not one organiser"
+      ],
+      "tools": [
+        "Live polls for which game, whose place, and what time",
+        "Group voice calls with every member, started from the chat",
+        "Invite links admins can revoke and rotate — the lobby stays yours",
+        "Media and voice notes in the group for replays and brackets"
+      ],
+      "demo": {
+        "name": "custom-room-9pm",
+        "status": "GROUP · 5 MEMBERS",
+        "asker": "ARJUN",
+        "question": "Tonight at 9 — what's the run?",
+        "options": [
+          { "text": "SQUAD MATCH, +ONE GROUP CALL", "mine": true },
+          { "text": "BOARD GAMES AT MY PLACE, 7PM SHARP", "mine": false }
+        ],
+        "votes": "5 votes",
+        "chip": "#game"
+      }
+    },
+    {
+      "category": "study",
+      "slug": "study-groups",
+      "label": "Study Group",
+      "tagline": "Exam prep, project sprints and mock-test slots, by college or course.",
+      "browse": "Browse study communities",
+      "h1": "Find your study group on +one",
+      "title": "Student & Study Group Communities — Plus One",
+      "metaDesc": "Study-group communities on +one: exam prep, project sprints and mock-test scheduling in one group chat — live polls, shared notes and photos, open or invite-only joining.",
+      "cta": "Join a study community on +one",
+      "related": ["chai-chat", "gaming", "running"],
+      "lastmod": "2026-08-27",
+      "intro": [
+        "Study groups are where +one's community model fits student life best: one persistent group per subject, batch or exam, instead of a course WhatsApp that died in week two. Create or join a Study Group community on the Discover grid — cards show the live member count, so twenty-person groups and one-person graveyards are easy to tell apart.",
+        "The actual work fits the tools: mock-test slots decided by poll (“Sat 8 am, library room 2” versus “Sun 6 pm, on call”), sheets and slides dropped in the shared group, 2 am panic questions answered by whoever's still awake. Voice notes carry the explanations that are painful to type. And for the material nobody should keep forever, per-message disappearing ink deletes the leaked question bank for everyone at once.",
+        "Most course groups are invite-only — the class rep holds the +one/c/… link and rotates it after exams so next year's batch starts clean. Open study communities work like a library seat: anyone at your campus can join, see the member count, and show up to the session."
+      ],
+      "who": [
+        "You want exam-prep accountability without relying on a class group chat that ignores you",
+        "You're the one organising study sessions and need RSVPs without twenty replies",
+        "You're new at a college and want to find the group that already meets on Tuesdays"
+      ],
+      "tools": [
+        "Polls lock session times and rooms while everyone's still awake",
+        "Shared sheets, slides and photos in the group chat",
+        "Disappearing ink for material that shouldn't outlive the exam",
+        "Rotating invite codes when the group is closed by design"
+      ],
+      "demo": {
+        "name": "pre-boards-2027",
+        "status": "GROUP · 31 MEMBERS",
+        "asker": "CLASS REP",
+        "question": "Mock-test slot — which works?",
+        "options": [
+          { "text": "SAT 8AM · LIBRARY ROOM 2", "mine": true },
+          { "text": "SUN 6PM · +ONE GROUP CALL", "mine": false }
+        ],
+        "votes": "28 votes",
+        "chip": "#study"
+      }
+    },
+    {
+      "category": "chai",
+      "slug": "chai-chat",
+      "label": "Chai Chat",
+      "tagline": "The lowest-stakes meetups: chai, coffee, and no agenda beyond showing up.",
+      "browse": "Browse chai-chat communities",
+      "h1": "Meet your people over chai on +one",
+      "title": "Chai Chats & Casual Hangout Communities — Plus One",
+      "metaDesc": "Chai Chat communities on +one are the lowest-pressure meetups there are: a group chat, a poll, and tomorrow's chai spot. The easiest way to find your people in a new city.",
+      "cta": "Join a chai chat on +one",
+      "related": ["travel", "study-groups", "running", "nightlife"],
+      "lastmod": "2026-08-27",
+      "intro": [
+        "Every other community type has an agenda. Chai Chat doesn't: it's the in-app category for casual hangouts — coffee and chai runs, “I'm in M Block till noon, anyone about?”, the Sunday walk that turns into breakfast. The name is the whole pitch, and it's the closest +one has to a general neighbourhood-hangout group.",
+        "It works because the group is persistent: “chai tomorrow morning?” is a live poll that ends with a time and a spot, and the regulars see every future one without re-introducing themselves. Photos of the actual chai, voice notes arguing about where the good kachori is — it all stays in the same chat, for whoever's in it.",
+        "Most chai groups are open: anyone in the area joins off the Discover grid, no admin approval, no interview. That's on purpose — the point isn't a curated club, it's that showing up to one low-stakes thing a week is how strangers in a new city become your people."
+      ],
+      "who": [
+        "You just moved cities and want the unstructured version of a hobby group",
+        "You'd rather have one standing chai plan than coordinate seven separate friendships",
+        "You host casual meetups and want RSVPs, the spot and the photos in one room"
+      ],
+      "tools": [
+        "Open joining by default — walk in off the Discover grid",
+        "Polls for where and when, results filling live as people answer",
+        "Voice notes and photos so the group has a memory",
+        "Disappearing ink when the vibe is tonight-only"
+      ],
+      "demo": {
+        "name": "chai-at-m-block",
+        "status": "GROUP · 12 MEMBERS",
+        "asker": "TANYA",
+        "question": "Tomorrow morning — chai where?",
+        "options": [
+          { "text": "M BLOCK STALL · 10:30", "mine": true },
+          { "text": "INDIA GATE STEPS · 8AM RUN FIRST", "mine": false }
+        ],
+        "votes": "8 votes",
+        "chip": "#chai"
+      }
+    },
+    {
+      "category": "party",
+      "slug": "house-parties",
+      "label": "House Party",
+      "tagline": "Hosting or crashing — coords, playlist and who's-bringing-what in one place.",
+      "browse": "Browse house-party communities",
+      "h1": "Find a house party crew on +one",
+      "title": "House Party Communities & Party Planning — Plus One",
+      "metaDesc": "House-party communities on +one: playlists, headcount and who's-bringing-what in one group chat — live polls, invite links, and ask-to-join controls so the guest list stays yours.",
+      "cta": "Find a house party on +one",
+      "related": ["nightlife", "gaming", "travel"],
+      "lastmod": "2026-08-27",
+      "intro": [
+        "The House Party category is for the other half of a night out: someone hosting and everyone else figuring out if they should be there. The community is the event page, the guest list and the group chat at once — coords, timing, playlist and “who's bringing the speakers” in one place that survives after the party and is ready for the next one.",
+        "Polls run the decisions — theme yes or no, rooftop vs flat 402, DJ Arpit versus shared playlist — and the answers are visible before anyone commits. Photos and voice notes from the night land in the same chat, which is exactly what the next host needs: the spot, the vibe, the people who show up.",
+        "This is also where join policies earn their keep: most hosts run invite-only and share a +one/c/… code with the people they want, with the door closing when they rotate the code after the party. Ask-to-join groups work as open-but-vetted — apply, get approved, see the next plan on the wall."
+      ],
+      "who": [
+        "You host and want one group for guests, RSVPs and the aftermath photos",
+        "You're the guest who wants to know what the vibe is before Saturday",
+        "You're throwing something with a co-host and the two of you need working admin powers"
+      ],
+      "tools": [
+        "Invite links with rotating codes — the guest list is exactly that",
+        "Ask-to-join for open-but-not-for-everyone parties",
+        "Multiple admins run the plan; the last admin can't be removed",
+        "Media, voice notes and afterparty calls in the same group chat"
+      ],
+      "demo": {
+        "name": "flat-402-aug30",
+        "status": "GROUP · 46 MEMBERS",
+        "asker": "THE HOST",
+        "question": "Music — what are we doing?",
+        "options": [
+          { "text": "DJ ARJIT + SPEAKERS (I'LL CARRY)", "mine": true },
+          { "text": "SHARED GROUP PLAYLIST, VOTE YOURS IN", "mine": false }
+        ],
+        "votes": "31 votes",
+        "chip": "#party"
+      }
+    }
+  ],
+  "customCard": {
+    "label": "Something Else",
+    "tagline": "Anything that doesn't fit a box. Name it, describe it, invite your people.",
+    "note": "There is no dedicated landing page for this one — it's the app's freeform category, so we link it to the hub, not a fake niche."
+  }
+}

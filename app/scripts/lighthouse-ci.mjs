@@ -71,7 +71,7 @@ const ok = (cond, label) => {
   else { failures += 1; console.error(`  ✗ ${label}`); }
 };
 
-const ROUTES = ['/', '/chat', '/communities', '/download', '/about', '/network', '/blog/'];
+const ROUTES = ['/', '/chat', '/communities', '/communities/running', '/download', '/about', '/network', '/blog/'];
 const GATES = { performance: 0.9, accessibility: 0.9, 'best-practices': 0.9, seo: 0.95 };
 
 /* ---------------------------------------------------------------- */

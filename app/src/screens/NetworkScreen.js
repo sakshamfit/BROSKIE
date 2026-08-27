@@ -21,7 +21,7 @@ import { SpringPressable, motion, haptic, useReducedMotion } from '../motion';
 import { type, inkBox, stroke, raised } from '../theme';
 import useResponsive from '../hooks/useResponsive';
 import { confirm } from '../hooks/confirm';
-import { onNetworkFilterRequest, consumePendingNetworkFilter, onOpenCommunity, consumePendingCommunity, onProfileWillOpen } from '../push/routing';
+import { onNetworkFilterRequest, consumePendingNetworkFilter, onOpenCommunity, consumePendingCommunity, onProfileWillOpen, onCommunitiesTabRequest, peekCommunitiesTab } from '../push/routing';
 import NewPostScreen from './NewPostScreen';
 import CommunitiesScreen from './CommunitiesScreen';
 import { stopPreview } from '../previewPlayer';
@@ -123,12 +123,17 @@ function NetworkScreen({ navigation, onOpenChat, active = true }) {
     if (filter) setActiveFilter(filter);
   }), []);
 
-  // Community deep links (invite links): jump to the Communities section.
-  // The detail sheet itself is opened by CommunitiesScreen.
+  // Community deep links (invite links, or the marketing /app?tab=communities
+  // handoff): jump to the Communities section. The detail sheet itself is
+  // opened by CommunitiesScreen; the category filter is consumed there too
+  // (peeked here — must not be eaten before the grid mounts).
   useEffect(() => {
     const pending = consumePendingCommunity();
     if (pending) setSection('communities');
-    return onOpenCommunity(() => setSection('communities'));
+    if (peekCommunitiesTab()) setSection('communities');
+    const unCommunity = onOpenCommunity(() => setSection('communities'));
+    const unTab = onCommunitiesTabRequest(() => setSection('communities'));
+    return () => { unCommunity(); unTab(); };
   }, []);
 
   /* live updates from other users (audience-filtered server-side) */

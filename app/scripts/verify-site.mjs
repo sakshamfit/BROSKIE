@@ -108,6 +108,16 @@ const PAGES = [
   { route: '/blog/', title: 'Plus One Blog — Community, Connection & Discovery', h1: 'The Plus One blog' },
 ];
 
+/* The /communities/<slug> niche pages are generated from community-niches.json
+ * (source of truth) — derive their expected title/h1/description from the same
+ * data so this harness checks the promise, not just "something exists". */
+const NICHES = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '..', 'web', 'community-niches.json'), 'utf8')
+).niches;
+for (const n of NICHES) {
+  PAGES.push({ route: `/communities/${n.slug}`, title: n.title, h1: n.h1, desc: n.metaDesc });
+}
+
 /* JSON-LD structural validation — the shape Google's Rich Results test
  * checks for each type we emit. */
 const LD_RULES = {
@@ -116,6 +126,13 @@ const LD_RULES = {
   SoftwareApplication: { req: ['name', 'operatingSystem', 'applicationCategory', 'offers'] },
   MobileApplication: { req: ['name', 'operatingSystem'] },
   BreadcrumbList: { req: ['itemListElement'], custom: (d) => Array.isArray(d.itemListElement) && d.itemListElement.length >= 1 },
+  CollectionPage: {
+    req: ['name', 'url'],
+    custom: (d) => d.mainEntity?.['@type'] === 'ItemList'
+      && Array.isArray(d.mainEntity.itemListElement)
+      && d.mainEntity.itemListElement.every((it, i) => it['@type'] === 'ListItem' && it.position === i + 1 && it.url),
+  },
+  WebPage: { req: ['name', 'url'], custom: (d) => !!d.isPartOf?.url },
   FAQPage: {
     req: ['mainEntity'],
     custom: (d) => d.mainEntity.every((q) => q['@type'] === 'Question' && q.name && q.acceptedAnswer?.text),
@@ -209,7 +226,10 @@ async function main() {
   const sitemap = await get(port, '/sitemap.xml');
   ok(sitemap.status === 200 && sitemap.type.includes('xml'), '/sitemap.xml: 200 xml');
   const locs = [...sitemap.body.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-  const expectedLocs = ['/', '/communities', '/chat', '/network', '/download', '/about', '/blog/'];
+  const expectedLocs = ['/', '/communities', '/chat', '/network', '/download', '/about', '/blog/',
+    ...NICHES.map((n) => `/communities/${n.slug}`)];
+  const nicheCount = locs.filter((l) => /\/communities\/[a-z-]+$/.test(l)).length;
+  ok(nicheCount === NICHES.length, `/sitemap.xml: lists all ${NICHES.length} generated niche pages (found ${nicheCount})`);
   for (const expected of expectedLocs) {
     ok(locs.includes(`${ORIGIN}${expected}`), `/sitemap.xml: lists ${expected}`);
   }
