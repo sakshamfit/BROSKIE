@@ -218,10 +218,12 @@ function main() {
     console.log('[export-web] PWA manifest copied.');
   }
 
-  // robots.txt + sitemap.xml + llms files: app/web is the source of truth
+  // robots.txt + sitemaps + llms files: app/web is the source of truth
   // for the marketing site — overwrite the copies expo brought in from
   // app/public. llms.txt / llms-full.txt brief AI answer engines (GEO).
-  for (const f of ['robots.txt', 'sitemap.xml', 'llms.txt', 'llms-full.txt']) {
+  // sitemap-communities.xml is the communities-only sitemap submitted
+  // separately in Search Console (docs/SEO_GEO_PLAYBOOK.md §6).
+  for (const f of ['robots.txt', 'sitemap.xml', 'sitemap-communities.xml', 'llms.txt', 'llms-full.txt']) {
     fs.copyFileSync(path.join(WEB_DIR, f), path.join(dist, f));
     console.log(`[export-web] ${f} → dist/${f}`);
   }

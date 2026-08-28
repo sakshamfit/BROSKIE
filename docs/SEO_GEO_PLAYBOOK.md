@@ -153,3 +153,121 @@ the keyword, keyword in the first paragraph, FAQ section, internal links
   `sitemapStatic` entries), `app/scripts/export-web.js` (new pages + llms
   copies), `app/scripts/build-communities.mjs` (footer), 
   `app/scripts/verify-site.mjs` (assertions for everything above)
+
+---
+
+## 6. Launch checklist — communities sitemap + true one-tap Android App Links
+
+Two things that ship *in the repo* below need one-time actions *outside* the
+repo. Do both after the deploy of this pass has gone live.
+
+### 6.1 `/sitemap-communities.xml` — submit once in Search Console
+
+The repo now generates a communities-only sitemap
+(`app/web/sitemap-communities.xml`, generated from `community-niches.json`
+by `build-communities.mjs` — the same source of truth as `sitemap.xml`, so
+the two can never disagree). It lists the hub + all 7 niche pages:
+
+```
+https://www.plusoneco.in/communities
+https://www.plusoneco.in/communities/travel
+https://www.plusoneco.in/communities/running
+https://www.plusoneco.in/communities/nightlife
+https://www.plusoneco.in/communities/gaming
+https://www.plusoneco.in/communities/study-groups
+https://www.plusoneco.in/communities/chai-chat
+https://www.plusoneco.in/communities/house-parties
+```
+
+After deploy:
+
+1. Confirm the file is live: `curl -s https://www.plusoneco.in/sitemap-communities.xml`.
+2. Google Search Console → **Sitemaps** → enter
+   `https://www.plusoneco.in/sitemap-communities.xml` → **Submit** (once).
+3. `robots.txt` already declares it (`Sitemap:` line); Vercel serves it with
+   `Cache-Control: public, max-age=3600`.
+
+Why a dedicated file when the URLs are already in `sitemap.xml`: the
+communities set is the fastest-moving part of the site, and a separate
+sitemap can be refreshed/discovered on its own. Submitting it once is
+enough — Google picks up changes automatically afterwards.
+
+### 6.2 True one-tap Android App Links (`https://…` opens the installed app)
+
+A custom scheme (`plusone://…`) always shows a confirmation prompt. App
+Links (`https://www.plusoneco.in/…`) open the installed app directly with
+**no chooser** once the association is verified. Four pieces make that work:
+
+| Piece | Where | Status after this pass |
+|---|---|---|
+| `intentFilters` with `autoVerify: true` for `www.plusoneco.in` | `app/app.json` (android) | ✅ in repo |
+| `/.well-known/assetlinks.json` served at the domain | Railway backend, rewritten by Vercel (`vercel.json`) | ✅ in repo; **needs env vars** |
+| Association JSON = installed APK's signing cert | `ANDROID_PACKAGE_NAME` + `ANDROID_CERT_FINGERPRINT` env | ⚠️ set on Railway (below) |
+| APK rebuilt with the new manifest | EAS / local build, then reinstall | ⚠️ **required** — OTA updates can't add intent filters |
+
+Setup steps:
+
+1. **Get the release APK's signing-cert fingerprint** (the one users install,
+   not a debug build):
+   ```
+   keytool -printcert -jarfile plusone.apk | grep -A1 "SHA256:"
+   ```
+   (If you build with EAS, the cert comes from the EAS keystore — the APK
+   itself is the ground truth either way, so this command is exact.)
+2. **Railway → project → Variables**, set both, then redeploy the backend
+   (a variable change restarts it):
+   ```
+   ANDROID_PACKAGE_NAME=ai.arena.tomodachi
+   ANDROID_CERT_FINGERPRINT=AA:BB:CC:…   # the SHA-256 from step 1
+   ```
+   Colon, space, dash or bare-hex formatting all work — the server
+   normalizes to `AA:BB:…`.
+3. **Verify** the association is live:
+   ```
+   curl -s https://www.plusoneco.in/.well-known/assetlinks.json
+   # → [{"relation":["delegate_permission/common.handle_all_urls"],"target":{…}}]
+   ```
+   While the env vars are missing the endpoint deliberately answers **503
+   “not configured”** — never a fake fingerprint (Android silently
+   un-verifies a wrong one, which is much harder to debug).
+   Google's own checker:
+   `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://www.plusoneco.in&relation=delegate_permission/common.handle_all_urls`
+4. **Rebuild the APK** with the new `app.json` (intent filters are manifest
+   config — the EAS update channel cannot add them), bump `versionCode`,
+   install it, and test:
+   ```
+   adb shell am start -a android.intent.action.VIEW \
+     -d "https://www.plusoneco.in/communities/travel"
+   ```
+   Expected: the app opens straight into **Communities → Trip Planning**
+   (the deep-link parser maps the page slug `travel` to the app category
+   `trip` via `community-niches.json`). No chooser, no `plusone://` prompt.
+5. **If the chooser still appears**, in order: re-check the fingerprint in
+   `assetlinks.json` matches the *installed* APK (`keytool` on that exact
+   file), confirm `autoVerify` actually landed in the manifest of the
+   installed build, and check `adb logcat | grep -i intentfilter`.
+
+Links this covers today: `/c/<code>` (community invites), `/gc/<id>`
+(group chats), `/communities`, `/communities/<slug>`, `/app` (the app shell).
+Only `www.plusoneco.in` is verified — the apex `plusoneco.in` is never used
+for app links (canonical is `www` everywhere).
+
+> iOS equivalent (Universal Links / `apple-app-site-association`) is a
+> separate future step; only the Android half ships here.
+
+### 6.3 Files changed in this pass
+
+- New: `server/src/appLinks.js` (pure Digital Asset Links builder),
+  `server/test-app-links.js` (offline unit tests).
+- Generated: `app/web/sitemap-communities.xml` (from `community-niches.json`).
+- Note: `assetlinks.json` is intentionally NOT a static file — it is built on
+  the Railway backend from env vars so the fingerprint can be changed without
+  a web redeploy (see §6.2).
+- App: `app/app.json` (android `intentFilters` with `autoVerify`),
+  `app/src/push/links.js` (slug → app-category mapping on deep links).
+- Infra: `server/src/index.js` (`/.well-known/assetlinks.json` route),
+  `vercel.json` (assetlinks rewrite + sitemap-communities exclusion/headers),
+  `app/web/robots.txt` (second `Sitemap:` line), `app/scripts/export-web.js`
+  (copies the community sitemap), `app/scripts/build-communities.mjs`
+  (generates it), `app/scripts/verify-site.mjs` (asserts both), CI
+  (`test:app-links`).

@@ -13,7 +13,10 @@
  *   4. canonical URL matches the requested URL (https://www.plusoneco.in)
  *   5. every ld+json block parses and structurally validates per @type
  *   6. /robots.txt + /sitemap.xml reachable, sitemap URLs all 200
- *   7. styles are inlined (no render-blocking css link) and site.js exists
+ *   7. /sitemap-communities.xml lists exactly the hub + every niche page
+ *   8. app.json declares the Android App Link intent filter (autoVerify,
+ *      www.plusoneco.in) so true one-tap app links can't regress silently
+ *   9. styles are inlined (no render-blocking css link) and site.js exists
  *
  * Usage: node scripts/verify-site.mjs [distDir]
  */
@@ -235,10 +238,11 @@ async function main() {
     console.log('');
   }
 
-  console.log('— robots.txt & sitemap.xml');
+  console.log('— robots.txt & sitemaps');
   const robots = await get(port, '/robots.txt');
   ok(robots.status === 200 && robots.type.includes('text/plain'), '/robots.txt: 200 text/plain');
   ok(robots.body.includes('Sitemap: https://www.plusoneco.in/sitemap.xml'), '/robots.txt: declares sitemap');
+  ok(robots.body.includes('Sitemap: https://www.plusoneco.in/sitemap-communities.xml'), '/robots.txt: declares communities sitemap');
 
   const sitemap = await get(port, '/sitemap.xml');
   ok(sitemap.status === 200 && sitemap.type.includes('xml'), '/sitemap.xml: 200 xml');
@@ -252,6 +256,29 @@ async function main() {
   for (const expected of expectedLocs) {
     ok(locs.includes(`${ORIGIN}${expected}`), `/sitemap.xml: lists ${expected}`);
   }
+
+  console.log('— communities sitemap');
+  const cs = await get(port, '/sitemap-communities.xml');
+  ok(cs.status === 200 && cs.type.includes('xml'), '/sitemap-communities.xml: 200 xml');
+  const clocs = [...cs.body.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+  const expectedClocs = [`${ORIGIN}/communities`, ...NICHES.map((n) => `${ORIGIN}/communities/${n.slug}`)];
+  for (const loc of expectedClocs) {
+    ok(clocs.includes(loc), `/sitemap-communities.xml: lists ${loc.replace(ORIGIN, '')}`);
+  }
+  ok(clocs.length === expectedClocs.length, `/sitemap-communities.xml: exactly hub + ${NICHES.length} niches (found ${clocs.length})`);
+  for (const loc of expectedClocs) {
+    const res = await get(port, loc.replace(ORIGIN, ''));
+    ok(res.status === 200, `communities sitemap URL answers 200: ${loc.replace(ORIGIN, '')}`);
+  }
+
+  console.log('— Android App Links config (app.json)');
+  const appConfig = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'app.json'), 'utf8'));
+  const filters = appConfig?.expo?.android?.intentFilters || [];
+  const appLink = filters.find((f) => f.action === 'VIEW' && f.autoVerify === true
+    && (f.data || []).some((d) => d.scheme === 'https' && d.host === 'www.plusoneco.in'));
+  ok(Boolean(appLink), 'app.json: Android App Link intent filter exists (VIEW, autoVerify, https://www.plusoneco.in)');
+  ok(appConfig?.expo?.android?.package === 'ai.arena.tomodachi', 'app.json: package matches assetlinks default (ai.arena.tomodachi)');
+
   for (const loc of locs) {
     const route = loc.replace(ORIGIN, '') || '/';
     const res = await get(port, route);

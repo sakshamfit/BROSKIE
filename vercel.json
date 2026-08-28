@@ -8,11 +8,15 @@
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://broskie-h.up.railway.app/api/:path*" },
     { "source": "/uploads/:path*", "destination": "https://broskie-h.up.railway.app/uploads/:path*" },
+    {
+      "source": "/.well-known/assetlinks.json",
+      "destination": "https://broskie-h.up.railway.app/.well-known/assetlinks.json"
+    },
     { "source": "/app/:path*", "destination": "/app/index.html" },
     { "source": "/c/:path*", "destination": "/app/index.html" },
     { "source": "/gc/:path*", "destination": "/app/index.html" },
     {
-      "source": "/((?!_vercel/|sitemap\\.xml$|robots\\.txt$).*)",
+      "source": "/((?!_vercel/|sitemap\\.xml$|sitemap-communities\\.xml$|robots\\.txt$).*)",
       "destination": "/index.html"
     }
   ],
@@ -85,6 +89,12 @@
     },
     {
       "source": "/sitemap.xml",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/sitemap-communities.xml",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=3600, must-revalidate" }
       ]

@@ -249,6 +249,38 @@ app.get('/google6b23d829f263b9d6.html', (req, res) => {
     .send('google-site-verification: google6b23d829f263b9d6.html');
 });
 
+// Android App Links — Digital Asset Links (true one-tap https:// deep links).
+// Vercel (www.plusoneco.in) rewrites /.well-known/assetlinks.json here so the
+// association can be pinned to the release APK's signing cert via Railway env
+// (ANDROID_PACKAGE_NAME, ANDROID_CERT_FINGERPRINT) without rebuilding the site.
+// See docs/SEO_GEO_PLAYBOOK.md §6. Missing/invalid fingerprint → 503, never a
+// fake association: a wrong fingerprint makes Android silently un-verify the
+// app link, so fail loudly instead.
+const { assetLinksPayload } = require('./appLinks');
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  const { packageName, fingerprint, payload } = assetLinksPayload({
+    packageName: process.env.ANDROID_PACKAGE_NAME,
+    fingerprint: process.env.ANDROID_CERT_FINGERPRINT,
+  });
+  if (!payload) {
+    res
+      .status(503)
+      .type('application/json')
+      .set('Cache-Control', 'no-store')
+      .json({
+        error: 'Android App Links not configured',
+        hint: 'Set ANDROID_PACKAGE_NAME (default ai.arena.tomodachi) and ANDROID_CERT_FINGERPRINT (SHA-256 of the release APK signing cert) on Railway, then redeploy.',
+        package_name: packageName,
+        fingerprint_status: fingerprint ? 'invalid_sha256' : 'unset',
+      });
+    return;
+  }
+  res
+    .type('application/json')
+    .set('Cache-Control', 'public, max-age=3600, must-revalidate')
+    .json(payload);
+});
+
 // Buffer in memory, then hand off to the storage backend (Supabase or disk).
 const upload = multer({
   storage: multer.memoryStorage(),

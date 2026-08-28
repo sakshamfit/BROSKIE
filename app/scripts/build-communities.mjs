@@ -13,6 +13,9 @@
  *      and the linked "Browse by community type" directory grid in <body>
  *   3. app/web/sitemap.xml — regenerated from `sitemapStatic` + the niches,
  *      so a new niche can never be "manually forgotten" in the sitemap
+ *   4. app/web/sitemap-communities.xml — communities-only sitemap (hub + the
+ *      7 niche pages), generated from the same data for a dedicated Search
+ *      Console submission (docs/SEO_GEO_PLAYBOOK.md §6).
  *
  * Adding a 9th niche = add one entry to the JSON + run this script. The
  * export pipeline (scripts/export-web.js) runs it automatically before every
@@ -336,7 +339,7 @@ const HUB_GRID_BEGIN = '      <!-- BEGIN AUTO:COMMUNITY-DIRECTORY';
 const HUB_GRID_END = '<!-- END AUTO:COMMUNITY-DIRECTORY -->';
 
 /* ------------------------------------------------------------------ */
-/* sitemap                                                             */
+/* sitemaps                                                            */
 /* ------------------------------------------------------------------ */
 function renderSitemap() {
   const entry = (loc, { lastmod, changefreq, priority }) => `  <url>
@@ -366,6 +369,41 @@ function renderSitemap() {
   Add a niche to the JSON and it lands here automatically; keep
   <lastmod> on the static pages fresh when those pages change.
   The app shell under /app is auth-gated and intentionally not indexed.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join('\n')}
+</urlset>
+`;
+}
+
+/* Communities-only sitemap: the hub + every niche page, generated from the
+ * same JSON as sitemap.xml so the two can never disagree. Submitted once in
+ * Search Console (docs/SEO_GEO_PLAYBOOK.md §6) so the communities set can be
+ * refreshed/re-checked without resubmitting the whole site. */
+function renderCommunitiesSitemap() {
+  const entry = (loc, { lastmod, changefreq, priority }) => `  <url>
+    <loc>${loc}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
+  </url>`;
+  const staticHub = DATA.sitemapStatic.find((s) => s.path === DATA.hub.url);
+  const hubLastmod = staticHub?.lastmod || DATA.niches[0]?.lastmod;
+  const urls = [
+    entry(HUB_URL, { lastmod: hubLastmod, changefreq: 'weekly', priority: '0.9' }),
+    ...DATA.niches.map((n) => entry(url(n.slug), { lastmod: n.lastmod, changefreq: 'weekly', priority: '0.8' })),
+  ];
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Communities-only sitemap (/sitemap-communities.xml) for plusoneco.in.
+  Hub + the generated /communities/<slug> niche pages, pulled from the same
+  single source of truth (app/web/community-niches.json) as sitemap.xml.
+
+  GENERATED FILE — do not hand-edit. Regenerate with
+    node scripts/build-communities.mjs
+  robots.txt declares this sitemap; submit it once in Search Console:
+    https://search.google.com/search-console → Sitemaps →
+    https://www.plusoneco.in/sitemap-communities.xml
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.join('\n')}
@@ -408,6 +446,7 @@ function run({ write }) {
   target(hubPath, hub);
 
   target(path.join(WEB, 'sitemap.xml'), renderSitemap());
+  target(path.join(WEB, 'sitemap-communities.xml'), renderCommunitiesSitemap());
   return report;
 }
 
@@ -420,4 +459,4 @@ if (CHECK && bad.length) {
   process.exit(1);
 }
 for (const r of report) console.log(`[communities] ${r.file}: ${r.action}`);
-console.log(`[communities] ${CHECK ? 'check' : 'build'} done — ${DATA.niches.length} niche pages, sitemap regenerated.`);
+console.log(`[communities] ${CHECK ? 'check' : 'build'} done — ${DATA.niches.length} niche pages, sitemaps regenerated.`);
