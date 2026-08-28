@@ -19,6 +19,7 @@ echo "  ✓ all server files parse"
 echo "━━━ [3/5] server: test suites ━━━"
 (cd server && \
   npm run test:data-dir           && \
+  npm run test:app-links          && \
   npm run test:hardening          && \
   npm run test:e2e-journey        && \
   npm run test:songs             && \

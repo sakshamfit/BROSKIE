@@ -22,7 +22,21 @@
     "android": {
       "package": "ai.arena.tomodachi",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 6,
+      "versionCode": 7,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "www.plusoneco.in", "pathPrefix": "/c/" },
+            { "scheme": "https", "host": "www.plusoneco.in", "pathPrefix": "/gc/" },
+            { "scheme": "https", "host": "www.plusoneco.in", "path": "/communities" },
+            { "scheme": "https", "host": "www.plusoneco.in", "pathPrefix": "/communities/" },
+            { "scheme": "https", "host": "www.plusoneco.in", "path": "/app" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png",

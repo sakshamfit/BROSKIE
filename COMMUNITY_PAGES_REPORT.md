@@ -162,9 +162,14 @@ niches draw impressions (the generator makes both adding an 8th real category
 
 1. Capture the real Communities screen (Discover grid + a live community)
    and swap the demo recreations for screenshots.
-2. Optional: register `plusone://communities/<category>` as an Android/iOS
-   App Link host path so the APK picks up the same deep link when the app is
-   installed (parsing already works).
+2. ✅ **Done in the §6 pass** — Android App Links: `app/app.json` now ships
+   `android.intentFilters` with `autoVerify: true` for
+   `https://www.plusoneco.in` (`/c/`, `/gc/`, `/communities`, `/communities/*`,
+   `/app`), the Railway backend serves `/.well-known/assetlinks.json` from
+   `ANDROID_PACKAGE_NAME` + `ANDROID_CERT_FINGERPRINT` (Vercel rewrites the
+   path), and `app/src/push/links.js` maps page slugs to app category keys.
+   Setup steps: docs/SEO_GEO_PLAYBOOK.md §6.2 (set Railway env, rebuild APK).
+   (`plusone://communities/<category>` was already wired and stays.)
 3. The `landing-verify` workflow ships as `.github/landing-verify.yml.txt` —
    `mv` it to `.github/workflows/` to activate real-Chrome Lighthouse + the
    new `--check` gate (bot token can't write to `workflows/`).

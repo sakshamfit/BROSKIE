@@ -6,6 +6,15 @@
 import { Linking, Platform } from 'react-native';
 import { api } from '../api';
 import { routeFromNotification, routeFromUrl, openCommunity, openCommunitiesTab } from './routing';
+// Single source of truth for the marketing /communities/<slug> pages
+// (app/web/community-niches.json). Deep links use the page slug in the URL
+// but the app's category keys are the REAL filter (slug "travel" → category
+// "trip"). One import keeps every mapping in the pages and the app in sync.
+import niches from '../../web/community-niches.json';
+
+const SLUG_CATEGORY = new Map(
+  (niches?.niches || []).map((n) => [String(n.slug).toLowerCase(), String(n.category)])
+);
 
 /* The web app is served from /app on the public site and from / on
  * single-host deployments — always clean URLs back to the app, not to the
@@ -43,11 +52,16 @@ export function handleDeepLink(url) {
     joinCommunityByCode(route.code);
     return;
   }
-  // Marketing deep links (plusone://communities/<category> or
-  // …/app?tab=communities&category=<category>): open the Communities grid,
-  // pre-filtered. Category validity is enforced where it is consumed.
+  // Marketing deep links (plusone://communities/<category>, the web form
+  // …/app?tab=communities&category=<category>, and Android App Links
+  // https://www.plusoneco.in/communities/<slug>): open the Communities grid,
+  // pre-filtered. The URL slug is the marketing page's slug — map it to the
+  // app category key so the filter matches what the landing page promised.
+  // Category validity is enforced where it is consumed (unknown → unfiltered).
   if (route.route === 'communities') {
-    openCommunitiesTab(route.category);
+    const key = (route.category || '').toLowerCase();
+    const category = SLUG_CATEGORY.get(key) || key || null;
+    openCommunitiesTab(category);
     return;
   }
   routeFromNotification(route);
