@@ -38,7 +38,7 @@ const TEAM = [
     name: 'Jai',
     role: 'Team member',
     initials: 'J',
-    photo: require('../assets/team/jai.jpg'),
+    // No photo yet — card falls back to the "J" initials avatar.
     icon: 'construct-outline',
     tag: 'THE ALL-ROUNDER',
     bio: 'Jai is the team\u2019s all-rounder — the one who jumps wherever the work is and gets it done. Whether it\u2019s testing, fixing, polishing or pushing a feature over the finish line, Jai brings energy, curiosity and a can-do attitude to every corner of the app. Curious, dependable and always up for learning something new, Jai proves that great products are built by people who care about the small stuff too. The team would not move half as fast without him.',
