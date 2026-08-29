@@ -203,6 +203,14 @@ export default function SettingsScreen({ navigation, embedded = false }) {
             subtitle="How to use every key feature"
             onPress={() => navigation.navigate('Help')}
           />
+          <Divider theme={theme} />
+          <NavRow
+            theme={theme}
+            icon="information-circle-outline"
+            title="About"
+            subtitle="Meet the team behind +one"
+            onPress={() => navigation.navigate('About')}
+          />
         </View>
 
         {/* -------- Danger zone -------- */}

@@ -519,21 +519,21 @@ export default function AuthScreen() {
                     />
                   )}
 
-                  {mode === 'login' && (
+                  {(mode === 'login' || mode === 'register') && (
                     <Field
                       icon="key-outline"
                       label="Password"
                       value={password}
                       onChangeText={(value) => { setPassword(value); if (error) setError(''); }}
-                      placeholder="Enter password"
+                      placeholder={mode === 'register' ? 'At least 8 characters' : 'Enter password'}
                       focused={focus === 'key'}
                       onFocus={() => setFocus('key')}
                       onBlur={() => setFocus(null)}
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
                       autoCorrect={false}
-                      autoComplete="current-password"
-                      textContentType="password"
+                      autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                      textContentType={mode === 'register' ? 'newPassword' : 'password'}
                       returnKeyType="done"
                       onSubmitEditing={submit}
                       editable={!busy}
