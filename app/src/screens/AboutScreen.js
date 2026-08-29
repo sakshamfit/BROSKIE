@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Pressable, StyleSheet, ScrollView, Linking, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, ScrollView, Linking, Platform, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../icons/Icon';
 import { useTheme } from '../store/ThemeContext';
@@ -20,6 +20,7 @@ const TEAM = [
     name: 'Saksham',
     role: 'Founder',
     initials: 'S',
+    photo: require('../assets/team/saksham.jpg'),
     icon: 'rocket-outline',
     tag: 'THE VISION KEEPER',
     bio: 'Saksham is the founder and the mind who dreamed up +one from nothing. He set the vision, sketched the soul of the product, and built the foundation everything else stands on — from the ink-and-paper look to the way chats, statuses and the Network feel like one living place. When something feels just right in this app, it is almost always because Saksham refused to ship it any other way. A relentless builder with a founder\u2019s eye for detail and a true believer in shipping real things that real people love.',
@@ -28,6 +29,7 @@ const TEAM = [
     name: 'Raees',
     role: 'Co-founder',
     initials: 'R',
+    photo: require('../assets/team/raees.jpg'),
     icon: 'sparkles-outline',
     tag: 'THE CO-PILOT',
     bio: 'Raees is the co-founder and Saksham\u2019s partner in turning an idea into an app. He sharpens every feature, keeps the build honest, and makes sure hard problems actually get solved — reliably, calmly, and without drama. Raees brings the steadiness every young product needs: equal parts builder, thinker and the person who says \u201cthere\u2019s a better way\u201d at exactly the right moment. A lot of +one\u2019s strength behind the scenes exists because Raees put it there.',
@@ -36,6 +38,7 @@ const TEAM = [
     name: 'Jai',
     role: 'Team member',
     initials: 'J',
+    photo: require('../assets/team/jai.jpg'),
     icon: 'construct-outline',
     tag: 'THE ALL-ROUNDER',
     bio: 'Jai is the team\u2019s all-rounder — the one who jumps wherever the work is and gets it done. Whether it\u2019s testing, fixing, polishing or pushing a feature over the finish line, Jai brings energy, curiosity and a can-do attitude to every corner of the app. Curious, dependable and always up for learning something new, Jai proves that great products are built by people who care about the small stuff too. The team would not move half as fast without him.',
@@ -89,7 +92,11 @@ export default function AboutScreen({ navigation, embedded = false }) {
               <PaperCard weight="thin" style={{ padding: 18 }}>
                 <View style={s.memberRow}>
                   <View style={[s.avatar, inkBox(theme, 'ink')]}>
-                    <Text style={s.avatarText}>{member.initials}</Text>
+                    {member.photo ? (
+                      <Image source={member.photo} style={s.avatarPhoto} resizeMode="cover" />
+                    ) : (
+                      <Text style={s.avatarText}>{member.initials}</Text>
+                    )}
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[type.bodyLg, { color: theme.text, fontFamily: type.body(700) }]}>{member.name}</Text>
@@ -153,8 +160,12 @@ const makeStyles = (t) => StyleSheet.create({
   introBadge: { width: 60, height: 60, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   avatar: {
-    width: 58, height: 58, borderRadius: 16,
+    width: 64, height: 64, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarPhoto: {
+    width: '100%', height: '100%',
   },
   avatarText: {
     fontFamily: type.head(800),
