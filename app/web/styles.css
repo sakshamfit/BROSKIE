@@ -724,6 +724,79 @@ section { position: relative; }
 .grid h3 { margin: 0.65rem 0 0.35rem; font-size: 1.1rem; }
 .grid p { color: var(--graphite); font-size: 0.93rem; }
 
+/* team cards — About page "meet the team" ---------------------------------- */
+
+.team-sec { margin-top: clamp(2.8rem, 6vw, 4rem); }
+.team-lede { color: var(--graphite); max-width: 44rem; margin-top: 0.8rem; }
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.3rem;
+  margin-top: 1.7rem;
+  align-items: start;
+}
+.team-card {
+  border: 2px solid var(--ink-pure);
+  border-radius: var(--sketch-sm);
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: var(--raise-1);
+  overflow: hidden;
+  transition: transform 160ms ease;
+}
+.team-card:nth-child(1) { transform: rotate(-0.5deg); }
+.team-card:nth-child(2) { transform: rotate(0.4deg); }
+.team-card:nth-child(3) { transform: rotate(-0.3deg); }
+.team-card:hover { transform: rotate(0) translateY(-3px); }
+.team-photo { border-bottom: 2px solid var(--ink-pure); background: var(--ink-pure); }
+.team-photo img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+/* initials avatar (no photo yet) — same fallback letter as the app, drawn
+   over a drafting-grid tile */
+.team-photo-initials {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 15.4px, rgba(28, 27, 27, 0.13) 16px),
+    repeating-linear-gradient(90deg, transparent, transparent 15.4px, rgba(28, 27, 27, 0.13) 16px),
+    var(--paper-low);
+  font-family: "Bricolage Grotesque", ui-sans-serif, sans-serif;
+  font-weight: 800;
+  font-size: 3.4rem;
+  color: var(--ink);
+  user-select: none;
+}
+.team-card-body { padding: 1rem 1rem 1.15rem; }
+.team-card-body h3 { font-size: 1.25rem; font-weight: 800; }
+.team-role { margin-top: 0.45rem; }
+.team-role .tag { font-size: 0.6rem; }
+.team-tagline {
+  margin-top: 0.45rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.team-bio { margin-top: 0.6rem; font-size: 0.88rem; color: var(--graphite); }
+.team-credit {
+  margin-top: 1.6rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  text-align: center;
+}
+.team-credit a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--hi);
+  text-underline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .team-card { transform: none; transition: none; }
+}
+
 /* split ------------------------------------------------------------------- */
 
 .split-wrap { border-top: 2px solid var(--ink-pure); }
@@ -950,6 +1023,7 @@ section { position: relative; }
   .demo-grid { grid-template-columns: 1fr 1fr; }
   .demo-grid .demo-col:first-child { grid-column: 1 / -1; }
   .page-cols { grid-template-columns: 1fr; }
+  .team-grid { grid-template-columns: 1fr; max-width: 420px; }
 }
 
 @media (max-width: 720px) {
