@@ -38,7 +38,6 @@ import ActivityScreen from './screens/ActivityScreen';
 import PrivacyScreen from './screens/PrivacyScreen';
 import BlockedUsersScreen from './screens/BlockedUsersScreen';
 import HelpScreen from './screens/HelpScreen';
-import AboutScreen from './screens/AboutScreen';
 import CallsScreen from './screens/CallsScreen';
 import StarredMessagesScreen from './screens/StarredMessagesScreen';
 import AdminSafetyScreen from './screens/AdminSafetyScreen';
@@ -374,7 +373,6 @@ export default function Navigation() {
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
             <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
             <Stack.Screen name="Help" component={HelpScreen} />
-            <Stack.Screen name="About" component={AboutScreen} />
             <Stack.Screen name="AdminSafety" component={AdminSafetyScreen} />
           </>
         )}
