@@ -120,6 +120,12 @@ const PAGES = [
   { route: '/blog/', title: 'Plus One Blog — Community, Connection & Discovery', h1: 'The Plus One blog' },
   { route: '/blog/what-does-gc-mean', title: 'What Does GC Mean? GC Meaning in Texting & Social Media', h1: 'What Does GC Mean? The Group Chat, Explained' },
   { route: '/blog/plus-one-meaning', title: 'What Does “Plus One” (+1) Mean? Invites, Texting & the App', h1: 'What Does “Plus One” Mean? Every Sense of +1' },
+  { route: '/blog/how-to-make-a-group-chat', title: 'How to Make a Group Chat: The Complete GC Guide', h1: 'How to Make a Group Chat That Actually Sticks' },
+  { route: '/blog/disappearing-messages', title: 'Disappearing Messages: What They Are & When to Use Them', h1: 'Disappearing Messages: What They Are & When to Use Them' },
+  { route: '/blog/end-to-end-encryption', title: 'What Is End-to-End Encryption (E2EE)? Secret Chats, Explained', h1: 'What Is End-to-End Encryption? Secret Chats, Explained' },
+  { route: '/blog/chat-without-phone-number', title: 'Why Chat Without a Phone Number? Username-Only Signup, Explained', h1: 'Why Chat Without a Phone Number?' },
+  { route: '/blog/how-to-plan-trip-with-friends', title: 'How to Plan a Trip With Friends: The Group Chat + Poll Method', h1: 'How to Plan a Trip With Friends' },
+  { route: '/blog/how-to-build-study-group', title: 'How to Build a Study Group That Actually Shows Up', h1: 'How to Build a Study Group That Actually Shows Up' },
 ];
 
 /* The /communities/<slug> niche pages are generated from community-niches.json

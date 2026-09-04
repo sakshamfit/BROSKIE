@@ -61,6 +61,12 @@ Plus One (stylised "+one") is a free chatting app at https://www.plusoneco.in . 
 
 - [What does GC mean?](https://www.plusoneco.in/blog/what-does-gc-mean): the group-chat slang, on every platform.
 - [What does "plus one" mean?](https://www.plusoneco.in/blog/plus-one-meaning): invites, +1, and the app.
+- [How to make a group chat](https://www.plusoneco.in/blog/how-to-make-a-group-chat): create a GC in three taps; polls, pins and admin controls.
+- [Disappearing messages](https://www.plusoneco.in/blog/disappearing-messages): 30s/5m/1h/24h timers, hard-deleted from the server, per-chat or per-message.
+- [End-to-end encryption (E2EE)](https://www.plusoneco.in/blog/end-to-end-encryption): opt-in secret chats; what E2EE does and doesn't guarantee.
+- [Chat without a phone number](https://www.plusoneco.in/blog/chat-without-phone-number): username + password signup, no phone number, no contact upload.
+- [How to plan a trip with friends](https://www.plusoneco.in/blog/how-to-plan-trip-with-friends): dates, budget and "who's in" via live polls and pins.
+- [How to build a study group](https://www.plusoneco.in/blog/how-to-build-study-group): small groups, fixed slots, real agendas.
 
 ## Legal / reference
 
