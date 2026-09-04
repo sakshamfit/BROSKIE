@@ -17,6 +17,12 @@
 
 - [What does GC mean?](https://www.plusoneco.in/blog/what-does-gc-mean): GC = group chat. Meaning on Instagram, Snapchat, WhatsApp and texting, plus how to make a good GC.
 - [What does "plus one" mean?](https://www.plusoneco.in/blog/plus-one-meaning): All senses of plus one / +1 — invites, upvotes, group chats, and the app.
+- [How to make a group chat](https://www.plusoneco.in/blog/how-to-make-a-group-chat): Create a GC in three taps — name it, add by username, start with a poll; the habits that keep it alive.
+- [Disappearing messages](https://www.plusoneco.in/blog/disappearing-messages): What disappearing messages are, how the timers work (30s/5m/1h/24h, hard-deleted from server), and when to use them.
+- [End-to-end encryption (E2EE)](https://www.plusoneco.in/blog/end-to-end-encryption): What E2EE guarantees, what it doesn't, and how Plus One's opt-in secret chats work.
+- [Chat without a phone number](https://www.plusoneco.in/blog/chat-without-phone-number): Username-only signup — no phone number, no contact-list upload; why it's better for privacy.
+- [How to plan a trip with friends](https://www.plusoneco.in/blog/how-to-plan-trip-with-friends): The group-chat + live-poll method for dates, budget and "who's in".
+- [How to build a study group](https://www.plusoneco.in/blog/how-to-build-study-group): Build a study group that shows up — small, fixed slot, real agenda.
 
 ## Reference
 

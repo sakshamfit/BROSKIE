@@ -10,6 +10,35 @@ outside the repo** to actually win the rankings. Both halves matter.
 
 ---
 
+## 0. Update — 2026-09-04: blog long-tail expansion
+
+A second blog pass shipped six new posts that bite off the long-tail queries
+around the app itself (not just the brand/slang terms). Each is a full
+BlogPosting + FAQPage (+ HowTo where relevant) page, wired into `/blog/`,
+`sitemap.xml`, `llms.txt` / `llms-full.txt`, and asserted by `verify-site.mjs`.
+
+| New URL | Targets |
+|---|---|
+| `/blog/how-to-make-a-group-chat` | how to make a group chat, create a group chat, make a GC |
+| `/blog/disappearing-messages` | disappearing messages, auto-delete messages, ephemeral chat |
+| `/blog/end-to-end-encryption` | e2ee meaning, what is e2ee, secret chat, encrypted messaging |
+| `/blog/chat-without-phone-number` | chat app without phone number, no-phone-number signup |
+| `/blog/how-to-plan-trip-with-friends` | plan a trip with friends, trip group chat, "who's in" poll |
+| `/blog/how-to-build-study-group` | build a study group, find study partners, study group app |
+
+Each post is written to be useful first (plain facts, concrete steps, honest
+caveats) because that is what both Google and AI answer engines reward, and
+it's what a reader keeps. Internal links run sitewide (footer) and in-copy to
+the product/community pages, so the long-tail posts route authority back to
+`/group-chat`, `/communities`, `/chatting-app`, etc.
+
+**Verification after this pass:** `verify-seo.mjs` 783/783 (31 pages),
+`verify-site.mjs` 612/612, `check-links.mjs` 857 internal links all resolve,
+`build-communities.mjs --check` green. `sitemap.xml` now lists **30 URLs**
+(23 static pages incl. 11 blog URLs + 7 generated community niches).
+
+---
+
 ## 1. The honest reality first
 
 On-page SEO is fully in your control and is now done. Rankings are not:

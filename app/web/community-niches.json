@@ -17,23 +17,144 @@
     "description": "Interest-based communities on Plus One, organised by what you're actually planning: trip planning, running groups, club nights, game nights, study groups, chai chats and house parties — each with live polls, join policies and a real-time group chat."
   },
   "sitemapStatic": [
-    { "path": "/", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "1.0" },
-    { "path": "/communities", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.9" },
-    { "path": "/chat", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.9" },
-    { "path": "/chatting-app", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.9" },
-    { "path": "/group-chat", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.9" },
-    { "path": "/plus-one", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.9" },
-    { "path": "/network", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.9" },
-    { "path": "/download", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.8" },
-    { "path": "/about", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.7" },
-    { "path": "/blog/", "lastmod": "2026-08-27", "changefreq": "weekly", "priority": "0.7" },
-    { "path": "/blog/how-to-find-a-running-partner", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.7" },
-    { "path": "/blog/interest-based-social-network", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.7" },
-    { "path": "/blog/what-does-gc-mean", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.7" },
-    { "path": "/blog/plus-one-meaning", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.7" },
-    { "path": "/support", "lastmod": "2026-08-27", "changefreq": "monthly", "priority": "0.5" },
-    { "path": "/privacy", "lastmod": "2026-08-27", "changefreq": "yearly", "priority": "0.3" },
-    { "path": "/terms", "lastmod": "2026-08-27", "changefreq": "yearly", "priority": "0.3" }
+    {
+      "path": "/",
+      "lastmod": "2026-08-27",
+      "changefreq": "weekly",
+      "priority": "1.0"
+    },
+    {
+      "path": "/communities",
+      "lastmod": "2026-08-27",
+      "changefreq": "weekly",
+      "priority": "0.9"
+    },
+    {
+      "path": "/chat",
+      "lastmod": "2026-08-27",
+      "changefreq": "weekly",
+      "priority": "0.9"
+    },
+    {
+      "path": "/chatting-app",
+      "lastmod": "2026-08-27",
+      "changefreq": "weekly",
+      "priority": "0.9"
+    },
+    {
+      "path": "/group-chat",
+      "lastmod": "2026-08-27",
+      "changefreq": "weekly",
+      "priority": "0.9"
+    },
+    {
+      "path": "/plus-one",
+      "lastmod": "2026-08-27",
+      "changefreq": "weekly",
+      "priority": "0.9"
+    },
+    {
+      "path": "/network",
+      "lastmod": "2026-08-27",
+      "changefreq": "weekly",
+      "priority": "0.9"
+    },
+    {
+      "path": "/download",
+      "lastmod": "2026-08-27",
+      "changefreq": "monthly",
+      "priority": "0.8"
+    },
+    {
+      "path": "/about",
+      "lastmod": "2026-08-27",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/",
+      "lastmod": "2026-08-27",
+      "changefreq": "weekly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/how-to-find-a-running-partner",
+      "lastmod": "2026-08-27",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/interest-based-social-network",
+      "lastmod": "2026-08-27",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/what-does-gc-mean",
+      "lastmod": "2026-08-27",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/plus-one-meaning",
+      "lastmod": "2026-08-27",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/how-to-make-a-group-chat",
+      "lastmod": "2026-09-03",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/disappearing-messages",
+      "lastmod": "2026-09-02",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/end-to-end-encryption",
+      "lastmod": "2026-09-01",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/chat-without-phone-number",
+      "lastmod": "2026-08-31",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/how-to-plan-trip-with-friends",
+      "lastmod": "2026-08-30",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/how-to-build-study-group",
+      "lastmod": "2026-08-29",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/support",
+      "lastmod": "2026-08-27",
+      "changefreq": "monthly",
+      "priority": "0.5"
+    },
+    {
+      "path": "/privacy",
+      "lastmod": "2026-08-27",
+      "changefreq": "yearly",
+      "priority": "0.3"
+    },
+    {
+      "path": "/terms",
+      "lastmod": "2026-08-27",
+      "changefreq": "yearly",
+      "priority": "0.3"
+    }
   ],
   "niches": [
     {
@@ -46,7 +167,12 @@
       "title": "Travel Communities & Trip Planning Groups — Plus One",
       "metaDesc": "Find or start a trip-planning community on +one: live polls for dates and routes, open or invite-only joining, and one group chat that keeps the whole plan together.",
       "cta": "Join a travel community on +one",
-      "related": ["nightlife", "running", "chai-chat", "house-parties"],
+      "related": [
+        "nightlife",
+        "running",
+        "chai-chat",
+        "house-parties"
+      ],
       "lastmod": "2026-08-27",
       "intro": [
         "Travel communities on +one are purpose-built groups for one specific job: planning an actual trip. The Spiti run next month, a long-weekend beach drive, the “anyone up for a Saturday trek?” post that gets twelve yeses. You find them under the Trip Planning category on the Discover grid, with live member counts so you can see a group is real before you join it.",
@@ -70,8 +196,14 @@
         "asker": "MEERA",
         "question": "Long weekend — how do we go?",
         "options": [
-          { "text": "CAB CONVOY · LEAVE FRI 5AM", "mine": true },
-          { "text": "OVERNIGHT BUS, FRESH BY MORNING", "mine": false }
+          {
+            "text": "CAB CONVOY · LEAVE FRI 5AM",
+            "mine": true
+          },
+          {
+            "text": "OVERNIGHT BUS, FRESH BY MORNING",
+            "mine": false
+          }
         ],
         "votes": "9 votes",
         "chip": "#trip"
@@ -87,7 +219,11 @@
       "title": "Running Communities & Running Groups — Plus One",
       "metaDesc": "Join a running community on +one: settle the Sunday long-run route with a live poll, share pace notes and route pins in the group chat, and find a crew that shows up.",
       "cta": "Join a running community on +one",
-      "related": ["chai-chat", "travel", "nightlife"],
+      "related": [
+        "chai-chat",
+        "travel",
+        "nightlife"
+      ],
       "lastmod": "2026-08-27",
       "intro": [
         "Running communities on +one are small public groups built around an actual weekly plan: the 6 am loop, the Sunday long run, the before-work 5k that doesn't get cancelled because someone's alarm didn't. They live in The Network's Communities section under the Running Group category, with member counts on each card so you can tell a living crew from an abandoned one.",
@@ -111,8 +247,14 @@
         "asker": "ADITI",
         "question": "Sunday long run — where?",
         "options": [
-          { "text": "LODHI GARDEN 6AM", "mine": true },
-          { "text": "DEW DEGREES 6:30", "mine": false }
+          {
+            "text": "LODHI GARDEN 6AM",
+            "mine": true
+          },
+          {
+            "text": "DEW DEGREES 6:30",
+            "mine": false
+          }
         ],
         "votes": "12 votes",
         "chip": "#running"
@@ -128,7 +270,12 @@
       "title": "Nightlife & Club Night Communities — Plus One",
       "metaDesc": "Nightlife communities on +one turn “are we going out?” into one group chat: live venue polls, open or invite-only joining, and a headcount you can see before booking a table.",
       "cta": "Join a nightlife community on +one",
-      "related": ["house-parties", "gaming", "travel", "running"],
+      "related": [
+        "house-parties",
+        "gaming",
+        "travel",
+        "running"
+      ],
       "lastmod": "2026-08-27",
       "intro": [
         "The in-app category is called Club Night, and it exists for one very specific problem: the 34-message “where are we going Saturday?” that ends with nobody going anywhere. A nightlife community is one persistent group for the going-out crowd — venue decided by poll, headcount visible, logistics said once.",
@@ -152,8 +299,14 @@
         "asker": "NIKHIL",
         "question": "Friday — which one?",
         "options": [
-          { "text": "ROOFTOP FIRST, CLUB AFTER 11", "mine": true },
-          { "text": "STRAIGHT TO THE DANCE FLOOR", "mine": false }
+          {
+            "text": "ROOFTOP FIRST, CLUB AFTER 11",
+            "mine": true
+          },
+          {
+            "text": "STRAIGHT TO THE DANCE FLOOR",
+            "mine": false
+          }
         ],
         "votes": "17 votes",
         "chip": "#club"
@@ -169,7 +322,11 @@
       "title": "Gaming & Game Night Communities — Plus One",
       "metaDesc": "Gaming communities on +one: find a fifth for the squad night, a carrom table or 5-a-side football — live polls to lock the plan, group calls, and one chat for the banter.",
       "cta": "Join a gaming community on +one",
-      "related": ["nightlife", "house-parties", "study-groups"],
+      "related": [
+        "nightlife",
+        "house-parties",
+        "study-groups"
+      ],
       "lastmod": "2026-08-27",
       "intro": [
         "The Game Night category covers the whole spectrum the app actually ships for: squad nights, board-game tables, 5-a-side on Sunday. What they all need is the same thing — reliably gathering exactly the right number of people at exactly one time — so a gaming community is basically a standing plan that lives in a group chat.",
@@ -193,8 +350,14 @@
         "asker": "ARJUN",
         "question": "Tonight at 9 — what's the run?",
         "options": [
-          { "text": "SQUAD MATCH, +ONE GROUP CALL", "mine": true },
-          { "text": "BOARD GAMES AT MY PLACE, 7PM SHARP", "mine": false }
+          {
+            "text": "SQUAD MATCH, +ONE GROUP CALL",
+            "mine": true
+          },
+          {
+            "text": "BOARD GAMES AT MY PLACE, 7PM SHARP",
+            "mine": false
+          }
         ],
         "votes": "5 votes",
         "chip": "#game"
@@ -210,7 +373,11 @@
       "title": "Student & Study Group Communities — Plus One",
       "metaDesc": "Study-group communities on +one: exam prep, project sprints and mock-test scheduling in one group chat — live polls, shared notes and photos, open or invite-only joining.",
       "cta": "Join a study community on +one",
-      "related": ["chai-chat", "gaming", "running"],
+      "related": [
+        "chai-chat",
+        "gaming",
+        "running"
+      ],
       "lastmod": "2026-08-27",
       "intro": [
         "Study groups are where +one's community model fits student life best: one persistent group per subject, batch or exam, instead of a course WhatsApp that died in week two. Create or join a Study Group community on the Discover grid — cards show the live member count, so twenty-person groups and one-person graveyards are easy to tell apart.",
@@ -234,8 +401,14 @@
         "asker": "CLASS REP",
         "question": "Mock-test slot — which works?",
         "options": [
-          { "text": "SAT 8AM · LIBRARY ROOM 2", "mine": true },
-          { "text": "SUN 6PM · +ONE GROUP CALL", "mine": false }
+          {
+            "text": "SAT 8AM · LIBRARY ROOM 2",
+            "mine": true
+          },
+          {
+            "text": "SUN 6PM · +ONE GROUP CALL",
+            "mine": false
+          }
         ],
         "votes": "28 votes",
         "chip": "#study"
@@ -251,7 +424,12 @@
       "title": "Chai Chats & Casual Hangout Communities — Plus One",
       "metaDesc": "Chai Chat communities on +one are the lowest-pressure meetups there are: a group chat, a poll, and tomorrow's chai spot. The easiest way to find your people in a new city.",
       "cta": "Join a chai chat on +one",
-      "related": ["travel", "study-groups", "running", "nightlife"],
+      "related": [
+        "travel",
+        "study-groups",
+        "running",
+        "nightlife"
+      ],
       "lastmod": "2026-08-27",
       "intro": [
         "Every other community type has an agenda. Chai Chat doesn't: it's the in-app category for casual hangouts — coffee and chai runs, “I'm in M Block till noon, anyone about?”, the Sunday walk that turns into breakfast. The name is the whole pitch, and it's the closest +one has to a general neighbourhood-hangout group.",
@@ -275,8 +453,14 @@
         "asker": "TANYA",
         "question": "Tomorrow morning — chai where?",
         "options": [
-          { "text": "M BLOCK STALL · 10:30", "mine": true },
-          { "text": "INDIA GATE STEPS · 8AM RUN FIRST", "mine": false }
+          {
+            "text": "M BLOCK STALL · 10:30",
+            "mine": true
+          },
+          {
+            "text": "INDIA GATE STEPS · 8AM RUN FIRST",
+            "mine": false
+          }
         ],
         "votes": "8 votes",
         "chip": "#chai"
@@ -292,7 +476,11 @@
       "title": "House Party Communities & Party Planning — Plus One",
       "metaDesc": "House-party communities on +one: playlists, headcount and who's-bringing-what in one group chat — live polls, invite links, and ask-to-join controls so the guest list stays yours.",
       "cta": "Find a house party on +one",
-      "related": ["nightlife", "gaming", "travel"],
+      "related": [
+        "nightlife",
+        "gaming",
+        "travel"
+      ],
       "lastmod": "2026-08-27",
       "intro": [
         "The House Party category is for the other half of a night out: someone hosting and everyone else figuring out if they should be there. The community is the event page, the guest list and the group chat at once — coords, timing, playlist and “who's bringing the speakers” in one place that survives after the party and is ready for the next one.",
@@ -316,8 +504,14 @@
         "asker": "THE HOST",
         "question": "Music — what are we doing?",
         "options": [
-          { "text": "DJ ARJIT + SPEAKERS (I'LL CARRY)", "mine": true },
-          { "text": "SHARED GROUP PLAYLIST, VOTE YOURS IN", "mine": false }
+          {
+            "text": "DJ ARJIT + SPEAKERS (I'LL CARRY)",
+            "mine": true
+          },
+          {
+            "text": "SHARED GROUP PLAYLIST, VOTE YOURS IN",
+            "mine": false
+          }
         ],
         "votes": "31 votes",
         "chip": "#party"
