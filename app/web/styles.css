@@ -5,7 +5,8 @@
  *   highlighter #FFE24D · outline-variant #c4c7c7
  *   Bricolage Grotesque / Karla / JetBrains Mono
  *   drafting-grid paper · hand-drawn radii · raised ink shadows (no blur)
- * app/scripts/export-web.js inlines this file into every page at build time.
+ * app/scripts/export-web.js compiles this file once into a fingerprinted,
+ * immutable stylesheet shared by every marketing page.
  */
 
 @font-face {
@@ -928,6 +929,18 @@ section { position: relative; }
   grid-template-columns: 1.05fr 0.95fr;
   gap: clamp(1.6rem, 4vw, 3.2rem);
   align-items: start;
+}
+
+/* Editorial articles use these contextual links to keep every guide one
+ * useful click away from more than the blog index. */
+.related-reading {
+  max-width: 1080px;
+  padding: 0 var(--pad) clamp(3rem, 6vw, 4.5rem);
+}
+.related-reading h2 { margin-top: 0.45rem; }
+.related-reading-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1.2rem;
 }
 
 /* FAQ list */
