@@ -9,14 +9,16 @@
  *
  *   1. every route answers 200 with text/html
  *   2. unique <title> + meta description present on every page
- *   3. exactly one <h1> with real crawlable text
+ *   3. exactly one <h1> with real crawlable text, distinct from the title
  *   4. canonical URL matches the requested URL (https://www.plusoneco.in)
  *   5. every ld+json block parses and structurally validates per @type
  *   6. /robots.txt + /sitemap.xml reachable, sitemap URLs all 200
  *   7. /sitemap-communities.xml lists exactly the hub + every niche page
  *   8. app.json declares the Android App Link intent filter (autoVerify,
  *      www.plusoneco.in) so true one-tap app links can't regress silently
- *   9. styles are inlined (no render-blocking css link) and site.js exists
+ *   9. a shared fingerprinted stylesheet and deferred site.js both exist
+ *  10. pages retain substantive readable copy and have at least two
+ *      non-self internal paths in — guards against thin and orphaned pages
  *
  * Usage: node scripts/verify-site.mjs [distDir]
  */
@@ -98,6 +100,16 @@ const decode = (s) => s
   .replace(/&quot;/g, '"')
   .replace(/&#39;|&apos;/g, "'");
 
+const visibleText = (html) => decode(html
+  .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+  .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+  .replace(/<!--([\s\S]*?)-->/g, ' ')
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim());
+const wordCount = (html) => visibleText(html).split(/\s+/).filter(Boolean).length;
+const normaliseTitleText = (text) => decode(text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
+
 const PAGES = [
   { route: '/', title: 'Plus One — Chatting App for Friends, Group Chats & Communities',
     desc: 'Plus One (+one) is a free chatting app for 1:1 chats, group chats (GCs) and interest-based communities — realtime messaging, polls, voice notes and disappearing messages on Android, iOS and web.',
@@ -117,15 +129,20 @@ const PAGES = [
     h1: 'Plus One is a chatting app for communities & GCs' },
   { route: '/network', title: 'The Network — A Worldwide Social Feed — Plus One', h1: 'A worldwide feed that still feels handwritten' },
   { route: '/download', title: 'Download Plus One — Android APK, iOS & Web App', h1: 'Get Plus One on anything' },
+  { route: '/privacy', title: 'Privacy Policy — Plus One', h1: 'Privacy Policy' },
+  { route: '/terms', title: 'Terms of Service — Plus One', h1: 'Terms of Service' },
+  { route: '/support', title: 'Support & FAQ — Help, Troubleshooting & Guides — Plus One', h1: 'Support & FAQ' },
   { route: '/blog/', title: 'Plus One Blog — Community, Connection & Discovery', h1: 'The Plus One blog' },
+  { route: '/blog/how-to-find-a-running-partner', title: 'How to Find a Running Partner & Running Groups Near You — Plus One Blog', h1: 'How to Find a Running Partner & Running Groups Near You' },
+  { route: '/blog/interest-based-social-network', title: 'Why Interest-Based Communities Beat Follower Graphs — Plus One Blog', h1: 'Why Interest-Based Communities Beat Follower Graphs' },
   { route: '/blog/what-does-gc-mean', title: 'What Does GC Mean? GC Meaning in Texting & Social Media', h1: 'What Does GC Mean? The Group Chat, Explained' },
   { route: '/blog/plus-one-meaning', title: 'What Does “Plus One” (+1) Mean? Invites, Texting & the App', h1: 'What Does “Plus One” Mean? Every Sense of +1' },
   { route: '/blog/how-to-make-a-group-chat', title: 'How to Make a Group Chat: The Complete GC Guide', h1: 'How to Make a Group Chat That Actually Sticks' },
-  { route: '/blog/disappearing-messages', title: 'Disappearing Messages: What They Are & When to Use Them', h1: 'Disappearing Messages: What They Are & When to Use Them' },
+  { route: '/blog/disappearing-messages', title: 'How Disappearing Messages Work & When to Use Them | Plus One', h1: 'Disappearing Messages: What They Are & When to Use Them' },
   { route: '/blog/end-to-end-encryption', title: 'What Is End-to-End Encryption (E2EE)? Secret Chats, Explained', h1: 'What Is End-to-End Encryption? Secret Chats, Explained' },
   { route: '/blog/chat-without-phone-number', title: 'Why Chat Without a Phone Number? Username-Only Signup, Explained', h1: 'Why Chat Without a Phone Number?' },
   { route: '/blog/how-to-plan-trip-with-friends', title: 'How to Plan a Trip With Friends: The Group Chat + Poll Method', h1: 'How to Plan a Trip With Friends' },
-  { route: '/blog/how-to-build-study-group', title: 'How to Build a Study Group That Actually Shows Up', h1: 'How to Build a Study Group That Actually Shows Up' },
+  { route: '/blog/how-to-build-study-group', title: 'How to Build a Study Group That Actually Shows Up | Plus One', h1: 'How to Build a Study Group That Actually Shows Up' },
 ];
 
 /* The /communities/<slug> niche pages are generated from community-niches.json
@@ -205,6 +222,7 @@ async function main() {
 
   const seenTitles = new Set();
   const seenDescs = new Set();
+  const pageBodies = new Map();
 
   for (const page of PAGES) {
     console.log(`— ${page.route}`);
@@ -227,21 +245,59 @@ async function main() {
     const canonical = body.match(/<link rel="canonical" href="([^"]*)" \/>/)?.[1];
     ok(canonical === `${ORIGIN}${page.route === '/' ? '/' : page.route}`, `${page.route}: canonical = ${canonical}`);
 
-    const h1s = [...body.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/g)].map((m) => decode(m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()));
+    const h1s = [...body.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/g)].map((m) => normaliseTitleText(m[1]));
     ok(h1s.length === 1, `${page.route}: exactly one <h1> in raw HTML`);
     ok(h1s[0] === page.h1, `${page.route}: <h1> text = "${h1s[0]}"`);
+    ok(normaliseTitleText(title) !== h1s[0], `${page.route}: title and H1 are distinct`);
+    ok(wordCount(body) >= 200, `${page.route}: substantive readable copy (${wordCount(body)} words)`);
 
     for (const needle of page.mustInclude || []) {
       ok(body.includes(needle), `${page.route}: crawlable text contains "${needle.slice(0, 58)}…")`);
     }
 
-    ok(!body.includes('<link rel="stylesheet"'), `${page.route}: styles inlined (no render-blocking link)`);
+    const stylesheetLinks = [...body.matchAll(/<link rel="stylesheet" href="([^"]+)" \/>/g)].map((m) => m[1]);
+    ok(stylesheetLinks.length === 1, `${page.route}: exactly one shared stylesheet link`);
+    const stylesheetHref = stylesheetLinks[0] || '';
+    ok(/^\/assets\/css\/site\.[a-f0-9]{12}\.css$/.test(stylesheetHref), `${page.route}: stylesheet is fingerprinted`);
+    ok(!/<style\b/i.test(body), `${page.route}: no repeated inline stylesheet`);
+    const css = await get(port, stylesheetHref || '/assets/css/missing.css');
+    ok(css.status === 200 && css.type.includes('text/css'), `${page.route}: shared stylesheet reachable`);
     ok(body.includes('/assets/js/site.js'), `${page.route}: site.js referenced`);
     const js = await get(port, '/assets/js/site.js');
     ok(js.status === 200 && js.type.includes('javascript'), '/assets/js/site.js: reachable');
 
+    pageBodies.set(page.route, body);
     validateJsonLd(body, page.route);
     console.log('');
+  }
+
+  console.log('— internal discoverability');
+  const knownRoutes = new Set(PAGES.map((page) => page.route));
+  const incoming = new Map(PAGES.map((page) => [page.route, new Set()]));
+  const routeForPath = (pathname) => {
+    if (knownRoutes.has(pathname)) return pathname;
+    const withoutTrailingSlash = pathname.replace(/\/+$/, '') || '/';
+    if (knownRoutes.has(withoutTrailingSlash)) return withoutTrailingSlash;
+    const withTrailingSlash = withoutTrailingSlash === '/' ? '/' : `${withoutTrailingSlash}/`;
+    return knownRoutes.has(withTrailingSlash) ? withTrailingSlash : null;
+  };
+  for (const [sourceRoute, body] of pageBodies) {
+    const links = [...body.matchAll(/<a\b[^>]*\bhref="([^"]+)"[^>]*>/gi)].map((m) => m[1]);
+    for (const href of links) {
+      let target;
+      try {
+        const parsed = new URL(href, `${ORIGIN}${sourceRoute}`);
+        if (parsed.origin !== ORIGIN) continue;
+        target = routeForPath(parsed.pathname);
+      } catch {
+        continue;
+      }
+      if (target && target !== sourceRoute) incoming.get(target).add(sourceRoute);
+    }
+  }
+  for (const page of PAGES) {
+    const sources = [...incoming.get(page.route)].sort();
+    ok(sources.length >= 2, `${page.route}: discoverable from ${sources.length} non-self internal page${sources.length === 1 ? '' : 's'}`);
   }
 
   console.log('— robots.txt & sitemaps');

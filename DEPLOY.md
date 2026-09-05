@@ -41,10 +41,11 @@ or you want Vercel preview deployments per pull request.
 
 - **Default (Vercel / plusoneco.in):** the static marketing/legal pages in
   `app/web/` are copied to the site root — `/` (home), `/privacy`, `/terms`,
-  `/support` — with `app/web/styles.css` inlined so the public pages ship
-  zero render-blocking CSS and **no JavaScript**. The Expo app shell moves to
-  `/app`; legacy deep links `/c/<code>` and `/gc/<id>` are rewritten to the
-  app shell so invite links keep working.
+  `/support`. `app/web/styles.css` is minified once to a fingerprinted
+  `/assets/css/site.<hash>.css` file and shared by every page, reducing raw
+  HTML size and allowing a one-year immutable browser cache. The Expo app
+  shell moves to `/app`; legacy deep links `/c/<code>` and `/gc/<id>` are
+  rewritten to the app shell so invite links keep working.
 - **`--app-only` (Railway single host, Cloudflare Workers):** the app keeps
   serving at the domain root, exactly as before. We use that flag because the
   Workers SPA fallback points at the root `index.html`.

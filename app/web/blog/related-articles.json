@@ -1,0 +1,79 @@
+{
+  "_comment": [
+    "Internal-link map for the Plus One editorial articles.",
+    "The build script inserts the linked reading block into each article before every export.",
+    "Each article intentionally receives at least two contextual, non-self incoming links (including /blog/), so useful guides never become orphaned sitemap URLs."
+  ],
+  "articles": [
+    {
+      "slug": "chat-without-phone-number",
+      "title": "Why Chat Without a Phone Number?",
+      "label": "Privacy guide",
+      "summary": "What username-only signup changes for your privacy, contacts and first conversations.",
+      "related": ["end-to-end-encryption", "plus-one-meaning"]
+    },
+    {
+      "slug": "disappearing-messages",
+      "title": "Disappearing Messages: What They Are & When to Use Them",
+      "label": "Privacy guide",
+      "summary": "How timed messages work, what they remove and when a short-lived chat makes sense.",
+      "related": ["end-to-end-encryption", "how-to-make-a-group-chat"]
+    },
+    {
+      "slug": "end-to-end-encryption",
+      "title": "What Is End-to-End Encryption?",
+      "label": "Privacy guide",
+      "summary": "A plain-English look at who can read a message and what secure messaging covers.",
+      "related": ["chat-without-phone-number", "disappearing-messages"]
+    },
+    {
+      "slug": "how-to-build-study-group",
+      "title": "How to Build a Study Group That Actually Shows Up",
+      "label": "Community guide",
+      "summary": "Find the right people, set a workable rhythm and turn a study chat into a real habit.",
+      "related": ["how-to-make-a-group-chat", "how-to-find-a-running-partner"]
+    },
+    {
+      "slug": "how-to-find-a-running-partner",
+      "title": "How to Find a Running Partner",
+      "label": "Community guide",
+      "summary": "Practical ways to find a consistent running crew and make the next plan stick.",
+      "related": ["how-to-plan-trip-with-friends", "interest-based-social-network"]
+    },
+    {
+      "slug": "how-to-make-a-group-chat",
+      "title": "How to Make a Group Chat",
+      "label": "Messaging guide",
+      "summary": "Name the group, invite the right people and use a poll to agree on the first plan.",
+      "related": ["disappearing-messages", "how-to-build-study-group"]
+    },
+    {
+      "slug": "how-to-plan-trip-with-friends",
+      "title": "How to Plan a Trip With Friends",
+      "label": "Community guide",
+      "summary": "Use a group chat and a few clear decisions to settle dates, budget and headcount.",
+      "related": ["how-to-make-a-group-chat", "how-to-find-a-running-partner"]
+    },
+    {
+      "slug": "interest-based-social-network",
+      "title": "Why Interest-Based Communities Beat Follower Graphs",
+      "label": "Community guide",
+      "summary": "Why a shared activity is a better starting point for a conversation than a follower count.",
+      "related": ["plus-one-meaning", "how-to-find-a-running-partner"]
+    },
+    {
+      "slug": "plus-one-meaning",
+      "title": "What Does Plus One Mean?",
+      "label": "Explainer",
+      "summary": "The meanings behind plus one, from invitations and texting to a people-first social app.",
+      "related": ["what-does-gc-mean", "interest-based-social-network"]
+    },
+    {
+      "slug": "what-does-gc-mean",
+      "title": "What Does GC Mean?",
+      "label": "Explainer",
+      "summary": "GC means group chat: the shared conversation where the plans, jokes and decisions happen.",
+      "related": ["plus-one-meaning", "how-to-make-a-group-chat"]
+    }
+  ]
+}

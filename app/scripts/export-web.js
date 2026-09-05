@@ -12,8 +12,10 @@
  *      blog → blog/index.html; privacy/terms/support → *.html)
  *   → copies robots.txt + sitemap.xml over the app-public copies
  *     (app/web is the single source of truth for the marketing site)
- *   → inlines app/web/styles.css into every page (no render-blocking
- *     <link rel="stylesheet"> on the public site)
+ *   → compiles app/web/styles.css once into a fingerprinted, immutable asset
+ *     and points every marketing page at it. This keeps raw HTML mostly
+ *     meaningful content instead of repeated CSS, improves cache reuse, and
+ *     avoids Site Audit high HTML-to-text / large-HTML warnings.
  *
  * --app-only (used by Railway single-host and Cloudflare Workers builds,
  *             where the app must keep serving at the domain root):
@@ -33,6 +35,7 @@
  * Usage: node scripts/export-web.js [--app-only] [--site-preview] [--output-dir <dir>]
  */
 const { execFileSync } = require('child_process');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -64,6 +67,14 @@ function buildCommunityPages() {
   });
 }
 
+function buildBlogLinks() {
+  console.log('[export-web] node scripts/build-blog-links.mjs');
+  execFileSync(process.execPath, [path.join(__dirname, 'build-blog-links.mjs')], {
+    cwd: APP_ROOT,
+    stdio: 'inherit',
+  });
+}
+
 function runExport(outputDir) {
   const rel = path.relative(APP_ROOT, path.resolve(outputDir));
   fs.rmSync(path.resolve(outputDir), { recursive: true, force: true });
@@ -89,16 +100,49 @@ function copyDir(src, dest) {
   }
 }
 
-/* Inlines the shared stylesheet. Pages live at dist/ root and reference
- * ./styles.css; the blog lives one level deeper and uses ../styles.css.
- * Both markers resolve to the same file. */
-function inlineStyles(html, css) {
+/* Build one compact, content-addressed stylesheet instead of repeating the
+ * 36 KB source stylesheet inside every document. A hash tied to the source
+ * content makes the Vercel immutable-cache rule safe: an edit gets a new URL.
+ * esbuild is available in production builds; the small fallback keeps
+ * --site-preview useful on machines without node_modules. */
+function fallbackMinifyCss(css) {
+  return css
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([{}:;,>])\s*/g, '$1')
+    .replace(/;}(?=})/g, '}')
+    .trim();
+}
+
+function buildStylesheet(dist) {
+  const source = path.join(WEB_DIR, 'styles.css');
+  const css = fs.readFileSync(source, 'utf8');
+  const hash = crypto.createHash('sha256').update(css).digest('hex').slice(0, 12);
+  const relativeHref = `/assets/css/site.${hash}.css`;
+  const out = path.join(dist, relativeHref.slice(1));
+  const esbuild = path.join(APP_ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'esbuild.cmd' : 'esbuild');
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+
+  try {
+    execFileSync(esbuild, [source, '--minify', `--outfile=${out}`, '--log-level=warning'], {
+      cwd: APP_ROOT,
+      stdio: 'inherit',
+    });
+    console.log(`[export-web] minified stylesheet → ${relativeHref} (${kmb(fs.statSync(out).size)})`);
+  } catch {
+    fs.writeFileSync(out, fallbackMinifyCss(css));
+    console.log(`[export-web] stylesheet fallback → ${relativeHref} (${kmb(fs.statSync(out).size)}; esbuild unavailable)`);
+  }
+  return relativeHref;
+}
+
+function pointToStylesheet(html, stylesheetHref) {
   const out = html.replace(
     /<link rel="stylesheet" href="(\.\.\/|\.?\/)?styles\.css" \/>/,
-    () => `<style>\n${css}\n</style>`
+    `<link rel="stylesheet" href="${stylesheetHref}" />`
   );
   if (out === html) {
-    throw new Error('Page is missing the styles.css <link> marker for inlining');
+    throw new Error('Page is missing the styles.css <link> marker for stylesheet replacement');
   }
   return out;
 }
@@ -131,6 +175,7 @@ function main() {
   const { appOnly, sitePreview, outputDir } = parseArgs(process.argv.slice(2));
   const dist = path.resolve(APP_ROOT, outputDir);
 
+  buildBlogLinks();
   buildCommunityPages();
 
   if (sitePreview && appOnly) throw new Error('--site-preview and --app-only are mutually exclusive');
@@ -161,7 +206,7 @@ function main() {
     console.log('[export-web] app shell → /app/index.html');
   }
 
-  const css = fs.readFileSync(path.join(WEB_DIR, 'styles.css'), 'utf8');
+  const stylesheetHref = buildStylesheet(dist);
   const generated = fs.readdirSync(path.join(WEB_DIR, 'communities'))
     .filter((f) => f.endsWith('.html'))
     .map((f) => ({ src: `communities/${f}`, dest: `communities/${f}` }));
@@ -188,7 +233,7 @@ function main() {
   ];
   for (const page of pages) {
     const html = fs.readFileSync(path.join(WEB_DIR, page.src), 'utf8');
-    const withCss = inlineStyles(html, css);
+    const withCss = pointToStylesheet(html, stylesheetHref);
     const destPath = path.join(dist, page.dest);
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
     fs.writeFileSync(destPath, withCss);
