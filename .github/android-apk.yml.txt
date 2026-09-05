@@ -1,0 +1,122 @@
+# ─────────────────────────────────────────────────────────────────
+# ACTIVATION: ships as .txt because the Arena bot token cannot create
+# files under .github/workflows/. To enable one-click APK builds:
+#
+#   mkdir -p .github/workflows
+#   git mv .github/android-apk.yml.txt .github/workflows/android-apk.yml
+#   git commit -m "ci: android apk workflow" && git push
+#
+# then add the EXPO_TOKEN secret (see below) and run it from the Actions tab.
+# ─────────────────────────────────────────────────────────────────
+name: Android APK (EAS)
+
+# Builds the installable +one Android APK with EAS (profile: preview) and
+# attaches it to the workflow run — optionally publishing a GitHub Release.
+#
+# One-time setup:  Settings → Secrets and variables → Actions → New secret
+#   EXPO_TOKEN = a token from https://expo.dev/accounts/<you>/settings/access-tokens
+#
+# Run:  Actions → "Android APK (EAS)" → Run workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS build profile (app/eas.json)
+        type: choice
+        default: preview
+        options: [preview, production]
+      release_tag:
+        description: "Optional: also publish the APK to a GitHub Release with this tag (e.g. v1.4.0)"
+        type: string
+        default: ''
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install app deps
+        working-directory: app
+        run: npm ci --no-audit --no-fund
+
+      - name: Show build metadata
+        working-directory: app
+        run: |
+          node -e '
+            const c = require("./app.json").expo;
+            console.log(`name=${c.name} version=${c.version} versionCode=${c.android.versionCode} package=${c.android.package}`);
+          '
+
+      - name: EAS build (Android, ${{ inputs.profile }})
+        working-directory: app
+        run: |
+          eas build --platform android \
+            --profile "${{ inputs.profile }}" \
+            --non-interactive --no-wait --json > build.json
+          cat build.json
+          echo "BUILD_ID=$(node -p 'require("./build.json")[0].id')" >> "$GITHUB_ENV"
+
+      - name: Wait for EAS and download the APK
+        working-directory: app
+        run: |
+          echo "Waiting for build $BUILD_ID …"
+          for i in $(seq 1 90); do
+            eas build:view "$BUILD_ID" --json > view.json
+            STATUS=$(node -p 'require("./view.json").status')
+            echo "[$i] $STATUS"
+            case "$STATUS" in
+              FINISHED) break ;;
+              ERRORED|CANCELED) echo "EAS build $STATUS"; cat view.json; exit 1 ;;
+            esac
+            sleep 60
+          done
+          URL=$(node -p 'require("./view.json").artifacts.buildUrl')
+          VER=$(node -p 'require("./app.json").expo.version')
+          CODE=$(node -p 'require("./app.json").expo.android.versionCode')
+          OUT="plusone-${VER}-vc${CODE}.apk"
+          curl -fsSL "$URL" -o "$OUT"
+          ls -lh "$OUT"
+          echo "APK=$OUT" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK }}
+          path: app/${{ env.APK }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: inputs.release_tag != ''
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+          else
+            gh release create "$TAG" "$APK" \
+              --title "+one $TAG (Android)" \
+              --notes "Installable Android APK built with EAS (profile: ${{ inputs.profile }}) from ${GITHUB_SHA::7}."
+          fi
+          echo "Published: https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG"

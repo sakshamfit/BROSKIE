@@ -22,7 +22,7 @@
     "android": {
       "package": "ai.arena.tomodachi",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 7,
+      "versionCode": 8,
       "intentFilters": [
         {
           "action": "VIEW",
