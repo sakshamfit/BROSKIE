@@ -4,6 +4,7 @@ node_modules/
 
 # runtime data (SQLite db + WAL/SHM) — never commit
 server/data/
+server/.data/
 *.db
 *.db-wal
 *.db-shm
