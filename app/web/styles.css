@@ -797,6 +797,130 @@ section { position: relative; }
   .team-card { transform: none; transition: none; }
 }
 
+/* circular team carousel — About page ------------------------------------
+   No-JS: every .tc-item is a plain stacked card (photo + copy).
+   With JS (html.js + [data-tc]): photos fan into a 3-card stack with the
+   active one front and centre; the active person's copy is shown beside it.
+   Transform / opacity only, honouring the landing-page motion guardrail. */
+
+.tc { margin-top: 1.7rem; outline-offset: 6px; }
+.tc-item {
+  border: 2px solid var(--ink-pure);
+  border-radius: var(--sketch-sm);
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: var(--raise-1);
+  overflow: hidden;
+  margin-bottom: 1.3rem;
+}
+.tc-photo { border-bottom: 2px solid var(--ink-pure); background: var(--ink-pure); }
+.tc-photo img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.tc-photo-initials {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 15.4px, rgba(28, 27, 27, 0.13) 16px),
+    repeating-linear-gradient(90deg, transparent, transparent 15.4px, rgba(28, 27, 27, 0.13) 16px),
+    var(--paper-low);
+  font-family: "Bricolage Grotesque", ui-sans-serif, sans-serif;
+  font-weight: 800;
+  font-size: 4.5rem;
+  color: var(--ink);
+  user-select: none;
+}
+.tc-copy { padding: 1rem 1rem 1.15rem; }
+.tc-name { font-size: 1.35rem; font-weight: 800; line-height: 1.15; }
+.tc-role { margin-top: 0.55rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.tc-role .tag { font-size: 0.6rem; }
+.tc-tagline {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tc-bio { margin-top: 0.8rem; color: var(--graphite); line-height: 1.7; }
+.tc-nav { display: flex; align-items: center; gap: 0.8rem; }
+.tc-arrow {
+  width: 2.7rem;
+  height: 2.7rem;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--ink-pure);
+  border-radius: 50%;
+  background: var(--ink-pure);
+  color: var(--ink-inverse);
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+.tc-arrow:hover { background: var(--hi); color: var(--ink); transform: translateY(-2px); box-shadow: var(--raise-1); }
+.tc-arrow:active { transform: translateY(0); }
+.tc-count {
+  margin-left: auto;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+/* no JS → hide the arrows, the list is already fully readable */
+html:not(.js) .tc-nav { display: none; }
+
+/* enhanced layout (JS present) */
+html.js .tc.is-ready {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.2rem;
+  align-items: center;
+}
+html.js .tc.is-ready .tc-stage {
+  position: relative;
+  width: min(100%, 22rem);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  perspective: 1000px;
+}
+html.js .tc.is-ready .tc-item {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: block;
+  transform-origin: center;
+  transition: transform 0.8s cubic-bezier(0.4, 1.6, 0.3, 1), opacity 0.6s ease;
+  will-change: transform, opacity;
+  opacity: 0;
+  pointer-events: none;
+}
+html.js .tc.is-ready .tc-item .tc-photo { border-bottom: 0; height: 100%; }
+html.js .tc.is-ready .tc-item .tc-photo img { height: 100%; aspect-ratio: auto; }
+html.js .tc.is-ready .tc-item .tc-photo-initials { height: 100%; }
+html.js .tc.is-ready .tc-item .tc-copy { display: none; }
+html.js .tc.is-ready .tc-item.is-active {
+  z-index: 3; opacity: 1; pointer-events: auto;
+  transform: translate3d(0, 0, 0) scale(1) rotateY(0deg);
+}
+html.js .tc.is-ready .tc-item.is-left {
+  z-index: 2; opacity: 1;
+  transform: translate3d(calc(var(--tc-gap) * -1), calc(var(--tc-gap) * -0.8), 0) scale(0.85) rotateY(15deg);
+}
+html.js .tc.is-ready .tc-item.is-right {
+  z-index: 2; opacity: 1;
+  transform: translate3d(var(--tc-gap), calc(var(--tc-gap) * -0.8), 0) scale(0.85) rotateY(-15deg);
+}
+/* the live copy panel, mirrored from the active card by site.js */
+.tc-panel { display: flex; flex-direction: column; justify-content: space-between; min-height: 16rem; }
+.tc-panel .tc-name { font-size: clamp(1.4rem, 2.6vw, 1.85rem); }
+.tc-panel .tc-bio { font-size: 1.02rem; }
+.tc-panel .tc-nav { margin-top: 2rem; }
+.tc-panel .tc-word { display: inline-block; }
+@media (min-width: 720px) {
+  html.js .tc.is-ready { grid-template-columns: 1fr 1fr; gap: clamp(2.5rem, 6vw, 5rem); }
+  html.js .tc.is-ready .tc-stage { width: min(100%, 24rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.js .tc.is-ready .tc-item { transition: none; }
+  .tc-arrow { transition: none; }
+}
+
 /* split ------------------------------------------------------------------- */
 
 .split-wrap { border-top: 2px solid var(--ink-pure); }

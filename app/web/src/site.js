@@ -43,6 +43,7 @@ function initMotion() {
   chatDemo();
   pollDemo();
   feedDemo();
+  teamCarousel();
 }
 
 /* ------------------------------------------------------------------ */
@@ -283,4 +284,116 @@ function feedDemo() {
 
     return tl;
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* team carousel (About) — 3-card photo stack + rotating copy panel    */
+/* Port of the "circular testimonials" pattern: photos fan left/centre/ */
+/* right, the active person's bio blurs in word by word. Autoplays only */
+/* while on screen; arrows / ← → keys stop autoplay.                   */
+/* ------------------------------------------------------------------ */
+function teamCarousel() {
+  const root = document.querySelector('[data-tc]');
+  if (!root) return;
+  const items = Array.from(root.querySelectorAll('[data-tc-item]'));
+  if (items.length < 2) return;
+
+  const stage = root.querySelector('.tc-stage');
+  const nav = root.querySelector('.tc-nav');
+  const countEl = root.querySelector('[data-tc-count]');
+
+  // Build the live copy panel from the active card's markup.
+  const panel = document.createElement('div');
+  panel.className = 'tc-panel';
+  const copy = document.createElement('div');
+  copy.className = 'tc-panel-copy';
+  copy.setAttribute('aria-live', 'polite');
+  panel.append(copy, nav);
+  root.append(panel);
+
+  let active = 0;
+  let timer = null;
+  const n = items.length;
+
+  // gap grows with the stage width (the original measured 1024→1456px)
+  function setGap() {
+    const w = stage.offsetWidth;
+    const gap = Math.max(52, Math.min(86, w * 0.22));
+    stage.style.setProperty('--tc-gap', `${gap}px`);
+  }
+
+  function render(dir) {
+    items.forEach((el, i) => {
+      el.classList.toggle('is-active', i === active);
+      el.classList.toggle('is-left', i === (active - 1 + n) % n);
+      el.classList.toggle('is-right', i === (active + 1) % n);
+      el.setAttribute('aria-hidden', i === active ? 'false' : 'true');
+    });
+    if (countEl) countEl.textContent = `${active + 1} / ${n}`;
+
+    const src = items[active].querySelector('.tc-copy');
+    const next = src.cloneNode(true);
+    next.classList.add('tc-copy-live');
+    // split the bio into words for the blur-in
+    const bio = next.querySelector('[data-tc-bio]');
+    if (bio) {
+      const words = bio.textContent.trim().split(/\s+/);
+      bio.textContent = '';
+      words.forEach((w, i) => {
+        const span = document.createElement('span');
+        span.className = 'tc-word';
+        span.textContent = w;
+        bio.append(span, i < words.length - 1 ? ' ' : '');
+      });
+    }
+
+    const prev = copy.firstElementChild;
+    const swap = () => {
+      copy.replaceChildren(next);
+      gsap.fromTo(next, { y: dir >= 0 ? 20 : -20, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.3, ease: 'power1.inOut', clearProps: 'transform' });
+      const ws = next.querySelectorAll('.tc-word');
+      if (ws.length) {
+        gsap.fromTo(ws, { filter: 'blur(10px)', autoAlpha: 0, y: 5 },
+          { filter: 'blur(0px)', autoAlpha: 1, y: 0, duration: 0.22, ease: 'power1.inOut', stagger: 0.025, clearProps: 'filter,transform' });
+      }
+    };
+    if (prev) gsap.to(prev, { y: dir >= 0 ? -20 : 20, autoAlpha: 0, duration: 0.2, ease: 'power1.in', onComplete: swap });
+    else swap();
+  }
+
+  function go(step) {
+    active = (active + step + n) % n;
+    render(step);
+  }
+  let userTookOver = false;
+  function stop() { if (timer) { clearInterval(timer); timer = null; } }
+  function halt() { userTookOver = true; stop(); }
+  function start() {
+    stop();
+    const ms = Number(root.dataset.autoplay || 0);
+    if (ms > 0) timer = setInterval(() => go(1), ms);
+  }
+
+  root.querySelector('[data-tc-prev]').addEventListener('click', () => { halt(); go(-1); });
+  root.querySelector('[data-tc-next]').addEventListener('click', () => { halt(); go(1); });
+  root.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); halt(); go(-1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); halt(); go(1); }
+  });
+  // touch swipe on the stage
+  let x0 = null;
+  stage.addEventListener('pointerdown', (e) => { x0 = e.clientX; }, { passive: true });
+  stage.addEventListener('pointerup', (e) => {
+    if (x0 == null) return;
+    const dx = e.clientX - x0; x0 = null;
+    if (Math.abs(dx) > 40) { halt(); go(dx < 0 ? 1 : -1); }
+  }, { passive: true });
+
+  window.addEventListener('resize', setGap, { passive: true });
+  setGap();
+  root.classList.add('is-ready');
+  render(1);
+
+  // autoplay only while visible (and only if the user hasn't taken over)
+  onVisible(root, '0px', '-5%', (visible) => { if (visible && !userTookOver) start(); else stop(); });
 }
