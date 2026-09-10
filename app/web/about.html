@@ -101,42 +101,54 @@
       <section class="team-sec" data-reveal-group aria-labelledby="team-title">
         <p class="kicker" data-reveal>The people behind +one</p>
         <h2 id="team-title" data-reveal>Three people, one sketchbook</h2>
-        <p class="team-lede" data-reveal>+one was built by a small team in India for real conversations and communities.</p>
+        <p class="team-lede" data-reveal>+one was built by a small team in India for real conversations and communities. Flip through the sketchbook to meet them.</p>
 
-        <div class="team-grid">
-          <article class="team-card" data-reveal>
-            <div class="team-photo">
-              <img src="assets/images/team-saksham.jpg" alt="Portrait of Anshuman Pandey, founder of Plus One" width="400" height="400" loading="lazy" decoding="async" />
-            </div>
-            <div class="team-card-body">
-              <h3>Anshuman Pandey {Saksham}</h3>
-              <p class="team-role"><span class="tag">Founder</span></p>
-              <p class="team-tagline">The vision keeper</p>
-              <p class="team-bio">Founder of +one. He shaped the idea, design and direction of the app.</p>
-            </div>
-          </article>
+        <!-- Circular team carousel: photos fan out in a 3-card stack, the copy
+             for the active person rotates in beside them. Progressive: without
+             JS every card is simply listed in flow. Runtime: site.js → teamCarousel() -->
+        <div class="tc" data-reveal data-tc data-autoplay="5000" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Meet the team">
+          <div class="tc-stage" aria-hidden="false">
+            <article class="tc-item" data-tc-item>
+              <div class="tc-photo">
+                <img src="assets/images/team-saksham.jpg" alt="Portrait of Anshuman Pandey, founder of Plus One" width="400" height="400" loading="lazy" decoding="async" />
+              </div>
+              <div class="tc-copy">
+                <h3 class="tc-name">Anshuman Pandey {Saksham}</h3>
+                <p class="tc-role"><span class="tag">Founder</span> <span class="tc-tagline">The vision keeper</span></p>
+                <p class="tc-bio" data-tc-bio>Founder of +one. Saksham sketched the first idea in a notebook — a messenger that looks like paper and treats every stranger as a potential +1. He shaped the idea, the Graphite &amp; Pulp design language and the direction of the app, and still reviews every screen before it ships.</p>
+              </div>
+            </article>
 
-          <article class="team-card" data-reveal>
-            <div class="team-photo">
-              <img src="assets/images/team-raees.jpg" alt="Portrait of MR.Raish Alam, co-founder of Plus One" width="400" height="400" loading="lazy" decoding="async" />
-            </div>
-            <div class="team-card-body">
-              <h3>MR.Raish Alam {Kartik Raees}</h3>
-              <p class="team-role"><span class="tag">Co-founder</span></p>
-              <p class="team-tagline">The co-pilot</p>
-              <p class="team-bio">Co-founder of +one. He helps build features and keeps the product moving smoothly.</p>
-            </div>
-          </article>
+            <article class="tc-item" data-tc-item>
+              <div class="tc-photo">
+                <img src="assets/images/team-raees.jpg" alt="Portrait of MR.Raish Alam, co-founder of Plus One" width="400" height="400" loading="lazy" decoding="async" />
+              </div>
+              <div class="tc-copy">
+                <h3 class="tc-name">MR.Raish Alam {Kartik Raees}</h3>
+                <p class="tc-role"><span class="tag">Co-founder</span> <span class="tc-tagline">The co-pilot</span></p>
+                <p class="tc-bio" data-tc-bio>Co-founder of +one. Raees turns ideas into working features — chats, communities, calls — and keeps the product moving smoothly from one release to the next. If something feels fast and just works, he probably built it.</p>
+              </div>
+            </article>
 
-          <article class="team-card" data-reveal>
-            <div class="team-photo team-photo-initials" aria-hidden="true">J</div>
-            <div class="team-card-body">
-              <h3>Jai</h3>
-              <p class="team-role"><span class="tag">Team member</span></p>
-              <p class="team-tagline">The all-rounder</p>
-              <p class="team-bio">Jai helps with testing, fixes and polishing features across the app.</p>
-            </div>
-          </article>
+            <article class="tc-item" data-tc-item>
+              <div class="tc-photo tc-photo-initials" aria-label="Jai" role="img">J</div>
+              <div class="tc-copy">
+                <h3 class="tc-name">Jai</h3>
+                <p class="tc-role"><span class="tag">Team member</span> <span class="tc-tagline">The all-rounder</span></p>
+                <p class="tc-bio" data-tc-bio>The all-rounder. Jai tests every build on real phones, files the bugs nobody else notices, and polishes features across the app until they feel finished. Every smooth edge in +one has passed through his hands first.</p>
+              </div>
+            </article>
+          </div>
+
+          <div class="tc-nav">
+            <button class="tc-arrow" type="button" data-tc-prev aria-label="Previous team member">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+            </button>
+            <button class="tc-arrow" type="button" data-tc-next aria-label="Next team member">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </button>
+            <span class="tc-count" data-tc-count aria-live="polite">1 / 3</span>
+          </div>
         </div>
 
         <p class="team-credit" data-reveal>Founded by Anshuman Pandey {Saksham} · Co-founded by MR.Raish Alam {Kartik Raees} · Team Jai — <a href="https://instagram.com/saxamfit" target="_blank" rel="noopener">follow the journey on Instagram · @saxamfit</a></p>
