@@ -1,26 +1,22 @@
+# Backend only; deploy the Expo/web frontend separately.
 services:
   - type: web
     name: tomodachi
-    runtime: node
+    runtime: docker
     plan: free
-    buildCommand: npm run build
-    startCommand: npm start
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /health
     envVars:
       - key: JWT_SECRET
         generateValue: true
-      - key: NODE_VERSION
-        value: "24.18.0"
-      # Only takes effect once the `disk:` block below is uncommented (Render
-      # Disks require a paid plan — Starter or up). server/src/db.js and
-      # server/src/storage.js both read DATA_DIR and, if set, store the
-      # SQLite file + locally-uploaded photos there instead of the
-      # container's ephemeral filesystem, so they survive every redeploy.
+      - key: CORS_ORIGIN
+        value: https://plusoneco.in,https://www.plusoneco.in
       - key: DATA_DIR
         value: /var/data
-    # Persist chats/users/messages (SQLite) and local-disk photo uploads
-    # across deploys — Render Disks require a paid plan (Free tier has no
-    # persistent disk at all, so DATA_DIR is a no-op there). Uncomment once
-    # you've upgraded the plan above:
+    # Free-tier storage is ephemeral: SQLite, uploads and backups are lost
+    # on redeploy/restart. For real accounts, change plan to starter and
+    # uncomment this disk before storing data you need to keep.
     # disk:
     #   name: tomodachi-data
     #   mountPath: /var/data

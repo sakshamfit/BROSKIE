@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
 
-// Railway remains the persistent realtime/socket origin. The public app
+// Render remains the persistent realtime/socket origin. The public app
 // domain proxies HTTP API and upload requests there through Vercel.
-const DEFAULT_SERVER_URL = 'https://broskie-h.up.railway.app';
+const DEFAULT_SERVER_URL = 'https://broskie.onrender.com';
 const PUBLIC_WEB_URL = 'https://plusoneco.in';
 const DEFAULT_MOBILE_API_URL = PUBLIC_WEB_URL;
 
@@ -20,11 +20,11 @@ const isPublicStaticHost = (hostname) => (
  *                       -> '' (relative URLs)
  * - Web preview (e2b):  same host, port 4000 -> https://4000-<sandbox>.e2b.app
  * - Local web dev:      http://localhost:4000
- * - Native fallback:    stable Vercel HTTP proxy -> Railway
+ * - Native fallback:    stable Vercel HTTP proxy -> Render
  */
 function resolveBase() {
   // Prefer the same-origin Vercel proxy even if an old project-level
-  // EXPO_PUBLIC_API_URL still points directly at Railway. This makes a
+  // EXPO_PUBLIC_API_URL still points directly at Render. This makes a
   // redeployed website pick up the transport fix without a second env edit.
   if (Platform.OS === 'web' && typeof window !== 'undefined' && isPublicStaticHost(window.location.hostname)) {
     return '';
@@ -39,7 +39,7 @@ function resolveBase() {
     if (Platform.OS !== 'web') {
       if (!isDevelopment && !configured.startsWith('https://')) return DEFAULT_MOBILE_API_URL;
       // Older release builds and some Expo Go environments commonly bake the
-      // Railway origin into this variable. Route that exact production value
+      // Render origin into this variable. Route that exact production value
       // through the Vercel HTTPS proxy too, so the transport fix also applies
       // while __DEV__ is true. Local/LAN URLs remain available for development.
       if (configured === DEFAULT_SERVER_URL) return DEFAULT_MOBILE_API_URL;
@@ -59,7 +59,7 @@ function resolveBase() {
       return `${protocol}//${hostname}:4000`;
     }
 
-    // Vercel proxies HTTP API/media requests to Railway. Keep the browser
+    // Vercel proxies HTTP API/media requests to Render. Keep the browser
     // request same-origin so the proxy also removes CORS/TLS differences.
     if (isPublicStaticHost(hostname)) return '';
 
@@ -67,14 +67,14 @@ function resolveBase() {
     return '';
   }
   // Native HTTP goes through Vercel; realtime sockets still connect directly
-  // to Railway because Vercel does not host a persistent Socket.IO process.
+  // to Render because Vercel does not host a persistent Socket.IO process.
   return DEFAULT_MOBILE_API_URL;
 }
 
 export const API_URL = resolveBase();
 
 /** Socket.IO target: Vercel and native HTTP proxy clients still use the
- * persistent Railway origin for realtime events. */
+ * persistent Render origin for realtime events. */
 const runningOnStaticHost = Platform.OS === 'web'
   && typeof window !== 'undefined'
   && isPublicStaticHost(window.location.hostname);
@@ -97,7 +97,7 @@ let authToken = null;
 export const setToken = (t) => { authToken = t; };
 export const getToken = () => authToken;
 
-const DEFAULT_TIMEOUT_MS = 25000; // increased for Realme / slow 5G where Railway cold-start + 5G DNS can exceed 18s
+const DEFAULT_TIMEOUT_MS = 25000; // increased for Realme / slow 5G where Render cold-start + 5G DNS can exceed 18s
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -139,12 +139,12 @@ function networkFailure(error, timedOut) {
 /**
  * Shared production HTTP layer. GETs retry once by default; auth POSTs (login/register)
  * retry once with fallback base to survive single-edge failures on Realme / low-end
- * devices (Vercel ↔ Railway). The fallback ensures a transient 5G DNS/TLS hiccup on
+ * devices (Vercel ↔ Render). The fallback ensures a transient 5G DNS/TLS hiccup on
  * one edge does not become “Unable to connect” — the second base is tried before
  * surfacing an error. Registration retry is safe: a duplicate hits 409 and maps to
  * “That username is already taken” rather than a silent duplicate.
  */
-// Build ordered list of bases to try: native tries Vercel proxy first, then direct Railway fallback (and vice versa)
+// Build ordered list of bases to try: native tries Vercel proxy first, then direct Render fallback (and vice versa)
 // This makes Realme 11x 5G resilient when one edge is blocked/slow but the other works — no extra user action needed.
 function candidateBases(path) {
   if (Platform.OS === 'web') return [API_URL];
