@@ -6,11 +6,11 @@
   "framework": null,
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://broskie-h.up.railway.app/api/:path*" },
-    { "source": "/uploads/:path*", "destination": "https://broskie-h.up.railway.app/uploads/:path*" },
+    { "source": "/api/:path*", "destination": "https://broskie.onrender.com/api/:path*" },
+    { "source": "/uploads/:path*", "destination": "https://broskie.onrender.com/uploads/:path*" },
     {
       "source": "/.well-known/assetlinks.json",
-      "destination": "https://broskie-h.up.railway.app/.well-known/assetlinks.json"
+      "destination": "https://broskie.onrender.com/.well-known/assetlinks.json"
     },
     { "source": "/app/:path*", "destination": "/app/index.html" },
     { "source": "/c/:path*", "destination": "/app/index.html" },
