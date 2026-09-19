@@ -42,13 +42,33 @@
     {
       "source": "/app",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, must-revalidate, max-age=0" }
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]
     },
     {
       "source": "/app/index.html",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, must-revalidate, max-age=0" }
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    },
+    {
+      "source": "/app/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    },
+    {
+      "source": "/c/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    },
+    {
+      "source": "/gc/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]
     },
     {

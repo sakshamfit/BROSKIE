@@ -5,6 +5,13 @@ Runs on iOS, Android and the web from one codebase.
 
 > Not affiliated with WhatsApp. Built as an original clone-style app for learning/demo purposes.
 
+**Live:** [plusoneco.in](https://www.plusoneco.in/) · web app at [plusoneco.in/app](https://www.plusoneco.in/app) ·
+[real-time chat app](https://www.plusoneco.in/real-time-chat-app) ·
+[group chat (GC)](https://www.plusoneco.in/group-chat) ·
+[communities](https://www.plusoneco.in/communities) ·
+[make friends online](https://www.plusoneco.in/make-friends-online) ·
+[download](https://www.plusoneco.in/download)
+
 ---
 
 ## Quick start
