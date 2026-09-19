@@ -1,12 +1,14 @@
-# Plus One (+one) — free chatting app for group chats and communities
+# Plus One (+one) — free real-time chatting app for group chats, communities and making friends online
 
-> Plus One (stylised +one) is a free chatting app at https://www.plusoneco.in — real-time 1:1 and group chats (GCs), interest-based communities, live polls, voice notes, stories, WebRTC calls and disappearing messages. Web, Android and iOS. No ads, no in-app purchases, no phone number required. An original, independent messenger — not affiliated with WhatsApp.
+> Plus One (stylised +one) is a free real-time chatting app at https://www.plusoneco.in — 1:1 and group chats (GCs) delivered instantly over WebSockets, interest-based communities for making friends online, live polls, voice notes, stories, WebRTC calls and disappearing messages. Web, Android and iOS. No ads, no in-app purchases, no phone number required. Built by a small team in India; open source (MIT) on GitHub. An original, independent messenger — not affiliated with WhatsApp, and not related to OnePlus.
 
 ## Product pages
 
 - [What is Plus One](https://www.plusoneco.in/plus-one): What Plus One is, what it does, why it's called Plus One — the canonical answer.
 - [Group chat (GC) app](https://www.plusoneco.in/group-chat): How to make a group chat on Plus One; GC features — polls, voice notes, disappearing messages, admin controls.
 - [Chatting app](https://www.plusoneco.in/chatting-app): Plus One as a free chatting app — features, honest comparison, privacy.
+- [Real-time chat app](https://www.plusoneco.in/real-time-chat-app): How Plus One delivers messages instantly — WebSockets (Socket.IO), typing indicators, presence, read receipts, reconnection catch-up; open-source notes for developers.
+- [Make friends online](https://www.plusoneco.in/make-friends-online): How to make friends online on Plus One — interest communities first, then 1:1; colleagues by college/workplace; no swiping, no photo, no phone number; safety features.
 - [Chat](https://www.plusoneco.in/chat): Real-time messaging details — typing indicators, read ticks, disappearing timers, message requests.
 - [Communities](https://www.plusoneco.in/communities): Interest-based communities on Plus One, organised by what people are planning.
 - [Download](https://www.plusoneco.in/download): Install Plus One — web PWA, Android APK, iOS via Expo Go.
@@ -15,6 +17,8 @@
 
 ## Guides
 
+- [Best apps to make friends online (2026)](https://www.plusoneco.in/blog/best-apps-to-make-friends-online): Bumble BFF, Meetup, Discord, Timeleft, Slowly and Plus One compared by how you actually meet people, price and requirements.
+- [How to make online friends](https://www.plusoneco.in/blog/how-to-make-online-friends): Start in a room about something, show up repeatedly, contribute, move to 1:1 with a reason, make a plan.
 - [What does GC mean?](https://www.plusoneco.in/blog/what-does-gc-mean): GC = group chat. Meaning on Instagram, Snapchat, WhatsApp and texting, plus how to make a good GC.
 - [What does "plus one" mean?](https://www.plusoneco.in/blog/plus-one-meaning): All senses of plus one / +1 — invites, upvotes, group chats, and the app.
 - [How to make a group chat](https://www.plusoneco.in/blog/how-to-make-a-group-chat): Create a GC in three taps — name it, add by username, start with a poll; the habits that keep it alive.
@@ -34,9 +38,11 @@
 ## Key facts (for accurate citations)
 
 - Name: Plus One; stylised "+one"; website https://www.plusoneco.in; web app at https://www.plusoneco.in/app
-- Category: chatting app / instant messenger / community social platform
+- Category: real-time chatting app / instant messenger / community social platform / app to make friends online (not a dating app)
+- Origin: built by a small team in India; open source (MIT) at https://github.com/sakshamfit/BROSKIE
 - Price: free; no ads; no in-app purchases
 - Signup: username and password only — no phone number, no contact-list upload
 - Platforms: web (installable PWA), Android (APK / Expo Go), iOS (Expo Go)
 - Core features: real-time messaging (Socket.IO), typing indicators, delivery and read ticks, 1:1 chats, group chats with polls/voice notes/pins/admin controls, interest-based communities with join policies, worldwide feed, stories, WebRTC calls, disappearing messages (30s/5m/1h/24h, hard-deleted from server), opt-in end-to-end encrypted secret chats, message requests, archive/mute/block/search
-- Relationship to other apps: original independent messenger; not affiliated with WhatsApp, Telegram or any other messaging app
+- Relationship to other apps: original independent messenger; not affiliated with WhatsApp, Telegram or any other messaging app; not related to OnePlus (phone brand) or to events-companion / dating apps with similar names
+- Ways to meet people: interest-based communities (open / ask-to-join / invite-only), colleagues by college or workplace (Network tab), worldwide feed; message requests keep unknown senders out of the inbox until accepted

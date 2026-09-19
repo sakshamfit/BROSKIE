@@ -99,10 +99,11 @@ const decode = (s) => s
   .replace(/&#39;|&apos;/g, "'");
 
 const PAGES = [
-  { route: '/', title: 'Plus One — Chatting App for Friends, Group Chats & Communities',
-    desc: 'Plus One (+one) is a free chatting app for 1:1 chats, group chats (GCs) and interest-based communities — realtime messaging, polls, voice notes and disappearing messages on Android, iOS and web.',
-    h1: 'Plus One — the chatting app for friends, GCs & communities',
-    mustInclude: ['Plus One is a free chatting app: real-time 1:1 and group chats (GCs), interest-based communities, polls, voice notes and disappearing messages — on Android, iOS and the web.'] },
+  { route: '/', title: 'Plus One — Real-Time Chatting App for Friends, GCs & Communities',
+    desc: 'Plus One (+one) is a free real-time chatting app: 1:1 chats, group chats (GCs) and interest-based communities to make friends online. No ads, no phone number.',
+    h1: 'Plus One — the real-time chatting app for friends, GCs & communities',
+    mustInclude: ['Plus One is a free real-time chatting app: 1:1 and group chats (GCs), interest-based communities to make friends online, polls, voice notes and disappearing messages — on Android, iOS and the web.',
+      'href="/real-time-chat-app"', 'href="/make-friends-online"', 'og-plus-one.png'] },
   { route: '/about', title: 'About Plus One — The Ink-and-Paper Social Platform', h1: 'A social platform that feels like paper' },
   { route: '/communities', title: 'Communities — Find & Build Interest-Based Groups — Plus One', h1: 'Find your people by what you do' },
   { route: '/chat', title: 'Chat & Group Chat — Free Real-Time Messaging | Plus One', h1: 'Chat that arrives instantly' },
@@ -112,12 +113,23 @@ const PAGES = [
   { route: '/chatting-app', title: 'Plus One — A Free Chatting App for Friends & Communities',
     desc: 'Looking for a chatting app? Plus One is a free chatting app with real-time messaging, group chats, communities, voice notes and disappearing messages — no ads, no phone number.',
     h1: 'A chatting app that stays light as paper' },
+  { route: '/real-time-chat-app', title: 'Real-Time Chat App — Free Instant Messaging Online | Plus One',
+    desc: 'Plus One is a free real-time chat app: instant delivery over WebSockets, live typing indicators, presence and read receipts for 1:1 chats, group chats and communities. Web, Android, iOS.',
+    h1: "A real-time chat app — messages land the instant they're sent",
+    mustInclude: ['What is a real-time chat app?', 'github.com/sakshamfit/BROSKIE'] },
+  { route: '/make-friends-online', title: 'Make Friends Online Through Interest Communities | Plus One',
+    desc: 'Make friends online on Plus One: join interest-based communities, chat in real time and meet people from your college, workplace or city. Free, no swiping, no photo required, no phone number.',
+    h1: 'Make friends online — through the things you actually do',
+    mustInclude: ['How to make friends online on Plus One', 'Message Requests'] },
   { route: '/plus-one', title: 'What Is Plus One? The Chatting App for Communities & GCs',
+    mustInclude: ['Is Plus One the same as OnePlus?'],
     desc: "Plus One (+one) is a free chatting app for group chats and communities — realtime messaging, polls, voice notes and disappearing messages. What it is, and why it's called Plus One.",
     h1: 'Plus One is a chatting app for communities & GCs' },
   { route: '/network', title: 'The Network — A Worldwide Social Feed — Plus One', h1: 'A worldwide feed that still feels handwritten' },
   { route: '/download', title: 'Download Plus One — Android APK, iOS & Web App', h1: 'Get Plus One on anything' },
   { route: '/blog/', title: 'Plus One Blog — Community, Connection & Discovery', h1: 'The Plus One blog' },
+  { route: '/blog/best-apps-to-make-friends-online', title: 'Best Apps to Make Friends Online in 2026, Honestly Compared', h1: 'Best Apps to Make Friends Online in 2026, Honestly Compared' },
+  { route: '/blog/how-to-make-online-friends', title: 'How to Make Online Friends (and Keep Them): A Practical Guide', h1: 'How to Make Online Friends (and Keep Them)' },
   { route: '/blog/what-does-gc-mean', title: 'What Does GC Mean? GC Meaning in Texting & Social Media', h1: 'What Does GC Mean? The Group Chat, Explained' },
   { route: '/blog/plus-one-meaning', title: 'What Does “Plus One” (+1) Mean? Invites, Texting & the App', h1: 'What Does “Plus One” Mean? Every Sense of +1' },
   { route: '/blog/how-to-make-a-group-chat', title: 'How to Make a Group Chat: The Complete GC Guide', h1: 'How to Make a Group Chat That Actually Sticks' },
@@ -164,6 +176,11 @@ const LD_RULES = {
   },
   BlogPosting: { req: ['headline', 'author', 'datePublished'] },
   Blog: { req: ['name', 'url'] },
+  ItemList: {
+    req: ['itemListElement'],
+    custom: (d) => Array.isArray(d.itemListElement) && d.itemListElement.length >= 2
+      && d.itemListElement.every((it, i) => it['@type'] === 'ListItem' && it.position === i + 1 && it.name),
+  },
 };
 
 function validateJsonLd(html, pageRoute) {
@@ -254,8 +271,10 @@ async function main() {
   ok(sitemap.status === 200 && sitemap.type.includes('xml'), '/sitemap.xml: 200 xml');
   const locs = [...sitemap.body.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
   const expectedLocs = ['/', '/communities', '/chat', '/chatting-app', '/group-chat', '/plus-one',
+    '/real-time-chat-app', '/make-friends-online',
     '/network', '/download', '/about', '/blog/',
     '/blog/what-does-gc-mean', '/blog/plus-one-meaning',
+    '/blog/best-apps-to-make-friends-online', '/blog/how-to-make-online-friends',
     ...NICHES.map((n) => `/communities/${n.slug}`)];
   const nicheCount = locs.filter((l) => /\/communities\/[a-z-]+$/.test(l)).length;
   ok(nicheCount === NICHES.length, `/sitemap.xml: lists all ${NICHES.length} generated niche pages (found ${nicheCount})`);

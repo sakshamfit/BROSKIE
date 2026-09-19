@@ -10,6 +10,123 @@ outside the repo** to actually win the rankings. Both halves matter.
 
 ---
 
+## 0a. Update — 2026-09-19: "real-time chat" + "make friends online" clusters, brand disambiguation, share cards
+
+Brief for this pass (owner's words): make Google surface plusoneco.in for
+**"plus one" / "+one"**, **"chatting app"**, **"real time chatting app"**,
+**"I want to meet friends online" / "online friends" / "friends talking"**
+and **"group" (group chat)** — after researching competitors and the
+keywords those SERPs actually reward.
+
+### What the research showed (Sept 2026 SERPs)
+
+| Query cluster | Who ranks today | What the winners have in common | Our play |
+|---|---|---|---|
+| `real time chatting app`, `realtime chat app`, `real-time messaging app` | Mostly **developer** content (Socket.IO / Firebase / Stream tutorials, GitHub repos) — few consumer apps compete | "how it works" explanations, WebSocket vocabulary, open-source code | **Low competition.** New `/real-time-chat-app` speaks both to users (instant delivery, typing, presence, read receipts) and devs (Socket.IO, open-source repo). |
+| `make friends online`, `apps to make friends`, `online friends`, `friendship app`, `meet new people online` | Listicles (Timeleft, Introvrs, Science of People, Grey Journal…) + Bumble BFF, Meetup, Slowly, Boo, 222, Yubo, Discord | Comparison tables, FAQ blocks, "free / no swiping / introverts / new city" angles, honest pros-cons | New `/make-friends-online` (communities-first, no swiping, no photo, no phone number, safety) + listicle `/blog/best-apps-to-make-friends-online` + guide `/blog/how-to-make-online-friends`. |
+| `plus one app`, `plus one chatting app`, `+one app` | OnePlus (phones), eventsplusone.com (event companions), a "plusone" companionship/dating app, misc. | Brand entity clarity | `/plus-one` gained an explicit **"Plus One vs. OnePlus (and other PlusOne apps)"** section + FAQ; Organization/WebSite/SoftwareApplication schema gained `alternateName` (`+one`, `Plus One app`, `plusoneco`), founders, India origin, Instagram/GitHub `sameAs`. Bare **"plus one"** remains an unwinnable dictionary/etiquette query — see §1. |
+| `chatting app`, `best chatting apps in India`, `chatting app without phone number` | WhatsApp/Telegram/Signal roundups, "Indian chat apps" listicles (Arattai, JioChat, ShareChat) | India angle, "no phone number", free | `/chatting-app` keywords + copy now include *real time chatting app*, *Indian chatting app*, *chatting app to make friends*; new FAQ answers "for new friends or people I know?". Homepage title/H1 now carry **"real-time"**. |
+| `group chat app`, `online group chat`, `create a group chat online` | Slack/Discord/WhatsApp/GroupMe roundups | how-to + feature grids | `/group-chat` keywords + copy: *online group chat*, browser use without install, cross-links to the two new pages. |
+
+Competitors catalogued for the honest listicle: **Bumble BFF / Bumble For
+Friends** (swipe, photos + phone required, relaunched late 2025 with Groups),
+**Meetup** (tens of millions of members, free to attend, organisers pay),
+**Discord** (servers, email signup), **Timeleft** (paid dinners with five
+strangers), **Slowly** (delayed pen-pal letters). Plus One's own weaknesses
+are stated in the post (young; densest in Indian cities/campuses; no event
+ticketing) — credibility is the ranking asset for a listicle from a vendor.
+
+### Keyword → page map additions
+
+| Query family | Canonical page | Support |
+|---|---|---|
+| real time chatting app · realtime chat app · instant messaging app · live chat with friends · open source chat app | `/real-time-chat-app` | home "Realtime, not almost" card, `/chat`, `/chatting-app`, `/group-chat` in-copy links, footer |
+| make friends online · meet friends online · online friends · make new friends app · friendship app · talk to new people online · friends near me / from my college | `/make-friends-online` | `/blog/best-apps-to-make-friends-online`, `/blog/how-to-make-online-friends`, home Explore card + communities strip, `/communities`, footer |
+| plus one app · +one app · plusoneco · plus one chat app (brand) | `/` + `/plus-one` | schema `alternateName`, OnePlus disambiguation FAQ, llms.txt "not OnePlus / not a dating app" facts |
+
+### What was implemented
+
+- **New landing pages** (site chrome, animated demo, checks list, `.compare`
+  table, FAQ, explore grid; WebPage + BreadcrumbList + FAQPage JSON-LD,
+  HowTo on the friends page): `app/web/real-time-chat-app.html`,
+  `app/web/make-friends-online.html`.
+- **New blog posts**: `blog/best-apps-to-make-friends-online.html`
+  (BlogPosting + **ItemList** + FAQPage), `blog/how-to-make-online-friends.html`
+  (BlogPosting + HowTo + FAQPage); both carded at the top of `/blog/`.
+- **Homepage retune**: title → *Plus One — Real-Time Chatting App for Friends,
+  GCs & Communities*; H1/sub-H1 and 158-char description now contain
+  "real-time" and "make friends online"; keywords meta extended; Explore grid
+  6 cards (+ real-time, + make friends). `SoftwareApplication` gained
+  `softwareVersion 1.4.0`, `installUrl/downloadUrl`, `screenshot`, `image`,
+  fuller `featureList`, `applicationSubCategory`; `Organization` gained
+  `alternateName`, `description`, `foundingLocation: India`, `founder`,
+  Instagram `sameAs`. **No `aggregateRating`** (no verifiable review source —
+  faking one is a manual-action risk).
+- **Share cards**: new 1200×630 `app/web/assets/images/og-plus-one.png`
+  (logo + "Free real-time chatting app · Group chats · Communities · Make
+  friends online · No ads · No phone number"). Every page — hand-written,
+  blog, and the generated community pages via `build-communities.mjs` — now
+  emits `og:image` (+ `width/height/alt`), `og:locale en_IN`,
+  `twitter:card summary_large_image`, `twitter:title/description/image`.
+  JSON-LD `logo` still points at the square `icon-512.png` (correct for logos).
+- **Footer** on every page (+ generator template): *Real-time chat app*,
+  *Make friends online*.
+- **App shell kept out of the index**: `<meta name="robots" content="noindex,
+  nofollow">` in `app/public/index.html`; `X-Robots-Tag: noindex, nofollow`
+  headers in `vercel.json` for `/app`, `/app/*`, `/c/*`, `/gc/*` (works even
+  where `robots.txt` blocks the crawl).
+- **GEO**: `llms.txt` / `llms-full.txt` gained the two pages, the two posts,
+  "Is Plus One a real-time chat app?", "Can I make friends online on Plus
+  One?", "Is Plus One a dating app?", "Is Plus One the same as OnePlus?",
+  origin (India, founders, MIT on GitHub). `app/public` copies synced.
+- **Plumbing**: `community-niches.json` `sitemapStatic` (+4 URLs, `lastmod`
+  bumped on retuned pages) → `sitemap.xml` now **34 URLs**;
+  `export-web.js` pages list; `verify-site.mjs` exact title/H1/description
+  for the new + retuned pages, new `ItemList` schema rule, sitemap
+  expectations; `styles.css` gained `.compare` (responsive table),
+  `.steps` (numbered how-to) and inline `code`.
+
+**Verification after this pass:** `build-communities.mjs --check` green,
+`verify-site.mjs` **729/729**, `verify-seo.mjs` **893/893** (34 pages),
+`check-links.mjs` 1,080 internal links + 1,160 asset refs all resolve.
+
+### Still needs a human (nothing in the repo can do these)
+
+1. **Deploy, then Search Console**: *URL Inspection → Request indexing* for
+   `/real-time-chat-app`, `/make-friends-online`, the two posts and `/`;
+   resubmit `sitemap.xml`. Expect first impressions in 1–3 weeks.
+2. **Validate rich results** for the four new URLs at
+   search.google.com/test/rich-results (FAQ, HowTo, Breadcrumb, ItemList) and
+   the share card at developers.facebook.com/tools/debug + cards-dev.twitter.
+3. **Google Play / App Store listings** (when live) are the single strongest
+   signal for "plus one app": same name, same 1-line description, link back
+   to `https://www.plusoneco.in`, and add the store URLs to `sameAs` +
+   `installUrl`.
+4. **Backlinks are what move "chatting app" / "make friends online"** — both
+   are competitive SERPs. Cheapest wins: the GitHub README linking to the two
+   new pages with those anchor texts; Product Hunt / AlternativeTo /
+   Slant / SaaSHub listings; a "made in India" angle to Indian tech press and
+   campus newsletters; answer Quora/Reddit threads on "apps to make friends
+   in India" honestly with the guide URL.
+5. **Keep the Instagram bio link** pointing at `https://www.plusoneco.in`
+   so the `sameAs` entity link is reciprocal.
+
+### Honest expectation
+
+- **"plus one app", "plus one chatting app", "+one app", "plusoneco"**:
+  winnable within weeks of indexing — brand + disambiguation now explicit.
+- **"real time chatting app" / "realtime chat app"**: realistic first-page
+  target within 1–3 months — SERP is developer-heavy and thin on products.
+- **"chatting app", "make friends online", "online friends", "group chat"**:
+  head terms owned by WhatsApp/Telegram/Bumble/Meetup domains; the new pages
+  make Plus One *eligible* and set up long-tail wins ("chatting app to make
+  friends", "make friends online no swiping", "online group chat no phone
+  number"). First page for the bare head terms needs sustained backlinks —
+  content alone won't do it.
+- **Bare "plus one"**: still a dictionary/etiquette query — not a target.
+
+---
+
 ## 0. Update — 2026-09-04: blog long-tail expansion
 
 A second blog pass shipped six new posts that bite off the long-tail queries

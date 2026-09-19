@@ -9,7 +9,9 @@
  *   → bundles app/web/src/site.js with esbuild (GSAP) → dist/assets/js/site.js
  *   → copies the static marketing pages from app/web/ to dist/
  *     (home → index.html; about/communities/chat/network/download → *.html;
- *      blog → blog/index.html; privacy/terms/support → *.html)
+ *      group-chat/chatting-app/real-time-chat-app/make-friends-online/plus-one
+ *      keyword landing pages → *.html; blog → blog/*.html;
+ *      privacy/terms/support → *.html)
  *   → copies robots.txt + sitemap.xml over the app-public copies
  *     (app/web is the single source of truth for the marketing site)
  *   → inlines app/web/styles.css into every page (no render-blocking
@@ -179,6 +181,8 @@ function main() {
     { src: 'chat.html', dest: 'chat.html' },
     { src: 'group-chat.html', dest: 'group-chat.html' },
     { src: 'chatting-app.html', dest: 'chatting-app.html' },
+    { src: 'real-time-chat-app.html', dest: 'real-time-chat-app.html' },
+    { src: 'make-friends-online.html', dest: 'make-friends-online.html' },
     { src: 'plus-one.html', dest: 'plus-one.html' },
     { src: 'network.html', dest: 'network.html' },
     { src: 'download.html', dest: 'download.html' },

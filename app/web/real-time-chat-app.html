@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Real-Time Chat App — Free Instant Messaging Online | Plus One</title>
+  <meta name="description" content="Plus One is a free real-time chat app: instant delivery over WebSockets, live typing indicators, presence and read receipts for 1:1 chats, group chats and communities. Web, Android, iOS." />
+  <meta name="keywords" content="real-time chat app, realtime chat app, real time chatting app, instant messaging app, live chat app, online chat app, real time messaging, websocket chat app, open source chat app" />
+  <meta name="theme-color" content="#fdf8f8" />
+  <link rel="canonical" href="https://www.plusoneco.in/real-time-chat-app" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Plus One" />
+  <meta property="og:locale" content="en_IN" />
+  <meta property="og:title" content="Real-Time Chat App — Free Instant Messaging Online | Plus One" />
+  <meta property="og:description" content="A free real-time chat app: instant delivery over WebSockets, live typing indicators, presence and read receipts for 1:1 chats, group chats and communities. No ads, no phone number." />
+  <meta property="og:url" content="https://www.plusoneco.in/real-time-chat-app" />
+  <meta property="og:image" content="https://www.plusoneco.in/assets/images/og-plus-one.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Plus One — free real-time chatting app for group chats, communities and making friends online" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Real-Time Chat App — Free Instant Messaging Online | Plus One" />
+  <meta name="twitter:description" content="Instant delivery over WebSockets, live typing indicators, presence and read receipts — 1:1, group chats and communities. Free, no ads, no phone number." />
+  <meta name="twitter:image" content="https://www.plusoneco.in/assets/images/og-plus-one.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23fdf8f8' width='32' height='32'/%3E%3Crect x='7' y='7' width='18' height='18' fill='%23ffe24d' transform='rotate(-3 16 16)'/%3E%3Cpath d='M16 8v16M8 16h16' stroke='%231c1b1b' stroke-width='3.4' stroke-linecap='round' transform='rotate(-3 16 16)'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles.css" />
+  <script>document.documentElement.classList.add('js')</script>
+  <script defer src="/assets/js/site.js"></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "Real-Time Chat App — Free Instant Messaging Online | Plus One",
+    "description": "Plus One is a free real-time chat app: instant delivery over WebSockets, live typing indicators, presence and read receipts for 1:1 chats, group chats and communities. Web, Android, iOS.",
+    "url": "https://www.plusoneco.in/real-time-chat-app",
+    "inLanguage": "en",
+    "isPartOf": { "@type": "WebSite", "name": "Plus One", "url": "https://www.plusoneco.in/" },
+    "about": {
+      "@type": "SoftwareApplication",
+      "name": "Plus One",
+      "alternateName": "+one",
+      "applicationCategory": "CommunicationApplication",
+      "operatingSystem": "Web, Android, iOS",
+      "url": "https://www.plusoneco.in/app",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" }
+    }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.plusoneco.in/" },
+      { "@type": "ListItem", "position": 2, "name": "Real-time chat app", "item": "https://www.plusoneco.in/real-time-chat-app" }
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is a real-time chat app?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A real-time chat app delivers messages the instant they are sent, over a persistent connection (WebSockets) instead of periodic refreshes. You see typing indicators while the other person types, online presence, and delivery and read receipts as they happen. Plus One is a free real-time chat app built on Socket.IO for 1:1 chats, group chats and communities."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Plus One really real-time?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Plus One keeps a live Socket.IO connection open, so messages, typing indicators, presence, read ticks, poll votes and feed reactions arrive without refreshing. If you go offline, receipts and messages catch up automatically the moment you reconnect."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I use a real-time chat app in the browser without installing anything?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Open plusoneco.in/app in any modern browser and chat in real time immediately — it is an installable web app (PWA), but nothing needs to be installed to start. Android and iOS apps use the same account."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Plus One work on slow connections?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The interface is deliberately light, media never autoplays inside chats, and delivery is resilient: messages you send while offline are queued and sent when the connection returns, and read ticks update once the other side reconnects."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is the Plus One real-time chat app free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes — completely free on web, Android and iOS, with no ads, no in-app purchases and no premium tier. You sign up with a username and password; no phone number is required."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Plus One an open-source real-time chat app?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The full Plus One codebase — an Expo / React Native client and a Node, Socket.IO and SQLite backend with WebRTC calling — is published under the MIT licence at github.com/sakshamfit/BROSKIE. You can read how the real-time layer works or run your own instance."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <div class="paper" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="mark" href="/"><span class="mark-plus">+</span>one</a>
+    <details class="menu">
+      <summary class="menu-btn" aria-label="Open menu" title="Menu">
+        <span></span><span></span><span></span>
+      </summary>
+      <nav id="site-nav">
+        <a href="/communities">Communities</a>
+        <a href="/chat">Chat</a>
+        <a href="/network">Network</a>
+        <a href="/about">About</a>
+        <a href="/download">Download</a>
+        <a class="btn btn-ink nav-cta" href="/app">Open the app</a>
+      </nav>
+    </details>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <span>Real-time chat app</span></nav>
+      <p class="kicker">real-time chat app · websockets · free</p>
+      <h1>A <em>real-time chat app</em> — messages land the instant they're sent</h1>
+      <p class="sub-h1">Plus One is a free real-time chat app. Messages travel over a live WebSocket connection, so you see typing as it happens, presence as people come online, and ticks turn read the second they're seen — in 1:1 chats, group chats and communities, on the web, Android and iOS. No ads. No phone number.</p>
+      <div class="hero-actions">
+        <a class="btn btn-ink" href="/app">Chat in real time — free</a>
+        <a class="btn btn-ghost" href="/download">Get the app</a>
+      </div>
+    </section>
+
+    <section class="page-body">
+      <div class="page-cols">
+        <div>
+          <div class="demo" id="chat-demo" aria-label="Animated demo of Plus One real-time chat: typing indicator, instant delivery and read ticks">
+            <div class="demo-head">
+              <svg width="11" height="13" viewBox="0 0 12 14" fill="none" aria-hidden="true"><rect x="1" y="6" width="10" height="7" rx="1.5" stroke="#1c1b1b" stroke-width="1.4"/><path d="M3.5 6V4a2.5 2.5 0 0 1 5 0v2" stroke="#1c1b1b" stroke-width="1.4"/></svg>
+              riya
+              <span class="demo-status">ONLINE · LIVE SOCKET</span>
+            </div>
+            <div class="demo-body">
+              <div class="msg them">
+                <span class="lbl">RIYA</span>
+                you there? need the address
+                <span class="meta">7:12 PM</span>
+              </div>
+              <div class="msg me msg2">
+                <span class="lbl">YOU</span>
+                sent — see you in 10 ⚡
+                <span class="meta">7:12 PM
+                  <span class="ticks">
+                    <svg class="tick1" width="15" height="11" viewBox="0 0 15 11" fill="none" aria-hidden="true"><path d="M1.5 6l3.2 3.2L11 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <svg class="tick2" width="15" height="11" viewBox="0 0 15 11" fill="none" aria-hidden="true"><path d="M1.5 6l3.2 3.2L11 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 9l4.5-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </span>
+                </span>
+              </div>
+              <div class="typing" aria-hidden="true"><span></span><span></span><span></span></div>
+            </div>
+            <div class="demo-input">
+              <span class="field">Type a message</span>
+              <span class="send" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 10.5L10.5 6L1.5 1.5L3.2 6L1.5 10.5Z" stroke="#f4f0ef" stroke-width="1.3" stroke-linejoin="round"/></svg>
+              </span>
+            </div>
+          </div>
+          <p class="demo-note" style="margin-top:.9rem">Real-time chat recreated with the app's own design tokens: typing dots, instant delivery, one tick to two, then read.</p>
+        </div>
+        <div data-reveal-group>
+          <article data-reveal>
+            <h2 class="note-title" style="font-size:1.15rem">What makes it real-time</h2>
+            <ul class="checks" style="margin-top:.8rem">
+              <li>Persistent Socket.IO connection — no polling, no refresh</li>
+              <li>Live typing indicators in 1:1 and group chats</li>
+              <li>Online / last-seen presence that updates as it changes</li>
+              <li>✓ sent → ✓✓ delivered → blue ✓✓ read, as it happens</li>
+              <li>Unread badges that move the moment a message lands</li>
+              <li>Poll votes, reactions and feed likes update live for everyone</li>
+              <li>Offline queue: send now, delivers on reconnect</li>
+              <li>Push notifications when the app is closed (web + Android)</li>
+              <li>WebRTC voice &amp; video calls signalled over the same socket</li>
+              <li>Free, no ads, username signup — no phone number</li>
+            </ul>
+          </article>
+          <div class="hero-actions" data-reveal style="margin-top:1.4rem">
+            <a class="btn btn-ink" href="/app">Open the web app</a>
+            <a class="btn btn-ghost" href="/group-chat">Real-time group chat →</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="max-width:760px;margin:clamp(2rem,5vw,3rem) auto 0">
+        <h2 data-reveal>What is a real-time chat app?</h2>
+        <p data-reveal>A <strong>real-time chat app</strong> delivers a message the instant it's sent — over a connection that stays open between your device and the server (a <em>WebSocket</em>) instead of asking “anything new?” every few seconds. That one design choice is why a real-time chat feels like a conversation rather than a mailbox: you watch the typing dots, you see someone come online, and you know the exact moment your message was read. Email, SMS and forum threads are <em>store-and-forward</em>; a real-time chat app is <em>live</em>.</p>
+        <p data-reveal>Plus One is built that way from the ground up. Every chat — one-to-one, <a href="/group-chat">group chat (GC)</a> or <a href="/communities">community</a> — rides one live Socket.IO connection, and everything that can be live, is: messages, typing, presence, read receipts, reactions, edits, poll results and even likes on the <a href="/network">Network feed</a>.</p>
+
+        <h2 data-reveal>How Plus One stays real-time</h2>
+        <ul class="checks" data-reveal>
+          <li><strong>Instant delivery:</strong> the server pushes each message to every member of the chat the moment it's saved — no refresh, no delay.</li>
+          <li><strong>Typing &amp; presence:</strong> typing state broadcasts as you type; online and last-seen update the moment someone connects or leaves.</li>
+          <li><strong>Read receipts done right:</strong> one tick when sent, two when delivered to every member, blue when everyone has read — identical logic for 1:1 and groups.</li>
+          <li><strong>Reconnect catch-up:</strong> lose signal in a lift and your queued messages send, and pending receipts flush, the second the socket is back.</li>
+          <li><strong>Live polls:</strong> vote in a group chat and the bars move on everyone's screen at once.</li>
+          <li><strong>Collaborative notes:</strong> shared notes inside a chat use operational transformation, so several people can type together with live cursors.</li>
+          <li><strong>Calls on the same wire:</strong> ringing, accept, decline and WebRTC signalling all travel over the same real-time channel.</li>
+          <li><strong>Disappearing ink, in sync:</strong> when a timed message expires it vanishes from every device in real time.</li>
+        </ul>
+
+        <h2 data-reveal>Real-time chat vs. the alternatives</h2>
+        <p data-reveal>If you've been coordinating over email threads, SMS or a forum, here's what changes when the channel is live:</p>
+        <div class="compare-wrap" data-reveal>
+          <table class="compare">
+            <thead>
+              <tr><th scope="col">What you get</th><th scope="col" class="us">Plus One (real-time)</th><th scope="col">SMS</th><th scope="col">Email</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Delivery</th><td class="us yes">Instant, live socket</td><td>Seconds to minutes</td><td>Minutes, and it lands in a pile</td></tr>
+              <tr><th scope="row">Typing indicator</th><td class="us yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
+              <tr><th scope="row">Read receipts</th><td class="us yes">Sent / delivered / read</td><td>Carrier-dependent</td><td class="no">No</td></tr>
+              <tr><th scope="row">Group chat with live polls</th><td class="us yes">Yes, results update live</td><td class="no">No</td><td class="no">No</td></tr>
+              <tr><th scope="row">Works in a browser, nothing to install</th><td class="us yes">Yes (PWA)</td><td class="no">No</td><td class="yes">Yes</td></tr>
+              <tr><th scope="row">Needs your phone number</th><td class="us yes">No — username only</td><td>Yes</td><td class="no">No</td></tr>
+              <tr><th scope="row">Voice &amp; video calls</th><td class="us yes">WebRTC, built in</td><td class="no">No</td><td class="no">No</td></tr>
+              <tr><th scope="row">Cost / ads</th><td class="us yes">Free, no ads</td><td>Carrier charges</td><td>Free, ads in many clients</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 data-reveal>For developers: an open-source real-time chat app</h2>
+        <p data-reveal>Searching for a real-time chat app because you're building one? Plus One's complete source is public under the MIT licence: an <strong>Expo / React Native</strong> client that runs on iOS, Android and web from one codebase, a <strong>Node + Socket.IO + SQLite</strong> backend with automatic backups, <strong>WebRTC</strong> signalling, web and Android push, and a Jupiter-style <strong>OT</strong> engine for collaborative editing. The repo documents every socket event (<code>message:send</code>, <code>message:read</code>, <code>typing</code>, <code>presence</code>, <code>call:offer</code>…) and ships offline test suites — a working reference, not a to-do demo. <a href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">Read the code on GitHub →</a></p>
+
+        <h2 data-reveal>Real-time chat app questions, answered</h2>
+        <div class="faq" data-reveal>
+          <details>
+            <summary>What is a real-time chat app?</summary>
+            <div class="faq-body"><p>One that delivers messages the instant they're sent over a persistent connection (WebSockets), with live typing indicators, presence and read receipts — instead of refreshing to check for new messages. Plus One is a free real-time chat app built on Socket.IO.</p></div>
+          </details>
+          <details>
+            <summary>Is Plus One really real-time?</summary>
+            <div class="faq-body"><p>Yes. A live Socket.IO connection carries messages, typing, presence, read ticks, poll votes and feed reactions as they happen. Go offline and everything catches up automatically when you reconnect.</p></div>
+          </details>
+          <details>
+            <summary>Can I chat in real time in the browser without installing anything?</summary>
+            <div class="faq-body"><p>Yes — open <a href="/app">plusoneco.in/app</a> and start. It installs as a PWA if you want it on your home screen, and the Android and iOS apps share the same account.</p></div>
+          </details>
+          <details>
+            <summary>Does it work on slow connections?</summary>
+            <div class="faq-body"><p>Yes. The UI is light, chats never autoplay heavy media, messages you send offline are queued, and ticks update once the other side reconnects.</p></div>
+          </details>
+          <details>
+            <summary>Is it free?</summary>
+            <div class="faq-body"><p>Completely — on web, Android and iOS, with no ads, no in-app purchases and no premium tier. Sign up with a username; no phone number needed.</p></div>
+          </details>
+          <details>
+            <summary>Is Plus One open source?</summary>
+            <div class="faq-body"><p>Yes, MIT-licensed at <a href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">github.com/sakshamfit/BROSKIE</a> — Expo/React Native client, Node + Socket.IO backend, WebRTC calls.</p></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="page-body" id="explore" style="max-width:1080px;padding-top:0">
+      <div class="sec-head">
+        <p class="kicker">Keep going</p>
+        <h2 data-reveal>Real-time, applied.</h2>
+      </div>
+      <div class="grid" data-reveal-group style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-top:1.2rem">
+        <article data-reveal>
+          <span class="tag">group chat</span>
+          <h3><a href="/group-chat">Real-time group chat (GC)</a></h3>
+          <p>Live polls, pins, voice notes and admin controls — make a GC in under a minute.</p>
+          <a class="niche-browse" href="/group-chat">Group chat app →</a>
+        </article>
+        <article data-reveal>
+          <span class="tag">chatting app</span>
+          <h3><a href="/chatting-app">A free chatting app, no ads</a></h3>
+          <p>Everything a chatting app should do, without your phone number or a premium tier.</p>
+          <a class="niche-browse" href="/chatting-app">Chatting app →</a>
+        </article>
+        <article data-reveal>
+          <span class="tag">people</span>
+          <h3><a href="/make-friends-online">Make friends online</a></h3>
+          <p>Meet people through interest communities, then move to a live chat — no swiping, no strangers roulette.</p>
+          <a class="niche-browse" href="/make-friends-online">Make friends online →</a>
+        </article>
+        <article data-reveal>
+          <span class="tag">features</span>
+          <h3><a href="/chat">Everything in a chat</a></h3>
+          <p>Replies, reactions, edits, forwards, stars, pins, search, disappearing ink and secret chats.</p>
+          <a class="niche-browse" href="/chat">Chat features →</a>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>+one</span>
+    <nav class="foot-links" aria-label="Site">
+      <a href="/about">About</a>
+      <a href="/communities">Communities</a>
+      <a href="/chat">Chat</a>
+      <a href="/real-time-chat-app">Real-time chat app</a>
+      <a href="/group-chat">Group chat (GC)</a>
+      <a href="/chatting-app">Chatting app</a>
+      <a href="/make-friends-online">Make friends online</a>
+      <a href="/plus-one">What is Plus One?</a>
+      <a href="/network">Network</a>
+      <a href="/download">Download</a>
+      <a href="/blog/">Blog</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/support">Support</a>
+      <a href="https://github.com/sakshamfit/BROSKIE" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <span>Not affiliated with WhatsApp. Original messenger.</span>
+  </footer>
+</body>
+</html>

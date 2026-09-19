@@ -123,3 +123,7 @@ Disallow: /app/
 Disallow: /api/
 
 Sitemap: https://www.plusoneco.in/sitemap.xml
+# Community niche pages live in their own sitemap (hub + /communities/<slug>)
+# so the communities set can be submitted, refreshed and re-checked on its
+# own in Search Console (docs/SEO_GEO_PLAYBOOK.md §6).
+Sitemap: https://www.plusoneco.in/sitemap-communities.xml

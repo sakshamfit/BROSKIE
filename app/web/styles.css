@@ -1202,3 +1202,69 @@ html.js .tc.is-ready .tc-item.is-right {
   border-bottom: 1.5px dashed var(--line);
 }
 .niche-browse:hover { border-bottom-style: solid; border-bottom-color: var(--ink-pure); background: var(--hi-soft); }
+
+/* comparison tables + numbered steps (SEO landing pages: /real-time-chat-app,
+   /make-friends-online, blog listicles). Same graphite/pulp tokens — hairline
+   dashed rules, ink header, highlighter for the "us" column. ------------------ */
+.compare-wrap { overflow-x: auto; margin: 1.2rem 0 1.6rem; -webkit-overflow-scrolling: touch; }
+.compare {
+  width: 100%;
+  min-width: 540px;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+  border: 2px solid var(--ink-pure);
+  border-radius: var(--sketch-sm);
+  background: rgba(255, 255, 255, 0.28);
+}
+.compare th, .compare td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px dashed rgba(28, 27, 27, 0.3);
+}
+.compare thead th {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  border-bottom: 2px solid var(--ink-pure);
+  background: var(--paper-low);
+}
+.compare tbody tr:last-child td { border-bottom: 0; }
+.compare th[scope="row"] { font-weight: 600; white-space: nowrap; }
+.compare .us { background: var(--hi-wash); font-weight: 600; }
+.compare .yes::before { content: "✓ "; font-weight: 700; }
+.compare .no { color: var(--muted); }
+.compare .no::before { content: "× "; font-weight: 700; }
+
+.steps { list-style: none; counter-reset: step; max-width: 40rem; margin: 1rem 0 1.4rem; }
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding: 0.55rem 0 0.7rem 2.6rem;
+  border-bottom: 1px dashed rgba(28, 27, 27, 0.25);
+}
+.steps li::before {
+  content: counter(step, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0.62rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.35rem;
+  background: var(--hi);
+  border: 1.5px solid var(--ink-pure);
+  border-radius: var(--sketch-sm);
+}
+.steps li strong { display: block; margin-bottom: 0.15rem; }
+.steps li p { color: var(--graphite); margin: 0; }
+.page-body code, .doc code {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.86em;
+  padding: 0.05em 0.35em;
+  background: var(--paper-high);
+  border: 1px solid var(--line);
+  border-radius: var(--sketch-sm);
+}

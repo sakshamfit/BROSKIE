@@ -56,6 +56,9 @@ const nicheBySlug = new Map(DATA.niches.map((n) => [n.slug, n]));
 /* Shared chrome copied from the hand-written marketing pages so the
  * generated pages are indistinguishable from the originals. */
 const FAVICON = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23fdf8f8' width='32' height='32'/%3E%3Crect x='7' y='7' width='18' height='18' fill='%23ffe24d' transform='rotate(-3 16 16)'/%3E%3Cpath d='M16 8v16M8 16h16' stroke='%231c1b1b' stroke-width='3.4' stroke-linecap='round' transform='rotate(-3 16 16)'/%3E%3C/svg%3E`;
+/* 1200x630 share card used by every page (app/web/assets/images/og-plus-one.png). */
+const OG_IMAGE = `${ORIGIN}/assets/images/og-plus-one.png`;
+const OG_IMAGE_ALT = 'Plus One — free real-time chatting app for group chats, communities and making friends online';
 const CLOCK_SVG = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><circle cx="6" cy="6" r="4.9" stroke="#1c1b1b" stroke-width="1.4"/><path d="M6 3.4V6l2 1.4" stroke="#1c1b1b" stroke-width="1.4" stroke-linecap="round"/></svg>`;
 const SEND_SVG = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="#f4f0ef" stroke-width="1.4" stroke-linecap="round"/></svg>`;
 
@@ -85,8 +88,10 @@ const footer = `  <footer class="foot">
       <a href="/about">About</a>
       <a href="/communities">Communities</a>
       <a href="/chat">Chat</a>
+      <a href="/real-time-chat-app">Real-time chat app</a>
       <a href="/group-chat">Group chat (GC)</a>
       <a href="/chatting-app">Chatting app</a>
+      <a href="/make-friends-online">Make friends online</a>
       <a href="/plus-one">What is Plus One?</a>
       <a href="/network">Network</a>
       <a href="/download">Download</a>
@@ -190,11 +195,18 @@ function headBlock(niche) {
   <link rel="canonical" href="${url(niche.slug)}" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Plus One" />
+  <meta property="og:locale" content="en_IN" />
   <meta property="og:title" content="${esc(niche.title)}" />
   <meta property="og:description" content="${esc(niche.metaDesc)}" />
   <meta property="og:url" content="${url(niche.slug)}" />
-  <meta property="og:image" content="${ORIGIN}/icon-512.png" />
+  <meta property="og:image" content="${OG_IMAGE}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="${OG_IMAGE_ALT}" />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${esc(niche.title)}" />
+  <meta name="twitter:description" content="${esc(niche.metaDesc)}" />
+  <meta name="twitter:image" content="${OG_IMAGE}" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="${FAVICON}" />
   <link rel="stylesheet" href="../styles.css" />

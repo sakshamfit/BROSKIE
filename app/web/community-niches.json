@@ -19,7 +19,7 @@
   "sitemapStatic": [
     {
       "path": "/",
-      "lastmod": "2026-08-27",
+      "lastmod": "2026-09-19",
       "changefreq": "weekly",
       "priority": "1.0"
     },
@@ -31,25 +31,37 @@
     },
     {
       "path": "/chat",
-      "lastmod": "2026-08-27",
+      "lastmod": "2026-09-19",
       "changefreq": "weekly",
       "priority": "0.9"
     },
     {
       "path": "/chatting-app",
-      "lastmod": "2026-08-27",
+      "lastmod": "2026-09-19",
       "changefreq": "weekly",
       "priority": "0.9"
     },
     {
       "path": "/group-chat",
-      "lastmod": "2026-08-27",
+      "lastmod": "2026-09-19",
+      "changefreq": "weekly",
+      "priority": "0.9"
+    },
+    {
+      "path": "/real-time-chat-app",
+      "lastmod": "2026-09-19",
+      "changefreq": "weekly",
+      "priority": "0.9"
+    },
+    {
+      "path": "/make-friends-online",
+      "lastmod": "2026-09-19",
       "changefreq": "weekly",
       "priority": "0.9"
     },
     {
       "path": "/plus-one",
-      "lastmod": "2026-08-27",
+      "lastmod": "2026-09-19",
       "changefreq": "weekly",
       "priority": "0.9"
     },
@@ -73,8 +85,20 @@
     },
     {
       "path": "/blog/",
-      "lastmod": "2026-08-27",
+      "lastmod": "2026-09-19",
       "changefreq": "weekly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/best-apps-to-make-friends-online",
+      "lastmod": "2026-09-19",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/blog/how-to-make-online-friends",
+      "lastmod": "2026-09-19",
+      "changefreq": "monthly",
       "priority": "0.7"
     },
     {
