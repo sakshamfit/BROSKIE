@@ -268,6 +268,18 @@ Existing users with older passwords can still sign in. They must meet the strong
 
 - Password hashes are stored by the backend using bcrypt.
 - App sessions use server-issued JWTs.
+- Sign-in throttling only ever counts **failed** attempts. A correct password
+  always signs in; it is never refused because of someone else's wrong
+  passwords. Two budgets apply per 15 minutes: 30 failures per client address
+  and 10 failures per account + address, answered with `429` + `Retry-After`
+  (the app now shows the server's reason instead of a generic error).
+- The client address is resolved across the deploy proxy chain (Vercel →
+  Render edge = two hops by default; override with `TRUST_PROXY_HOPS`).
+  Trusting a single hop keyed every request to the same proxy address, which
+  gave the entire user base one bucket: after 30 sign-ins the server answered
+  `429 Too many attempts from this network` to everyone, so users could not log
+  in even with the right password. `npm run test:login-limits` (14 checks)
+  plus `npm run test:hardening` guard this behaviour over the real proxy chain.
 - The app currently does **not** use Supabase Auth for user sign-in.
 - A future Supabase Auth migration must include a safe password-reset/account-linking strategy, because bcrypt hashes cannot simply be copied into Supabase Auth.
 
@@ -641,6 +653,7 @@ If any credential is accidentally exposed, revoke/rotate it immediately in the r
 | current | **Phase 3**: live WebRTC calls on Android, **web push parity** (VAPID, zero-config), community invite links + deep links, hold-to-record voice notes, grouped Activity rows, GitHub Actions CI; `test-phase3.js` (27 checks). |
 | current | Per-conversation chat themes (13 themes, realtime sync, picker with live preview). |
 | current | Centralized motion system (`src/motion.js`): a press-depth ladder applied to every affordance, single-kick overshoot springs, icon morphs, toggle blooms, error shakes, one drag-to-dismiss sheet behaviour, a shared gesture-driven photo viewer, feed skeletons, a scroll-aware compose button, off-screen loop gating, reduced-motion + haptics support, and a headless smoke test for all of it. |
+| current | **"Users cannot log in" fix**: the real client address is now derived across the whole deploy proxy chain (`TRUST_PROXY_HOPS`, default 2 = Vercel + Render edge) instead of one hop, and sign-in throttling counts failed attempts only — the shared proxy bucket used to answer `429 Too many attempts from this network` to every user after 30 sign-ins, including users with the correct password. The app no longer retries `429` and shows the server's reason. `test-login-limits.js` (14 checks) added. |
 
 ---
 

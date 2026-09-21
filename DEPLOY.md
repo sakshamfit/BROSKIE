@@ -117,7 +117,17 @@ still selected (that line itself is not an error).
    `EXPO_PUBLIC_API_URL=https://<your-service>.onrender.com`. If your frontend
    host proxies API or Socket.IO requests to Railway, update those proxy
    destinations to Render as well.
-5. **Data persistence:** the free plan has ephemeral storage. Setting
+5. **Sign-in rate limiting / client addresses:** production sits behind two
+   proxies (`plusoneco.in` (Vercel) → Render edge → container), so the server
+   trusts **two** `X-Forwarded-For` hops by default to find the user's own
+   address (`TRUST_PROXY_HOPS`, 0–8). Change it only if your front-proxy chain
+   differs. With the wrong count every user shares one rate-limit bucket and
+   the whole user base is answered `429 Too many attempts from this network`
+   — users cannot log in, even with the correct password. Verify with
+   `npm run test:login-limits` (14 checks over the two-hop chain).
+   Login/registration throttling counts **failed** attempts only, so a correct
+   password always signs in.
+6. **Data persistence:** the free plan has ephemeral storage. Setting
    `DATA_DIR` does not make it persistent. Before storing real user data,
    select Starter (or higher), enable the disk block in `render.yaml`, and
    mount it at `/var/data`. Migrate existing SQLite/uploads/backups separately;

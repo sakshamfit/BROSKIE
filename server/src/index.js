@@ -107,10 +107,33 @@ app.use(express.json({ limit: '1mb' }));
 /* security & abuse hardening                                          */
 /* ------------------------------------------------------------------ */
 
-// Railway/Vercel terminate TLS in front of this process; without this the
-// "real" client IP is the proxy's, which would make per-IP rate limiting
-// throttle everyone together (and let attackers rotate fake IPs).
-app.set('trust proxy', 1);
+// How many proxies sit in front of this process.
+//
+// Production is `client → Vercel (plusoneco.in) → Render edge → this
+// container`: both hops *append* the address they saw to X-Forwarded-For, so
+// the right-most entry always belongs to a proxy. Trusting a single hop made
+// every browser and app request look like it came from the same Vercel
+// address, so the whole user base shared ONE rate-limit bucket — after 30
+// sign-in/registration attempts in a 15-minute window everyone got
+// "Too many attempts from this network" and no user could log in.
+//
+// Counting hops from the right (matching the proxies actually deployed in
+// front of the app) yields the user's own address and ignores entries a
+// client prepends to X-Forwarded-For. Set TRUST_PROXY_HOPS=1 when the app is
+// only reachable through the Render edge (no front proxy), or 0 when it is
+// reached directly.
+function trustProxyHops() {
+  const raw = process.env.TRUST_PROXY_HOPS;
+  if (raw === undefined || String(raw).trim() === '') return 2; // Vercel + Render edge
+  const hops = Number(raw);
+  if (!Number.isFinite(hops) || hops < 0) {
+    console.warn(`[config] TRUST_PROXY_HOPS="${raw}" is not a hop count — using the default of 2`);
+    return 2;
+  }
+  return Math.min(8, Math.floor(hops));
+}
+const TRUST_PROXY_HOPS = trustProxyHops();
+app.set('trust proxy', TRUST_PROXY_HOPS);
 
 // Baseline security headers for every response. The API also serves the SPA
 // and uploads in single-host mode, so these apply to the whole origin.
@@ -137,6 +160,9 @@ app.use((req, res, next) => {
  */
 const rateBuckets = new Map(); // key -> { count, resetAt }
 let lastSweep = 0;
+// `req.ip` respects the TRUST_PROXY_HOPS setting above, so this is the real
+// client address (not the Vercel/Render proxy address that every request in a
+// proxied deployment would otherwise share).
 function clientKey(req) {
   return String(req.ip || req.socket?.remoteAddress || 'unknown');
 }
@@ -147,7 +173,7 @@ function isLoopbackReq(req) {
   const raw = String(req.socket?.remoteAddress || '');
   return raw === '127.0.0.1' || raw === '::1' || raw === '::ffff:127.0.0.1';
 }
-function rateLimit({ windowMs, max, message, keyFn }) {
+function rateLimit({ windowMs, max, message, keyFn, countFailuresOnly = false }) {
   return function rateLimiter(req, res, next) {
     if (process.env.RATE_LIMIT_DISABLED === 'true' || isLoopbackReq(req)) return next();
     const key = `${keyFn ? keyFn(req) : clientKey(req)}`;
@@ -161,43 +187,88 @@ function rateLimit({ windowMs, max, message, keyFn }) {
       bucket = { count: 0, resetAt: t + windowMs };
       rateBuckets.set(key, bucket);
     }
-    bucket.count += 1;
-    if (bucket.count > max) {
+    const tooMany = () => {
       const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - t) / 1000));
       res.set('Retry-After', String(retryAfter));
       return res.status(429).json({ error: message || 'Too many requests. Please slow down and try again shortly.' });
+    };
+    if (countFailuresOnly) {
+      // Brute-force budgets only ever count FAILED attempts. Successful
+      // sign-ins/sign-ups must never consume the budget: this app's users
+      // mostly arrive through carrier/NAT and proxy addresses, where counting
+      // every request throttled whole networks together and locked out users
+      // whose password was perfectly correct.
+      if (bucket.count >= max) return tooMany();
+      res.on('finish', () => {
+        if (res.statusCode >= 400) bucket.count += 1;
+      });
+      return next();
     }
+    bucket.count += 1;
+    if (bucket.count > max) return tooMany();
     next();
   };
 }
 
-// Brute-force protection for the password login: per-IP budget plus a tighter
-// per-username budget so one IP rotating names can't grind a single account.
-const loginFailures = new Map(); // "ip|username" -> { count, resetAt }
-function loginFailureKey(req) {
-  const u = String(req.body?.username || '').trim().toLowerCase();
-  return `${clientKey(req)}|${u}`;
-}
-function loginThrottle(req, res, next) {
-  if (process.env.RATE_LIMIT_DISABLED === 'true' || isLoopbackReq(req)) return next();
+// Brute-force protection for the password login. Two failure-only budgets:
+//   * per origin (the real client address)          — 30 failures / 15 min
+//   * per account + origin                          — 10 failures / 15 min
+// so one origin rotating usernames cannot grind a single account, and one
+// account cannot be ground down from many origins.
+//
+// Both budgets are checked AFTER the password is verified (see the login
+// route): they only ever reject *guesses*. A correct password always signs in,
+// which is what keeps carrier/NAT and shared-wifi users (thousands of people
+// behind one public address) from being locked out by each other's typos.
+const loginFailures = new Map(); // "origin|account" (and "origin") -> { count, resetAt }
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES_PER_ACCOUNT = 10;
+const LOGIN_MAX_FAILURES_PER_ORIGIN = 30;
+const originFailureKey = (req) => clientKey(req);
+const accountFailureKey = (req) => `${clientKey(req)}|${usernameKey(req.body?.username)}`;
+const loginThrottlingDisabled = (req) => process.env.RATE_LIMIT_DISABLED === 'true' || isLoopbackReq(req);
+
+/** Is this failed attempt over either budget? Returns the Retry-After info. */
+function loginFailureLimit(req) {
+  if (loginThrottlingDisabled(req)) return null;
   const t = now();
-  const key = loginFailureKey(req);
-  const bucket = loginFailures.get(key);
-  if (bucket && bucket.resetAt > t && bucket.count >= 10) {
-    const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - t) / 1000));
-    res.set('Retry-After', String(retryAfter));
-    return res.status(429).json({ error: 'Too many attempts. Please wait a few minutes and try again.' });
+  const budgets = [
+    [originFailureKey(req), LOGIN_MAX_FAILURES_PER_ORIGIN, 'Too many attempts from this network. Try again in a few minutes.'],
+    [accountFailureKey(req), LOGIN_MAX_FAILURES_PER_ACCOUNT, 'Too many attempts for this account. Please wait a few minutes and try again.'],
+  ];
+  for (const [key, max, error] of budgets) {
+    const bucket = loginFailures.get(key);
+    if (bucket && bucket.resetAt > t && bucket.count >= max) {
+      return { retryAfter: Math.max(1, Math.ceil((bucket.resetAt - t) / 1000)), error };
+    }
+  }
+  return null;
+}
+function recordLoginFailure(req) {
+  if (loginThrottlingDisabled(req)) return;
+  const t = now();
+  for (const key of [originFailureKey(req), accountFailureKey(req)]) {
+    const bucket = loginFailures.get(key);
+    if (!bucket || bucket.resetAt <= t) loginFailures.set(key, { count: 1, resetAt: t + LOGIN_FAILURE_WINDOW_MS });
+    else bucket.count += 1;
+  }
+}
+// A sustained flood from one origin (5x the failure budget) is answered with a
+// cheap 429 *before* bcrypt runs, so password hashing cannot be used as a CPU
+// amplifier. Reaching this line takes 150 failed sign-ins in 15 minutes from
+// one address, far beyond any legitimate shared/NAT/carrier address.
+const LOGIN_FLOOD_FAILURES_PER_ORIGIN = LOGIN_MAX_FAILURES_PER_ORIGIN * 5;
+function loginFloodGuard(req, res, next) {
+  if (loginThrottlingDisabled(req)) return next();
+  const t = now();
+  const bucket = loginFailures.get(originFailureKey(req));
+  if (bucket && bucket.resetAt > t && bucket.count >= LOGIN_FLOOD_FAILURES_PER_ORIGIN) {
+    res.set('Retry-After', String(Math.max(1, Math.ceil((bucket.resetAt - t) / 1000))));
+    return res.status(429).json({ error: 'Too many attempts from this network. Try again in a few minutes.' });
   }
   next();
 }
-function recordLoginFailure(req) {
-  if (isLoopbackReq(req)) return;
-  const key = loginFailureKey(req);
-  const t = now();
-  const bucket = loginFailures.get(key);
-  if (!bucket || bucket.resetAt <= t) loginFailures.set(key, { count: 1, resetAt: t + 15 * 60 * 1000 });
-  else bucket.count += 1;
-}
+
 // Periodic cleanup so the maps cannot grow unbounded on a long-lived server.
 setInterval(() => {
   const t = now();
@@ -205,7 +276,15 @@ setInterval(() => {
   for (const [k, b] of loginFailures) if (b.resetAt <= t) loginFailures.delete(k);
 }, 600000).unref();
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, message: 'Too many attempts from this network. Try again in a few minutes.' });
+// Account creation: 30 FAILED attempts per origin per 15 minutes. Successful
+// sign-ups never consume the budget, so a busy shared/carrier address cannot
+// lock its users out of registering.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  countFailuresOnly: true,
+  message: 'Too many attempts from this network. Try again in a few minutes.',
+});
 const otpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 6, message: 'Too many verification codes requested. Try again in a few minutes.' });
 const uploadLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60, message: 'Upload limit reached for now. Try again in a few minutes.' });
 // Song search is keyed PER USER (carriers/NAT share IPs, so an IP key would
@@ -1681,13 +1760,33 @@ app.post('/api/auth/reset-password', otpLimiter, (req, res) => {
   res.json({ success: true, message: 'Password updated successfully' });
 });
 
-app.post('/api/auth/login', authLimiter, loginThrottle, (req, res) => {
+/**
+ * Password sign-in.
+ *
+ * Throttling here is deliberately FAILURE-only: the budgets are consulted
+ * after the password has been checked, so a correct password always signs in.
+ * Punishing the whole origin instead (which is what a shared proxy address
+ * made happen — one bucket for every user) produced "Too many attempts from
+ * this network" for people whose credentials were right, i.e. users could not
+ * log in at all. Brute-force protection is intact: every wrong password draws
+ * on both the per-origin and the per-account budget, and guesses stop being
+ * answered once either is exhausted.
+ */
+app.post('/api/auth/login', loginFloodGuard, (req, res) => {
   const { username, password } = req.body || {};
   const user = getUserByUsername(username);
-  if (!user || !bcrypt.compareSync(String(password || ''), user.password_hash)) {
+  const passwordOk = !!user && bcrypt.compareSync(String(password || ''), user.password_hash);
+
+  if (!passwordOk) {
+    const limit = loginFailureLimit(req);
     recordLoginFailure(req);
+    if (limit) {
+      res.set('Retry-After', String(limit.retryAfter));
+      return res.status(429).json({ error: limit.error });
+    }
     return res.status(401).json({ error: 'Invalid username or password' });
   }
+
   // Enforcement state is checked server-side on login.
   const gate = moderation.moderationGate(user.id);
   if (gate.blocked) return res.status(403).json({ error: gate.error });
