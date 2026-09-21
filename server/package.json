@@ -23,6 +23,7 @@
     "test:moderation": "node test-moderation.js",
     "test:ot": "node test-ot.js",
     "test:otp": "node test-forgot-password-otp.js",
+    "test:login-limits": "node test-login-limits.js",
     "test:gc": "node test-gc-isolation.js",
     "test:chat-inbox": "node test-chat-inbox.js",
     "test:features": "node test-features.js",

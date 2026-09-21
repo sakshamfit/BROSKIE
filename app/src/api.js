@@ -251,7 +251,11 @@ async function requestUncached(path, {
       }
 
       if (!response.ok) {
-        if (attempt < retries && RETRYABLE_STATUS.has(response.status)) {
+        // A 429 carries an explicit Retry-After: retrying 450 ms later cannot
+        // succeed and doubles the load on a budget that is already hot (that
+        // made sign-in lockouts worse), so rate-limited requests surface
+        // immediately instead of being retried.
+        if (attempt < retries && response.status !== 429 && RETRYABLE_STATUS.has(response.status)) {
           await wait(450 * (attempt + 1));
           continue;
         }
@@ -322,6 +326,12 @@ export function authErrorMessage(error, mode = 'login') {
     return 'Service is temporarily unavailable. Please try again shortly.';
   }
   if (error?.status === 401) return 'Incorrect username or password.';
+  // The server's throttle/enforcement text is written for the person holding
+  // the phone ("Too many attempts from this network…", moderation state), so
+  // show it instead of a vague fallback — a login that is refused needs to say
+  // why, otherwise it just looks broken.
+  if (error?.status === 429) return error.message || 'Too many attempts. Please wait a few minutes and try again.';
+  if (error?.status === 403) return error.message || 'This account cannot sign in right now.';
   if (error?.status === 409 && /username/i.test(error.message || '')) return 'That username is already taken.';
   if (/password must be at least 8/i.test(error?.message || '')) return 'Password must be at least 8 characters.';
   if (/username is required/i.test(error?.message || '')) return 'Username is required.';
