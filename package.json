@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "cd server && npm install && npm run build",
+    "precompress": "node scripts/precompress.mjs server/public --prune",
     "start": "cd server && npm start",
     "dev:server": "cd server && npm run dev",
     "dev:app": "cd app && npx expo start",
@@ -31,7 +32,8 @@
     "test:moderation": "cd server && npm run test:moderation",
     "test:features": "cd server && npm run test:features",
     "test:chat-inbox": "cd server && npm run test:chat-inbox",
-    "test:data-dir": "cd server && npm run test:data-dir"
+    "test:data-dir": "cd server && npm run test:data-dir",
+    "test:compression": "cd server && npm run test:compression"
   },
   "workspaces": [],
   "license": "MIT"

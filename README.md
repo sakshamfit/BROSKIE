@@ -319,6 +319,9 @@ whatsapp-clone/
 │   │   ├── db.js         SQLite schema (users, chats, members,
 │   │   │                 messages, receipts, reactions, statuses)
 │   │   ├── auth.js       JWT sign/verify + middleware
+│   │   ├── httpCompression.js   zstd/brotli/gzip response negotiation
+│   │   ├── precompressed.js     serves build-time .br/.zst bundle sidecars
+│   │   ├── socketCompression.js permessage-deflate for realtime frames
 │   │   └── backup.js     automatic safety backups
 │   └── uploads/          uploaded images (served at /uploads)
 └── app/
@@ -365,6 +368,20 @@ whatsapp-clone/
 ### Message status derivation
 A message is `delivered` once every other member has a delivered receipt, and `read`
 once every other member has a read receipt — so it works identically for groups.
+
+### Bandwidth — zstd + brotli
+
+The server answers with the best codec the client advertised (**zstd →
+brotli → gzip**), pre-compresses the immutable web bundles at build time
+(brotli-11 / zstd-19) so they are served with zero per-request CPU, and
+compresses realtime Socket.IO frames with permessage-deflate. Measured
+savings: **−47%** on API JSON versus the old gzip-only setup, **−57%** on the
+web bundle, **−70%** on realtime frames.
+
+Nothing changes for clients: the codec is chosen from each request's
+`Accept-Encoding`, so a stack that only speaks gzip still gets gzip. Full
+write-up, knobs and verification commands in [`docs/BANDWIDTH.md`](docs/BANDWIDTH.md);
+run `npm run test:compression` for the numbers on your machine.
 
 ---
 

@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const compression = require('compression');
 const http = require('http');
 const cors = require('cors');
 const path = require('path');
@@ -95,11 +94,21 @@ const configuredCorsOrigins = String(process.env.CORS_ORIGIN || '*')
   .map((origin) => origin.trim())
   .filter(Boolean);
 const corsOrigin = configuredCorsOrigins.length === 0 || configuredCorsOrigins.includes('*') ? '*' : configuredCorsOrigins;
-// Gzip every compressible response (JS/CSS bundles, API JSON). The web
-// bundle drops from ~1.4 MB to ~380 KB over the wire — the single biggest
-// win for slow connections. Socket.IO traffic is unaffected (it attaches to
-// the raw HTTP server), and tiny responses skip compression via `threshold`.
-app.use(compression({ threshold: 1024 }));
+// Compress every compressible response (JS/CSS bundles, API JSON) with the
+// best codec the client advertised: **zstd → brotli → gzip**. A 335 KB web
+// bundle that gzip carried as 59.5 KB now goes out as 13.9 KB — the single
+// biggest win for slow connections. Bytes are only ever sent with an encoding
+// the client asked for, so every platform (iOS/Android/Web) stays compatible
+// and anything that only speaks gzip still gets gzip. Socket.IO traffic is
+// unaffected (it attaches to the raw HTTP server) and is compressed by its
+// own permessage-deflate settings below; tiny responses skip compression via
+// `threshold`. See server/src/httpCompression.js and docs/BANDWIDTH.md.
+const httpCompression = require('./httpCompression');
+app.use(httpCompression());
+console.log(
+  `[compression] codecs zstd=${httpCompression.codecs.zstd} brotli=${httpCompression.codecs.br} gzip=${httpCompression.codecs.gzip}` +
+    ` · preference ${httpCompression.preference.join(' > ')} · responses ≥ ${httpCompression.thresholds.min} B`
+);
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '1mb' }));
 
@@ -5599,6 +5608,19 @@ function caseSummary(row) {
   };
 }
 
+/* Live bandwidth/compression counters — lets us confirm in production that
+   clients really are getting zstd/brotli rather than silently falling back. */
+app.get('/api/admin/compression', requireAuth, requireAdmin, (req, res) => {
+  res.json({
+    codecs: httpCompression.codecs,
+    preference: httpCompression.preference,
+    levels: httpCompression.levels,
+    thresholds: httpCompression.thresholds,
+    socketCompression: SOCKET_COMPRESSION ? socketCompression() : { perMessageDeflate: false, httpCompression: false },
+    ...httpCompression.snapshotStats(),
+  });
+});
+
 app.get('/api/admin/moderation/overview', requireAuth, requireAdmin, (req, res) => {
   moderation.retentionSweep();
   const counts = {};
@@ -5881,7 +5903,19 @@ const server = http.createServer(app);
 // socket could pin the event loop parsing huge frames). Legit realtime
 // payloads are tiny — messages cap at 5 000 chars, media goes through the
 // HTTP upload path, OT ops/selections are bytes — so 1MB is ~200x headroom.
-const io = new Server(server, { cors: { origin: corsOrigin }, maxHttpBufferSize: 1e6 });
+// Realtime frames: see server/src/socketCompression.js. Socket.IO disables
+// permessage-deflate by default, which left every chat message, presence
+// sweep and OT operation going out at full JSON size; enabling it measured
+// −70% on the wire for an 18.6 KB chat batch. `maxHttpBufferSize` is enforced
+// against the *decompressed* size, so the zip-bomb concern that usually
+// accompanies the extension does not apply here.
+const socketCompression = require('./socketCompression');
+const SOCKET_COMPRESSION = socketCompression.enabled();
+const io = new Server(server, {
+  cors: { origin: corsOrigin },
+  maxHttpBufferSize: 1e6,
+  ...socketCompression(),
+});
 
 const sockets = new Map(); // userId -> Set<socketId>
 const activeCalls = new Map(); // userId -> callId, for busy-detection and cleanup on disconnect
@@ -6555,6 +6589,29 @@ setInterval(() => {
 const { backupNow, BACKUP_DIR } = require('./backup');
 console.log(`[backup] automatic backups enabled → ${BACKUP_DIR} (every 6h + on shutdown)`);
 
+/* ------------------------------------------------------------------ */
+/* bandwidth report — how many bytes compression is actually saving     */
+/* ------------------------------------------------------------------ */
+
+// Logged hourly (only when something was served) so the numbers show up in
+// the platform logs without needing a dashboard.
+setInterval(() => {
+  try {
+    const s = httpCompression.snapshotStats();
+    if (s.compressed < 1) return;
+    const pct = (n) => `${(n * 100).toFixed(1)}%`;
+    const parts = Object.entries(s.byCodec)
+      .filter(([, v]) => v.count > 0)
+      .map(([k, v]) => `${k} ×${v.count} −${pct(v.savedRatio)}`)
+      .join(', ');
+    console.log(
+      `[bandwidth] ${s.compressed}/${s.responses} responses compressed, ` +
+        `${(s.rawBytes / 1024).toFixed(0)} KB → ${(s.sentBytes / 1024).toFixed(0)} KB ` +
+        `(−${pct(s.savedRatio)}) · ${parts || 'none'}`
+    );
+  } catch {}
+}, 3600 * 1000).unref();
+
 // Every 6 hours.
 setInterval(() => {
   backupNow().catch((e) => console.error('[backup]', e.message));
@@ -6616,6 +6673,21 @@ process.on('exit', () => {
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 if (fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
+  // Build-time precompressed bundles first: `scripts/precompress.mjs` writes
+  // `<file>.zst` / `<file>.br` at max quality, so serving them costs zero CPU
+  // per request and beats anything we could afford to do on the fly. Falls
+  // through to the normal static handler + live compression otherwise.
+  const servePrecompressed = require('./precompressed');
+  app.use(servePrecompressed(PUBLIC_DIR, {
+    setHeaders: (res, filePath) => {
+      if (filePath.includes(`${path.sep}_expo${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }));
+
   // hashed assets are immutable -> cache hard; index.html must never be cached
   app.use(
     express.static(PUBLIC_DIR, {

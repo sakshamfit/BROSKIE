@@ -23,6 +23,13 @@ RUN npm ci --no-audit --no-fund
 COPY app/ ./
 RUN CI=true npx expo export --platform web --output-dir /tmp/plusone-web
 
+# Precompress the immutable bundles ONCE (brotli quality 11 + zstd level 19).
+# Doing it here rather than at request time means the runtime never spends CPU
+# compressing the same bytes twice, and we can afford the highest level each
+# codec offers — see scripts/precompress.mjs.
+COPY scripts/ /app/scripts/
+RUN node /app/scripts/precompress.mjs /tmp/plusone-web --prune
+
 # Install only the backend runtime dependencies. better-sqlite3 installs its
 # platform-specific native binding here, inside the same Debian family used by
 # the final runtime image.
