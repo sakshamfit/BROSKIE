@@ -25,7 +25,7 @@ Two ways to think about what you're doing:
 1. **Merge & deploy the push PR** (Phase 1). The Railway backend emits the
    pushes — if `server/src/push.js` isn't deployed, nothing will send, no matter
    how perfect Firebase is. Check it's live:
-   `https://broskie-h.up.railway.app/api/health` should respond `ok: true`
+   `https://broskie-production-5d30.up.railway.app/api/health` should respond `ok: true`
    after the deploy.
 2. **Confirm which Expo account builds your APKs:**
    ```bash

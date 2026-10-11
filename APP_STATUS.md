@@ -2,7 +2,7 @@
 
 **Last updated:** 21 August 2026**Repository:** `sakshamfit/BROSKIE`
 **Primary production host:** Railway
-**Production API:** `https://broskie-h.up.railway.app`
+**Production API:** `https://broskie-production-5d30.up.railway.app`
 
 This document is a plain-language reference for anyone maintaining, testing, or deploying BROSKIE. It describes what is live today, where data is stored, what is safe to change, and what still needs work.
 
@@ -115,13 +115,13 @@ Native Android/iOS builds must reach the public Railway API, not `localhost`.
 The source currently defaults native builds to:
 
 ```text
-https://broskie-h.up.railway.app
+https://broskie-production-5d30.up.railway.app
 ```
 
 For repeatable release builds, configure this build-time variable privately:
 
 ```text
-EXPO_PUBLIC_API_URL=https://broskie-h.up.railway.app
+EXPO_PUBLIC_API_URL=https://broskie-production-5d30.up.railway.app
 ```
 
 ### Important for Android/iOS releases
@@ -529,7 +529,7 @@ dependency changes still require a new build.
 Open:
 
 ```text
-https://broskie-h.up.railway.app/api/health
+https://broskie-production-5d30.up.railway.app/api/health
 ```
 
 A healthy response includes:
@@ -537,12 +537,11 @@ A healthy response includes:
 ```json
 {
   "ok": true,
-  "time": 0,
-  "storage": "..."
+  "time": 0
 }
 ```
 
-Expected storage values:
+Storage mode is reported in the Railway startup logs. Expected storage log values:
 
 | Value | Meaning |
 |---|---|
