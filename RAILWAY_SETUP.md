@@ -1,59 +1,71 @@
 # 🚂 Deploy +one Backend to Railway
 
-## Step 1 — Deploy to Railway
+The current production backend domain is `https://broskie-production-5d30.up.railway.app`.
+The app configuration and Vercel proxy in this repository now target that service.
 
-1. Go to [https://railway.app](https://railway.app) and log in (GitHub login works)
-2. Click **New Project** → **Deploy from GitHub repo**
-3. Select `sakshamfit/BROSKIE`
-4. Railway builds the repo `Dockerfile` (`railway.json` sets `builder: DOCKERFILE`). Leave the root directory empty.
+## Step 1 — Select the backend service
 
-## Step 2 — Add Environment Variables
+1. Open the BROSKIE project in Railway and select the production environment.
+2. Select the Node backend service (not a database service).
+3. Confirm its source is this repository, the root directory is empty, and the builder uses the repository `Dockerfile` (`railway.json` selects it).
 
-In your Railway project dashboard → **Variables**, add these:
+## Step 2 — Set backend variables
+
+Open the backend service → **Variables**. Add variables in the **production** environment:
 
 | Variable | Value |
 |---|---|
-| `JWT_SECRET` | Generate one: click "Generate" or run `openssl rand -hex 32` |
-| `RAILWAY_RUN_UID` | `0` — **required** once a Volume is attached. Railway mounts volumes as root; without this the process cannot write `tomodachi.db` and boot crashes with `SQLITE_READONLY`. |
-| `SUPABASE_URL` | `https://ldrdawvivzggzoxyiugf.supabase.co` |
-| `SUPABASE_SERVICE_KEY` | Your secret key (from Supabase dashboard → Settings → API → `service_role` key) |
-| `SUPABASE_BUCKET` | `tomodachi-uploads` |
+| `JWT_SECRET` | Required. Generate a strong random secret, e.g. `openssl rand -hex 32`. Keep it private and stable. |
+| `CORS_ORIGIN` | `https://plusoneco.in,https://www.plusoneco.in` (include the exact HTTPS origin(s) where people open the frontend). |
+| `RAILWAY_RUN_UID` | `0` when using a Railway Volume. |
+| `DATA_DIR` | `/data` when the volume is mounted at `/data`; the Docker image also defaults to this path. |
 
-> ⚠️ **Never put these in your repo** — Railway's Variables panel keeps them secret.
+**JWT_SECRET is separate from every Supabase key.** If the backend log says `JWT_SECRET is required when NODE_ENV=production`, set this exact variable on the backend service and redeploy. Do not remove the production check or use a development fallback.
 
-## Step 3 — Get Your Backend URL
+### Optional: Supabase Storage for uploads
 
-In Railway → **Settings** → **Networking** → **Generate Domain**.  
-Copy the URL — it'll look like `https://your-app.up.railway.app`
+Only add these if uploads should use Supabase Storage. They are not needed for login:
 
-## Step 4 — Create your account
+| Variable | Value |
+|---|---|
+| `SUPABASE_URL` | Your Supabase project URL, e.g. `https://your-project.supabase.co` |
+| `SUPABASE_SECRET_KEY` | A current Supabase server-side secret key. If a previous key was shared or exposed, rotate it first. Never put it in Git or chat. |
+| `SUPABASE_BUCKET` | `tomodachi-uploads` (the default) |
 
-There's no demo data — the app runs entirely on real accounts. Open the
-deployed app and use **Sign Up** to create your own account with a
-username and password; anyone else who wants an account signs up the same
-way. (No seed/fake-data script exists in the repo.)
+`SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_JWKS_URL` are not required by this backend's upload or login flow.
 
-**Data safety:** the server automatically backs up the database every 6
-hours and on every shutdown (including redeploys). Attach a persistent
-volume so the database and its backups survive redeploys — see `DEPLOY.md`
-→ "Never lose data on deploy".
+## Step 3 — Attach persistent storage
 
-## Step 5 — Point Vercel Frontend to Railway
+1. Backend service → **Volumes** → **New Volume**.
+2. Mount it at **`/data`**.
+3. Keep `DATA_DIR=/data` and `RAILWAY_RUN_UID=0` set, then redeploy.
 
-1. Go to [https://vercel.com](https://vercel.com) → your `broskie-mu` project
-2. **Settings** → **Environment Variables**
-3. Add: `EXPO_PUBLIC_API_URL` = `https://your-app.up.railway.app` (your Railway URL, no trailing slash)
-4. Go to **Deployments** → trigger a **Redeploy** (three dots menu → Redeploy)
-5. Vercel rebuilds the frontend with the backend URL baked in
+A newly attached volume is empty. If existing accounts/chats need to be kept, migrate the old SQLite database and uploads before retiring the old backend; a new Railway volume does not copy them automatically.
 
-## Step 6 — Verify
+## Step 4 — Check the backend
 
-1. Open `https://broskie-mu.vercel.app` — sign up for an account (or log in with one you already created)
-2. Open **Settings** — the connection dot should show **Connected** (yellow/green)
-3. Open a second browser tab, sign up as a second account, and message between them — it should arrive instantly with blue ticks
+The service's public domain is shown in Railway → backend service → **Settings → Networking**. The current configured domain is:
+
+```text
+https://broskie-production-5d30.up.railway.app
+```
+
+Open `https://broskie-production-5d30.up.railway.app/health`. A healthy service returns JSON containing `"ok": true`.
+
+## Step 5 — Redeploy the frontend
+
+The checked-in `vercel.json` proxies `/api`, `/uploads`, and Android App Links to the Railway backend; `app/src/api.js` uses Railway for Socket.IO. After this repository change is merged, redeploy the Vercel frontend so the new rewrites and bundle are live. The Vercel website does not need `EXPO_PUBLIC_API_URL` for its HTTP requests because it uses the same-origin proxy.
+
+Native app builds bake in their JavaScript and Android network-security configuration. Build and distribute a new APK after updating the backend target; already installed APKs do not receive the native domain configuration automatically.
+
+## Step 6 — Verify login and realtime
+
+1. Open the deployed frontend and create an account, or log in with an account in the Railway database.
+2. Open Settings and confirm the connection status is **Connected**.
+3. Test a second account and send a message to verify REST login and Socket.IO delivery.
+
+If accounts from the old backend should remain available, migrate the database first. Login credentials live in the app's SQLite database, not in Supabase.
 
 ---
 
-## Done! 🎉
-
-The frontend lives on Vercel's CDN, the real-time backend runs on Railway, and uploaded images persist via your Supabase bucket — all working together.
+Never commit Railway/Supabase secrets, passwords, or tokens. Set them only in the relevant service's Variables panel.

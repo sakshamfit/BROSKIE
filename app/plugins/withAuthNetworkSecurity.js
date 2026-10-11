@@ -4,7 +4,7 @@ const path = require('path');
 
 /**
  * Android 7.0 predates ISRG Root X1 in the system trust store.
- * Keep the bundled public root available for the production Render API
+ * Keep the bundled public root available for the production Railway API
  * domain when its certificate chain uses it, alongside system trust roots.
  * This does not bypass hostname checks, allow cleartext HTTP, or trust
  * arbitrary custom certificates.
@@ -47,7 +47,7 @@ function withAuthNetworkSecurity(config) {
     </trust-anchors>
   </base-config>
   <domain-config cleartextTrafficPermitted="false">
-    <domain includeSubdomains="false">broskie.onrender.com</domain>
+    <domain includeSubdomains="false">broskie-production-5d30.up.railway.app</domain>
     <trust-anchors>
       <certificates src="system" />
       <certificates src="@raw/isrg_root_x1" />

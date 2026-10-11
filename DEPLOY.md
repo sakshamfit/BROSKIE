@@ -73,24 +73,14 @@ and the server serves it automatically when that folder exists.
 4. **Settings → Networking → Generate Domain**
 5. Open the domain. That's the whole app.
 
-### Render (backend only)
+### Render (optional backend-only alternative)
 
-Current backend: `https://broskie.onrender.com`
-Render service ID: `srv-dalsvsqjnfac73anc4eg`
-Dashboard: https://dashboard.render.com/web/srv-dalsvsqjnfac73anc4eg
+The production backend targeted by the current app is Railway:
+`https://broskie-production-5d30.up.railway.app`. The following instructions
+are only for an intentional move to Render; they do not change the Railway
+service or the active app targets.
 
-The Vercel rewrites, Cloudflare build commands, app Socket.IO/default backend
-origin, and Android network-security domain point to this Render host.
-Redeploy the frontend and rebuild Android to apply these changes. Remove or
-update any old Railway `EXPO_PUBLIC_API_URL` in hosting/EAS build environments;
-external environment settings can override the repository defaults.
-
-Provided IP ranges: `74.220.49.0/24`, `74.220.57.0/24`. If confirmed as this
-service's outbound ranges in Render, add them only to external database or
-service IP allowlists that require it. They are not frontend CORS origins,
-backend URLs, or inbound DNS targets. No IP firewall is configured in this repo.
-
-`render.yaml` now deploys only the API and Socket.IO server using
+`render.yaml` deploys only the API and Socket.IO server using
 `Dockerfile.render`. The root `Dockerfile` still builds the full app for
 Railway/Compose. Backend-only Render builds do **not** install Expo or run
 Metro; `Starting Metro Bundler` in a build log means the full-app build is
@@ -113,10 +103,9 @@ still selected (that line itself is not an error).
    Render's `PORT` automatically.
 3. Verify `https://<your-service>.onrender.com/health` returns `{"ok":true}`.
    The root URL returns API metadata, not the frontend; this is expected.
-4. Rebuild your separately hosted frontend/mobile app with
-   `EXPO_PUBLIC_API_URL=https://<your-service>.onrender.com`. If your frontend
-   host proxies API or Socket.IO requests to Railway, update those proxy
-   destinations to Render as well.
+4. If intentionally using this Render backend, set the frontend/mobile API
+   target to `https://<your-service>.onrender.com` and update Vercel/Cloudflare
+   proxy destinations and native Socket.IO configuration to that same origin.
 5. **Sign-in rate limiting / client addresses:** production sits behind two
    proxies (`plusoneco.in` (Vercel) → Render edge → container), so the server
    trusts **two** `X-Forwarded-For` hops by default to find the user's own
@@ -309,6 +298,7 @@ PWA that stubbornly serves an old build.
 | Blank page, 404 on refresh | Web build missing — run `npm run build` so `server/public` exists |
 | "Failed to fetch" on login | Two-host: backend `http://` while site is `https://` (mixed content) |
 | Messages send but never arrive | WebSockets blocked — the host must support them (Vercel functions don't) |
+| Deploy log: `JWT_SECRET is required when NODE_ENV=production` | Add a strong, stable `JWT_SECRET` to the Railway backend service Variables in the active environment, then redeploy. Do not use a Supabase key for JWT signing. |
 | Deploy log: `SqliteError: attempt to write a readonly database` on `UPDATE users SET about…` | Railway volume is mounted as root and the process is not root. Set **`RAILWAY_RUN_UID=0`** on the service and redeploy. The Docker entrypoint also chowns `/data` when it starts as root. |
 | Chats/communities/posts vanish after redeploy | No persistent volume attached yet — see "Never lose data on deploy" above |
 | Images 404 after redeploy | `server/uploads` is ephemeral without a volume — attach one (above) or set up Supabase Storage (see `SUPABASE.md`) |
