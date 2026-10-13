@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
-    "build": "cd ../app && npm install && CI=true node scripts/export-web.js --app-only --output-dir ../server/public",
+    "build": "cd ../app && npm install && CI=true node scripts/export-web.js --app-only --output-dir ../server/public && (node ../scripts/precompress.mjs ../server/public --prune || echo 'precompress skipped (non-fatal)')",
     "postinstall": "echo 'run npm run build to bundle the web app into ./public'",
     "backup": "node src/backup.js",
     "audit:chats": "node src/chat-audit.js",
@@ -31,13 +31,14 @@
     "test:app-links": "node test-app-links.js",
     "test:hardening": "node test-hardening.js",
     "test:songs": "node test-songs.js",
-    "test:e2e-journey": "node test-e2e-journey.js"
+    "test:e2e-journey": "node test-e2e-journey.js",
+    "precompress": "node ../scripts/precompress.mjs public --prune",
+    "test:compression": "node test-compression.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.5.0",
-    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.21.1",
